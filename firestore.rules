@@ -1,0 +1,116 @@
+rules_version = '2';
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Firestore Security Rules — Dynamic Role-Based Access Control
+//
+// Roles are stored in /roles/{roleId} with a permissions map.
+// Each user has a document at /users/{uid} with a roleId field.
+//
+// Helper functions resolve the user's role and check permissions dynamically.
+// ──────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper Functions ───────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRoleId() {
+      return getUserDoc().roleId;
+    }
+
+    function getRoleDoc() {
+      return get(/databases/$(database)/documents/roles/$(getUserRoleId())).data;
+    }
+
+    function hasPermission(perm) {
+      return isAuthenticated() && getRoleDoc().permissions[perm] == true;
+    }
+
+    function isAdmin() {
+      return hasPermission('roles.manage');
+    }
+
+    // ── Roles Collection ───────────────────────────────────────────────────
+    // Only users with roles.manage can write. All authenticated can read.
+
+    match /roles/{roleId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── Users Collection ───────────────────────────────────────────────────
+    // Users can read their own doc. Admin can read/write any user.
+    // A user can create their own doc (first login).
+
+    match /users/{userId} {
+      allow read: if isAuthenticated()
+        && (request.auth.uid == userId || isAdmin());
+
+      allow create: if isAuthenticated()
+        && request.auth.uid == userId;
+
+      allow update: if isAuthenticated()
+        && (request.auth.uid == userId || isAdmin());
+
+      allow delete: if isAdmin();
+    }
+
+    // ── Products Collection ───────────────────────────────────────────────
+    match /products/{docId} {
+      allow read: if isAuthenticated() && hasPermission('products.view');
+      allow create: if hasPermission('products.create');
+      allow update: if hasPermission('products.edit');
+      allow delete: if hasPermission('products.delete');
+    }
+
+    // ── Production Lines Collection ───────────────────────────────────────
+    match /production_lines/{docId} {
+      allow read: if isAuthenticated() && hasPermission('lines.view');
+      allow create: if hasPermission('lines.create');
+      allow update: if hasPermission('lines.edit');
+      allow delete: if hasPermission('lines.delete');
+    }
+
+    // ── Supervisors Collection ────────────────────────────────────────────
+    match /supervisors/{docId} {
+      allow read: if isAuthenticated() && hasPermission('supervisors.view');
+      allow create: if hasPermission('supervisors.create');
+      allow update: if hasPermission('supervisors.edit');
+      allow delete: if hasPermission('supervisors.delete');
+    }
+
+    // ── Production Reports Collection ─────────────────────────────────────
+    match /production_reports/{docId} {
+      allow read: if isAuthenticated() && hasPermission('reports.view');
+      allow create: if hasPermission('reports.create');
+      allow update: if hasPermission('reports.edit');
+      allow delete: if hasPermission('reports.delete');
+    }
+
+    // ── Line Status Collection ────────────────────────────────────────────
+    match /line_status/{docId} {
+      allow read: if isAuthenticated() && hasPermission('lineStatus.view');
+      allow create, update: if hasPermission('lineStatus.edit');
+      allow delete: if isAdmin();
+    }
+
+    // ── Line Product Config Collection ────────────────────────────────────
+    match /line_product_config/{docId} {
+      allow read: if isAuthenticated() && hasPermission('lineProductConfig.view');
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── Catch-all: deny everything else ───────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
