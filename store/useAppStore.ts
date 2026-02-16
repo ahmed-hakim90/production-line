@@ -257,7 +257,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const supervisors: Supervisor[] = rawSupervisors.map((s) => ({
         id: s.id!,
         name: s.name,
-        role: '',
+        role: s.role ?? 'supervisor',
+        isActive: s.isActive !== false,
         efficiency: 0,
         monthlyHours: 0,
         monthlyShifts: 0,
@@ -373,7 +374,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const supervisors: Supervisor[] = rawSupervisors.map((s) => ({
         id: s.id!,
         name: s.name,
-        role: '',
+        role: s.role ?? 'supervisor',
+        isActive: s.isActive !== false,
         efficiency: 0,
         monthlyHours: 0,
         monthlyShifts: 0,

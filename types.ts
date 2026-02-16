@@ -40,6 +40,7 @@ export interface Supervisor {
   id: string;
   name: string;
   role: string;
+  isActive: boolean;
   lineId?: string;
   efficiency: number;
   monthlyHours: number;
@@ -69,6 +70,16 @@ export interface FirestoreProductionLine {
 export interface FirestoreSupervisor {
   id?: string;
   name: string;
+  role?: 'supervisor' | 'hall_supervisor' | 'factory_manager' | 'admin';
+  isActive?: boolean;
+}
+
+export interface ActivityLog {
+  id?: string;
+  supervisorId: string;
+  action: string;
+  description: string;
+  timestamp: any;
 }
 
 export interface LineProductConfig {
