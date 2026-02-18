@@ -131,26 +131,26 @@ export const LineDetails: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
           <button
             onClick={() => navigate('/lines')}
-            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all shrink-0 mt-1 sm:mt-0"
           >
             <span className="material-icons-round">arrow_forward</span>
           </button>
-          <div>
-            <h2 className="text-2xl font-black text-slate-800 dark:text-white">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white truncate">
               {line?.name}
             </h2>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-sm text-slate-400 font-medium">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
+              <span className="text-xs sm:text-sm text-slate-400 font-medium">
                 المشرف: {line?.supervisorName}
               </span>
               {rawLine && (
                 <>
-                  <span className="text-slate-300">|</span>
-                  <span className="text-sm text-slate-400">
+                  <span className="hidden sm:inline text-slate-300">|</span>
+                  <span className="text-xs sm:text-sm text-slate-400">
                     {rawLine.dailyWorkingHours} ساعة يومياً · {rawLine.maxWorkers} عامل
                   </span>
                 </>

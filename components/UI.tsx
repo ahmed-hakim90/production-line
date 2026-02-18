@@ -29,13 +29,13 @@ interface KPIBoxProps {
 }
 
 export const KPIBox: React.FC<KPIBoxProps> = ({ label, value, icon, trend, trendUp, colorClass = 'bg-primary/10 text-primary', unit }) => (
-  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-5 shadow-sm transition-transform hover:scale-[1.02]">
-    <div className={`w-14 h-14 ${colorClass} rounded-lg flex items-center justify-center`}>
-      <span className="material-icons-round text-3xl">{icon}</span>
+  <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3 sm:gap-5 shadow-sm">
+    <div className={`w-12 h-12 sm:w-14 sm:h-14 ${colorClass} rounded-lg flex items-center justify-center shrink-0`}>
+      <span className="material-icons-round text-2xl sm:text-3xl">{icon}</span>
     </div>
-    <div>
-      <p className="text-slate-500 text-sm mb-1 font-medium">{label}</p>
-      <h3 className="text-2xl font-bold flex items-baseline gap-1">
+    <div className="min-w-0">
+      <p className="text-slate-500 text-xs sm:text-sm mb-1 font-medium">{label}</p>
+      <h3 className="text-xl sm:text-2xl font-bold flex items-baseline gap-1">
         {value} {unit && <span className="text-xs font-normal text-slate-400">{unit}</span>}
       </h3>
       {trend && (

@@ -52,7 +52,7 @@ export const Login: React.FC = () => {
         </div>
 
         {/* Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-8">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-5 sm:p-8">
           <div className="text-center mb-6">
             <h2 className="text-xl font-black text-slate-800 dark:text-white">
               {isRegister ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}

@@ -147,30 +147,30 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div>
-        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">ريح علشان الجو مريح</h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">ريح علشان الجو مريح</h2>
+        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {/* Production Card — Daily & Monthly */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition-transform hover:scale-[1.02]">
-          <div className="flex items-center gap-4 mb-5">
-            <div className="w-14 h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg flex items-center justify-center">
-              <span className="material-icons-round text-3xl">inventory</span>
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm sm:col-span-2 md:col-span-1">
+          <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-2xl sm:text-3xl">inventory</span>
             </div>
             <p className="text-slate-500 text-sm font-bold">إجمالي الإنتاج</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-blue-50/60 dark:bg-blue-900/10 rounded-xl p-4 text-center border border-blue-100 dark:border-blue-900/20">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className="bg-blue-50/60 dark:bg-blue-900/10 rounded-xl p-3 sm:p-4 text-center border border-blue-100 dark:border-blue-900/20">
               <p className="text-[11px] font-bold text-slate-400 mb-1.5">إنتاج اليوم</p>
-              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatNumber(kpis.todayProduction)}</h3>
+              <h3 className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">{formatNumber(kpis.todayProduction)}</h3>
               <span className="text-[10px] font-medium text-slate-400">وحدة</span>
             </div>
-            <div className="bg-indigo-50/60 dark:bg-indigo-900/10 rounded-xl p-4 text-center border border-indigo-100 dark:border-indigo-900/20">
+            <div className="bg-indigo-50/60 dark:bg-indigo-900/10 rounded-xl p-3 sm:p-4 text-center border border-indigo-100 dark:border-indigo-900/20">
               <p className="text-[11px] font-bold text-slate-400 mb-1.5">إنتاج الشهر</p>
-              <h3 className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{formatNumber(kpis.monthlyProduction)}</h3>
+              <h3 className="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400">{formatNumber(kpis.monthlyProduction)}</h3>
               <span className="text-[10px] font-medium text-slate-400">وحدة</span>
             </div>
           </div>
@@ -179,14 +179,14 @@ export const Dashboard: React.FC = () => {
         <KPIBox label="نسبة الهالك" value={`${kpis.wasteRatio}%`} icon="delete_sweep" trend="" trendUp={true} colorClass="bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-xl font-bold flex items-center gap-3">
-              <span className="w-2 h-7 bg-primary rounded-full"></span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+        <div className="lg:col-span-2 space-y-5 sm:space-y-6">
+          <div className="flex items-center justify-between px-2 gap-3">
+            <h3 className="text-lg sm:text-xl font-bold flex items-center gap-3">
+              <span className="w-2 h-7 bg-primary rounded-full shrink-0"></span>
               مراقبة خطوط الإنتاج
             </h3>
-            <Button variant="outline" className="text-xs py-1.5 h-auto" onClick={() => navigate('/lines')}>عرض الكل</Button>
+            <Button variant="outline" className="text-xs py-1.5 h-auto shrink-0" onClick={() => navigate('/lines')}>عرض الكل</Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

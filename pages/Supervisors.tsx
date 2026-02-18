@@ -379,7 +379,7 @@ export const Supervisors: React.FC = () => {
       {/* ── Page Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-white">فريق العمل</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">فريق العمل</h2>
           <p className="text-sm text-slate-500 font-medium">إدارة المستخدمين وحساباتهم ومتابعة أدائهم على خطوط الإنتاج.</p>
         </div>
         {can("supervisors.create") && (
@@ -391,7 +391,7 @@ export const Supervisors: React.FC = () => {
       </div>
 
       {/* ── Summary KPIs ── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
           <div className="w-11 h-11 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg flex items-center justify-center">
             <span className="material-icons-round text-xl">groups</span>

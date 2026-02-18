@@ -7,7 +7,7 @@ import { formatNumber, getTodayDateString } from '../utils/calculations';
 import { ProductionReport } from '../types';
 import { usePermission } from '../utils/permissions';
 import { exportReportsByDateRange } from '../utils/exportExcel';
-import { exportToPDF, shareToWhatsApp } from '../utils/reportExport';
+import { exportToPDF, shareToWhatsApp, ShareResult } from '../utils/reportExport';
 import {
   ProductionReportPrint,
   SingleReportPrint,
@@ -50,6 +50,7 @@ export const Reports: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
 
   // Single-report print state
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
@@ -109,39 +110,59 @@ export const Reports: React.FC = () => {
 
   const handleSinglePrint = useReactToPrint({ contentRef: singlePrintRef });
 
-  const triggerSinglePrint = useCallback(
-    (report: ProductionReport) => {
-      const row: ReportPrintRow = {
-        date: report.date,
-        lineName: getLineName(report.lineId),
-        productName: getProductName(report.productId),
-        supervisorName: getSupervisorName(report.supervisorId),
-        quantityProduced: report.quantityProduced || 0,
-        quantityWaste: report.quantityWaste || 0,
-        workersCount: report.workersCount || 0,
-        workHours: report.workHours || 0,
-      };
-      setPrintReport(row);
-    },
+  const buildReportRow = useCallback(
+    (report: ProductionReport | typeof emptyForm): ReportPrintRow => ({
+      date: report.date,
+      lineName: getLineName(report.lineId),
+      productName: getProductName(report.productId),
+      supervisorName: getSupervisorName(report.supervisorId),
+      quantityProduced: report.quantityProduced || 0,
+      quantityWaste: report.quantityWaste || 0,
+      workersCount: report.workersCount || 0,
+      workHours: report.workHours || 0,
+    }),
     [getLineName, getProductName, getSupervisorName]
   );
 
-  useEffect(() => {
-    if (printReport && singlePrintRef.current) {
-      const timer = setTimeout(async () => {
-        try {
-          await shareToWhatsApp(
-            singlePrintRef.current!,
-            `تقرير إنتاج - ${printReport.lineName} - ${printReport.date}`,
-          );
-        } catch (err) {
-          console.error('Share failed:', err);
-        }
+  const triggerSinglePrint = useCallback(
+    async (report: ProductionReport) => {
+      setPrintReport(buildReportRow(report));
+      await new Promise((r) => setTimeout(r, 300));
+      handleSinglePrint();
+      setTimeout(() => setPrintReport(null), 1000);
+    },
+    [buildReportRow, handleSinglePrint]
+  );
+
+  const showShareFeedback = useCallback((result: ShareResult) => {
+    if (result.method === 'native_share') return;
+    const msg = result.copied
+      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
+      : 'تم تحميل صورة التقرير — أرفقها في محادثة واتساب';
+    setShareToast(msg);
+    setTimeout(() => setShareToast(null), 6000);
+  }, []);
+
+  const triggerSingleShare = useCallback(
+    async (report: ProductionReport) => {
+      const row = buildReportRow(report);
+      setPrintReport(row);
+      await new Promise((r) => setTimeout(r, 300));
+      if (!singlePrintRef.current) return;
+      setExporting(true);
+      try {
+        const result = await shareToWhatsApp(
+          singlePrintRef.current,
+          `تقرير إنتاج - ${row.lineName} - ${row.date}`,
+        );
+        showShareFeedback(result);
+      } finally {
+        setExporting(false);
         setTimeout(() => setPrintReport(null), 500);
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [printReport]);
+      }
+    },
+    [buildReportRow, showShareFeedback]
+  );
 
   // ── CRUD handlers ──────────────────────────────────────────────────────────
 
@@ -191,19 +212,6 @@ export const Reports: React.FC = () => {
     setSaving(false);
     setShowModal(false);
     setEditId(null);
-
-    // Auto-print after save
-    const row: ReportPrintRow = {
-      date: form.date,
-      lineName: getLineName(form.lineId),
-      productName: getProductName(form.productId),
-      supervisorName: getSupervisorName(form.supervisorId),
-      quantityProduced: form.quantityProduced || 0,
-      quantityWaste: form.quantityWaste || 0,
-      workersCount: form.workersCount || 0,
-      workHours: form.workHours || 0,
-    };
-    setPrintReport(row);
   };
 
   const handleDelete = async (id: string) => {
@@ -225,7 +233,8 @@ export const Reports: React.FC = () => {
     if (!bulkPrintRef.current) return;
     setExporting(true);
     try {
-      await shareToWhatsApp(bulkPrintRef.current, `تقارير الإنتاج ${startDate}`);
+      const result = await shareToWhatsApp(bulkPrintRef.current, `تقارير الإنتاج ${startDate}`);
+      showShareFeedback(result);
     } finally {
       setExporting(false);
     }
@@ -234,12 +243,12 @@ export const Reports: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-white">تقارير الإنتاج</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">تقارير الإنتاج</h2>
           <p className="text-sm text-slate-500 font-medium">إنشاء ومراجعة تقارير الإنتاج اليومية.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {displayedReports.length > 0 && can("export") && (
             <>
               <Button
@@ -249,7 +258,7 @@ export const Reports: React.FC = () => {
                 }
               >
                 <span className="material-icons-round text-sm">download</span>
-                Excel
+                <span className="hidden sm:inline">Excel</span>
               </Button>
               <Button variant="outline" disabled={exporting} onClick={handlePDF}>
                 {exporting ? (
@@ -257,11 +266,11 @@ export const Reports: React.FC = () => {
                 ) : (
                   <span className="material-icons-round text-sm">picture_as_pdf</span>
                 )}
-                PDF
+                <span className="hidden sm:inline">PDF</span>
               </Button>
               <Button variant="outline" disabled={exporting} onClick={handleWhatsApp}>
                 <span className="material-icons-round text-sm">share</span>
-                واتساب
+                <span className="hidden sm:inline">واتساب</span>
               </Button>
             </>
           )}
@@ -282,8 +291,19 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
+      {/* WhatsApp Share Feedback Toast */}
+      {shareToast && (
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+          <span className="material-icons-round text-emerald-500">image</span>
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex-1">{shareToast}</p>
+          <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
+            <span className="material-icons-round text-sm">close</span>
+          </button>
+        </div>
+      )}
+
       {/* Date Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap gap-4 items-center shadow-sm">
+      <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap gap-3 sm:gap-4 items-center shadow-sm">
         <Button
           variant={viewMode === 'today' ? 'primary' : 'outline'}
           onClick={handleShowToday}
@@ -292,13 +312,13 @@ export const Reports: React.FC = () => {
           <span className="material-icons-round text-sm">today</span>
           اليوم
         </Button>
-        <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-700"></div>
-        <div className="flex items-center gap-3">
+        <div className="hidden sm:block h-8 w-[1px] bg-slate-200 dark:bg-slate-700"></div>
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <label className="text-xs font-bold text-slate-500">من:</label>
             <input
               type="date"
-              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
+              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 w-[130px] sm:w-auto"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
@@ -307,7 +327,7 @@ export const Reports: React.FC = () => {
             <label className="text-xs font-bold text-slate-500">إلى:</label>
             <input
               type="date"
-              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
+              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 w-[130px] sm:w-auto"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
@@ -369,15 +389,25 @@ export const Reports: React.FC = () => {
                   <td className="px-5 py-4 text-center text-sm font-bold">{report.workersCount}</td>
                   <td className="px-5 py-4 text-center text-sm font-bold">{report.workHours}</td>
                   <td className="px-5 py-4 text-left">
-                    <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       {can("print") && (
-                        <button
-                          onClick={() => triggerSinglePrint(report)}
-                          className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
-                          title="طباعة التقرير"
-                        >
-                          <span className="material-icons-round text-lg">print</span>
-                        </button>
+                        <>
+                          <button
+                            onClick={() => triggerSingleShare(report)}
+                            className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-lg transition-all"
+                            title="مشاركة عبر واتساب"
+                            disabled={exporting}
+                          >
+                            <span className="material-icons-round text-lg">share</span>
+                          </button>
+                          <button
+                            onClick={() => triggerSinglePrint(report)}
+                            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+                            title="طباعة التقرير"
+                          >
+                            <span className="material-icons-round text-lg">print</span>
+                          </button>
+                        </>
                       )}
                       {can("reports.edit") && (
                         <button
@@ -441,8 +471,8 @@ export const Reports: React.FC = () => {
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 sm:p-6 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">التاريخ *</label>
                   <input
@@ -466,7 +496,7 @@ export const Reports: React.FC = () => {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">خط الإنتاج *</label>
                   <select
@@ -494,7 +524,7 @@ export const Reports: React.FC = () => {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الكمية المنتجة *</label>
                   <input
@@ -518,7 +548,7 @@ export const Reports: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">عدد العمال *</label>
                   <input
@@ -552,8 +582,8 @@ export const Reports: React.FC = () => {
                 disabled={saving || !form.lineId || !form.productId || !form.supervisorId || !form.quantityProduced || !form.workersCount || !form.workHours}
               >
                 {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                <span className="material-icons-round text-sm">{editId ? 'save' : 'share'}</span>
-                {editId ? 'حفظ ومشاركة' : 'حفظ ومشاركة'}
+                <span className="material-icons-round text-sm">{editId ? 'save' : 'add'}</span>
+                {editId ? 'حفظ التعديلات' : 'حفظ التقرير'}
               </Button>
             </div>
           </div>

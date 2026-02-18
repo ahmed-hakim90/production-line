@@ -3,7 +3,7 @@ import { useReactToPrint } from 'react-to-print';
 import { useAppStore } from '../store/useAppStore';
 import { Card, Button } from '../components/UI';
 import { usePermission } from '../utils/permissions';
-import { exportToPDF, shareToWhatsApp } from '../utils/reportExport';
+import { exportToPDF, shareToWhatsApp, ShareResult } from '../utils/reportExport';
 import {
   SingleReportPrint,
   ReportPrintRow,
@@ -26,6 +26,7 @@ export const QuickAction: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -125,14 +126,24 @@ export const QuickAction: React.FC = () => {
     }
   };
 
+  const showShareFeedback = (result: ShareResult) => {
+    if (result.method === 'native_share') return;
+    const msg = result.copied
+      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
+      : 'تم تحميل صورة التقرير — أرفقها في محادثة واتساب';
+    setShareToast(msg);
+    setTimeout(() => setShareToast(null), 6000);
+  };
+
   const handleShareWhatsApp = async () => {
     if (!printRef.current) return;
     setExporting(true);
     try {
-      await shareToWhatsApp(
+      const result = await shareToWhatsApp(
         printRef.current,
         `تقرير إنتاج - ${getLineName(lineId)} - ${today}`
       );
+      showShareFeedback(result);
     } finally {
       setExporting(false);
     }
@@ -143,9 +154,20 @@ export const QuickAction: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-black text-slate-800 dark:text-white">إدخال سريع</h2>
+        <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدخال سريع</h2>
         <p className="text-sm text-slate-500 font-medium">إدخال بيانات الإنتاج بسرعة — حفظ، طباعة، ومشاركة.</p>
       </div>
+
+      {/* WhatsApp Share Feedback Toast */}
+      {shareToast && (
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+          <span className="material-icons-round text-emerald-500">image</span>
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex-1">{shareToast}</p>
+          <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
+            <span className="material-icons-round text-sm">close</span>
+          </button>
+        </div>
+      )}
 
       {!saved ? (
         <Card title="بيانات التقرير">
@@ -236,7 +258,7 @@ export const QuickAction: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
             <Button
               onClick={handleSave}
               disabled={saving || !lineId || !productId || !supervisorId || !quantity || !workers || !hours || !canCreateReport}
@@ -327,7 +349,7 @@ export const QuickAction: React.FC = () => {
                     <p className="text-sm font-black text-rose-500">{printReport.quantityWaste}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700">
                     <p className="text-[10px] font-bold text-slate-400 mb-1">المشرف</p>
                     <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{printReport.supervisorName}</p>

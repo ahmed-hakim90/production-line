@@ -174,24 +174,24 @@ export const ProductDetails: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <button
             onClick={() => navigate('/products')}
-            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all shrink-0"
           >
             <span className="material-icons-round">arrow_forward</span>
           </button>
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="hidden sm:flex w-14 h-14 rounded-xl bg-primary/10 items-center justify-center shrink-0">
               <span className="material-icons-round text-primary text-3xl">inventory_2</span>
             </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-800 dark:text-white">
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white truncate">
                 {product?.name || rawProduct?.name}
               </h2>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-sm text-slate-400 font-mono">{product?.code || rawProduct?.code}</span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
+                <span className="text-xs sm:text-sm text-slate-400 font-mono">{product?.code || rawProduct?.code}</span>
                 {(product?.category || rawProduct?.model) && (
                   <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2.5 py-0.5 rounded-full font-bold">
                     {product?.category || rawProduct?.model}

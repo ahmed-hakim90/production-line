@@ -70,9 +70,9 @@ export const ActivityLogPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-white">سجل النشاط</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">سجل النشاط</h2>
           <p className="text-sm text-slate-500 font-medium">تتبع جميع الأنشطة والعمليات في النظام.</p>
         </div>
         <button

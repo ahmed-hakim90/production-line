@@ -15,6 +15,20 @@ const capture = (el: HTMLElement) =>
     logging: false,
   });
 
+const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
+  new Promise((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+
+const downloadBlob = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
 // ─── Export element to PDF (A4, multi-page) ─────────────────────────────────
 
 export const exportToPDF = async (el: HTMLElement, fileName: string) => {
@@ -58,34 +72,65 @@ export const exportToPDF = async (el: HTMLElement, fileName: string) => {
   pdf.save(`${fileName}.pdf`);
 };
 
+// ─── Export element as image (PNG download) ─────────────────────────────────
+
+export const exportAsImage = async (el: HTMLElement, fileName: string) => {
+  const canvas = await capture(el);
+  const blob = await canvasToBlob(canvas);
+  downloadBlob(blob, `${fileName}.png`);
+};
+
+// ─── Share result type ──────────────────────────────────────────────────────
+
+export type ShareResult = {
+  method: 'native_share' | 'clipboard_and_download' | 'download_only';
+  copied: boolean;
+};
+
 // ─── Share as image to WhatsApp ─────────────────────────────────────────────
 
-export const shareToWhatsApp = async (el: HTMLElement, title: string) => {
+export const shareToWhatsApp = async (
+  el: HTMLElement,
+  title: string,
+): Promise<ShareResult> => {
   const canvas = await capture(el);
 
-  // Try native Web Share API (mobile)
+  // Mobile: Use Web Share API with file attachment
   if (navigator.share && navigator.canShare) {
-    const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), 'image/png'));
-    const file = new File([blob], `${title}.png`, { type: 'image/png' });
-    if (navigator.canShare({ files: [file] })) {
-      await navigator.share({ title, files: [file] });
-      return;
+    try {
+      const blob = await canvasToBlob(canvas);
+      const file = new File([blob], `${title}.png`, { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ title, files: [file] });
+        return { method: 'native_share', copied: false };
+      }
+    } catch {
+      // User cancelled or API unavailable — fall through to desktop fallback
     }
   }
 
-  // Fallback: download image then open WhatsApp
-  const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), 'image/png'));
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${title}.png`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Desktop fallback: download + copy to clipboard
+  const blob = await canvasToBlob(canvas);
+  const fileName = `${title}.png`;
 
-  window.open(
-    `https://wa.me/?text=${encodeURIComponent('Production Report Ready')}`,
-    '_blank'
-  );
+  // 1. Download the image
+  downloadBlob(blob, fileName);
+
+  // 2. Try copying the image to clipboard so user can paste in WhatsApp
+  let copied = false;
+  try {
+    if (navigator.clipboard?.write) {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob }),
+      ]);
+      copied = true;
+    }
+  } catch {
+    // Clipboard write not supported — image was still downloaded
+  }
+
+  // 3. Open WhatsApp Web so user can paste the image
+  window.open('https://web.whatsapp.com/', '_blank');
+
+  return { method: copied ? 'clipboard_and_download' : 'download_only', copied };
 };

@@ -85,13 +85,13 @@ export const Products: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-white">إدارة المنتجات</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدارة المنتجات</h2>
           <p className="text-sm text-slate-500 font-medium">قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج.</p>
         </div>
         {can("products.create") && (
-          <Button variant="primary" onClick={openCreate}>
+          <Button variant="primary" onClick={openCreate} className="self-start sm:self-auto shrink-0">
             <span className="material-icons-round text-sm">add</span>
             إضافة منتج جديد
           </Button>
@@ -99,18 +99,18 @@ export const Products: React.FC = () => {
       </div>
 
       {/* Search & Filters */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap gap-4 items-center justify-between shadow-sm">
-        <div className="flex flex-1 min-w-[300px] items-center gap-3 relative">
+      <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap gap-3 sm:gap-4 items-center justify-between shadow-sm">
+        <div className="flex flex-1 min-w-0 sm:min-w-[250px] items-center gap-3 relative">
           <span className="material-icons-round absolute right-3 text-slate-400">search</span>
           <input
             className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm font-medium"
-            placeholder="ابحث عن منتج بالاسم أو الكود..."
+            placeholder="ابحث عن منتج..."
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <select
             className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm font-bold focus:ring-primary outline-none min-w-[140px]"
             value={categoryFilter}
@@ -199,7 +199,7 @@ export const Products: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-5 text-left">
-                    <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={() => navigate(`/products/${product.id}`)} className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="عرض التفاصيل">
                         <span className="material-icons-round text-lg">visibility</span>
                       </button>
@@ -247,7 +247,7 @@ export const Products: React.FC = () => {
                   placeholder="مثال: محرك هيدروليكي H-400"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الكود *</label>
                   <input

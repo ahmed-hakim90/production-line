@@ -229,11 +229,11 @@ export const SupervisorDetails: React.FC = () => {
           <button onClick={() => navigate('/supervisors')} className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">
             <span className="material-icons-round">arrow_forward</span>
           </button>
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center ring-4 ring-primary/5">
+          <div className="hidden sm:flex w-16 h-16 rounded-full bg-primary/10 items-center justify-center ring-4 ring-primary/5 shrink-0">
             <span className="material-icons-round text-primary text-3xl">person</span>
           </div>
           <div>
-            <h2 className="text-2xl font-black text-slate-800 dark:text-white">{supervisor?.name}</h2>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">{supervisor?.name}</h2>
             <div className="flex items-center gap-3 mt-1">
               <Badge variant={reports.length > 0 ? 'success' : 'neutral'}>
                 {reports.length > 0 ? 'نشط' : 'لا توجد تقارير'}
