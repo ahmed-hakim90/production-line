@@ -33,6 +33,8 @@ export const Reports: React.FC = () => {
   const supervisors = useAppStore((s) => s.supervisors);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawLines = useAppStore((s) => s._rawLines);
+  const _rawSupervisors = useAppStore((s) => s._rawSupervisors);
+  const uid = useAppStore((s) => s.uid);
   const createReport = useAppStore((s) => s.createReport);
   const updateReport = useAppStore((s) => s.updateReport);
   const deleteReport = useAppStore((s) => s.deleteReport);
@@ -61,7 +63,17 @@ export const Reports: React.FC = () => {
   const [endDate, setEndDate] = useState(getTodayDateString());
   const [viewMode, setViewMode] = useState<'today' | 'range'>('today');
 
-  const displayedReports = viewMode === 'today' ? todayReports : productionReports;
+  // Supervisor-only filter: basic supervisors see only their own reports
+  const mySupervisorId = useMemo(() => {
+    if (can('reports.edit')) return null;
+    const linked = _rawSupervisors.find((s) => s.userId === uid);
+    return linked?.id ?? null;
+  }, [_rawSupervisors, uid, can]);
+
+  const allReports = viewMode === 'today' ? todayReports : productionReports;
+  const displayedReports = mySupervisorId
+    ? allReports.filter((r) => r.supervisorId === mySupervisorId)
+    : allReports;
 
   // ── Lookups ────────────────────────────────────────────────────────────────
 

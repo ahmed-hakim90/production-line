@@ -1,0 +1,206 @@
+.
+
+⚠️ IMPORTANT:
+
+Do NOT refactor existing layout.
+
+Do NOT break current dashboard.
+
+Extend architecture cleanly.
+
+Keep Zustand and services structure intact.
+
+🎯 OBJECTIVE
+
+Implement:
+
+A full Production Plans page.
+
+A Quick Planning widget inside Dashboard.
+
+Proper Firestore integration.
+
+Dynamic calculations (no derived data stored).
+
+🔹 STEP 1 — Create New Collection
+
+Create Firestore collection:
+
+production_plans
+
+Structure:
+
+{
+productId: string,
+lineId: string,
+plannedQuantity: number,
+startDate: timestamp,
+status: "planned" | "in_progress" | "completed" | "paused",
+createdBy: userId,
+createdAt: serverTimestamp()
+}
+
+Do NOT store computed values like capacity or days.
+
+🔹 STEP 2 — Create New Page
+
+Create:
+
+/production-plans
+
+This page must include:
+
+Section 1 — Create New Plan Form
+
+Fields:
+
+Product (dropdown)
+
+Line (dropdown)
+
+Planned Quantity
+
+Start Date
+
+When user enters quantity:
+Dynamically calculate:
+
+Average Assembly Time (from reports)
+
+Daily Capacity of selected line
+
+Estimated days required
+
+Display calculations live before saving.
+
+Button:
+"إنشاء خطة"
+
+Section 2 — Plans Table
+
+Display all production plans with:
+
+Product
+
+Line
+
+Planned Quantity
+
+Start Date
+
+Status
+
+Progress %
+
+Remaining Quantity
+
+Actions (Edit / Change Status / View)
+
+Progress must be calculated dynamically:
+
+actualProducedFromReports / plannedQuantity
+
+Do NOT store progress in Firestore.
+
+🔹 STEP 3 — Dashboard Widget
+
+In dashboard left section:
+
+Create Quick Planning Widget:
+
+Fields:
+
+Product
+
+Quantity
+
+When quantity entered:
+Calculate:
+
+Best line suggestion
+
+Daily capacity per line
+
+Estimated days
+
+Button:
+"إنشاء خطة رسمية"
+
+On click:
+Redirect to /production-plans
+Pre-fill form with selected product and quantity.
+
+🔹 STEP 4 — Calculations
+
+Use utils for all calculations.
+
+Average Assembly Time:
+sum(workers × hours) / sum(quantityProduced)
+
+Daily Capacity:
+(maxWorkers × dailyWorkingHours) / avgAssemblyTime
+
+Estimated Days:
+plannedQuantity / dailyCapacity
+
+Progress:
+actualProduced / plannedQuantity
+
+All calculations must remain dynamic.
+
+🔹 STEP 5 — Role Permissions
+
+supervisor:
+
+Cannot create plan.
+
+hall_supervisor:
+
+Can create and edit plan.
+
+factory_manager:
+
+Can view only.
+
+admin:
+
+Full control.
+
+Hide unauthorized actions completely.
+
+🔹 STEP 6 — Performance
+
+Fetch reports by product + line only.
+
+Avoid loading full history unnecessarily.
+
+Use memoized selectors where needed.
+
+🔹 STEP 7 — Code Quality
+
+Keep UI clean and Arabic RTL.
+
+No Firestore calls inside components.
+
+Use services layer.
+
+Use Zustand actions.
+
+Modular and production-ready code.
+
+🔥 FINAL RESULT
+
+System should now support:
+
+Official production planning
+
+Live progress tracking
+
+Smart capacity calculation
+
+Role-based control
+
+Clean ERP-style interface
+
+Do not redesign UI.
+Focus on logic and clean implementation.

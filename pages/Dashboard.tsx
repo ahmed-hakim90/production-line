@@ -138,7 +138,7 @@ export const Dashboard: React.FC = () => {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">مرحباً بك،</h2>
+          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">ريح علشان الجو مريح</h2>
           <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">جاري تحميل البيانات...</p>
         </div>
         <LoadingSkeleton type="card" rows={6} />
@@ -149,7 +149,7 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">مرحباً بك،</h2>
+        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">ريح علشان الجو مريح</h2>
         <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
       </div>
 

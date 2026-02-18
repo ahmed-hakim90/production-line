@@ -769,7 +769,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportService.getByDateRange(today, today),
         reportService.getByDateRange(monthStart, monthEnd),
       ]);
-      set({ todayReports, monthlyReports });
+      set({ todayReports, monthlyReports, productionReports: monthlyReports });
       get()._rebuildProducts();
       get()._rebuildLines();
 
@@ -791,7 +791,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportService.getByDateRange(today, today),
         reportService.getByDateRange(monthStart, monthEnd),
       ]);
-      set({ todayReports, monthlyReports });
+      set({ todayReports, monthlyReports, productionReports: monthlyReports });
       get()._rebuildProducts();
       get()._rebuildLines();
 
@@ -810,7 +810,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportService.getByDateRange(today, today),
         reportService.getByDateRange(monthStart, monthEnd),
       ]);
-      set({ todayReports, monthlyReports });
+      set({ todayReports, monthlyReports, productionReports: monthlyReports });
       get()._rebuildProducts();
       get()._rebuildLines();
 
