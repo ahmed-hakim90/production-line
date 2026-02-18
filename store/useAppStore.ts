@@ -14,6 +14,7 @@ import {
   Product,
   Supervisor,
   ProductionReport,
+  ProductionPlan,
   LineStatus,
   LineProductConfig,
   FirestoreProduct,
@@ -36,6 +37,7 @@ import { supervisorService } from '../services/supervisorService';
 import { reportService } from '../services/reportService';
 import { lineStatusService } from '../services/lineStatusService';
 import { lineProductConfigService } from '../services/lineProductConfigService';
+import { productionPlanService } from '../services/productionPlanService';
 import { roleService } from '../services/roleService';
 import { userService } from '../services/userService';
 import { activityLogService } from '../services/activityLogService';
@@ -78,6 +80,8 @@ interface AppState {
   monthlyReports: ProductionReport[];
   lineStatuses: LineStatus[];
   lineProductConfigs: LineProductConfig[];
+  productionPlans: ProductionPlan[];
+  planReports: Record<string, ProductionReport[]>;
 
   // Loading & error
   loading: boolean;
@@ -129,6 +133,7 @@ interface AppState {
   fetchReports: (startDate?: string, endDate?: string) => Promise<void>;
   fetchLineStatuses: () => Promise<void>;
   fetchLineProductConfigs: () => Promise<void>;
+  fetchProductionPlans: () => Promise<void>;
 
   // Mutations — Products
   createProduct: (data: Omit<FirestoreProduct, 'id'>) => Promise<string | null>;
@@ -191,6 +196,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   monthlyReports: [],
   lineStatuses: [],
   lineProductConfigs: [],
+  productionPlans: [],
+  planReports: {},
 
   loading: false,
   productsLoading: false,
@@ -375,6 +382,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       monthlyReports: [],
       lineStatuses: [],
       lineProductConfigs: [],
+      productionPlans: [],
+      planReports: {},
       roles: [],
       error: null,
       authError: null,
@@ -476,12 +485,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: Load all app data (after auth) ────────────────────────────
 
   _loadAppData: async () => {
-    const [rawProducts, rawLines, rawSupervisors, configs] =
+    const [rawProducts, rawLines, rawSupervisors, configs, productionPlans] =
       await Promise.all([
         productService.getAll(),
         lineService.getAll(),
         supervisorService.getAll(),
         lineProductConfigService.getAll(),
+        productionPlanService.getAll(),
       ]);
 
     const today = getTodayDateString();
@@ -492,6 +502,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       lineStatusService.getAll(),
     ]);
 
+    const activePlans = productionPlans.filter(
+      (p) => p.status === 'in_progress' || p.status === 'planned'
+    );
+    const planReports: Record<string, ProductionReport[]> = {};
+    await Promise.all(
+      activePlans.map(async (plan) => {
+        const key = `${plan.lineId}_${plan.productId}`;
+        planReports[key] = await reportService.getByLineAndProduct(
+          plan.lineId, plan.productId, plan.startDate
+        );
+      })
+    );
+
     set({
       _rawProducts: rawProducts,
       _rawLines: rawLines,
@@ -500,11 +523,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       todayReports,
       monthlyReports,
       lineStatuses,
+      productionPlans,
+      planReports,
     });
 
     const products = buildProducts(rawProducts, todayReports, configs);
     const productionLines = buildProductionLines(
-      rawLines, rawProducts, rawSupervisors, todayReports, lineStatuses, configs
+      rawLines, rawProducts, rawSupervisors, todayReports, lineStatuses, configs,
+      productionPlans, planReports
     );
     const supervisors: Supervisor[] = rawSupervisors.map((s) => ({
       id: s.id!,
@@ -660,6 +686,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       const configs = await lineProductConfigService.getAll();
       set({ lineProductConfigs: configs });
       get()._rebuildProducts();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  fetchProductionPlans: async () => {
+    try {
+      const productionPlans = await productionPlanService.getAll();
+      const activePlans = productionPlans.filter(
+        (p) => p.status === 'in_progress' || p.status === 'planned'
+      );
+      const planReports: Record<string, ProductionReport[]> = {};
+      await Promise.all(
+        activePlans.map(async (plan) => {
+          const key = `${plan.lineId}_${plan.productId}`;
+          planReports[key] = await reportService.getByLineAndProduct(
+            plan.lineId, plan.productId, plan.startDate
+          );
+        })
+      );
+      set({ productionPlans, planReports });
+      get()._rebuildLines();
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -906,6 +954,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       todayReports,
       lineStatuses,
       lineProductConfigs,
+      productionPlans,
+      planReports,
     } = get();
     const productionLines = buildProductionLines(
       _rawLines,
@@ -913,7 +963,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       _rawSupervisors,
       todayReports,
       lineStatuses,
-      lineProductConfigs
+      lineProductConfigs,
+      productionPlans,
+      planReports
     );
     set({ productionLines });
   },

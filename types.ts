@@ -128,6 +128,17 @@ export interface LineStatus {
   updatedAt?: any;
 }
 
+export interface ProductionPlan {
+  id?: string;
+  productId: string;
+  lineId: string;
+  plannedQuantity: number;
+  startDate: string;
+  status: 'planned' | 'in_progress' | 'completed' | 'paused';
+  createdBy: string;
+  createdAt?: any;
+}
+
 // ─── Dynamic Roles & Permissions ─────────────────────────────────────────────
 
 /** @deprecated use FirestoreRole + dynamic permissions instead */

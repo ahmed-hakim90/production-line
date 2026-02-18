@@ -1,13 +1,15 @@
 
-import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { useAppStore } from '../store/useAppStore';
-import { Card, Button, Badge } from '../components/UI';
+import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { formatNumber, getTodayDateString } from '../utils/calculations';
 import { ProductionReport } from '../types';
 import { usePermission } from '../utils/permissions';
 import { exportReportsByDateRange } from '../utils/exportExcel';
 import { exportToPDF, shareToWhatsApp, ShareResult } from '../utils/reportExport';
+import { parseExcelFile, toReportData, ImportResult, ParsedReportRow } from '../utils/importExcel';
+import { downloadReportsTemplate } from '../utils/downloadTemplates';
 import {
   ProductionReportPrint,
   SingleReportPrint,
@@ -51,6 +53,14 @@ export const Reports: React.FC = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+
+  // Import from Excel state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importSaving, setImportSaving] = useState(false);
+  const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Single-report print state
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
@@ -240,8 +250,64 @@ export const Reports: React.FC = () => {
     }
   };
 
+  // ── Import from Excel ────────────────────────────────────────────────────
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImportParsing(true);
+    setShowImportModal(true);
+    setImportResult(null);
+    try {
+      const result = await parseExcelFile(file, {
+        products: _rawProducts,
+        lines: _rawLines,
+        supervisors: _rawSupervisors,
+      });
+      setImportResult(result);
+    } catch {
+      setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0 });
+    } finally {
+      setImportParsing(false);
+    }
+  };
+
+  const handleImportSave = async () => {
+    if (!importResult) return;
+    const validRows = importResult.rows.filter((r) => r.errors.length === 0);
+    if (validRows.length === 0) return;
+
+    setImportSaving(true);
+    setImportProgress({ done: 0, total: validRows.length });
+
+    let done = 0;
+    for (const row of validRows) {
+      try {
+        await createReport(toReportData(row));
+      } catch {
+        // skip failed row
+      }
+      done++;
+      setImportProgress({ done, total: validRows.length });
+    }
+
+    setImportSaving(false);
+    setShowImportModal(false);
+    setImportResult(null);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -275,10 +341,16 @@ export const Reports: React.FC = () => {
             </>
           )}
           {can("reports.create") && (
-            <Button variant="primary" onClick={openCreate}>
-              <span className="material-icons-round text-sm">note_add</span>
-              إنشاء تقرير
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <span className="material-icons-round text-sm">upload_file</span>
+                <span className="hidden sm:inline">رفع Excel</span>
+              </Button>
+              <Button variant="primary" onClick={openCreate}>
+                <span className="material-icons-round text-sm">note_add</span>
+                إنشاء تقرير
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -484,44 +556,32 @@ export const Reports: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المشرف *</label>
-                  <select
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  <SearchableSelect
+                    placeholder="اختر المشرف"
+                    options={supervisors.map((s) => ({ value: s.id, label: s.name }))}
                     value={form.supervisorId}
-                    onChange={(e) => setForm({ ...form, supervisorId: e.target.value })}
-                  >
-                    <option value="">اختر المشرف</option>
-                    {supervisors.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm({ ...form, supervisorId: v })}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">خط الإنتاج *</label>
-                  <select
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  <SearchableSelect
+                    placeholder="اختر الخط"
+                    options={_rawLines.map((l) => ({ value: l.id!, label: l.name }))}
                     value={form.lineId}
-                    onChange={(e) => setForm({ ...form, lineId: e.target.value })}
-                  >
-                    <option value="">اختر الخط</option>
-                    {_rawLines.map((l) => (
-                      <option key={l.id} value={l.id!}>{l.name}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm({ ...form, lineId: v })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المنتج *</label>
-                  <select
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  <SearchableSelect
+                    placeholder="اختر المنتج"
+                    options={_rawProducts.map((p) => ({ value: p.id!, label: p.name }))}
                     value={form.productId}
-                    onChange={(e) => setForm({ ...form, productId: e.target.value })}
-                  >
-                    <option value="">اختر المنتج</option>
-                    {_rawProducts.map((p) => (
-                      <option key={p.id} value={p.id!}>{p.name}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm({ ...form, productId: v })}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -609,6 +669,172 @@ export const Reports: React.FC = () => {
                 نعم، احذف
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Import from Excel Modal ══ */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="px-5 sm:px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
+                  <span className="material-icons-round text-emerald-600 dark:text-emerald-400">upload_file</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-bold">استيراد تقارير من Excel</h3>
+                    <button onClick={downloadReportsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
+                      <span className="material-icons-round text-sm">download</span>
+                      تحميل نموذج
+                    </button>
+                  </div>
+                  {importResult && (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {importResult.totalRows} صف — {importResult.validCount} صالح — {importResult.errorCount} خطأ
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                disabled={importSaving}
+              >
+                <span className="material-icons-round">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {importParsing ? (
+                <div className="text-center py-12">
+                  <span className="material-icons-round text-4xl text-primary animate-spin block mb-3">refresh</span>
+                  <p className="font-bold text-slate-600 dark:text-slate-400">جاري قراءة الملف...</p>
+                </div>
+              ) : importResult && importResult.rows.length === 0 ? (
+                <div className="text-center py-12">
+                  <span className="material-icons-round text-5xl text-slate-300 block mb-3">warning</span>
+                  <p className="font-bold text-slate-600 dark:text-slate-400">لا توجد بيانات في الملف</p>
+                  <p className="text-sm text-slate-400 mt-1">تأكد أن الملف يحتوي على أعمدة: التاريخ، خط الإنتاج، المنتج، المشرف، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
+                  <button onClick={downloadReportsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
+                    <span className="material-icons-round text-sm">download</span>
+                    تحميل نموذج التقارير
+                  </button>
+                </div>
+              ) : importResult ? (
+                <div className="space-y-4">
+                  {/* Summary */}
+                  <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm font-bold text-blue-600 dark:text-blue-400">
+                      <span className="material-icons-round text-sm">description</span>
+                      {importResult.totalRows} صف
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                      <span className="material-icons-round text-sm">check_circle</span>
+                      {importResult.validCount} صالح للحفظ
+                    </div>
+                    {importResult.errorCount > 0 && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-rose-50 dark:bg-rose-900/20 rounded-lg text-sm font-bold text-rose-500">
+                        <span className="material-icons-round text-sm">error</span>
+                        {importResult.errorCount} يحتاج تعديل
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview Table */}
+                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                    <table className="w-full text-right border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">#</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">الحالة</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">التاريخ</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">خط الإنتاج</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">المنتج</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">المشرف</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">الكمية</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">الهالك</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">عمال</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">ساعات</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {importResult.rows.map((row) => {
+                          const isValid = row.errors.length === 0;
+                          return (
+                            <tr key={row.rowIndex} className={isValid ? '' : 'bg-rose-50/50 dark:bg-rose-900/5'}>
+                              <td className="px-3 py-2 text-slate-400 font-mono text-xs">{row.rowIndex}</td>
+                              <td className="px-3 py-2">
+                                {isValid ? (
+                                  <span className="material-icons-round text-emerald-500 text-sm">check_circle</span>
+                                ) : (
+                                  <span className="material-icons-round text-rose-500 text-sm" title={row.errors.join('\n')}>error</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 font-medium">{row.date}</td>
+                              <td className={`px-3 py-2 ${row.lineId ? '' : 'text-rose-500'}`}>{row.lineName || '—'}</td>
+                              <td className={`px-3 py-2 ${row.productId ? '' : 'text-rose-500'}`}>{row.productName || '—'}</td>
+                              <td className={`px-3 py-2 ${row.supervisorId ? '' : 'text-rose-500'}`}>{row.supervisorName || '—'}</td>
+                              <td className="px-3 py-2 text-center font-bold">{row.quantityProduced}</td>
+                              <td className="px-3 py-2 text-center text-rose-500">{row.quantityWaste}</td>
+                              <td className="px-3 py-2 text-center">{row.workersCount}</td>
+                              <td className="px-3 py-2 text-center">{row.workHours}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Error details */}
+                  {importResult.errorCount > 0 && (
+                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-4">
+                      <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mb-2">
+                        <span className="material-icons-round text-sm align-middle ml-1">info</span>
+                        الصفوف التالية تحتاج تعديل ولن يتم حفظها:
+                      </p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {importResult.rows.filter((r) => r.errors.length > 0).map((row) => (
+                          <p key={row.rowIndex} className="text-xs text-rose-600 dark:text-rose-400">
+                            صف {row.rowIndex}: {row.errors.join(' · ')}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Modal Footer */}
+            {importResult && importResult.validCount > 0 && (
+              <div className="px-5 sm:px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+                {importSaving ? (
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-300"
+                        style={{ width: `${importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-bold text-primary shrink-0">
+                      {importProgress.done}/{importProgress.total}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={() => { setShowImportModal(false); setImportResult(null); }}>إلغاء</Button>
+                    <Button variant="primary" onClick={handleImportSave}>
+                      <span className="material-icons-round text-sm">save</span>
+                      حفظ {importResult.validCount} تقرير
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

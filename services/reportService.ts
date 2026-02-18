@@ -155,6 +155,37 @@ export const reportService = {
   },
 
   /**
+   * Fetch reports for a specific line + product combo.
+   * Queries by lineId only (single-field index), filters productId + date in memory
+   * to avoid requiring a Firestore composite index.
+   */
+  async getByLineAndProduct(
+    lineId: string,
+    productId: string,
+    fromDate?: string
+  ): Promise<ProductionReport[]> {
+    if (!isConfigured) return [];
+    try {
+      const q = query(
+        collection(db, COLLECTION),
+        where('lineId', '==', lineId)
+      );
+      const snap = await getDocs(q);
+      let reports = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as ProductionReport)
+      );
+      reports = reports.filter((r) => r.productId === productId);
+      if (fromDate) {
+        reports = reports.filter((r) => r.date >= fromDate);
+      }
+      return reports.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    } catch (error) {
+      console.error('reportService.getByLineAndProduct error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Fetch reports filtered by product.
    * Sorts in-memory to avoid needing a Firestore composite index.
    */

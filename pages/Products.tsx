@@ -1,11 +1,13 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../utils/calculations';
 import { FirestoreProduct } from '../types';
 import { usePermission } from '../utils/permissions';
+import { parseProductsExcel, toProductData, ProductImportResult } from '../utils/importProducts';
+import { downloadProductsTemplate } from '../utils/downloadTemplates';
 
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
   name: '',
@@ -29,6 +31,14 @@ export const Products: React.FC = () => {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Import from Excel
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importResult, setImportResult] = useState<ProductImportResult | null>(null);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importSaving, setImportSaving] = useState(false);
+  const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Search & Filters
   const [search, setSearch] = useState('');
@@ -83,18 +93,70 @@ export const Products: React.FC = () => {
     setDeleteConfirmId(null);
   };
 
+  // ── Import from Excel ──────────────────────────────────────────────────
+
+  const _rawProducts = useAppStore((s) => s._rawProducts);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImportParsing(true);
+    setShowImportModal(true);
+    setImportResult(null);
+    try {
+      const result = await parseProductsExcel(file, _rawProducts);
+      setImportResult(result);
+    } catch {
+      setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0 });
+    } finally {
+      setImportParsing(false);
+    }
+  };
+
+  const handleImportSave = async () => {
+    if (!importResult) return;
+    const validRows = importResult.rows.filter((r) => r.errors.length === 0);
+    if (validRows.length === 0) return;
+
+    setImportSaving(true);
+    setImportProgress({ done: 0, total: validRows.length });
+
+    let done = 0;
+    for (const row of validRows) {
+      try {
+        await createProduct(toProductData(row));
+      } catch { /* skip failed */ }
+      done++;
+      setImportProgress({ done, total: validRows.length });
+    }
+
+    setImportSaving(false);
+    setShowImportModal(false);
+    setImportResult(null);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Hidden file input */}
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileSelect} />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدارة المنتجات</h2>
           <p className="text-sm text-slate-500 font-medium">قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج.</p>
         </div>
         {can("products.create") && (
-          <Button variant="primary" onClick={openCreate} className="self-start sm:self-auto shrink-0">
-            <span className="material-icons-round text-sm">add</span>
-            إضافة منتج جديد
-          </Button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="shrink-0">
+              <span className="material-icons-round text-sm">upload_file</span>
+              <span className="hidden sm:inline">رفع Excel</span>
+            </Button>
+            <Button variant="primary" onClick={openCreate} className="shrink-0">
+              <span className="material-icons-round text-sm">add</span>
+              إضافة منتج جديد
+            </Button>
+          </div>
         )}
       </div>
 
@@ -315,6 +377,129 @@ export const Products: React.FC = () => {
                 <span className="material-icons-round text-sm">delete</span>
                 نعم، احذف
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Import Excel Modal ── */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-bold">رفع منتجات من Excel</h3>
+                <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
+                  <span className="material-icons-round text-sm">download</span>
+                  تحميل نموذج
+                </button>
+              </div>
+              <button onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <span className="material-icons-round">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {importParsing && (
+                <div className="text-center py-12">
+                  <span className="material-icons-round animate-spin text-4xl text-primary mb-3 block">refresh</span>
+                  <p className="font-bold text-slate-600">جاري تحليل الملف...</p>
+                </div>
+              )}
+
+              {!importParsing && importResult && importResult.totalRows === 0 && (
+                <div className="text-center py-12">
+                  <span className="material-icons-round text-5xl text-slate-300 mb-3 block">warning</span>
+                  <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
+                  <p className="text-sm text-slate-400 mt-1">تأكد من أن الملف يحتوي على أعمدة: اسم المنتج، الكود، الفئة، الرصيد الافتتاحي</p>
+                  <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
+                    <span className="material-icons-round text-sm">download</span>
+                    تحميل نموذج المنتجات
+                  </button>
+                </div>
+              )}
+
+              {!importParsing && importResult && importResult.totalRows > 0 && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-2 text-sm font-bold">
+                      الإجمالي: <span className="text-primary">{importResult.totalRows}</span>
+                    </div>
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl px-4 py-2 text-sm font-bold text-emerald-600">
+                      صالح: {importResult.validCount}
+                    </div>
+                    {importResult.errorCount > 0 && (
+                      <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl px-4 py-2 text-sm font-bold text-rose-500">
+                        يحتوي أخطاء: {importResult.errorCount}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                    <table className="w-full text-right text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50">
+                          <th className="px-4 py-3 text-xs font-black text-slate-500">صف</th>
+                          <th className="px-4 py-3 text-xs font-black text-slate-500">الحالة</th>
+                          <th className="px-4 py-3 text-xs font-black text-slate-500">اسم المنتج</th>
+                          <th className="px-4 py-3 text-xs font-black text-slate-500">الكود</th>
+                          <th className="px-4 py-3 text-xs font-black text-slate-500">الفئة</th>
+                          <th className="px-4 py-3 text-xs font-black text-slate-500">الرصيد</th>
+                          <th className="px-4 py-3 text-xs font-black text-slate-500">الأخطاء</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {importResult.rows.map((row) => (
+                          <tr key={row.rowIndex} className={row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}>
+                            <td className="px-4 py-2.5 text-slate-400 font-mono">{row.rowIndex}</td>
+                            <td className="px-4 py-2.5">
+                              {row.errors.length === 0 ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold">
+                                  <span className="material-icons-round text-sm">check_circle</span> صالح
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
+                                  <span className="material-icons-round text-sm">error</span> خطأ
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row.name || '—'}</td>
+                            <td className="px-4 py-2.5 font-mono text-slate-500">{row.code || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{row.model || '—'}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{row.openingBalance}</td>
+                            <td className="px-4 py-2.5">
+                              {row.errors.length > 0 && (
+                                <ul className="text-xs text-rose-500 space-y-0.5">
+                                  {row.errors.map((err, i) => <li key={i}>• {err}</li>)}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <Button variant="outline" onClick={() => { setShowImportModal(false); setImportResult(null); }} disabled={importSaving}>إلغاء</Button>
+              {importResult && importResult.validCount > 0 && (
+                <Button variant="primary" onClick={handleImportSave} disabled={importSaving}>
+                  {importSaving ? (
+                    <>
+                      <span className="material-icons-round animate-spin text-sm">refresh</span>
+                      {importProgress.done} / {importProgress.total}
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-icons-round text-sm">save</span>
+                      حفظ {importResult.validCount} منتج
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>

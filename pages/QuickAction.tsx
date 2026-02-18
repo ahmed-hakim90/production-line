@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { useAppStore } from '../store/useAppStore';
-import { Card, Button } from '../components/UI';
+import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../utils/permissions';
 import { exportToPDF, shareToWhatsApp, ShareResult } from '../utils/reportExport';
 import {
@@ -174,42 +174,30 @@ export const QuickAction: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">المشرف *</label>
-              <select
+              <SearchableSelect
+                placeholder="اختر المشرف"
+                options={activeSupervisors.map((s) => ({ value: s.id, label: s.name }))}
                 value={supervisorId}
-                onChange={(e) => setSupervisorId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="">اختر المشرف</option>
-                {activeSupervisors.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
+                onChange={setSupervisorId}
+              />
             </div>
             <div>
               <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">خط الإنتاج *</label>
-              <select
+              <SearchableSelect
+                placeholder="اختر الخط"
+                options={_rawLines.map((l) => ({ value: l.id!, label: l.name }))}
                 value={lineId}
-                onChange={(e) => setLineId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="">اختر الخط</option>
-                {_rawLines.map((l) => (
-                  <option key={l.id} value={l.id!}>{l.name}</option>
-                ))}
-              </select>
+                onChange={setLineId}
+              />
             </div>
             <div>
               <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">المنتج *</label>
-              <select
+              <SearchableSelect
+                placeholder="اختر المنتج"
+                options={_rawProducts.map((p) => ({ value: p.id!, label: p.name }))}
                 value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="">اختر المنتج</option>
-                {_rawProducts.map((p) => (
-                  <option key={p.id} value={p.id!}>{p.name}</option>
-                ))}
-              </select>
+                onChange={setProductId}
+              />
             </div>
             <div>
               <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">الكمية المنتجة *</label>

@@ -138,7 +138,7 @@ export const Dashboard: React.FC = () => {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">ريح علشان الجو مريح</h2>
+          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">مؤسسة المغربي</h2>
           <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">جاري تحميل البيانات...</p>
         </div>
         <LoadingSkeleton type="card" rows={6} />
@@ -148,10 +148,10 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">ريح علشان الجو مريح</h2>
+      {/* <div>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">مؤسسة المغربي</h2>
         <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
-      </div>
+      </div> */}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {/* Production Card — Daily & Monthly */}
@@ -217,9 +217,12 @@ export const Dashboard: React.FC = () => {
 
                   <div className="space-y-3">
                     <div className="flex justify-between text-xs font-bold">
-                      <span className="text-slate-500">الإنجاز: {formatNumber(line.achievement)} / {formatNumber(line.target)}</span>
+                      <span className="text-slate-500">الإنتاج: {formatNumber(line.achievement)} / {formatNumber(line.target)}</span>
                       <span className={`${line.efficiency > 80 ? 'text-emerald-600' : 'text-amber-600'}`}>{line.efficiency}%</span>
                     </div>
+                    {line.target > 0 && (
+                      <p className="text-[11px] font-bold text-slate-400">المتبقي: {formatNumber(Math.max(line.target - line.achievement, 0))}</p>
+                    )}
                     <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
                       <div 
                         className={`h-full rounded-full transition-all duration-1000 ${line.status === ProductionLineStatus.WARNING ? 'bg-amber-500' : 'bg-primary shadow-[0_0_10px_rgba(19,146,236,0.3)]'}`} 
@@ -334,6 +337,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* ── Set Target Modal ── */}
+
       {targetModal && can("lineStatus.edit") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>

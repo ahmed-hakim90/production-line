@@ -13,6 +13,7 @@ import type {
   Product,
   ProductionLine,
   ProductionLineStatus,
+  ProductionPlan,
 } from '../types';
 
 // ─── Core Metrics ───────────────────────────────────────────────────────────
@@ -227,6 +228,8 @@ export const buildProducts = (
 
 /**
  * Build UI-ready ProductionLine[] from Firestore lines + supporting data.
+ * When productionPlans & planReports are provided, active plans drive
+ * achievement/target/progress instead of today-only data.
  */
 export const buildProductionLines = (
   rawLines: FirestoreProductionLine[],
@@ -234,30 +237,78 @@ export const buildProductionLines = (
   rawSupervisors: FirestoreSupervisor[],
   todayReports: ProductionReport[],
   lineStatuses: LineStatus[],
-  configs: LineProductConfig[]
+  configs: LineProductConfig[],
+  productionPlans: ProductionPlan[] = [],
+  planReports: Record<string, ProductionReport[]> = {}
 ): ProductionLine[] => {
   return rawLines.map((line) => {
+    const activePlan = productionPlans.find(
+      (p) => p.lineId === line.id && (p.status === 'in_progress' || p.status === 'planned')
+    );
+
+    if (activePlan) {
+      const key = `${line.id}_${activePlan.productId}`;
+      const historical = planReports[key] || [];
+
+      const todayForPlan = todayReports.filter(
+        (r) => r.lineId === line.id && r.productId === activePlan.productId
+      );
+      const historicalIds = new Set(historical.map((r) => r.id));
+      const merged = [
+        ...historical,
+        ...todayForPlan.filter((r) => !historicalIds.has(r.id)),
+      ];
+
+      const actualProduced = merged.reduce(
+        (sum, r) => sum + (r.quantityProduced || 0), 0
+      );
+      const plannedQty = activePlan.plannedQuantity;
+      const progress = calculatePlanProgress(actualProduced, plannedQty);
+
+      const currentProduct =
+        rawProducts.find((p) => p.id === activePlan.productId)?.name ?? '—';
+
+      const sorted = [...merged].sort(
+        (a, b) => (b.date || '').localeCompare(a.date || '')
+      );
+      const latest = sorted[0];
+      const supervisorName = latest
+        ? rawSupervisors.find((s) => s.id === latest.supervisorId)?.name ?? '—'
+        : '—';
+
+      return {
+        id: line.id!,
+        name: line.name,
+        code: line.id!,
+        supervisorName,
+        status: line.status as ProductionLineStatus,
+        currentProduct,
+        achievement: actualProduced,
+        target: plannedQty,
+        workersCount: latest?.workersCount ?? 0,
+        efficiency: progress,
+        hoursUsed: merged.reduce((sum, r) => sum + (r.workHours || 0), 0),
+      };
+    }
+
+    // Fallback: no active plan — use today's data + lineStatus target
     const status = lineStatuses.find((s) => s.lineId === line.id);
     const lineReports = todayReports.filter((r) => r.lineId === line.id);
 
     const achievement = lineReports.reduce(
-      (sum, r) => sum + (r.quantityProduced || 0),
-      0
+      (sum, r) => sum + (r.quantityProduced || 0), 0
     );
     const target = status?.targetTodayQty ?? 0;
     const workersCount = lineReports.length
       ? lineReports[lineReports.length - 1].workersCount
       : 0;
     const hoursUsed = lineReports.reduce(
-      (sum, r) => sum + (r.workHours || 0),
-      0
+      (sum, r) => sum + (r.workHours || 0), 0
     );
 
-    // Find product name via line_status → product
     const currentProduct =
       rawProducts.find((p) => p.id === status?.currentProductId)?.name ?? '—';
 
-    // Find supervisor name (first config that maps to this line → supervisor from reports, or fallback)
     const supervisorId = lineReports.length
       ? lineReports[0].supervisorId
       : undefined;
@@ -278,6 +329,17 @@ export const buildProductionLines = (
       hoursUsed,
     };
   });
+};
+
+/**
+ * Plan progress = (actualProduced / plannedQuantity) × 100, capped at 100.
+ */
+export const calculatePlanProgress = (
+  actualProduced: number,
+  plannedQuantity: number
+): number => {
+  if (plannedQuantity <= 0) return 0;
+  return Math.min(Math.round((actualProduced / plannedQuantity) * 100), 100);
 };
 
 /**

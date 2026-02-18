@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 interface CardProps {
   children: React.ReactNode;
@@ -144,5 +144,140 @@ export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { 
     <button className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
       {children}
     </button>
+  );
+};
+
+// ─── Searchable Select ────────────────────────────────────────────────────
+
+export interface SelectOption {
+  value: string;
+  label: string;
+}
+
+interface SearchableSelectProps {
+  options: SelectOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+export const SearchableSelect: React.FC<SearchableSelectProps> = ({
+  options,
+  value,
+  onChange,
+  placeholder = 'اختر...',
+  className = '',
+}) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const selectedLabel = useMemo(
+    () => options.find((o) => o.value === value)?.label ?? '',
+    [options, value]
+  );
+
+  const filtered = useMemo(() => {
+    if (!query) return options;
+    const q = query.toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelect = (val: string) => {
+    onChange(val);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const handleInputFocus = () => {
+    setOpen(true);
+    setQuery('');
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange('');
+    setQuery('');
+    setOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className={`relative ${className}`}>
+      <div
+        className={`
+          w-full border rounded-xl text-sm font-medium transition-all flex items-center gap-2 cursor-text
+          ${open
+            ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-slate-800'
+            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+          }
+        `}
+        onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+      >
+        <span className="material-icons-round text-slate-400 text-lg pr-3 pl-1 shrink-0">search</span>
+        <input
+          ref={inputRef}
+          type="text"
+          className="flex-1 bg-transparent border-none outline-none py-3 pl-3 text-sm font-medium text-slate-700 dark:text-slate-200 placeholder-slate-400 min-w-0"
+          placeholder={placeholder}
+          value={open ? query : selectedLabel}
+          readOnly={!open}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={handleInputFocus}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="p-1 ml-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors shrink-0"
+          >
+            <span className="material-icons-round text-sm">close</span>
+          </button>
+        )}
+        <span className={`material-icons-round text-slate-400 text-lg ml-2 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}>
+          expand_more
+        </span>
+      </div>
+
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-black/30 max-h-56 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-slate-400 text-center">لا توجد نتائج</div>
+          ) : (
+            filtered.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`
+                  w-full text-right px-4 py-2.5 text-sm font-medium transition-colors flex items-center gap-2
+                  ${opt.value === value
+                    ? 'bg-primary/10 text-primary font-bold'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }
+                `}
+                onClick={() => handleSelect(opt.value)}
+              >
+                {opt.value === value && (
+                  <span className="material-icons-round text-primary text-sm shrink-0">check</span>
+                )}
+                <span className="truncate">{opt.label}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 };
