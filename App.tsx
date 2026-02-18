@@ -5,6 +5,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
+import { Setup } from './pages/Setup';
 import { Dashboard } from './pages/Dashboard';
 import { Products } from './pages/Products';
 import { ProductDetails } from './pages/ProductDetails';
@@ -33,7 +34,6 @@ const App: React.FC = () => {
     if (initialized.current) return;
     initialized.current = true;
 
-    // Listen for Firebase auth state; if a user is already signed in, initialize
     const unsub = onAuthChange((user) => {
       if (user) {
         initializeApp().then(() => {
@@ -41,8 +41,6 @@ const App: React.FC = () => {
           if (state.isAuthenticated) {
             const unsubReports = subscribeToDashboard();
             const unsubStatuses = subscribeToLineStatuses();
-
-            // Store cleanup functions
             (window as any).__cleanupSubs = () => {
               unsubReports();
               unsubStatuses();
@@ -58,7 +56,6 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Global loading screen
   if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
@@ -75,6 +72,9 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <Routes>
+        {/* Public: Setup (first-time only) */}
+        <Route path="/setup" element={<Setup />} />
+
         {/* Public: Login */}
         <Route path="/login" element={
           isAuthenticated ? <Navigate to="/" replace /> : <Login />

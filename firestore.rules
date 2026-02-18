@@ -6,7 +6,7 @@ rules_version = '2';
 // Roles are stored in /roles/{roleId} with a permissions map.
 // Each user has a document at /users/{uid} with a roleId field + isActive flag.
 //
-// Helper functions resolve the user's role and check permissions dynamically.
+// Bootstrap: first-time setup allows creating roles & user doc without existing data.
 // ──────────────────────────────────────────────────────────────────────────────
 
 service cloud.firestore {
@@ -18,12 +18,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isActiveUser() {
-      return isAuthenticated() && getUserDoc().isActive == true;
+      return isAuthenticated() && userDocExists() && getUserDoc().isActive == true;
     }
 
     function getUserRoleId() {
@@ -42,26 +46,28 @@ service cloud.firestore {
       return hasPermission('roles.manage');
     }
 
-    // ── Roles Collection ───────────────────────────────────────────────────
-    // Only admin can write. All active authenticated users can read.
+    // Bootstrap: authenticated user without a user doc yet (first setup)
+    function isBootstrap() {
+      return isAuthenticated() && !userDocExists();
+    }
 
     // ── Roles Collection ───────────────────────────────────────────────────
-    // Read is open (needed during setup + role resolution).
-    // Only admin can write.
+    // All authenticated users can read roles (not sensitive config data).
+    // Only admin can write. Bootstrap allows creating initial roles.
 
     match /roles/{roleId} {
-      allow read: if true;
-      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isBootstrap();
       allow update, delete: if isAdmin();
     }
 
     // ── Users Collection ───────────────────────────────────────────────────
-    // List/read is open so the login page can detect "first-time setup".
-    // Only authenticated users can create their own doc.
-    // Only admin can manage (create for others, update, delete) users.
+    // Users can read/create their own doc. Admin can manage all users.
+    // Bootstrap: new user can create their own doc on first setup.
 
     match /users/{userId} {
-      allow read: if true;
+      allow read: if isAuthenticated()
+        && (request.auth.uid == userId || isAdmin());
 
       allow create: if isAuthenticated()
         && (request.auth.uid == userId || isAdmin());
@@ -74,7 +80,7 @@ service cloud.firestore {
 
     // ── Products Collection ───────────────────────────────────────────────
     match /products/{docId} {
-      allow read: if isActiveUser() && hasPermission('products.view');
+      allow read: if isActiveUser();
       allow create: if hasPermission('products.create');
       allow update: if hasPermission('products.edit');
       allow delete: if isAdmin();
@@ -82,7 +88,7 @@ service cloud.firestore {
 
     // ── Production Lines Collection ───────────────────────────────────────
     match /production_lines/{docId} {
-      allow read: if isActiveUser() && hasPermission('lines.view');
+      allow read: if isActiveUser();
       allow create: if hasPermission('lines.create');
       allow update: if hasPermission('lines.edit');
       allow delete: if isAdmin();
@@ -90,16 +96,15 @@ service cloud.firestore {
 
     // ── Supervisors Collection ────────────────────────────────────────────
     match /supervisors/{docId} {
-      allow read: if isActiveUser() && hasPermission('supervisors.view');
+      allow read: if isActiveUser();
       allow create: if hasPermission('supervisors.create');
       allow update: if hasPermission('supervisors.edit');
       allow delete: if isAdmin();
     }
 
     // ── Production Reports Collection ─────────────────────────────────────
-    // Only admin can delete. Only hall supervisor+ can edit.
     match /production_reports/{docId} {
-      allow read: if isActiveUser() && hasPermission('reports.view');
+      allow read: if isActiveUser();
       allow create: if hasPermission('reports.create');
       allow update: if hasPermission('reports.edit');
       allow delete: if isAdmin();
@@ -107,22 +112,22 @@ service cloud.firestore {
 
     // ── Line Status Collection ────────────────────────────────────────────
     match /line_status/{docId} {
-      allow read: if isActiveUser() && hasPermission('lineStatus.view');
+      allow read: if isActiveUser();
       allow create, update: if hasPermission('lineStatus.edit');
       allow delete: if isAdmin();
     }
 
     // ── Line Product Config Collection ────────────────────────────────────
     match /line_product_config/{docId} {
-      allow read: if isActiveUser() && hasPermission('lineProductConfig.view');
+      allow read: if isActiveUser();
       allow create, update, delete: if isAdmin();
     }
 
     // ── Activity Logs Collection ──────────────────────────────────────────
-    // Any active user can create logs. Only admin can read/delete.
+    // Any authenticated user can create logs. Only admin can read/delete.
     match /activity_logs/{docId} {
       allow read: if hasPermission('activityLog.view');
-      allow create: if isActiveUser();
+      allow create: if isAuthenticated();
       allow update, delete: if isAdmin();
     }
 

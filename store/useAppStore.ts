@@ -106,6 +106,7 @@ interface AppState {
   // Auth
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  register: (email: string, password: string, displayName: string) => Promise<void>;
   initializeApp: () => Promise<void>;
 
   // Admin user management
@@ -227,6 +228,55 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { uid, userEmail } = get();
     if (uid && userEmail) {
       activityLogService.log(uid, userEmail, action, description, metadata);
+    }
+  },
+
+  // ── Register: Create a new user account (no role selection) ─────────────────
+
+  register: async (email: string, password: string, displayName: string) => {
+    set({ loading: true, authError: null, error: null });
+    try {
+      const cred = await createUserWithEmail(email, password);
+      const uid = cred.user.uid;
+
+      const roles = await roleService.seedIfEmpty();
+      set({ roles });
+
+      // Assign the last role (most basic — "مشرف") by default
+      const defaultRole = roles[roles.length - 1] ?? roles[0];
+      if (!defaultRole) throw new Error('Failed to seed roles');
+
+      await userService.set(uid, {
+        email,
+        displayName,
+        roleId: defaultRole.id!,
+        isActive: true,
+        createdBy: 'self-register',
+      });
+
+      set({
+        isAuthenticated: true,
+        uid,
+        userEmail: email,
+        userDisplayName: displayName,
+        userProfile: { id: uid, email, displayName, roleId: defaultRole.id!, isActive: true },
+      });
+
+      get()._applyRole(defaultRole);
+      await get()._loadAppData();
+
+      activityLogService.log(uid, email, 'LOGIN', `إنشاء حساب جديد: ${displayName}`);
+
+      set({ loading: false });
+    } catch (error: any) {
+      let msg = 'فشل إنشاء الحساب';
+      if (error?.code === 'auth/email-already-in-use') {
+        msg = 'البريد الإلكتروني مستخدم بالفعل. جرب تسجيل الدخول بدلاً من ذلك.';
+      } else if (error?.code === 'auth/weak-password') {
+        msg = 'كلمة المرور ضعيفة. استخدم 6 أحرف على الأقل.';
+      }
+      console.error('register error:', error);
+      set({ authError: msg, loading: false, isAuthenticated: false });
     }
   },
 
