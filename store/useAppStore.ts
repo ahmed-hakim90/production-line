@@ -176,6 +176,11 @@ interface AppState {
   updateLineProductConfig: (id: string, data: Partial<LineProductConfig>) => Promise<void>;
   deleteLineProductConfig: (id: string) => Promise<void>;
 
+  // Mutations — Production Plans
+  createProductionPlan: (data: Omit<ProductionPlan, 'id' | 'createdAt'>) => Promise<string | null>;
+  updateProductionPlan: (id: string, data: Partial<ProductionPlan>) => Promise<void>;
+  deleteProductionPlan: (id: string) => Promise<void>;
+
   // Mutations — Cost Management
   fetchCostData: () => Promise<void>;
   createCostCenter: (data: Omit<CostCenter, 'id' | 'createdAt'>) => Promise<string | null>;
@@ -748,6 +753,37 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
       set({ productionPlans, planReports });
       get()._rebuildLines();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  // ── Production Plan Mutations ────────────────────────────────────────────
+
+  createProductionPlan: async (data) => {
+    try {
+      const id = await productionPlanService.create(data);
+      if (id) await get().fetchProductionPlans();
+      return id;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      return null;
+    }
+  },
+
+  updateProductionPlan: async (id, data) => {
+    try {
+      await productionPlanService.update(id, data);
+      await get().fetchProductionPlans();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  deleteProductionPlan: async (id) => {
+    try {
+      await productionPlanService.delete(id);
+      await get().fetchProductionPlans();
     } catch (error) {
       set({ error: (error as Error).message });
     }

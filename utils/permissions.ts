@@ -27,6 +27,7 @@ export type Permission =
   | 'activityLog.view'
   | 'quickAction.view'
   | 'costs.view' | 'costs.manage'
+  | 'plans.view' | 'plans.create' | 'plans.edit'
   | 'print' | 'export';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -154,6 +155,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    key: 'plans',
+    label: 'خطط الإنتاج',
+    permissions: [
+      { key: 'plans.view', label: 'عرض الخطط' },
+      { key: 'plans.create', label: 'إنشاء خطة' },
+      { key: 'plans.edit', label: 'تعديل خطة' },
+    ],
+  },
+  {
     key: 'special',
     label: 'صلاحيات خاصة',
     permissions: [
@@ -184,6 +194,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { path: '/reports', icon: 'bar_chart', label: 'التقارير', permission: 'reports.view' },
   { path: '/quick-action', icon: 'bolt', label: 'إدخال سريع', permission: 'quickAction.view' },
   { path: '/activity-log', icon: 'history', label: 'سجل النشاط', permission: 'activityLog.view' },
+  { path: '/production-plans', icon: 'event_note', label: 'خطط الإنتاج', permission: 'plans.view' },
   { path: '/cost-centers', icon: 'account_balance', label: 'مراكز التكلفة', permission: 'costs.view' },
   { path: '/cost-settings', icon: 'payments', label: 'إعدادات التكلفة', permission: 'costs.manage' },
   { path: '/roles', icon: 'admin_panel_settings', label: 'إدارة الأدوار', permission: 'roles.manage' },
@@ -204,6 +215,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/quick-action': 'quickAction.view',
   '/users': 'users.view',
   '/activity-log': 'activityLog.view',
+  '/production-plans': 'plans.view',
   '/cost-centers': 'costs.view',
   '/cost-centers/:id': 'costs.view',
   '/cost-settings': 'costs.manage',

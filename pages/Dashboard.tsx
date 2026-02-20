@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '../store/useAppStore';
@@ -10,9 +10,50 @@ import {
   calculateDailyCapacity,
   calculateEstimatedDays,
 } from '../utils/calculations';
-import { buildLineCosts, buildProductCosts, buildProductAvgCost, formatCost } from '../utils/costCalculations';
-import { ProductionLineStatus } from '../types';
+import { buildLineCosts, buildProductCosts, buildProductAvgCost, formatCost, ProductCostData, buildDailyProductionCostChart, getCurrentMonth } from '../utils/costCalculations';
+import { ProductionLineStatus, ProductionReport } from '../types';
 import { usePermission } from '../utils/permissions';
+import { reportService } from '../services/reportService';
+import {
+  ComposedChart,
+  Line,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+
+const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  const data = payload[0]?.payload;
+  if (!data) return null;
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-lg text-right min-w-[180px]" dir="rtl">
+      <p className="text-xs font-black text-slate-600 dark:text-slate-400 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1.5">{data.date}</p>
+      <div className="space-y-1.5 text-xs">
+        <div className="flex justify-between gap-6">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500 shrink-0"></span><span className="text-slate-500 font-bold">الإنتاج</span></span>
+          <span className="font-black text-blue-600">{formatNumber(data.production)} وحدة</span>
+        </div>
+        <div className="flex justify-between gap-6">
+          <span className="text-slate-500 font-bold">تكلفة العمالة</span>
+          <span className="font-black text-slate-700 dark:text-slate-300">{formatCost(data.laborCost)} ج.م</span>
+        </div>
+        <div className="flex justify-between gap-6">
+          <span className="text-slate-500 font-bold">غير مباشرة</span>
+          <span className="font-black text-slate-700 dark:text-slate-300">{formatCost(data.indirectCost)} ج.م</span>
+        </div>
+        <div className="flex justify-between gap-6 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0"></span><span className="text-slate-500 font-bold">تكلفة الوحدة</span></span>
+          <span className="font-black text-violet-600">{formatCost(data.costPerUnit)} ج.م</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const Dashboard: React.FC = () => {
   const productionLines = useAppStore((s) => s.productionLines);
@@ -37,6 +78,15 @@ export const Dashboard: React.FC = () => {
 
   const [selectedProductId, setSelectedProductId] = useState('');
   const [planQuantity, setPlanQuantity] = useState<number>(0);
+
+  const [costProductIds, setCostProductIds] = useState<string[]>([]);
+
+  // ── Daily Production vs Cost Chart ──
+  const [chartProductId, setChartProductId] = useState('');
+  const [chartLineId, setChartLineId] = useState('');
+  const [chartMonth, setChartMonth] = useState(getCurrentMonth);
+  const [chartReports, setChartReports] = useState<ProductionReport[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
 
   // ── Set Target Modal ──
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);
@@ -89,6 +139,18 @@ export const Dashboard: React.FC = () => {
     return buildProductCosts(pids, todayReports, laborSettings, costCenters, costCenterValues, costAllocations);
   }, [canViewCosts, productionLines, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
 
+  const costAnalysisMap = useMemo(() => {
+    if (!canViewCosts || costProductIds.length === 0) return {};
+    const hourlyRate = laborSettings?.hourlyRate ?? 0;
+    const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
+    const result: Record<string, ProductCostData> = {};
+    for (const pid of costProductIds) {
+      const avg = buildProductAvgCost(pid, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+      if (avg.quantityProduced > 0) result[pid] = avg;
+    }
+    return result;
+  }, [canViewCosts, costProductIds, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+
   const selectedProductCost = useMemo(() => {
     if (!canViewCosts || !selectedProductId) return null;
     const hourlyRate = laborSettings?.hourlyRate ?? 0;
@@ -97,6 +159,51 @@ export const Dashboard: React.FC = () => {
     if (avg.costPerUnit <= 0) return null;
     return avg;
   }, [canViewCosts, selectedProductId, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+
+  const monthOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
+      options.push({ value, label });
+    }
+    return options;
+  }, []);
+
+  useEffect(() => {
+    if (!canViewCosts) return;
+    const currentMonth = getCurrentMonth();
+    if (chartMonth === currentMonth) {
+      setChartReports(monthlyReports);
+      return;
+    }
+    let cancelled = false;
+    setChartLoading(true);
+    const [y, m] = chartMonth.split('-').map(Number);
+    const dim = new Date(y, m, 0).getDate();
+    const startDate = `${chartMonth}-01`;
+    const endDate = `${chartMonth}-${String(dim).padStart(2, '0')}`;
+    reportService.getByDateRange(startDate, endDate).then((reports) => {
+      if (!cancelled) {
+        setChartReports(reports);
+        setChartLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setChartLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [canViewCosts, chartMonth, monthlyReports]);
+
+  const dailyChartData = useMemo(() => {
+    if (!canViewCosts || chartReports.length === 0) return [];
+    const hourlyRate = laborSettings?.hourlyRate ?? 0;
+    return buildDailyProductionCostChart(
+      chartReports, chartProductId, chartLineId, chartMonth,
+      hourlyRate, costCenters, costCenterValues, costAllocations
+    );
+  }, [canViewCosts, chartReports, chartProductId, chartLineId, chartMonth, laborSettings, costCenters, costCenterValues, costAllocations]);
 
   const planResults = useMemo(() => {
     if (!selectedProductId || planQuantity <= 0) return null;
@@ -208,6 +315,263 @@ export const Dashboard: React.FC = () => {
         <KPIBox label="معدل الكفاءة" value={`${kpis.efficiency}%`} icon="bolt" trend="" trendUp={true} colorClass="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400" />
         <KPIBox label="نسبة الهالك" value={`${kpis.wasteRatio}%`} icon="delete_sweep" trend="" trendUp={true} colorClass="bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400" />
       </div>
+
+      {/* ── Product Cost Analysis Section ── */}
+      {canViewCosts && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-lg flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-violet-600 dark:text-violet-400">price_check</span>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-white">تحليل تكلفة المنتجات</h3>
+                <p className="text-[11px] text-slate-400 font-medium">اختر منتج أو أكثر لمقارنة متوسط التكلفة الشهرية</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[200px] transition-all"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value && !costProductIds.includes(e.target.value)) {
+                    setCostProductIds([...costProductIds, e.target.value]);
+                  }
+                }}
+              >
+                <option value="">إضافة منتج...</option>
+                {products.filter((p) => !costProductIds.includes(p.id)).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {costProductIds.length > 0 && (
+                <button
+                  onClick={() => setCostProductIds([])}
+                  className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-all"
+                  title="مسح الكل"
+                >
+                  <span className="material-icons-round text-sm">clear_all</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {costProductIds.length > 0 && (
+            <div className="px-5 sm:px-6 pt-4 flex flex-wrap gap-2">
+              {costProductIds.map((pid) => {
+                const p = products.find((pr) => pr.id === pid);
+                return (
+                  <span key={pid} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 text-xs font-bold border border-violet-200 dark:border-violet-800">
+                    {p?.name || pid}
+                    <button
+                      onClick={() => setCostProductIds(costProductIds.filter((id) => id !== pid))}
+                      className="hover:text-rose-500 transition-colors"
+                    >
+                      <span className="material-icons-round text-sm">close</span>
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {Object.keys(costAnalysisMap).length > 0 ? (
+            <div className="p-5 sm:p-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">المنتج</th>
+                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">تكلفة الوحدة</th>
+                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">تكلفة العمالة</th>
+                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">غير مباشرة</th>
+                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">إجمالي التكلفة</th>
+                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الإنتاج</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {costProductIds.map((pid) => {
+                      const data = costAnalysisMap[pid];
+                      const p = products.find((pr) => pr.id === pid);
+                      if (!data) return (
+                        <tr key={pid} className="text-slate-400">
+                          <td className="px-4 py-3 text-sm font-bold">{p?.name || '—'}</td>
+                          <td colSpan={5} className="px-4 py-3 text-center text-xs">لا توجد بيانات</td>
+                        </tr>
+                      );
+                      return (
+                        <tr key={pid} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                          <td className="px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300">{p?.name || '—'}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 text-sm font-black ring-1 ring-violet-500/20">
+                              {formatCost(data.costPerUnit)} ج.م
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-slate-600 dark:text-slate-400">{formatCost(data.laborCost)} ج.م</td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-slate-600 dark:text-slate-400">{formatCost(data.indirectCost)} ج.م</td>
+                          <td className="px-4 py-3 text-center text-sm font-black text-primary">{formatCost(data.totalCost)} ج.م</td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-emerald-600">{formatNumber(data.quantityProduced)} وحدة</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {Object.keys(costAnalysisMap).length > 1 && (
+                    <tfoot>
+                      <tr className="bg-slate-50 dark:bg-slate-800/50 border-t-2 border-slate-200 dark:border-slate-700">
+                        <td className="px-4 py-3 text-sm font-black text-slate-800 dark:text-white">الإجمالي</td>
+                        {(() => {
+                          const vals = Object.values(costAnalysisMap) as ProductCostData[];
+                          const sumLabor = vals.reduce((s, v) => s + v.laborCost, 0);
+                          const sumIndirect = vals.reduce((s, v) => s + v.indirectCost, 0);
+                          const sumTotal = vals.reduce((s, v) => s + v.totalCost, 0);
+                          const sumQty = vals.reduce((s, v) => s + v.quantityProduced, 0);
+                          const avgCPU = sumQty > 0 ? sumTotal / sumQty : 0;
+                          return (
+                            <>
+                              <td className="px-4 py-3 text-center text-sm font-black text-violet-600">{avgCPU > 0 ? `${formatCost(avgCPU)} ج.م` : '—'}</td>
+                              <td className="px-4 py-3 text-center text-sm font-black text-slate-600 dark:text-slate-400">{formatCost(sumLabor)} ج.م</td>
+                              <td className="px-4 py-3 text-center text-sm font-black text-slate-600 dark:text-slate-400">{formatCost(sumIndirect)} ج.م</td>
+                              <td className="px-4 py-3 text-center text-sm font-black text-primary">{formatCost(sumTotal)} ج.م</td>
+                              <td className="px-4 py-3 text-center text-sm font-black text-emerald-600">{formatNumber(sumQty)} وحدة</td>
+                            </>
+                          );
+                        })()}
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          ) : costProductIds.length > 0 ? (
+            <div className="p-8 text-center text-slate-400">
+              <span className="material-icons-round text-3xl mb-2 block opacity-30">info</span>
+              <p className="text-sm font-bold">لا توجد بيانات تكلفة للمنتجات المختارة في الشهر الحالي</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* ── Daily Production vs Cost Chart ── */}
+      {canViewCosts && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-blue-600 dark:text-blue-400">insights</span>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-white">الإنتاج اليومي مقابل التكلفة</h3>
+                <p className="text-[11px] text-slate-400 font-medium">تحليل يومي للإنتاج والتكاليف خلال الشهر المحدد</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-5 sm:px-6 pt-4 flex flex-wrap gap-3">
+            <select
+              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              value={chartProductId}
+              onChange={(e) => setChartProductId(e.target.value)}
+            >
+              <option value="">كل المنتجات</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+
+            <select
+              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              value={chartLineId}
+              onChange={(e) => setChartLineId(e.target.value)}
+            >
+              <option value="">كل الخطوط</option>
+              {_rawLines.map((l) => (
+                <option key={l.id} value={l.id!}>{l.name}</option>
+              ))}
+            </select>
+
+            <select
+              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              value={chartMonth}
+              onChange={(e) => setChartMonth(e.target.value)}
+            >
+              {monthOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="p-5 sm:p-6">
+            {chartLoading ? (
+              <div className="flex items-center justify-center py-12 text-slate-400">
+                <span className="material-icons-round animate-spin text-2xl">refresh</span>
+                <span className="mr-2 text-sm font-bold">جاري تحميل البيانات...</span>
+              </div>
+            ) : dailyChartData.length > 0 ? (
+              <div style={{ width: '100%', height: 380 }} dir="ltr">
+                <ResponsiveContainer>
+                  <ComposedChart data={dailyChartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis
+                      dataKey="day"
+                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
+                      axisLine={{ stroke: '#e2e8f0' }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      yAxisId="production"
+                      orientation="left"
+                      tick={{ fontSize: 11, fill: '#3b82f6', fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
+                      label={{ value: 'الإنتاج', angle: -90, position: 'insideLeft', offset: 10, style: { fontSize: 11, fill: '#3b82f6', fontWeight: 700 } }}
+                    />
+                    <YAxis
+                      yAxisId="cost"
+                      orientation="right"
+                      tick={{ fontSize: 11, fill: '#8b5cf6', fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
+                      label={{ value: 'تكلفة الوحدة', angle: 90, position: 'insideRight', offset: 10, style: { fontSize: 11, fill: '#8b5cf6', fontWeight: 700 } }}
+                    />
+                    <Tooltip content={<DailyChartTooltip />} />
+                    <Legend
+                      verticalAlign="top"
+                      height={36}
+                      iconType="square"
+                      formatter={(value: string) => <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>{value}</span>}
+                    />
+                    <Bar
+                      yAxisId="production"
+                      dataKey="production"
+                      name="الإنتاج اليومي"
+                      fill="#3b82f6"
+                      radius={[4, 4, 0, 0]}
+                      barSize={22}
+                      opacity={0.85}
+                    />
+                    <Line
+                      yAxisId="cost"
+                      type="monotone"
+                      dataKey="costPerUnit"
+                      name="تكلفة الوحدة"
+                      stroke="#8b5cf6"
+                      strokeWidth={2.5}
+                      dot={{ r: 3.5, fill: '#8b5cf6', strokeWidth: 0 }}
+                      activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 2, fill: '#fff' }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-400">
+                <span className="material-icons-round text-3xl mb-2 block opacity-30">bar_chart</span>
+                <p className="text-sm font-bold">لا توجد بيانات للشهر المحدد</p>
+                <p className="text-xs mt-1">اختر شهر يحتوي على تقارير إنتاج لعرض الرسم البياني</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div className="lg:col-span-2 space-y-5 sm:space-y-6">

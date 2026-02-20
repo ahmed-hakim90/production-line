@@ -438,3 +438,82 @@ export const formatCost = (amount: number): string => {
     maximumFractionDigits: 2,
   }).format(amount);
 };
+
+export interface DailyProductionCostPoint {
+  date: string;
+  day: string;
+  production: number;
+  laborCost: number;
+  indirectCost: number;
+  totalCost: number;
+  costPerUnit: number;
+}
+
+export const buildDailyProductionCostChart = (
+  reports: ProductionReport[],
+  productId: string,
+  lineId: string,
+  month: string,
+  hourlyRate: number,
+  costCenters: CostCenter[],
+  costCenterValues: CostCenterValue[],
+  costAllocations: CostAllocation[]
+): DailyProductionCostPoint[] => {
+  let filtered = reports;
+  if (productId) filtered = filtered.filter((r) => r.productId === productId);
+  if (lineId) filtered = filtered.filter((r) => r.lineId === lineId);
+  if (filtered.length === 0) return [];
+
+  const byDate = new Map<string, ProductionReport[]>();
+  filtered.forEach((r) => {
+    const list = byDate.get(r.date) || [];
+    list.push(r);
+    byDate.set(r.date, list);
+  });
+
+  const allByDateLine = new Map<string, number>();
+  reports.forEach((r) => {
+    const key = `${r.date}_${r.lineId}`;
+    allByDateLine.set(key, (allByDateLine.get(key) || 0) + (r.quantityProduced || 0));
+  });
+
+  const indirectCache = new Map<string, number>();
+  const result: DailyProductionCostPoint[] = [];
+
+  for (const [date, dayReports] of byDate) {
+    const production = dayReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+    const laborCost = dayReports.reduce(
+      (s, r) => s + (r.workersCount || 0) * (r.workHours || 0) * hourlyRate, 0
+    );
+
+    let indirectCost = 0;
+    const lineQty = new Map<string, number>();
+    dayReports.forEach((r) => {
+      lineQty.set(r.lineId, (lineQty.get(r.lineId) || 0) + (r.quantityProduced || 0));
+    });
+
+    for (const [lid, qty] of lineQty) {
+      if (!indirectCache.has(lid)) {
+        indirectCache.set(lid, calculateDailyIndirectCost(lid, month, costCenters, costCenterValues, costAllocations));
+      }
+      const lineIndirect = indirectCache.get(lid) || 0;
+      const lineDayTotal = allByDateLine.get(`${date}_${lid}`) || 0;
+      if (lineDayTotal > 0) {
+        indirectCost += lineIndirect * (qty / lineDayTotal);
+      }
+    }
+
+    const totalCost = laborCost + indirectCost;
+    result.push({
+      date,
+      day: date.slice(8),
+      production,
+      laborCost,
+      indirectCost,
+      totalCost,
+      costPerUnit: production > 0 ? totalCost / production : 0,
+    });
+  }
+
+  return result.sort((a, b) => a.date.localeCompare(b.date));
+};

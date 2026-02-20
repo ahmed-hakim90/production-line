@@ -123,6 +123,14 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ── Production Plans Collection ─────────────────────────────────────
+    match /production_plans/{docId} {
+      allow read: if hasPermission('plans.view');
+      allow create: if hasPermission('plans.create');
+      allow update: if hasPermission('plans.edit');
+      allow delete: if isAdmin();
+    }
+
     // ── Activity Logs Collection ──────────────────────────────────────────
     // Any authenticated user can create logs. Only admin can read/delete.
     match /activity_logs/{docId} {
