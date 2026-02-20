@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../utils/calculations';
+import { buildProductCosts, buildProductAvgCost, formatCost } from '../utils/costCalculations';
 import { FirestoreProduct } from '../types';
 import { usePermission } from '../utils/permissions';
 import { parseProductsExcel, toProductData, ProductImportResult } from '../utils/importProducts';
@@ -23,7 +24,15 @@ export const Products: React.FC = () => {
   const deleteProduct = useAppStore((s) => s.deleteProduct);
   const productsLoading = useAppStore((s) => s.productsLoading);
 
+  const todayReports = useAppStore((s) => s.todayReports);
+  const monthlyReports = useAppStore((s) => s.monthlyReports);
+  const costCenters = useAppStore((s) => s.costCenters);
+  const costCenterValues = useAppStore((s) => s.costCenterValues);
+  const costAllocations = useAppStore((s) => s.costAllocations);
+  const laborSettings = useAppStore((s) => s.laborSettings);
+
   const { can } = usePermission();
+  const canViewCosts = can('costs.view');
   const navigate = useNavigate();
 
   const [showModal, setShowModal] = useState(false);
@@ -56,6 +65,18 @@ export const Products: React.FC = () => {
       return matchSearch && matchCategory && matchStock;
     });
   }, [products, search, categoryFilter, stockFilter]);
+
+  const productCosts = useMemo(() => {
+    if (!canViewCosts) return {};
+    const hourlyRate = laborSettings?.hourlyRate ?? 0;
+    const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
+    const result: Record<string, { costPerUnit: number }> = {};
+    for (const p of products) {
+      const avg = buildProductAvgCost(p.id, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+      result[p.id] = { costPerUnit: avg.costPerUnit };
+    }
+    return result;
+  }, [canViewCosts, products, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
 
   const openCreate = () => {
     setEditId(null);
@@ -214,13 +235,16 @@ export const Products: React.FC = () => {
                 <th className="px-6 py-4 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] text-center">إجمالي الإنتاج</th>
                 <th className="px-6 py-4 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] text-center">إجمالي الهالك</th>
                 <th className="px-6 py-4 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] text-center">متوسط وقت التجميع</th>
+                {canViewCosts && (
+                  <th className="px-6 py-4 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] text-center">تكلفة الوحدة</th>
+                )}
                 <th className="px-6 py-4 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] text-left">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-slate-400">
+                  <td colSpan={canViewCosts ? 8 : 7} className="px-6 py-16 text-center text-slate-400">
                     <span className="material-icons-round text-5xl mb-3 block opacity-30">inventory_2</span>
                     <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter ? ' مطابقة للبحث' : ' بعد'}</p>
                     <p className="text-sm mt-1">
@@ -260,6 +284,17 @@ export const Products: React.FC = () => {
                       <span className="text-sm font-bold">{product.avgAssemblyTime} دقيقة</span>
                     </div>
                   </td>
+                  {canViewCosts && (
+                    <td className="px-6 py-5 text-center">
+                      {productCosts[product.id]?.costPerUnit > 0 ? (
+                        <span className="px-3 py-1.5 rounded-lg bg-primary/5 text-primary text-sm font-black ring-1 ring-primary/20">
+                          {formatCost(productCosts[product.id].costPerUnit)} ج.م
+                        </span>
+                      ) : (
+                        <span className="text-sm text-slate-300">—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-6 py-5 text-left">
                     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={() => navigate(`/products/${product.id}`)} className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="عرض التفاصيل">

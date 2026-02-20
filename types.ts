@@ -15,6 +15,7 @@ export interface ProductionLine {
   supervisorName: string;
   status: ProductionLineStatus;
   currentProduct: string;
+  currentProductId: string;
   achievement: number;
   target: number;
   workersCount: number;
@@ -137,6 +138,35 @@ export interface ProductionPlan {
   status: 'planned' | 'in_progress' | 'completed' | 'paused';
   createdBy: string;
   createdAt?: any;
+}
+
+// ─── Cost Management ─────────────────────────────────────────────────────────
+
+export interface CostCenter {
+  id?: string;
+  name: string;
+  type: 'indirect' | 'direct';
+  isActive: boolean;
+  createdAt?: any;
+}
+
+export interface CostCenterValue {
+  id?: string;
+  costCenterId: string;
+  month: string;
+  amount: number;
+}
+
+export interface CostAllocation {
+  id?: string;
+  costCenterId: string;
+  month: string;
+  allocations: { lineId: string; percentage: number }[];
+}
+
+export interface LaborSettings {
+  id?: string;
+  hourlyRate: number;
 }
 
 // ─── Dynamic Roles & Permissions ─────────────────────────────────────────────

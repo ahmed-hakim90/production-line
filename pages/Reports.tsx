@@ -4,6 +4,7 @@ import { useReactToPrint } from 'react-to-print';
 import { useAppStore } from '../store/useAppStore';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { formatNumber, getTodayDateString } from '../utils/calculations';
+import { buildReportsCosts, estimateReportCost, formatCost } from '../utils/costCalculations';
 import { ProductionReport } from '../types';
 import { usePermission } from '../utils/permissions';
 import { exportReportsByDateRange } from '../utils/exportExcel';
@@ -44,7 +45,13 @@ export const Reports: React.FC = () => {
   const reportsLoading = useAppStore((s) => s.reportsLoading);
   const error = useAppStore((s) => s.error);
 
+  const costCenters = useAppStore((s) => s.costCenters);
+  const costCenterValues = useAppStore((s) => s.costCenterValues);
+  const costAllocations = useAppStore((s) => s.costAllocations);
+  const laborSettings = useAppStore((s) => s.laborSettings);
+
   const { can } = usePermission();
+  const canViewCosts = can('costs.view');
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -85,6 +92,12 @@ export const Reports: React.FC = () => {
   const displayedReports = mySupervisorId
     ? allReports.filter((r) => r.supervisorId === mySupervisorId)
     : allReports;
+
+  const reportCosts = useMemo(() => {
+    if (!canViewCosts) return new Map<string, number>();
+    const hourlyRate = laborSettings?.hourlyRate ?? 0;
+    return buildReportsCosts(displayedReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+  }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations]);
 
   // ── Lookups ────────────────────────────────────────────────────────────────
 
@@ -429,13 +442,16 @@ export const Reports: React.FC = () => {
                 <th className="px-5 py-4 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الهالك</th>
                 <th className="px-5 py-4 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">عمال</th>
                 <th className="px-5 py-4 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">ساعات</th>
+                {canViewCosts && (
+                  <th className="px-5 py-4 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">تكلفة الوحدة</th>
+                )}
                 <th className="px-5 py-4 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-left">إجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {displayedReports.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-16 text-center text-slate-400">
+                  <td colSpan={canViewCosts ? 10 : 9} className="px-6 py-16 text-center text-slate-400">
                     <span className="material-icons-round text-5xl mb-3 block opacity-30">bar_chart</span>
                     <p className="font-bold text-lg">لا توجد تقارير{viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}</p>
                     <p className="text-sm mt-1">
@@ -460,6 +476,15 @@ export const Reports: React.FC = () => {
                   <td className="px-5 py-4 text-center text-rose-500 font-bold text-sm">{formatNumber(report.quantityWaste)}</td>
                   <td className="px-5 py-4 text-center text-sm font-bold">{report.workersCount}</td>
                   <td className="px-5 py-4 text-center text-sm font-bold">{report.workHours}</td>
+                  {canViewCosts && (
+                    <td className="px-5 py-4 text-center">
+                      {report.id && reportCosts.get(report.id) ? (
+                        <span className="text-sm font-black text-primary">{formatCost(reportCosts.get(report.id)!)} ج.م</span>
+                      ) : (
+                        <span className="text-sm text-slate-300">—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-5 py-4 text-left">
                     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       {can("print") && (
@@ -634,6 +659,28 @@ export const Reports: React.FC = () => {
                 </div>
               </div>
             </div>
+            {canViewCosts && form.workersCount > 0 && form.workHours > 0 && form.quantityProduced > 0 && form.lineId && (
+              (() => {
+                const est = estimateReportCost(
+                  form.workersCount, form.workHours, form.quantityProduced,
+                  laborSettings?.hourlyRate ?? 0, form.lineId,
+                  costCenters, costCenterValues, costAllocations
+                );
+                return (
+                  <div className="mx-4 sm:mx-6 mb-2 bg-primary/5 border border-primary/10 rounded-xl p-4 flex flex-wrap items-center gap-4 sm:gap-6">
+                    <div className="flex items-center gap-2">
+                      <span className="material-icons-round text-primary text-lg">price_check</span>
+                      <span className="text-xs font-bold text-slate-500">تكلفة تقديرية:</span>
+                    </div>
+                    <div className="flex items-center gap-4 sm:gap-6 text-xs font-bold">
+                      <span className="text-slate-600 dark:text-slate-400">عمالة: <span className="text-slate-800 dark:text-white">{formatCost(est.laborCost)} ج.م</span></span>
+                      <span className="text-slate-600 dark:text-slate-400">غير مباشرة: <span className="text-slate-800 dark:text-white">{formatCost(est.indirectCost)} ج.م</span></span>
+                      <span className="text-primary font-black">الوحدة: {formatCost(est.costPerUnit)} ج.م</span>
+                    </div>
+                  </div>
+                );
+              })()
+            )}
             <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => { setShowModal(false); setEditId(null); }}>إلغاء</Button>
               <Button

@@ -17,6 +17,10 @@ import {
   ProductionPlan,
   LineStatus,
   LineProductConfig,
+  CostCenter,
+  CostCenterValue,
+  CostAllocation,
+  LaborSettings,
   FirestoreProduct,
   FirestoreProductionLine,
   FirestoreSupervisor,
@@ -38,6 +42,10 @@ import { reportService } from '../services/reportService';
 import { lineStatusService } from '../services/lineStatusService';
 import { lineProductConfigService } from '../services/lineProductConfigService';
 import { productionPlanService } from '../services/productionPlanService';
+import { costCenterService } from '../services/costCenterService';
+import { costCenterValueService } from '../services/costCenterValueService';
+import { costAllocationService } from '../services/costAllocationService';
+import { laborSettingsService } from '../services/laborSettingsService';
 import { roleService } from '../services/roleService';
 import { userService } from '../services/userService';
 import { activityLogService } from '../services/activityLogService';
@@ -82,6 +90,12 @@ interface AppState {
   lineProductConfigs: LineProductConfig[];
   productionPlans: ProductionPlan[];
   planReports: Record<string, ProductionReport[]>;
+
+  // Cost management
+  costCenters: CostCenter[];
+  costCenterValues: CostCenterValue[];
+  costAllocations: CostAllocation[];
+  laborSettings: LaborSettings | null;
 
   // Loading & error
   loading: boolean;
@@ -162,6 +176,15 @@ interface AppState {
   updateLineProductConfig: (id: string, data: Partial<LineProductConfig>) => Promise<void>;
   deleteLineProductConfig: (id: string) => Promise<void>;
 
+  // Mutations — Cost Management
+  fetchCostData: () => Promise<void>;
+  createCostCenter: (data: Omit<CostCenter, 'id' | 'createdAt'>) => Promise<string | null>;
+  updateCostCenter: (id: string, data: Partial<CostCenter>) => Promise<void>;
+  deleteCostCenter: (id: string) => Promise<void>;
+  saveCostCenterValue: (data: Omit<CostCenterValue, 'id'>, existingId?: string) => Promise<void>;
+  saveCostAllocation: (data: Omit<CostAllocation, 'id'>, existingId?: string) => Promise<void>;
+  updateLaborSettings: (data: Omit<LaborSettings, 'id'>) => Promise<void>;
+
   // Real-time subscriptions (return unsubscribe fn)
   subscribeToDashboard: () => () => void;
   subscribeToLineStatuses: () => () => void;
@@ -198,6 +221,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   lineProductConfigs: [],
   productionPlans: [],
   planReports: {},
+
+  costCenters: [],
+  costCenterValues: [],
+  costAllocations: [],
+  laborSettings: null,
 
   loading: false,
   productsLoading: false,
@@ -384,6 +412,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       lineProductConfigs: [],
       productionPlans: [],
       planReports: {},
+      costCenters: [],
+      costCenterValues: [],
+      costAllocations: [],
+      laborSettings: null,
       roles: [],
       error: null,
       authError: null,
@@ -485,13 +517,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: Load all app data (after auth) ────────────────────────────
 
   _loadAppData: async () => {
-    const [rawProducts, rawLines, rawSupervisors, configs, productionPlans] =
+    const [rawProducts, rawLines, rawSupervisors, configs, productionPlans, costCenters, costCenterValues, costAllocations, laborSettings] =
       await Promise.all([
         productService.getAll(),
         lineService.getAll(),
         supervisorService.getAll(),
         lineProductConfigService.getAll(),
         productionPlanService.getAll(),
+        costCenterService.getAll(),
+        costCenterValueService.getAll(),
+        costAllocationService.getAll(),
+        laborSettingsService.get(),
       ]);
 
     const today = getTodayDateString();
@@ -525,6 +561,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       lineStatuses,
       productionPlans,
       planReports,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      laborSettings,
     });
 
     const products = buildProducts(rawProducts, todayReports, configs);
@@ -912,6 +952,90 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await lineProductConfigService.delete(id);
       await get().fetchLineProductConfigs();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  // ── Cost Management ────────────────────────────────────────────────────────
+
+  fetchCostData: async () => {
+    try {
+      const [costCenters, costCenterValues, costAllocations, laborSettings] =
+        await Promise.all([
+          costCenterService.getAll(),
+          costCenterValueService.getAll(),
+          costAllocationService.getAll(),
+          laborSettingsService.get(),
+        ]);
+      set({ costCenters, costCenterValues, costAllocations, laborSettings });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  createCostCenter: async (data) => {
+    try {
+      const id = await costCenterService.create(data);
+      if (id) await get().fetchCostData();
+      return id;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      return null;
+    }
+  },
+
+  updateCostCenter: async (id, data) => {
+    try {
+      await costCenterService.update(id, data);
+      await get().fetchCostData();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  deleteCostCenter: async (id) => {
+    try {
+      await costCenterService.delete(id);
+      await get().fetchCostData();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  saveCostCenterValue: async (data, existingId) => {
+    try {
+      if (existingId) {
+        await costCenterValueService.update(existingId, data);
+      } else {
+        await costCenterValueService.create(data);
+      }
+      const costCenterValues = await costCenterValueService.getAll();
+      set({ costCenterValues });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  saveCostAllocation: async (data, existingId) => {
+    try {
+      if (existingId) {
+        await costAllocationService.update(existingId, data);
+      } else {
+        await costAllocationService.create(data);
+      }
+      const costAllocations = await costAllocationService.getAll();
+      set({ costAllocations });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  updateLaborSettings: async (data) => {
+    try {
+      await laborSettingsService.set(data);
+      const laborSettings = await laborSettingsService.get();
+      set({ laborSettings });
     } catch (error) {
       set({ error: (error as Error).message });
     }

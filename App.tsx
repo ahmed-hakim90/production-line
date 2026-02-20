@@ -19,6 +19,9 @@ import { Settings } from './pages/Settings';
 import { Users } from './pages/Users';
 import { QuickAction } from './pages/QuickAction';
 import { ActivityLogPage } from './pages/ActivityLog';
+import { CostCenters } from './pages/CostCenters';
+import { CostCenterDistribution } from './pages/CostCenterDistribution';
+import { CostSettings } from './pages/CostSettings';
 import { useAppStore } from './store/useAppStore';
 import { onAuthChange } from './services/firebase';
 
@@ -96,6 +99,9 @@ const App: React.FC = () => {
                 <Route path="/quick-action" element={<ProtectedRoute permission="quickAction.view"><QuickAction /></ProtectedRoute>} />
                 <Route path="/users" element={<ProtectedRoute permission="users.view"><Users /></ProtectedRoute>} />
                 <Route path="/activity-log" element={<ProtectedRoute permission="activityLog.view"><ActivityLogPage /></ProtectedRoute>} />
+                <Route path="/cost-centers" element={<ProtectedRoute permission="costs.view"><CostCenters /></ProtectedRoute>} />
+                <Route path="/cost-centers/:id" element={<ProtectedRoute permission="costs.view"><CostCenterDistribution /></ProtectedRoute>} />
+                <Route path="/cost-settings" element={<ProtectedRoute permission="costs.manage"><CostSettings /></ProtectedRoute>} />
                 <Route path="/roles" element={<ProtectedRoute permission="roles.manage"><RolesManagement /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute permission="settings.view"><Settings /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />

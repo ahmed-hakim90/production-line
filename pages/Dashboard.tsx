@@ -10,6 +10,7 @@ import {
   calculateDailyCapacity,
   calculateEstimatedDays,
 } from '../utils/calculations';
+import { buildLineCosts, buildProductCosts, buildProductAvgCost, formatCost } from '../utils/costCalculations';
 import { ProductionLineStatus } from '../types';
 import { usePermission } from '../utils/permissions';
 
@@ -25,9 +26,14 @@ export const Dashboard: React.FC = () => {
   const loading = useAppStore((s) => s.loading);
   const createLineStatus = useAppStore((s) => s.createLineStatus);
   const updateLineStatus = useAppStore((s) => s.updateLineStatus);
+  const costCenters = useAppStore((s) => s.costCenters);
+  const costCenterValues = useAppStore((s) => s.costCenterValues);
+  const costAllocations = useAppStore((s) => s.costAllocations);
+  const laborSettings = useAppStore((s) => s.laborSettings);
   const navigate = useNavigate();
 
   const { can } = usePermission();
+  const canViewCosts = can('costs.view');
 
   const [selectedProductId, setSelectedProductId] = useState('');
   const [planQuantity, setPlanQuantity] = useState<number>(0);
@@ -67,6 +73,30 @@ export const Dashboard: React.FC = () => {
   };
 
   const kpis = buildDashboardKPIs(todayReports, monthlyReports);
+
+  const lineCosts = useMemo(
+    () => buildLineCosts(
+      productionLines.map((l) => l.id),
+      todayReports, laborSettings, costCenters, costCenterValues, costAllocations
+    ),
+    [productionLines, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]
+  );
+
+  const productCosts = useMemo(() => {
+    if (!canViewCosts) return {};
+    const pids = [...new Set(productionLines.map((l) => l.currentProductId).filter(Boolean))];
+    if (pids.length === 0) return {};
+    return buildProductCosts(pids, todayReports, laborSettings, costCenters, costCenterValues, costAllocations);
+  }, [canViewCosts, productionLines, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+
+  const selectedProductCost = useMemo(() => {
+    if (!canViewCosts || !selectedProductId) return null;
+    const hourlyRate = laborSettings?.hourlyRate ?? 0;
+    const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
+    const avg = buildProductAvgCost(selectedProductId, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+    if (avg.costPerUnit <= 0) return null;
+    return avg;
+  }, [canViewCosts, selectedProductId, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
 
   const planResults = useMemo(() => {
     if (!selectedProductId || planQuantity <= 0) return null;
@@ -230,6 +260,31 @@ export const Dashboard: React.FC = () => {
                       ></div>
                     </div>
                   </div>
+
+                  {canViewCosts && lineCosts[line.id] && (lineCosts[line.id].laborCost > 0 || lineCosts[line.id].indirectCost > 0) && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400">تكلفة العمالة</p>
+                        <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCost(lineCosts[line.id].laborCost)} ج.م</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400">تكلفة غير مباشرة</p>
+                        <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCost(lineCosts[line.id].indirectCost)} ج.م</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400">إجمالي التكلفة</p>
+                        <p className="text-xs font-black text-primary">{formatCost(lineCosts[line.id].totalCost)} ج.م</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400">تكلفة الوحدة (المنتج)</p>
+                        <p className="text-xs font-black text-emerald-600">
+                          {line.currentProductId && productCosts[line.currentProductId]?.costPerUnit > 0
+                            ? `${formatCost(productCosts[line.currentProductId].costPerUnit)} ج.م`
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {can("lineStatus.edit") && (
                   <button
@@ -297,6 +352,14 @@ export const Dashboard: React.FC = () => {
                         {planResults.estimatedDays > 0 ? `${planResults.estimatedDays} يوم` : '—'}
                       </span>
                     </div>
+                    {selectedProductCost && planQuantity > 0 && (
+                      <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-600">
+                        <span className="text-xs font-bold text-slate-500">التكلفة المتوقعة</span>
+                        <span className="text-sm font-black text-primary">
+                          {formatCost(selectedProductCost.costPerUnit * planQuantity)} ج.م
+                        </span>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-center text-slate-400 py-2">
@@ -306,6 +369,31 @@ export const Dashboard: React.FC = () => {
                 )}
               </div>
             </form>
+
+            {canViewCosts && selectedProductCost && (
+              <div className="mt-6 p-4 bg-violet-50 dark:bg-violet-900/10 rounded-xl border border-violet-200 dark:border-violet-800 space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-icons-round text-violet-600 text-sm">price_check</span>
+                  <h4 className="text-xs font-black text-violet-600">تحليل تكلفة المنتج (متوسط الشهر)</h4>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-500">متوسط تكلفة الوحدة</span>
+                  <span className="text-sm font-black text-violet-600">{formatCost(selectedProductCost.costPerUnit)} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-500">تكلفة العمالة</span>
+                  <span className="text-sm font-black text-slate-700 dark:text-slate-300">{formatCost(selectedProductCost.laborCost)} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-500">تكلفة غير مباشرة</span>
+                  <span className="text-sm font-black text-slate-700 dark:text-slate-300">{formatCost(selectedProductCost.indirectCost)} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-violet-200 dark:border-violet-700">
+                  <span className="text-xs font-bold text-slate-500">إجمالي الإنتاج</span>
+                  <span className="text-sm font-black text-slate-700 dark:text-slate-300">{formatNumber(selectedProductCost.quantityProduced)} وحدة</span>
+                </div>
+              </div>
+            )}
 
             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">أهم تنبيهات النظام</h4>
