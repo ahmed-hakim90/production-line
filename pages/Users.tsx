@@ -25,10 +25,16 @@ export const Users: React.FC = () => {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
+  const [newCode, setNewCode] = useState('');
   const [newRoleId, setNewRoleId] = useState('');
   const [createError, setCreateError] = useState('');
 
-  // Re-auth state (needed after creating user on client)
+  // Edit form state
+  const [editRoleId, setEditRoleId] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [editDisplayName, setEditDisplayName] = useState('');
+
+  // Re-auth state
   const [reAuthPassword, setReAuthPassword] = useState('');
   const [showReAuth, setShowReAuth] = useState(false);
 
@@ -53,24 +59,28 @@ export const Users: React.FC = () => {
     return role?.color ?? 'bg-slate-100 text-slate-600';
   };
 
+  const pendingUsers = users.filter((u) => !u.isActive);
+  const activeUsers = users.filter((u) => u.isActive);
+
+  // ── Create User ──
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmail || !newPassword || !newDisplayName || !newRoleId) return;
     setCreateError('');
     setActionLoading('create');
 
-    // Store current admin credentials for re-auth
-    const adminEmail = currentEmail;
-
     const newUid = await createUser(newEmail, newPassword, newDisplayName, newRoleId);
 
     if (newUid) {
-      // Firebase client SDK signs in as the newly created user.
-      // We need to re-authenticate as the admin.
+      if (newCode) {
+        await userService.update(newUid, { code: newCode });
+      }
       setShowCreateModal(false);
       setNewEmail('');
       setNewPassword('');
       setNewDisplayName('');
+      setNewCode('');
       setNewRoleId('');
       setShowReAuth(true);
     } else {
@@ -90,6 +100,44 @@ export const Users: React.FC = () => {
     fetchUsers();
   };
 
+  // ── Approve / Reject ──
+
+  const handleApprove = async (user: FirestoreUser) => {
+    setActionLoading('approve-' + user.id);
+    await userService.update(user.id!, { isActive: true });
+
+    if (currentUid && currentEmail) {
+      activityLogService.log(
+        currentUid, currentEmail,
+        'APPROVE_USER',
+        `تمت الموافقة على المستخدم: ${user.displayName}`,
+        { targetUserId: user.id }
+      );
+    }
+
+    await fetchUsers();
+    setActionLoading(null);
+  };
+
+  const handleReject = async (user: FirestoreUser) => {
+    setActionLoading('reject-' + user.id);
+    await userService.delete(user.id!);
+
+    if (currentUid && currentEmail) {
+      activityLogService.log(
+        currentUid, currentEmail,
+        'REJECT_USER',
+        `تم رفض المستخدم: ${user.displayName} (${user.email})`,
+        { targetUserId: user.id }
+      );
+    }
+
+    await fetchUsers();
+    setActionLoading(null);
+  };
+
+  // ── Toggle Active ──
+
   const handleToggleActive = async (user: FirestoreUser) => {
     setActionLoading(user.id!);
     await userService.toggleActive(user.id!, !user.isActive);
@@ -107,17 +155,35 @@ export const Users: React.FC = () => {
     setActionLoading(null);
   };
 
-  const handleUpdateRole = async (user: FirestoreUser, newRoleId: string) => {
-    setActionLoading(user.id!);
-    await userService.update(user.id!, { roleId: newRoleId });
+  // ── Edit User ──
 
-    if (currentUid && currentEmail) {
-      activityLogService.log(
-        currentUid, currentEmail,
-        'UPDATE_USER_ROLE',
-        `تغيير دور المستخدم ${user.displayName} إلى: ${getRoleName(newRoleId)}`,
-        { targetUserId: user.id, oldRoleId: user.roleId, newRoleId }
-      );
+  const openEditModal = (user: FirestoreUser) => {
+    setShowEditModal(user);
+    setEditRoleId(user.roleId);
+    setEditCode(user.code || '');
+    setEditDisplayName(user.displayName);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!showEditModal) return;
+    setActionLoading('edit-' + showEditModal.id);
+
+    const updates: Partial<Omit<FirestoreUser, 'id'>> = {};
+    if (editRoleId !== showEditModal.roleId) updates.roleId = editRoleId;
+    if (editCode !== (showEditModal.code || '')) updates.code = editCode;
+    if (editDisplayName !== showEditModal.displayName) updates.displayName = editDisplayName;
+
+    if (Object.keys(updates).length > 0) {
+      await userService.update(showEditModal.id!, updates);
+
+      if (updates.roleId && currentUid && currentEmail) {
+        activityLogService.log(
+          currentUid, currentEmail,
+          'UPDATE_USER_ROLE',
+          `تغيير دور المستخدم ${showEditModal.displayName} إلى: ${getRoleName(editRoleId)}`,
+          { targetUserId: showEditModal.id, oldRoleId: showEditModal.roleId, newRoleId: editRoleId }
+        );
+      }
     }
 
     await fetchUsers();
@@ -147,7 +213,61 @@ export const Users: React.FC = () => {
         )}
       </div>
 
-      {/* Re-auth Modal */}
+      {/* ── Pending Users Section ── */}
+      {pendingUsers.length > 0 && can('users.edit') && (
+        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
+              <span className="material-icons-round text-amber-600 dark:text-amber-400 text-xl">pending_actions</span>
+            </div>
+            <div>
+              <h3 className="text-base font-black text-amber-800 dark:text-amber-300">بانتظار الموافقة</h3>
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">{pendingUsers.length} مستخدم بانتظار موافقتك</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendingUsers.map((user) => (
+              <div key={user.id} className="bg-white dark:bg-slate-900 rounded-xl border border-amber-100 dark:border-amber-900/30 p-4 shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center shrink-0">
+                    <span className="material-icons-round text-amber-600 dark:text-amber-400">person</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800 dark:text-white truncate">{user.displayName}</p>
+                    <p className="text-[11px] text-slate-400 font-mono truncate" dir="ltr">{user.email}</p>
+                  </div>
+                </div>
+                {user.code && (
+                  <div className="mb-3 px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded-lg text-center">
+                    <span className="text-[10px] text-slate-400 font-bold">الكود: </span>
+                    <span className="text-xs font-mono font-black text-primary">{user.code}</span>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleApprove(user)}
+                    disabled={actionLoading === 'approve-' + user.id}
+                    className="flex-1 py-2 px-3 bg-emerald-500 text-white rounded-lg text-xs font-bold hover:bg-emerald-600 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                  >
+                    <span className="material-icons-round text-sm">check_circle</span>
+                    موافقة
+                  </button>
+                  <button
+                    onClick={() => handleReject(user)}
+                    disabled={actionLoading === 'reject-' + user.id}
+                    className="py-2 px-3 bg-rose-100 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-200 dark:hover:bg-rose-900/40 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                  >
+                    <span className="material-icons-round text-sm">close</span>
+                    رفض
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Re-auth Modal ── */}
       {showReAuth && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl">
@@ -181,7 +301,7 @@ export const Users: React.FC = () => {
         </div>
       )}
 
-      {/* Create User Modal */}
+      {/* ── Create User Modal ── */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 shadow-2xl">
@@ -199,55 +319,68 @@ export const Users: React.FC = () => {
             )}
 
             <form onSubmit={handleCreateUser} className="space-y-4">
-              <div>
-                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">الاسم الكامل</label>
-                <input
-                  type="text"
-                  value={newDisplayName}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
-                  placeholder="محمد أحمد"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">البريد الإلكتروني</label>
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
-                  placeholder="user@example.com"
-                  required
-                  dir="ltr"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">كلمة المرور</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
-                  placeholder="6 أحرف على الأقل"
-                  minLength={6}
-                  required
-                  dir="ltr"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">الدور</label>
-                <select
-                  value={newRoleId}
-                  onChange={(e) => setNewRoleId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
-                  required
-                >
-                  <option value="">اختر الدور</option>
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id!}>{r.name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">الاسم الكامل</label>
+                  <input
+                    type="text"
+                    value={newDisplayName}
+                    onChange={(e) => setNewDisplayName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                    placeholder="محمد أحمد"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">كود المستخدم</label>
+                  <input
+                    type="text"
+                    value={newCode}
+                    onChange={(e) => setNewCode(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono"
+                    placeholder="مثال: EMP-001"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">الدور</label>
+                  <select
+                    value={newRoleId}
+                    onChange={(e) => setNewRoleId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                    required
+                  >
+                    <option value="">اختر الدور</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id!}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">البريد الإلكتروني</label>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                    placeholder="user@example.com"
+                    required
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">كلمة المرور</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                    placeholder="6 أحرف على الأقل"
+                    minLength={6}
+                    required
+                    dir="ltr"
+                  />
+                </div>
               </div>
               <div className="flex gap-3 pt-2">
                 <Button type="submit" disabled={actionLoading === 'create'} className="flex-1">
@@ -262,53 +395,79 @@ export const Users: React.FC = () => {
         </div>
       )}
 
-      {/* Edit Role Modal */}
+      {/* ── Edit User Modal ── */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-black">تعديل دور المستخدم</h3>
+              <h3 className="text-lg font-black">تعديل المستخدم</h3>
               <button onClick={() => setShowEditModal(null)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                 <span className="material-icons-round text-slate-400">close</span>
               </button>
             </div>
-            <div className="mb-4">
-              <p className="text-sm text-slate-500">
-                <span className="font-bold text-slate-800 dark:text-white">{showEditModal.displayName}</span>
-                {' '}({showEditModal.email})
-              </p>
-            </div>
-            <div className="space-y-2">
-              {roles.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => handleUpdateRole(showEditModal, r.id!)}
-                  disabled={actionLoading === showEditModal.id}
-                  className={`w-full px-4 py-3 rounded-xl text-right flex items-center gap-3 transition-all text-sm border ${
-                    r.id === showEditModal.roleId
-                      ? 'border-primary bg-primary/5 text-primary font-bold'
-                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${r.color}`}>
-                    {r.name}
-                  </span>
-                  {r.id === showEditModal.roleId && (
-                    <span className="material-icons-round text-primary text-sm mr-auto">check</span>
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4">
-              <Button variant="outline" onClick={() => setShowEditModal(null)} className="w-full">
-                إغلاق
-              </Button>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">الاسم</label>
+                <input
+                  type="text"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">البريد الإلكتروني</label>
+                <p className="text-sm font-mono text-slate-500 px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl" dir="ltr">{showEditModal.email}</p>
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">كود المستخدم</label>
+                <input
+                  type="text"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono"
+                  placeholder="مثال: EMP-001"
+                  dir="ltr"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 block">الدور</label>
+                <div className="space-y-2">
+                  {roles.map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => setEditRoleId(r.id!)}
+                      className={`w-full px-4 py-3 rounded-xl text-right flex items-center gap-3 transition-all text-sm border ${
+                        r.id === editRoleId
+                          ? 'border-primary bg-primary/5 text-primary font-bold'
+                          : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${r.color}`}>
+                        {r.name}
+                      </span>
+                      {r.id === editRoleId && (
+                        <span className="material-icons-round text-primary text-sm mr-auto">check</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button onClick={handleSaveEdit} disabled={!!actionLoading} className="flex-1">
+                  حفظ التعديلات
+                </Button>
+                <Button variant="outline" onClick={() => setShowEditModal(null)}>
+                  إغلاق
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Users List */}
+      {/* ── Active Users List ── */}
       {loading ? (
         <LoadingSkeleton rows={4} type="table" />
       ) : (
@@ -318,6 +477,7 @@ export const Users: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
                   <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase">المستخدم</th>
+                  <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase">الكود</th>
                   <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase">البريد الإلكتروني</th>
                   <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase">الدور</th>
                   <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase">الحالة</th>
@@ -325,7 +485,7 @@ export const Users: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {users.map((user) => (
+                {activeUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
@@ -338,6 +498,15 @@ export const Users: React.FC = () => {
                         </div>
                       </div>
                     </td>
+                    <td className="px-4 py-4">
+                      {user.code ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-primary/5 text-primary text-xs font-mono font-bold">
+                          {user.code}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-300 font-mono text-xs" dir="ltr">
                       {user.email}
                     </td>
@@ -347,17 +516,15 @@ export const Users: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <Badge variant={user.isActive ? 'success' : 'danger'}>
-                        {user.isActive ? 'نشط' : 'معطل'}
-                      </Badge>
+                      <Badge variant="success">نشط</Badge>
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
                         {can('users.edit') && (
                           <button
-                            onClick={() => setShowEditModal(user)}
+                            onClick={() => openEditModal(user)}
                             className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
-                            title="تعديل الدور"
+                            title="تعديل"
                           >
                             <span className="material-icons-round text-lg">edit</span>
                           </button>
@@ -366,16 +533,10 @@ export const Users: React.FC = () => {
                           <button
                             onClick={() => handleToggleActive(user)}
                             disabled={actionLoading === user.id}
-                            className={`p-1.5 rounded-lg transition-all ${
-                              user.isActive
-                                ? 'text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20'
-                                : 'text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-                            }`}
-                            title={user.isActive ? 'تعطيل' : 'تفعيل'}
+                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
+                            title="تعطيل"
                           >
-                            <span className="material-icons-round text-lg">
-                              {user.isActive ? 'block' : 'check_circle'}
-                            </span>
+                            <span className="material-icons-round text-lg">block</span>
                           </button>
                         )}
                         <button
@@ -390,11 +551,11 @@ export const Users: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-                {users.length === 0 && (
+                {activeUsers.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400 font-medium">
                       <span className="material-icons-round text-4xl block mb-2">group_off</span>
-                      لا يوجد مستخدمين
+                      لا يوجد مستخدمين نشطين
                     </td>
                   </tr>
                 )}
@@ -404,7 +565,7 @@ export const Users: React.FC = () => {
         </Card>
       )}
 
-      {/* Stats */}
+      {/* ── Stats ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
           <p className="text-xs text-slate-400 font-bold mb-1">إجمالي المستخدمين</p>
@@ -412,11 +573,11 @@ export const Users: React.FC = () => {
         </div>
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
           <p className="text-xs text-slate-400 font-bold mb-1">نشط</p>
-          <p className="text-2xl font-black text-emerald-500">{users.filter((u) => u.isActive).length}</p>
+          <p className="text-2xl font-black text-emerald-500">{activeUsers.length}</p>
         </div>
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-xs text-slate-400 font-bold mb-1">معطل</p>
-          <p className="text-2xl font-black text-rose-500">{users.filter((u) => !u.isActive).length}</p>
+          <p className="text-xs text-slate-400 font-bold mb-1">بانتظار الموافقة</p>
+          <p className="text-2xl font-black text-amber-500">{pendingUsers.length}</p>
         </div>
       </div>
     </div>

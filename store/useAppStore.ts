@@ -113,6 +113,7 @@ interface AppState {
 
   // Auth
   isAuthenticated: boolean;
+  isPendingApproval: boolean;
   uid: string | null;
   userEmail: string | null;
   userDisplayName: string | null;
@@ -132,6 +133,7 @@ interface AppState {
   logout: () => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   initializeApp: () => Promise<void>;
+  checkApprovalStatus: () => Promise<boolean>;
 
   // Admin user management
   createUser: (email: string, password: string, displayName: string, roleId: string) => Promise<string | null>;
@@ -251,6 +253,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   authError: null,
   isAuthenticated: false,
+  isPendingApproval: false,
   uid: null,
   userEmail: null,
   userDisplayName: null,
@@ -294,7 +297,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       const roles = await roleService.seedIfEmpty();
       set({ roles });
 
-      // Assign the last role (most basic — "مشرف") by default
       const defaultRole = roles[roles.length - 1] ?? roles[0];
       if (!defaultRole) throw new Error('Failed to seed roles');
 
@@ -302,24 +304,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         email,
         displayName,
         roleId: defaultRole.id!,
-        isActive: true,
+        isActive: false,
         createdBy: 'self-register',
       });
 
       set({
         isAuthenticated: true,
+        isPendingApproval: true,
         uid,
         userEmail: email,
         userDisplayName: displayName,
-        userProfile: { id: uid, email, displayName, roleId: defaultRole.id!, isActive: true },
+        userProfile: { id: uid, email, displayName, roleId: defaultRole.id!, isActive: false },
+        loading: false,
       });
-
-      get()._applyRole(defaultRole);
-      await get()._loadAppData();
-
-      activityLogService.log(uid, email, 'LOGIN', `إنشاء حساب جديد: ${displayName}`);
-
-      set({ loading: false });
     } catch (error: any) {
       let msg = 'فشل إنشاء الحساب';
       if (error?.code === 'auth/email-already-in-use') {
@@ -340,11 +337,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const cred = await signInWithEmail(email, password);
       const uid = cred.user.uid;
 
-      // Fetch roles
       const roles = await roleService.seedIfEmpty();
       set({ roles });
 
-      // Fetch user profile from Firestore
       const userDoc = await userService.get(uid);
       if (!userDoc) {
         await signOut();
@@ -356,22 +351,24 @@ export const useAppStore = create<AppState>((set, get) => ({
         return;
       }
 
-      // Check isActive
       if (!userDoc.isActive) {
-        await signOut();
         set({
+          isAuthenticated: true,
+          isPendingApproval: true,
+          uid,
+          userEmail: userDoc.email,
+          userDisplayName: userDoc.displayName,
+          userProfile: userDoc,
           loading: false,
-          authError: 'حسابك معطل. تواصل مع مدير النظام.',
-          isAuthenticated: false,
         });
         return;
       }
 
-      // Resolve role
       const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
 
       set({
         isAuthenticated: true,
+        isPendingApproval: false,
         uid,
         userEmail: userDoc.email,
         userDisplayName: userDoc.displayName,
@@ -379,11 +376,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
 
       get()._applyRole(role);
-
-      // Load app data
       await get()._loadAppData();
 
-      // Log login activity
       activityLogService.log(uid, userDoc.email, 'LOGIN', `تسجيل دخول: ${userDoc.displayName}`);
 
       set({ loading: false });
@@ -408,6 +402,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await signOut();
     set({
       isAuthenticated: false,
+      isPendingApproval: false,
       uid: null,
       userEmail: null,
       userDisplayName: null,
@@ -503,12 +498,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ roles });
 
       const userDoc = await userService.get(uid);
-      if (!userDoc || !userDoc.isActive) {
+      if (!userDoc) {
         await signOut();
         set({
           loading: false,
           isAuthenticated: false,
-          authError: !userDoc ? 'لم يتم العثور على حساب المستخدم.' : 'حسابك معطل.',
+          authError: 'لم يتم العثور على حساب المستخدم.',
+        });
+        return;
+      }
+
+      if (!userDoc.isActive) {
+        set({
+          isAuthenticated: true,
+          isPendingApproval: true,
+          uid,
+          userEmail: userDoc.email,
+          userDisplayName: userDoc.displayName,
+          userProfile: userDoc,
+          loading: false,
         });
         return;
       }
@@ -517,6 +525,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       set({
         isAuthenticated: true,
+        isPendingApproval: false,
         uid,
         userEmail: userDoc.email,
         userDisplayName: userDoc.displayName,
@@ -529,6 +538,35 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('initializeApp error:', error);
       set({ error: (error as Error).message, loading: false });
+    }
+  },
+
+  // ── Check Approval Status (called from PendingApproval page) ────────────
+
+  checkApprovalStatus: async () => {
+    const { uid } = get();
+    if (!uid) return false;
+    try {
+      const userDoc = await userService.get(uid);
+      if (!userDoc) return false;
+      if (!userDoc.isActive) return false;
+
+      const roles = get().roles.length > 0 ? get().roles : await roleService.seedIfEmpty();
+      if (roles.length > 0 && get().roles.length === 0) set({ roles });
+      const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
+
+      set({
+        isPendingApproval: false,
+        userProfile: userDoc,
+        userEmail: userDoc.email,
+        userDisplayName: userDoc.displayName,
+      });
+
+      get()._applyRole(role);
+      await get()._loadAppData();
+      return true;
+    } catch {
+      return false;
     }
   },
 

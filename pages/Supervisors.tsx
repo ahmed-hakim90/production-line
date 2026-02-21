@@ -107,6 +107,7 @@ export const Supervisors: React.FC = () => {
   const [formEmail, setFormEmail] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [formRoleId, setFormRoleId] = useState('');
+  const [formCode, setFormCode] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [toggleConfirmId, setToggleConfirmId] = useState<string | null>(null);
@@ -249,6 +250,7 @@ export const Supervisors: React.FC = () => {
     setFormEmail('');
     setFormPassword('');
     setFormRoleId(roles.length > 0 ? roles[roles.length - 1].id! : '');
+    setFormCode('');
     setShowModal(true);
   };
 
@@ -261,6 +263,7 @@ export const Supervisors: React.FC = () => {
     setFormPassword('');
     const user = supervisorUserMap[id];
     setFormRoleId(user?.roleId ?? '');
+    setFormCode(user?.code ?? '');
     setShowModal(true);
   };
 
@@ -270,29 +273,31 @@ export const Supervisors: React.FC = () => {
 
     if (editId) {
       await updateSupervisor(editId, form);
-      // Update linked user role if changed
       const linkedUser = supervisorUserMap[editId];
-      if (linkedUser && formRoleId && formRoleId !== linkedUser.roleId) {
-        await userService.update(linkedUser.id!, { roleId: formRoleId });
-
-        if (currentUid && currentEmail) {
-          activityLogService.log(currentUid, currentEmail, 'UPDATE_USER_ROLE',
-            `تغيير دور ${form.name} إلى: ${getDynamicRoleName(formRoleId)}`,
-            { targetUserId: linkedUser.id, newRoleId: formRoleId }
-          );
+      if (linkedUser) {
+        const userUpdates: Record<string, any> = {};
+        if (formRoleId && formRoleId !== linkedUser.roleId) userUpdates.roleId = formRoleId;
+        if (formCode !== (linkedUser.code || '')) userUpdates.code = formCode;
+        if (Object.keys(userUpdates).length > 0) {
+          await userService.update(linkedUser.id!, userUpdates);
+          if (userUpdates.roleId && currentUid && currentEmail) {
+            activityLogService.log(currentUid, currentEmail, 'UPDATE_USER_ROLE',
+              `تغيير دور ${form.name} إلى: ${getDynamicRoleName(formRoleId)}`,
+              { targetUserId: linkedUser.id, newRoleId: formRoleId }
+            );
+          }
         }
       }
     } else {
-      // Create supervisor
       const supId = await createSupervisor(form);
 
-      // Also create Firebase Auth account if email provided
       if (supId && formEmail && formPassword && formRoleId) {
         const newUid = await createUser(formEmail, formPassword, form.name, formRoleId);
         if (newUid) {
-          // Link supervisor to user
           await supervisorService.update(supId, { userId: newUid, email: formEmail });
-          // Firebase SDK limitation: creating a user signs us in as them
+          if (formCode) {
+            await userService.update(newUid, { code: formCode });
+          }
           setShowModal(false);
           setSaving(false);
           setShowReAuth(true);
@@ -555,15 +560,21 @@ export const Supervisors: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-bold text-base text-slate-800 dark:text-white truncate">{sup.name}</h4>
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold mt-1 ${roleColor}`}>
-                        {roleLabel}
-                      </span>
-                      {/* Show dynamic role if linked to account */}
-                      {linkedUser && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold mt-1 mr-1 ${getDynamicRoleColor(linkedUser.roleId)}`}>
-                          {getDynamicRoleName(linkedUser.roleId)}
+                      <div className="flex items-center gap-1 flex-wrap mt-1">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${roleColor}`}>
+                          {roleLabel}
                         </span>
-                      )}
+                        {linkedUser && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${getDynamicRoleColor(linkedUser.roleId)}`}>
+                            {getDynamicRoleName(linkedUser.roleId)}
+                          </span>
+                        )}
+                        {linkedUser?.code && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-primary/5 text-primary text-[10px] font-mono font-bold">
+                            {linkedUser.code}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <Badge variant={sup.isActive ? 'success' : 'danger'}>
                       {sup.isActive ? 'مفعل' : 'غير مفعل'}
@@ -785,6 +796,10 @@ export const Supervisors: React.FC = () => {
                     <span className="text-sm font-bold text-blue-700 dark:text-blue-400">حساب الدخول (اختياري)</span>
                   </div>
                   <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500">كود المستخدم</label>
+                    <input type="text" value={formCode} onChange={(e) => setFormCode(e.target.value)} className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-mono" placeholder="مثال: EMP-001" dir="ltr" />
+                  </div>
+                  <div className="space-y-2">
                     <label className="block text-xs font-bold text-slate-500">البريد الإلكتروني</label>
                     <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none" placeholder="user@example.com" dir="ltr" />
                   </div>
@@ -804,16 +819,22 @@ export const Supervisors: React.FC = () => {
 
               {/* Edit: show linked account role selector */}
               {editId && canManageUsers && supervisorUserMap[editId] && (
-                <div className="space-y-2 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30">
+                <div className="space-y-3 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="material-icons-round text-blue-500 text-sm">vpn_key</span>
                     <span className="text-sm font-bold text-blue-700 dark:text-blue-400">حساب الدخول</span>
                     <span className="text-xs font-mono text-slate-400" dir="ltr">{supervisorUserMap[editId]?.email}</span>
                   </div>
-                  <label className="block text-xs font-bold text-slate-500">الدور في النظام</label>
-                  <select value={formRoleId} onChange={(e) => setFormRoleId(e.target.value)} className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none">
-                    {roles.map((r) => (<option key={r.id} value={r.id!}>{r.name}</option>))}
-                  </select>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500">كود المستخدم</label>
+                    <input type="text" value={formCode} onChange={(e) => setFormCode(e.target.value)} className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-mono" placeholder="مثال: EMP-001" dir="ltr" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500">الدور في النظام</label>
+                    <select value={formRoleId} onChange={(e) => setFormRoleId(e.target.value)} className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none">
+                      {roles.map((r) => (<option key={r.id} value={r.id!}>{r.name}</option>))}
+                    </select>
+                  </div>
                 </div>
               )}
 

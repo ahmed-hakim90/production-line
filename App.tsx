@@ -26,6 +26,7 @@ import { ProductionPlans } from './pages/ProductionPlans';
 import { SupervisorDashboard } from './pages/SupervisorDashboard';
 import { FactoryManagerDashboard } from './pages/FactoryManagerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { PendingApproval } from './pages/PendingApproval';
 import { useAppStore } from './store/useAppStore';
 import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
@@ -50,6 +51,7 @@ const App: React.FC = () => {
   const subscribeToDashboard = useAppStore((s) => s.subscribeToDashboard);
   const subscribeToLineStatuses = useAppStore((s) => s.subscribeToLineStatuses);
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const isPendingApproval = useAppStore((s) => s.isPendingApproval);
   const loading = useAppStore((s) => s.loading);
   const initialized = useRef(false);
 
@@ -100,12 +102,23 @@ const App: React.FC = () => {
 
         {/* Public: Login */}
         <Route path="/login" element={
-          isAuthenticated ? <LoginRedirect /> : <Login />
+          isAuthenticated
+            ? (isPendingApproval ? <Navigate to="/pending" replace /> : <LoginRedirect />)
+            : <Login />
+        } />
+
+        {/* Pending Approval */}
+        <Route path="/pending" element={
+          !isAuthenticated ? <Navigate to="/login" replace />
+            : isPendingApproval ? <PendingApproval />
+            : <LoginRedirect />
         } />
 
         {/* Protected: All app routes inside Layout */}
         <Route path="/*" element={
-          !isAuthenticated ? <Navigate to="/login" replace /> : (
+          !isAuthenticated ? <Navigate to="/login" replace />
+            : isPendingApproval ? <Navigate to="/pending" replace />
+            : (
             <Layout>
               <Routes>
                 <Route path="/" element={<ProtectedRoute permission="dashboard.view"><HomeRedirect /></ProtectedRoute>} />

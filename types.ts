@@ -89,7 +89,9 @@ export type ActivityAction =
   | 'DELETE_REPORT'
   | 'CREATE_USER'
   | 'UPDATE_USER_ROLE'
-  | 'TOGGLE_USER_ACTIVE';
+  | 'TOGGLE_USER_ACTIVE'
+  | 'APPROVE_USER'
+  | 'REJECT_USER';
 
 export interface ActivityLog {
   id?: string;
@@ -229,6 +231,7 @@ export interface FirestoreUser {
   id?: string;
   email: string;
   displayName: string;
+  code?: string;
   roleId: string;
   isActive: boolean;
   createdAt?: any;
