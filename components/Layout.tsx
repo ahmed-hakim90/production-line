@@ -288,11 +288,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { collapsed } = useSidebarCollapse();
 
   return (
-    <div className="flex min-h-screen bg-background dark:bg-background-dark text-slate-800 dark:text-slate-200">
+    <div className="flex min-h-screen bg-background dark:bg-background-dark text-slate-800 dark:text-slate-200 overflow-x-hidden">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className={`flex-1 ${collapsed ? 'lg:mr-[72px]' : 'lg:mr-64'} flex flex-col min-w-0 transition-all duration-300`}>
+      <main className={`flex-1 ${collapsed ? 'lg:mr-[72px]' : 'lg:mr-64'} flex flex-col min-w-0 transition-all duration-300 overflow-x-hidden`}>
         <Header onMenuToggle={() => setSidebarOpen((o) => !o)} />
-        <div className="p-4 sm:p-6 lg:p-8 flex-1 animate-in fade-in duration-500">{children}</div>
+        <div className="p-4 sm:p-6 lg:p-8 flex-1 animate-in fade-in duration-500 overflow-x-hidden">{children}</div>
         <footer className="mt-auto py-4 sm:py-6 px-4 sm:px-8 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-xs sm:text-sm font-medium">
           <p>© {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM</p>
           <div className="flex items-center gap-4 sm:gap-6">

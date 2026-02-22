@@ -46,6 +46,9 @@ export interface ParsedEmployeeRow {
   hourlyRate: number;
   shiftName: string;
   shiftId: string;
+  email: string;
+  isActive: boolean;
+  hasSystemAccess: boolean;
   errors: string[];
   /** Set when employee already exists — holds Firestore doc id */
   existingId?: string;
@@ -87,8 +90,11 @@ const EMP_HEADERS: Record<string, string> = {
   'المستوى': 'level',
   'نوع التوظيف': 'employmentType', 'نوع العمل': 'employmentType',
   'الراتب الأساسي': 'baseSalary', 'الراتب': 'baseSalary',
-  'أجر الساعة': 'hourlyRate',
+  'أجر الساعة': 'hourlyRate', 'سعر الساعة': 'hourlyRate',
   'الوردية': 'shiftName', 'اسم الوردية': 'shiftName',
+  'البريد الإلكتروني': 'email', 'الإيميل': 'email', 'ايميل': 'email', 'البريد': 'email',
+  'الحالة': 'isActive', 'حالة': 'isActive',
+  'صلاحية النظام': 'hasSystemAccess', 'صلاحية': 'hasSystemAccess',
 };
 
 const SHEET_ALIASES: Record<string, 'departments' | 'positions' | 'employees'> = {
@@ -263,8 +269,20 @@ function parseEmployeeSheet(
     const hourlyRateRaw = getValue(row, rawHeaders, hMap, 'hourlyRate');
     const hourlyRate = Number(hourlyRateRaw) || 0;
     const shiftName = String(getValue(row, rawHeaders, hMap, 'shiftName') ?? '').trim();
+    const emailRaw = String(getValue(row, rawHeaders, hMap, 'email') ?? '').trim();
+    const isActiveRaw = String(getValue(row, rawHeaders, hMap, 'isActive') ?? '').trim();
+    const hasSystemAccessRaw = String(getValue(row, rawHeaders, hMap, 'hasSystemAccess') ?? '').trim();
 
-    // Track which fields actually have non-empty values in the Excel row
+    const parseBool = (val: string, defaultVal: boolean): boolean => {
+      if (!val) return defaultVal;
+      const lower = val.toLowerCase();
+      return ['نعم', 'نشط', 'true', '1', 'yes', 'active'].includes(lower);
+    };
+
+    const email = emailRaw;
+    const isActive = parseBool(isActiveRaw, true);
+    const hasSystemAccess = parseBool(hasSystemAccessRaw, false);
+
     const providedFields: string[] = [];
     if (name) providedFields.push('name');
     if (code) providedFields.push('code');
@@ -275,6 +293,9 @@ function parseEmployeeSheet(
     if (baseSalaryRaw !== '' && baseSalaryRaw != null && !isNaN(Number(baseSalaryRaw))) providedFields.push('baseSalary');
     if (hourlyRateRaw !== '' && hourlyRateRaw != null && !isNaN(Number(hourlyRateRaw))) providedFields.push('hourlyRate');
     if (shiftName) providedFields.push('shiftName');
+    if (emailRaw) providedFields.push('email');
+    if (isActiveRaw) providedFields.push('isActive');
+    if (hasSystemAccessRaw) providedFields.push('hasSystemAccess');
 
     if (!name && !code) errors.push('اسم الموظف أو الكود مطلوب');
 
@@ -314,6 +335,9 @@ function parseEmployeeSheet(
       hourlyRate,
       shiftName,
       shiftId: (shift as FirestoreShift)?.id ?? '',
+      email,
+      isActive,
+      hasSystemAccess,
       errors,
       existingId: existingEmp?.id,
       providedFields,

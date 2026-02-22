@@ -152,10 +152,10 @@ const App: React.FC = () => {
                 <Route path="/reports" element={<ProtectedRoute permission="reports.view"><Reports /></ProtectedRoute>} />
                 <Route path="/quick-action" element={<ProtectedRoute permission="quickAction.view"><QuickAction /></ProtectedRoute>} />
                 <Route path="/users" element={<Navigate to="/employees" replace />} />
-                <Route path="/supervisors" element={<ProtectedRoute permission="employees.view"><Supervisors /></ProtectedRoute>} />
-                <Route path="/supervisors/:id" element={<ProtectedRoute permission="employees.view"><SupervisorDetails /></ProtectedRoute>} />
-                <Route path="/production-workers" element={<ProtectedRoute permission="employees.view"><ProductionWorkers /></ProtectedRoute>} />
-                <Route path="/production-workers/:id" element={<ProtectedRoute permission="employees.view"><ProductionWorkerDetails /></ProtectedRoute>} />
+                <Route path="/supervisors" element={<ProtectedRoute permission="supervisors.view"><Supervisors /></ProtectedRoute>} />
+                <Route path="/supervisors/:id" element={<ProtectedRoute permission="supervisors.view"><SupervisorDetails /></ProtectedRoute>} />
+                <Route path="/production-workers" element={<ProtectedRoute permission="productionWorkers.view"><ProductionWorkers /></ProtectedRoute>} />
+                <Route path="/production-workers/:id" element={<ProtectedRoute permission="productionWorkers.view"><ProductionWorkerDetails /></ProtectedRoute>} />
                 <Route path="/activity-log" element={<ProtectedRoute permission="activityLog.view"><ActivityLogPage /></ProtectedRoute>} />
                 <Route path="/employee-dashboard" element={<ProtectedRoute permission="employeeDashboard.view"><EmployeeDashboard /></ProtectedRoute>} />
                 <Route path="/supervisor-dashboard" element={<Navigate to="/employee-dashboard" replace />} />

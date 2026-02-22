@@ -5,7 +5,8 @@
  */
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import type { ProductionReport } from '../types';
+import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee } from '../types';
+import type { ProductCostBreakdown } from './productCostBreakdown';
 
 interface ReportRow {
   التاريخ: string;
@@ -160,4 +161,78 @@ export const exportHRData = (
 ) => {
   if (rows.length === 0) return;
   downloadExcel(rows, sheetName, fileName);
+};
+
+// ─── Products Export ─────────────────────────────────────────────────────────
+
+interface ProductExportData {
+  product: Product;
+  raw: FirestoreProduct;
+  costBreakdown?: ProductCostBreakdown | null;
+}
+
+const fmtCost = (v: number) => v > 0 ? Number(v.toFixed(2)) : 0;
+
+export const exportAllProducts = (
+  data: ProductExportData[],
+  includeCosts: boolean
+) => {
+  const rows = data.map((d) => {
+    const base: Record<string, any> = {
+      'الكود': d.raw.code,
+      'اسم المنتج': d.raw.name,
+      'الفئة': d.raw.model || '—',
+      'الرصيد الافتتاحي': d.product.openingStock,
+      'إجمالي الإنتاج': d.product.totalProduction,
+      'إجمالي الهالك': d.product.wasteUnits,
+      'الرصيد الحالي': d.product.stockLevel,
+      'حالة المخزون': d.product.stockStatus === 'available' ? 'متوفر' : d.product.stockStatus === 'low' ? 'منخفض' : 'نفذ',
+    };
+    if (includeCosts && d.costBreakdown) {
+      base['تكلفة الوحدة الصينية'] = fmtCost(d.costBreakdown.chineseUnitCost);
+      base['تكلفة المواد الخام'] = fmtCost(d.costBreakdown.rawMaterialCost);
+      base['تكلفة العلبة الداخلية'] = fmtCost(d.costBreakdown.innerBoxCost);
+      base['تكلفة الكرتونة'] = fmtCost(d.costBreakdown.outerCartonCost);
+      base['وحدات/كرتونة'] = d.costBreakdown.unitsPerCarton;
+      base['نصيب الكرتونة'] = fmtCost(d.costBreakdown.cartonShare);
+      base['نصيب المصاريف الصناعية'] = fmtCost(d.costBreakdown.productionOverheadShare);
+      base['إجمالي التكلفة المحسوبة'] = fmtCost(d.costBreakdown.totalCalculatedCost);
+    }
+    return base;
+  });
+  const date = new Date().toISOString().slice(0, 10);
+  downloadExcel(rows, 'المنتجات', `المنتجات-${date}`);
+};
+
+// ─── Employees Export ────────────────────────────────────────────────────────
+
+const EMPLOYMENT_TYPE_AR: Record<string, string> = {
+  full_time: 'دوام كامل',
+  part_time: 'دوام جزئي',
+  contract: 'عقد',
+  daily: 'يومي',
+};
+
+export const exportAllEmployees = (
+  employees: FirestoreEmployee[],
+  getDeptName: (id: string) => string,
+  getJobTitle: (id: string) => string,
+  getShiftName: (id: string) => string
+) => {
+  const rows = employees.map((e) => ({
+    'الكود': e.code || '—',
+    'الاسم': e.name,
+    'القسم': getDeptName(e.departmentId),
+    'الوظيفة': getJobTitle(e.jobPositionId),
+    'نوع التوظيف': EMPLOYMENT_TYPE_AR[e.employmentType] || e.employmentType,
+    'المستوى': e.level,
+    'الراتب الأساسي': e.baseSalary,
+    'سعر الساعة': e.hourlyRate,
+    'الوردية': e.shiftId ? getShiftName(e.shiftId) : '—',
+    'البريد الإلكتروني': e.email || '—',
+    'الحالة': e.isActive ? 'نشط' : 'غير نشط',
+    'صلاحية النظام': e.hasSystemAccess ? 'نعم' : 'لا',
+  }));
+  const date = new Date().toISOString().slice(0, 10);
+  downloadExcel(rows, 'الموظفين', `الموظفين-${date}`);
 };

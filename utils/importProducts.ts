@@ -12,6 +12,10 @@ export interface ParsedProductRow {
   code: string;
   model: string;
   openingBalance: number;
+  chineseUnitCost: number;
+  innerBoxCost: number;
+  outerCartonCost: number;
+  unitsPerCarton: number;
   errors: string[];
 }
 
@@ -42,6 +46,19 @@ const HEADER_MAP: Record<string, string> = {
   'رصيد افتتاحي': 'openingBalance',
   'الرصيد': 'openingBalance',
   'رصيد': 'openingBalance',
+  'تكلفة الوحدة الصينية': 'chineseUnitCost',
+  'الوحدة الصينية': 'chineseUnitCost',
+  'تكلفة صينية': 'chineseUnitCost',
+  'تكلفة العلبة الداخلية': 'innerBoxCost',
+  'العلبة الداخلية': 'innerBoxCost',
+  'علبة داخلية': 'innerBoxCost',
+  'تكلفة الكرتونة الخارجية': 'outerCartonCost',
+  'الكرتونة الخارجية': 'outerCartonCost',
+  'تكلفة الكرتونة': 'outerCartonCost',
+  'كرتونة': 'outerCartonCost',
+  'عدد الوحدات في الكرتونة': 'unitsPerCarton',
+  'وحدات/كرتونة': 'unitsPerCarton',
+  'وحدات الكرتونة': 'unitsPerCarton',
 };
 
 function normalizeHeader(h: string): string {
@@ -121,6 +138,10 @@ export function parseProductsExcel(
 
           const model = String(getValue('model') ?? '').trim();
           const openingBalance = Number(getValue('openingBalance')) || 0;
+          const chineseUnitCost = Number(getValue('chineseUnitCost')) || 0;
+          const innerBoxCost = Number(getValue('innerBoxCost')) || 0;
+          const outerCartonCost = Number(getValue('outerCartonCost')) || 0;
+          const unitsPerCarton = Number(getValue('unitsPerCarton')) || 0;
 
           return {
             rowIndex: idx + 2,
@@ -128,6 +149,10 @@ export function parseProductsExcel(
             code,
             model,
             openingBalance,
+            chineseUnitCost,
+            innerBoxCost,
+            outerCartonCost,
+            unitsPerCarton,
             errors,
           };
         });
@@ -156,5 +181,9 @@ export function toProductData(row: ParsedProductRow): Omit<FirestoreProduct, 'id
     code: row.code,
     model: row.model,
     openingBalance: row.openingBalance,
+    chineseUnitCost: row.chineseUnitCost,
+    innerBoxCost: row.innerBoxCost,
+    outerCartonCost: row.outerCartonCost,
+    unitsPerCarton: row.unitsPerCarton,
   };
 }

@@ -143,10 +143,14 @@ export const leaveRequestService = {
     const q = query(
       leaveRequestsRef(),
       where('employeeId', '==', employeeId),
-      orderBy('createdAt', 'desc'),
     );
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+    const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+    return results.sort((a, b) => {
+      const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+      const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+      return tb - ta;
+    });
   },
 
   async getById(id: string): Promise<FirestoreLeaveRequest | null> {
@@ -161,10 +165,14 @@ export const leaveRequestService = {
     const q = query(
       leaveRequestsRef(),
       where('finalStatus', '==', 'pending'),
-      orderBy('createdAt', 'desc'),
     );
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+    const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+    return results.sort((a, b) => {
+      const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+      const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+      return tb - ta;
+    });
   },
 
   async updateApproval(

@@ -18,6 +18,8 @@ export type Permission =
   | 'products.view' | 'products.create' | 'products.edit' | 'products.delete'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
   | 'employees.view' | 'employees.create' | 'employees.edit' | 'employees.delete'
+  | 'supervisors.view'
+  | 'productionWorkers.view'
   | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
@@ -91,6 +93,20 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'employees.create', label: 'إنشاء' },
       { key: 'employees.edit', label: 'تعديل' },
       { key: 'employees.delete', label: 'حذف' },
+    ],
+  },
+  {
+    key: 'supervisors',
+    label: 'المشرفين',
+    permissions: [
+      { key: 'supervisors.view', label: 'عرض المشرفين' },
+    ],
+  },
+  {
+    key: 'productionWorkers',
+    label: 'عمال الإنتاج',
+    permissions: [
+      { key: 'productionWorkers.view', label: 'عرض عمال الإنتاج' },
     ],
   },
   {
@@ -323,7 +339,8 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { path: '/lines', icon: 'precision_manufacturing', label: 'خطوط الإنتاج', permission: 'lines.view' },
       { path: '/products', icon: 'inventory_2', label: 'المنتجات', permission: 'products.view' },
       { path: '/production-plans', icon: 'event_note', label: 'خطط الإنتاج', permission: 'plans.view' },
-      { path: '/supervisors', icon: 'engineering', label: 'المشرفين', permission: 'employees.view' },
+      { path: '/supervisors', icon: 'engineering', label: 'المشرفين', permission: 'supervisors.view' },
+      { path: '/production-workers', icon: 'construction', label: 'عمال الإنتاج', permission: 'productionWorkers.view' },
       { path: '/reports', icon: 'bar_chart', label: 'التقارير', permission: 'reports.view' },
       { path: '/quick-action', icon: 'bolt', label: 'إدخال سريع', permission: 'quickAction.view' },
     ],
@@ -384,8 +401,10 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/employees': 'employees.view',
   '/employees/import': 'employees.create',
   '/employees/:id': 'employees.view',
-  '/supervisors': 'employees.view',
-  '/supervisors/:id': 'employees.view',
+  '/supervisors': 'supervisors.view',
+  '/supervisors/:id': 'supervisors.view',
+  '/production-workers': 'productionWorkers.view',
+  '/production-workers/:id': 'productionWorkers.view',
   '/self-service': 'selfService.view',
   '/reports': 'reports.view',
   '/quick-action': 'quickAction.view',

@@ -9,12 +9,18 @@ import { FirestoreProduct } from '../types';
 import { usePermission } from '../utils/permissions';
 import { parseProductsExcel, toProductData, ProductImportResult } from '../utils/importProducts';
 import { downloadProductsTemplate } from '../utils/downloadTemplates';
+import { exportAllProducts } from '../utils/exportExcel';
+import { calculateProductCostBreakdown } from '../utils/productCostBreakdown';
 
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
   name: '',
   model: '',
   code: '',
   openingBalance: 0,
+  chineseUnitCost: 0,
+  innerBoxCost: 0,
+  outerCartonCost: 0,
+  unitsPerCarton: 0,
 };
 
 export const Products: React.FC = () => {
@@ -87,12 +93,17 @@ export const Products: React.FC = () => {
   const openEdit = (id: string) => {
     const product = products.find((p) => p.id === id);
     if (!product) return;
+    const raw = _rawProducts.find((p) => p.id === id);
     setEditId(id);
     setForm({
       name: product.name,
       model: product.category,
       code: product.code,
       openingBalance: product.openingStock,
+      chineseUnitCost: raw?.chineseUnitCost ?? 0,
+      innerBoxCost: raw?.innerBoxCost ?? 0,
+      outerCartonCost: raw?.outerCartonCost ?? 0,
+      unitsPerCarton: raw?.unitsPerCarton ?? 0,
     });
     setShowModal(true);
   };
@@ -157,6 +168,15 @@ export const Products: React.FC = () => {
     setImportResult(null);
   };
 
+  const handleExportProducts = () => {
+    const data = products.map((p) => {
+      const raw = _rawProducts.find((r) => r.id === p.id);
+      const breakdown = raw ? calculateProductCostBreakdown(raw, [], productCosts[p.id]?.costPerUnit ?? 0) : null;
+      return { product: p, raw: raw || { name: p.name, model: p.category, code: p.code, openingBalance: p.openingStock }, costBreakdown: breakdown };
+    });
+    exportAllProducts(data, canViewCosts);
+  };
+
   return (
     <div className="space-y-6">
       {/* Hidden file input */}
@@ -167,8 +187,15 @@ export const Products: React.FC = () => {
           <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدارة المنتجات</h2>
           <p className="text-sm text-slate-500 font-medium">قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج.</p>
         </div>
-        {can("products.create") && (
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {products.length > 0 && (
+            <Button variant="secondary" onClick={handleExportProducts} className="shrink-0">
+              <span className="material-icons-round text-sm">download</span>
+              <span className="hidden sm:inline">تصدير Excel</span>
+            </Button>
+          )}
+          {can("products.create") && (
+            <>
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="shrink-0">
               <span className="material-icons-round text-sm">upload_file</span>
               <span className="hidden sm:inline">رفع Excel</span>
@@ -177,8 +204,9 @@ export const Products: React.FC = () => {
               <span className="material-icons-round text-sm">add</span>
               إضافة منتج جديد
             </Button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -327,14 +355,14 @@ export const Products: React.FC = () => {
       {/* ── Add / Edit Modal ── */}
       {showModal && (can("products.create") || can("products.edit")) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <h3 className="text-lg font-bold">{editId ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h3>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="p-6 space-y-5">
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">اسم المنتج *</label>
                 <input
@@ -378,6 +406,56 @@ export const Products: React.FC = () => {
                   onChange={(e) => setForm({ ...form, openingBalance: Number(e.target.value) })}
                 />
               </div>
+
+              {/* ── Cost Breakdown Fields ── */}
+              {canViewCosts && (
+                <>
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                    <h4 className="text-sm font-black text-slate-600 dark:text-slate-300 mb-3 flex items-center gap-2">
+                      <span className="material-icons-round text-teal-500 text-base">receipt_long</span>
+                      تفصيل التكلفة
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">تكلفة الوحدة الصينية (ج.م)</label>
+                      <input
+                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        type="number" min={0} step="any"
+                        value={form.chineseUnitCost ?? 0}
+                        onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">تكلفة العلبة الداخلية (ج.م)</label>
+                      <input
+                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        type="number" min={0} step="any"
+                        value={form.innerBoxCost ?? 0}
+                        onChange={(e) => setForm({ ...form, innerBoxCost: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">تكلفة الكرتونة الخارجية (ج.م)</label>
+                      <input
+                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        type="number" min={0} step="any"
+                        value={form.outerCartonCost ?? 0}
+                        onChange={(e) => setForm({ ...form, outerCartonCost: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">عدد الوحدات في الكرتونة</label>
+                      <input
+                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        type="number" min={0} step="1"
+                        value={form.unitsPerCarton ?? 0}
+                        onChange={(e) => setForm({ ...form, unitsPerCarton: Number(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setShowModal(false)}>إلغاء</Button>
@@ -420,7 +498,7 @@ export const Products: React.FC = () => {
       {/* ── Import Excel Modal ── */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <h3 className="text-lg font-bold">رفع منتجات من Excel</h3>
@@ -474,20 +552,24 @@ export const Products: React.FC = () => {
                     <table className="w-full text-right text-sm border-collapse">
                       <thead>
                         <tr className="bg-slate-50 dark:bg-slate-800/50">
-                          <th className="px-4 py-3 text-xs font-black text-slate-500">صف</th>
-                          <th className="px-4 py-3 text-xs font-black text-slate-500">الحالة</th>
-                          <th className="px-4 py-3 text-xs font-black text-slate-500">اسم المنتج</th>
-                          <th className="px-4 py-3 text-xs font-black text-slate-500">الكود</th>
-                          <th className="px-4 py-3 text-xs font-black text-slate-500">الفئة</th>
-                          <th className="px-4 py-3 text-xs font-black text-slate-500">الرصيد</th>
-                          <th className="px-4 py-3 text-xs font-black text-slate-500">الأخطاء</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">صف</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">الحالة</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">اسم المنتج</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">الكود</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">الفئة</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">الرصيد</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">الوحدة الصينية</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">العلبة الداخلية</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">الكرتونة</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">وحدات/كرتونة</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">الأخطاء</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {importResult.rows.map((row) => (
                           <tr key={row.rowIndex} className={row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}>
-                            <td className="px-4 py-2.5 text-slate-400 font-mono">{row.rowIndex}</td>
-                            <td className="px-4 py-2.5">
+                            <td className="px-3 py-2.5 text-slate-400 font-mono">{row.rowIndex}</td>
+                            <td className="px-3 py-2.5">
                               {row.errors.length === 0 ? (
                                 <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold">
                                   <span className="material-icons-round text-sm">check_circle</span> صالح
@@ -498,11 +580,15 @@ export const Products: React.FC = () => {
                                 </span>
                               )}
                             </td>
-                            <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row.name || '—'}</td>
-                            <td className="px-4 py-2.5 font-mono text-slate-500">{row.code || '—'}</td>
-                            <td className="px-4 py-2.5 text-slate-500">{row.model || '—'}</td>
-                            <td className="px-4 py-2.5 text-slate-500">{row.openingBalance}</td>
-                            <td className="px-4 py-2.5">
+                            <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row.name || '—'}</td>
+                            <td className="px-3 py-2.5 font-mono text-slate-500">{row.code || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-500">{row.model || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-500">{row.openingBalance}</td>
+                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.chineseUnitCost || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.innerBoxCost || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.outerCartonCost || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.unitsPerCarton || '—'}</td>
+                            <td className="px-3 py-2.5">
                               {row.errors.length > 0 && (
                                 <ul className="text-xs text-rose-500 space-y-0.5">
                                   {row.errors.map((err, i) => <li key={i}>• {err}</li>)}

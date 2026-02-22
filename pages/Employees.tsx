@@ -16,6 +16,7 @@ import { departmentsRef, jobPositionsRef, shiftsRef } from '../modules/hr/collec
 import { vehicleService } from '../modules/hr/vehicleService';
 import type { JobLevel } from '../modules/hr/types';
 import { getTodayDateString } from '../utils/calculations';
+import { exportAllEmployees } from '../utils/exportExcel';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -652,7 +653,18 @@ export const Employees: React.FC = () => {
           <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">الموظفين</h2>
           <p className="text-sm text-slate-500 font-medium">إدارة الموظفين والتسلسل الوظيفي والحسابات</p>
         </div>
-        <div className="flex gap-2 self-start sm:self-auto">
+        <div className="flex gap-2 self-start sm:self-auto flex-wrap">
+          {_rawEmployees.length > 0 && (
+            <Button variant="secondary" onClick={() => {
+              const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
+              const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
+              const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
+              exportAllEmployees(_rawEmployees, getDeptName, getJobTitle, getShiftName);
+            }} className="shrink-0">
+              <span className="material-icons-round text-sm">download</span>
+              تصدير Excel
+            </Button>
+          )}
           {can('employees.create') && (
             <Button variant="outline" onClick={() => navigate('/employees/import')} className="shrink-0">
               <span className="material-icons-round text-sm">upload_file</span>

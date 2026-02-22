@@ -71,6 +71,18 @@ export interface FirestoreProduct {
   model: string;
   code: string;
   openingBalance: number;
+  chineseUnitCost?: number;
+  innerBoxCost?: number;
+  outerCartonCost?: number;
+  unitsPerCarton?: number;
+}
+
+export interface ProductMaterial {
+  id?: string;
+  productId: string;
+  materialName: string;
+  quantityUsed: number;
+  unitCost: number;
 }
 
 export interface FirestoreProductionLine {
@@ -222,6 +234,19 @@ export interface CostAllocation {
 export interface LaborSettings {
   id?: string;
   hourlyRate: number;
+}
+
+// ─── Monthly Production Cost ─────────────────────────────────────────────────
+
+export interface MonthlyProductionCost {
+  id?: string;
+  productId: string;
+  month: string;            // "YYYY-MM"
+  totalProducedQty: number;
+  totalProductionCost: number;
+  averageUnitCost: number;  // totalProductionCost / totalProducedQty
+  isClosed: boolean;
+  calculatedAt?: any;
 }
 
 // ─── System Settings (system_settings/global) ───────────────────────────────

@@ -175,6 +175,9 @@ export const HRImport: React.FC = () => {
           if (emp.providedFields.includes('baseSalary')) updateData.baseSalary = emp.baseSalary;
           if (emp.providedFields.includes('hourlyRate')) updateData.hourlyRate = emp.hourlyRate;
           if (emp.providedFields.includes('shiftName')) updateData.shiftId = resolveShiftId(emp.shiftName);
+          if (emp.providedFields.includes('email')) updateData.email = emp.email;
+          if (emp.providedFields.includes('isActive')) updateData.isActive = emp.isActive;
+          if (emp.providedFields.includes('hasSystemAccess')) updateData.hasSystemAccess = emp.hasSystemAccess;
 
           if (Object.keys(updateData).length > 0) {
             await updateDoc(doc(db, HR_COLLECTIONS.EMPLOYEES, emp.existingId), updateData);
@@ -192,10 +195,11 @@ export const HRImport: React.FC = () => {
             baseSalary: emp.baseSalary,
             hourlyRate: emp.hourlyRate,
             shiftId: resolveShiftId(emp.shiftName),
+            email: emp.email || '',
             managerId: '',
             vehicleId: '',
-            hasSystemAccess: false,
-            isActive: true,
+            hasSystemAccess: emp.hasSystemAccess,
+            isActive: emp.isActive,
             createdAt: serverTimestamp(),
           });
           empCount++;
@@ -535,7 +539,9 @@ export const HRImport: React.FC = () => {
                           <th className="text-right py-3 px-3">المستوى</th>
                           <th className="text-right py-3 px-3">نوع التوظيف</th>
                           <th className="text-right py-3 px-3">الراتب</th>
-                          <th className="text-right py-3 px-3">الحالة</th>
+                          <th className="text-right py-3 px-3">البريد</th>
+                          <th className="text-right py-3 px-3">نشط</th>
+                          <th className="text-right py-3 px-3">الأخطاء</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -562,6 +568,8 @@ export const HRImport: React.FC = () => {
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('level') ? (JOB_LEVEL_LABELS[row.level] ?? row.level) : '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('employmentType') ? (EMPLOYMENT_TYPE_LABELS[row.employmentType] ?? row.employmentType) : '—'}</td>
                             <td className="py-2.5 px-3 font-mono text-xs">{row.providedFields.includes('baseSalary') ? row.baseSalary.toLocaleString('ar-EG') : '—'}</td>
+                            <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('email') ? row.email : '—'}</td>
+                            <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('isActive') ? (row.isActive ? 'نشط' : 'غير نشط') : '—'}</td>
                             <td className="py-2.5 px-3">
                               {row.errors.length > 0 ? (
                                 <div className="space-y-0.5">
