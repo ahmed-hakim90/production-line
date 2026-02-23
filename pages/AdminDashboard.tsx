@@ -767,23 +767,29 @@ export const AdminDashboard: React.FC = () => {
               </button>
             ))}
           </div>
-          {preset === 'custom' && (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800"
-              />
-              <span className="text-slate-400">—</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800"
-              />
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={customStart || dateRange.start}
+              onChange={(e) => { setCustomStart(e.target.value); setPreset('custom'); }}
+              className={`border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 transition-all ${
+                preset === 'custom'
+                  ? 'border-primary ring-1 ring-primary/20'
+                  : 'border-slate-200 dark:border-slate-700'
+              }`}
+            />
+            <span className="text-slate-400">—</span>
+            <input
+              type="date"
+              value={customEnd || dateRange.end}
+              onChange={(e) => { setCustomEnd(e.target.value); setPreset('custom'); }}
+              className={`border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 transition-all ${
+                preset === 'custom'
+                  ? 'border-primary ring-1 ring-primary/20'
+                  : 'border-slate-200 dark:border-slate-700'
+              }`}
+            />
+          </div>
           <div className="mr-auto text-xs text-slate-400 font-medium">
             {dateRange.start} → {dateRange.end}
           </div>
