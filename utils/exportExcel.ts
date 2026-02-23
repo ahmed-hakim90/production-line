@@ -18,6 +18,7 @@ interface ReportRow {
   'نسبة الهالك %': string;
   'عدد العمال': number;
   'ساعات العمل': number;
+  'تكلفة الوحدة'?: number | string;
   'أمر الشغل'?: string;
   'كمية أمر الشغل'?: number | string;
   'عمالة أمر الشغل'?: number | string;
@@ -35,9 +36,11 @@ interface LookupFns {
  */
 const mapReportsToRows = (
   reports: ProductionReport[],
-  lookups: LookupFns
+  lookups: LookupFns,
+  costMap?: Map<string, number>
 ): ReportRow[] => {
   const hasWO = lookups.getWorkOrder && reports.some((r) => r.workOrderId);
+  const hasCosts = costMap && costMap.size > 0;
   return reports.map((r) => {
     const total = (r.quantityProduced || 0) + (r.quantityWaste || 0);
     const wasteRatio =
@@ -55,6 +58,10 @@ const mapReportsToRows = (
       'عدد العمال': r.workersCount || 0,
       'ساعات العمل': r.workHours || 0,
     };
+    if (hasCosts) {
+      const cost = r.id ? costMap.get(r.id) : undefined;
+      row['تكلفة الوحدة'] = cost != null && cost > 0 ? Number(cost.toFixed(2)) : '—';
+    }
     if (hasWO) {
       const wo = r.workOrderId && lookups.getWorkOrder ? lookups.getWorkOrder(r.workOrderId) : undefined;
       row['أمر الشغل'] = wo ? wo.workOrderNumber : '—';
@@ -88,6 +95,14 @@ const appendSummary = (rows: ReportRow[]): ReportRow[] => {
     'عدد العمال': totalWorkers,
     'ساعات العمل': totalHours,
   };
+  if (rows[0]?.['تكلفة الوحدة'] !== undefined) {
+    const costValues = rows
+      .map((r) => r['تكلفة الوحدة'])
+      .filter((v): v is number => typeof v === 'number' && v > 0);
+    summaryRow['تكلفة الوحدة'] = costValues.length > 0
+      ? Number((costValues.reduce((s, v) => s + v, 0) / costValues.length).toFixed(2))
+      : '—';
+  }
   if (rows[0]?.['أمر الشغل'] !== undefined) {
     summaryRow['أمر الشغل'] = '';
     summaryRow['كمية أمر الشغل'] = '';
@@ -135,9 +150,10 @@ const downloadExcel = (rows: Record<string, any>[], sheetName: string, fileName:
 export const exportSupervisorReports = (
   employeeName: string,
   reports: ProductionReport[],
-  lookups: LookupFns
+  lookups: LookupFns,
+  costMap?: Map<string, number>
 ) => {
-  const rows = appendSummary(mapReportsToRows(reports, lookups));
+  const rows = appendSummary(mapReportsToRows(reports, lookups, costMap));
   const date = new Date().toISOString().slice(0, 10);
   downloadExcel(rows, `تقارير ${employeeName}`, `تقارير-${employeeName}-${date}`);
 };
@@ -148,9 +164,10 @@ export const exportSupervisorReports = (
 export const exportProductReports = (
   productName: string,
   reports: ProductionReport[],
-  lookups: LookupFns
+  lookups: LookupFns,
+  costMap?: Map<string, number>
 ) => {
-  const rows = appendSummary(mapReportsToRows(reports, lookups));
+  const rows = appendSummary(mapReportsToRows(reports, lookups, costMap));
   const date = new Date().toISOString().slice(0, 10);
   downloadExcel(rows, `تقارير ${productName}`, `تقارير-${productName}-${date}`);
 };
@@ -162,9 +179,10 @@ export const exportReportsByDateRange = (
   reports: ProductionReport[],
   startDate: string,
   endDate: string,
-  lookups: LookupFns
+  lookups: LookupFns,
+  costMap?: Map<string, number>
 ) => {
-  const rows = appendSummary(mapReportsToRows(reports, lookups));
+  const rows = appendSummary(mapReportsToRows(reports, lookups, costMap));
   const label = startDate === endDate ? startDate : `${startDate}_${endDate}`;
   downloadExcel(rows, 'تقارير الإنتاج', `تقارير-الإنتاج-${label}`);
 };
@@ -179,6 +197,43 @@ export const exportHRData = (
 ) => {
   if (rows.length === 0) return;
   downloadExcel(rows, sheetName, fileName);
+};
+
+/**
+ * Export product summary table (from admin dashboard).
+ */
+export const exportProductSummary = (
+  data: { name: string; code: string; qty: number; avgCost: number }[],
+  includeCosts: boolean
+) => {
+  if (data.length === 0) return;
+  const rows = data.map((p, i) => {
+    const base: Record<string, any> = {
+      '#': i + 1,
+      'المنتج': p.name,
+      'الكود': p.code,
+      'الكمية المنتجة': p.qty,
+    };
+    if (includeCosts) {
+      base['متوسط تكلفة الوحدة'] = p.avgCost > 0 ? Number(p.avgCost.toFixed(2)) : 0;
+    }
+    return base;
+  });
+  const totalQty = data.reduce((s, p) => s + p.qty, 0);
+  const summary: Record<string, any> = {
+    '#': '',
+    'المنتج': 'الإجمالي',
+    'الكود': `${data.length} منتج`,
+    'الكمية المنتجة': totalQty,
+  };
+  if (includeCosts) {
+    summary['متوسط تكلفة الوحدة'] = totalQty > 0
+      ? Number((data.reduce((s, p) => s + p.avgCost * p.qty, 0) / totalQty).toFixed(2))
+      : 0;
+  }
+  rows.push(summary);
+  const date = new Date().toISOString().slice(0, 10);
+  downloadExcel(rows, 'ملخص المنتجات', `ملخص-المنتجات-${date}`);
 };
 
 // ─── Products Export ─────────────────────────────────────────────────────────

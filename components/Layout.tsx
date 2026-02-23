@@ -86,7 +86,7 @@ const Sidebar: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClo
         )}
 
         {/* ── Navigation ── */}
-        <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-1">
+        <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-2">
           {visibleGroups.map((group) => {
             const active = isGroupActive(group.key);
             const isOpen = openGroup === group.key;
@@ -98,35 +98,35 @@ const Sidebar: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClo
                 <button
                   onClick={() => collapsed ? undefined : toggleGroup(group.key)}
                   title={collapsed ? group.label : undefined}
-                  className={`group relative w-full flex items-center gap-3 rounded-xl transition-all text-sm select-none ${collapsed ? 'justify-center px-0 py-3' : 'px-3 py-2.5'} ${
+                  className={`group relative w-full flex items-center gap-3 rounded-xl transition-all select-none ${collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'} ${
                     active
                       ? 'bg-primary/10 text-primary font-bold'
-                      : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 font-semibold'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 font-bold'
                   }`}
                 >
-                  {active && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-l-full" />}
+                  {active && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-l-full" />}
 
-                  <span className="material-icons-round text-[21px]">{group.icon}</span>
+                  <span className="material-icons-round text-[22px]">{group.icon}</span>
 
                   {!collapsed && (
                     <>
-                      <span className="flex-1 text-start">{group.label}</span>
+                      <span className="flex-1 text-start text-[14px]">{group.label}</span>
                       {totalBadge > 0 && (
-                        <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
+                        <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
                           {totalBadge > 99 ? '99+' : totalBadge}
                         </span>
                       )}
-                      <span className={`material-icons-round text-base text-slate-400 transition-transform duration-300 ${isOpen ? '-rotate-90' : ''}`}>chevron_left</span>
+                      <span className={`material-icons-round text-lg text-slate-400 transition-transform duration-300 ${isOpen ? '-rotate-90' : ''}`}>chevron_left</span>
                     </>
                   )}
 
                   {collapsed && totalBadge > 0 && (
-                    <span className="absolute top-1 left-1 w-2 h-2 bg-rose-500 rounded-full" />
+                    <span className="absolute top-1 left-1 w-2.5 h-2.5 bg-rose-500 rounded-full" />
                   )}
 
                   {/* Tooltip in collapsed mode */}
                   {collapsed && (
-                    <span className="pointer-events-none absolute right-full mr-3 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg z-[60]">
+                    <span className="pointer-events-none absolute right-full mr-3 px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg z-[60]">
                       {group.label}
                     </span>
                   )}
@@ -136,7 +136,7 @@ const Sidebar: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClo
                 {!collapsed && (
                   <div
                     className="overflow-hidden transition-all duration-300 ease-in-out"
-                    style={{ maxHeight: isOpen ? `${group.children.length * 42 + 8}px` : '0px', opacity: isOpen ? 1 : 0 }}
+                    style={{ maxHeight: isOpen ? `${group.children.length * 44 + 10}px` : '0px', opacity: isOpen ? 1 : 0 }}
                   >
                     <div className="pt-1 pb-1 mr-4 border-r-2 border-slate-200/80 dark:border-slate-700/80 space-y-0.5">
                       {group.children.map((item) => {
@@ -147,17 +147,17 @@ const Sidebar: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClo
                           <NavLink
                             key={item.path}
                             to={item.path}
-                            className={`group/item relative flex items-center gap-2.5 pr-9 pl-3 py-2 rounded-lg text-[12.5px] transition-all ${
+                            className={`group/item relative flex items-center gap-3 pr-9 pl-3 py-2.5 rounded-lg text-[13.5px] transition-all ${
                               itemActive
                                 ? 'bg-primary/10 text-primary font-bold'
-                                : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-700 dark:hover:text-slate-300 font-medium'
+                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-700 dark:hover:text-slate-300 font-medium'
                             }`}
                           >
-                            {itemActive && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-primary rounded-l-full" />}
-                            <span className="material-icons-round text-[17px]">{item.icon}</span>
+                            {itemActive && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-l-full" />}
+                            <span className="material-icons-round text-[19px]">{item.icon}</span>
                             <span className="flex-1 truncate">{item.label}</span>
                             {badge > 0 && (
-                              <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[9px] font-bold bg-rose-500 text-white rounded-full">
+                              <span className="min-w-[20px] h-[20px] px-1 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
                                 {badge > 99 ? '99+' : badge}
                               </span>
                             )}
@@ -292,7 +292,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Header onMenuToggle={() => setSidebarOpen((o) => !o)} />
         <div className="p-4 sm:p-6 lg:p-8 flex-1 animate-in fade-in duration-500 overflow-x-hidden">{children}</div>
         <footer className="mt-auto py-4 sm:py-6 px-4 sm:px-8 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-xs sm:text-sm font-medium">
-          <p>© {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM — v{__APP_VERSION__}</p>
+          <p>© {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM — v1.0.10</p>
           <div className="flex items-center gap-4 sm:gap-6">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>

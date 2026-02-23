@@ -6,6 +6,7 @@ import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
 import { reportService } from '../services/reportService';
 import { adminService, type SystemUsers } from '../services/adminService';
 import { formatNumber, calculateWasteRatio } from '../utils/calculations';
+import { exportProductSummary } from '../utils/exportExcel';
 import {
   formatCost,
   getCurrentMonth,
@@ -864,15 +865,25 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
                 <Badge variant="info">{productSummary.length} منتج</Badge>
               </div>
-              <div className="sm:mr-auto relative">
-                <span className="material-icons-round text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
-                <input
-                  type="text"
-                  placeholder="بحث بالكود أو الاسم..."
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  className="pr-9 pl-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold w-full sm:w-56 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
-                />
+              <div className="flex items-center gap-2 sm:mr-auto">
+                <button
+                  onClick={() => exportProductSummary(filtered, canViewCosts)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all"
+                  title="تصدير Excel"
+                >
+                  <span className="material-icons-round text-sm">download</span>
+                  <span className="hidden sm:inline">Excel</span>
+                </button>
+                <div className="relative">
+                  <span className="material-icons-round text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
+                  <input
+                    type="text"
+                    placeholder="بحث بالكود أو الاسم..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="pr-9 pl-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold w-full sm:w-56 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                  />
+                </div>
               </div>
             </div>
             <div className="overflow-x-auto">

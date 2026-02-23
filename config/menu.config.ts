@@ -57,15 +57,15 @@ export const MENU_CONFIG: MenuGroup[] = [
     label: 'الإنتاج',
     icon: 'precision_manufacturing',
     children: [
+      { key: 'quick', label: 'إدخال سريع', icon: 'bolt', path: '/quick-action', permission: 'quickAction.view' },
+      { key: 'reports', label: 'التقارير', icon: 'bar_chart', path: '/reports', permission: 'reports.view' },
       { key: 'lines', label: 'خطوط الإنتاج', icon: 'precision_manufacturing', path: '/lines', permission: 'lines.view', activePatterns: ['/lines/'] },
       { key: 'products', label: 'المنتجات', icon: 'inventory_2', path: '/products', permission: 'products.view', activePatterns: ['/products/'] },
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'employees.view', activePatterns: ['/supervisors/'] },
       { key: 'production-workers', label: 'عمال الإنتاج', icon: 'construction', path: '/production-workers', permission: 'employees.view', activePatterns: ['/production-workers/'] },
-      { key: 'line-workers', label: 'ربط العمالة بالخطوط', icon: 'qr_code_scanner', path: '/line-workers', permission: 'lineWorkers.view' },
-      { key: 'reports', label: 'التقارير', icon: 'bar_chart', path: '/reports', permission: 'reports.view' },
-      { key: 'quick', label: 'إدخال سريع', icon: 'bolt', path: '/quick-action', permission: 'quickAction.view' },
+      { key: 'line-workers', label: 'ربط العمالة بالخطوط', icon: 'group_work', path: '/line-workers', permission: 'lineWorkers.view' },
     ],
   },
   {

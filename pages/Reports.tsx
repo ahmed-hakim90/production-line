@@ -483,9 +483,9 @@ export const Reports: React.FC = () => {
 
   const reportBulkActions = useMemo<TableBulkAction<ProductionReport>[]>(() => [
     { label: 'طباعة المحدد', icon: 'print', action: handleBulkPrintSelected, permission: 'print' },
-    { label: 'تصدير المحدد', icon: 'download', action: (items) => exportReportsByDateRange(items, startDate, endDate, lookups), permission: 'export' },
+    { label: 'تصدير المحدد', icon: 'download', action: (items) => exportReportsByDateRange(items, startDate, endDate, lookups, canViewCosts ? reportCosts : undefined), permission: 'export' },
     { label: 'حذف المحدد', icon: 'delete', action: (items) => setBulkDeleteItems(items), permission: 'reports.delete', variant: 'danger' },
-  ], [handleBulkPrintSelected, startDate, endDate, lookups]);
+  ], [handleBulkPrintSelected, startDate, endDate, lookups, canViewCosts, reportCosts]);
 
   const renderReportActions = (report: ProductionReport) => (
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
@@ -547,7 +547,7 @@ export const Reports: React.FC = () => {
               <Button
                 variant="secondary"
                 onClick={() =>
-                  exportReportsByDateRange(displayedReports, startDate, endDate, lookups)
+                  exportReportsByDateRange(displayedReports, startDate, endDate, lookups, canViewCosts ? reportCosts : undefined)
                 }
               >
                 <span className="material-icons-round text-sm">download</span>
