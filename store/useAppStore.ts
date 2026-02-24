@@ -29,6 +29,8 @@ import {
   FirestoreUser,
   WorkOrder,
   AppNotification,
+  WorkOrderScanEvent,
+  WorkOrderLiveSummary,
 } from '../types';
 
 import {
@@ -56,6 +58,7 @@ import { roleService } from '../services/roleService';
 import { userService } from '../services/userService';
 import { activityLogService } from '../services/activityLogService';
 import { systemSettingsService } from '../services/systemSettingsService';
+import { scanEventService } from '../services/scanEventService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -106,6 +109,9 @@ interface AppState {
   // Work Orders & Notifications
   workOrders: WorkOrder[];
   notifications: AppNotification[];
+  scanEventsToday: WorkOrderScanEvent[];
+  workOrderScanEvents: WorkOrderScanEvent[];
+  liveProduction: Record<string, WorkOrderLiveSummary>;
 
   // Cost management
   costCenters: CostCenter[];
@@ -230,6 +236,15 @@ interface AppState {
   // Real-time subscriptions (return unsubscribe fn)
   subscribeToDashboard: () => () => void;
   subscribeToLineStatuses: () => () => void;
+  subscribeToScanEventsToday: () => () => void;
+  subscribeToWorkOrderScans: (workOrderId: string) => () => void;
+  toggleBarcodeScan: (payload: {
+    workOrderId: string;
+    lineId: string;
+    productId: string;
+    serialBarcode: string;
+    employeeId?: string;
+  }) => Promise<{ action: 'IN' | 'OUT'; cycleSeconds?: number }>;
 
   // Internal helpers
   _loadAppData: () => Promise<void>;
@@ -270,6 +285,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   workOrders: [],
   notifications: [],
+  scanEventsToday: [],
+  workOrderScanEvents: [],
+  liveProduction: {},
 
   costCenters: [],
   costCenterValues: [],
@@ -459,6 +477,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       planReports: {},
       workOrders: [],
       notifications: [],
+      scanEventsToday: [],
+      workOrderScanEvents: [],
+      liveProduction: {},
       costCenters: [],
       costCenterValues: [],
       costAllocations: [],
@@ -1382,6 +1403,49 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ lineStatuses: statuses });
       get()._rebuildLines();
     });
+  },
+
+  subscribeToScanEventsToday: () => {
+    const today = getTodayDateString();
+    return scanEventService.subscribeLiveToday(today, (events) => {
+      const byWorkOrder = new Map<string, WorkOrderScanEvent[]>();
+      for (const evt of events) {
+        const arr = byWorkOrder.get(evt.workOrderId) ?? [];
+        arr.push(evt);
+        byWorkOrder.set(evt.workOrderId, arr);
+      }
+
+      const liveProduction: Record<string, WorkOrderLiveSummary> = {};
+      byWorkOrder.forEach((workOrderEvents, workOrderId) => {
+        const sessions = scanEventService.sessionsFromEvents(workOrderEvents);
+        liveProduction[workOrderId] = scanEventService.summaryFromSessions(sessions);
+      });
+
+      set({ scanEventsToday: events, liveProduction });
+    });
+  },
+
+  subscribeToWorkOrderScans: (workOrderId: string) => {
+    if (!workOrderId) return () => {};
+    return scanEventService.subscribeByWorkOrder(workOrderId, (events) => {
+      const sessions = scanEventService.sessionsFromEvents(events);
+      const summary = scanEventService.summaryFromSessions(sessions);
+      set((state) => ({
+        workOrderScanEvents: events,
+        liveProduction: {
+          ...state.liveProduction,
+          [workOrderId]: summary,
+        },
+      }));
+    });
+  },
+
+  toggleBarcodeScan: async (payload) => {
+    const result = await scanEventService.toggleScan(payload);
+    return {
+      action: result.action,
+      cycleSeconds: result.cycleSeconds,
+    };
   },
 
   // ── Internal Rebuilders ───────────────────────────────────────────────────

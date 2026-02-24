@@ -419,6 +419,7 @@ export const Payroll: React.FC = () => {
 
   const paginatedRecords = filteredRecords.slice(0, visibleCount);
   const canLoadMoreRecords = paginatedRecords.length < filteredRecords.length;
+  const remainingRecordsCount = Math.max(filteredRecords.length - paginatedRecords.length, 0);
 
   // Department options from records
   const departments = useMemo(() => {
@@ -741,7 +742,7 @@ export const Payroll: React.FC = () => {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all"
                 >
                   <span className="material-icons-round text-sm">expand_more</span>
-                  تحميل 15 أخرى
+                  تحميل المزيد{remainingRecordsCount > 0 ? ` (متبقي ${remainingRecordsCount})` : ''}
                 </button>
               )}
             </div>

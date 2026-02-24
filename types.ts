@@ -229,9 +229,51 @@ export interface WorkOrder {
   actualCost: number;
   status: WorkOrderStatus;
   notes?: string;
+  actualWorkersCount?: number;
+  actualProducedFromScans?: number;
+  scanSummary?: WorkOrderLiveSummary;
+  scanSessionClosedAt?: any;
   createdBy: string;
   createdAt?: any;
   completedAt?: any;
+}
+
+export type WorkOrderScanAction = 'IN' | 'OUT';
+export type WorkOrderScanSessionStatus = 'open' | 'closed';
+
+export interface WorkOrderScanEvent {
+  id?: string;
+  workOrderId: string;
+  lineId: string;
+  productId: string;
+  serialBarcode: string;
+  employeeId?: string;
+  action: WorkOrderScanAction;
+  timestamp: any;
+  scanDate: string; // YYYY-MM-DD (for realtime/day filters)
+  sessionId: string;
+  cycleSeconds?: number;
+}
+
+export interface WorkOrderScanSession {
+  sessionId: string;
+  serialBarcode: string;
+  workOrderId: string;
+  lineId: string;
+  productId: string;
+  employeeId?: string;
+  inAt: any;
+  outAt?: any;
+  cycleSeconds?: number;
+  status: WorkOrderScanSessionStatus;
+}
+
+export interface WorkOrderLiveSummary {
+  completedUnits: number;
+  inProgressUnits: number;
+  activeWorkers: number;
+  avgCycleSeconds: number;
+  lastScanAt?: any;
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────

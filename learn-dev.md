@@ -1011,7 +1011,7 @@ cursor-pointer      → مؤشر اليد
 export function applyTheme(theme) {
   const root = document.documentElement;
 
-  // حوّل #24308f → "36 48 143"
+  // حوّلrgb(102, 36, 20) → "36 48 143"
   root.style.setProperty('--color-primary', hexToRgb(theme.primaryColor));
   root.style.setProperty('--font-family-base', `'${theme.baseFontFamily}'`);
   root.style.setProperty('--font-size-base', `${theme.baseFontSize}px`);

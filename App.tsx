@@ -24,6 +24,7 @@ import { CostSettings } from './pages/CostSettings';
 import { MonthlyProductionCosts } from './pages/MonthlyProductionCosts';
 import { ProductionPlans } from './pages/ProductionPlans';
 import { WorkOrders } from './pages/WorkOrders';
+import { WorkOrderScanner } from './pages/WorkOrderScanner.tsx';
 import { EmployeeDashboard } from './pages/EmployeeDashboard';
 import { EmployeeSelfService } from './pages/EmployeeSelfService';
 import { FactoryManagerDashboard } from './pages/FactoryManagerDashboard';
@@ -130,6 +131,7 @@ const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApprov
         <Route path="/admin-dashboard" element={<ProtectedRoute permission="adminDashboard.view"><AdminDashboard /></ProtectedRoute>} />
         <Route path="/production-plans" element={<ProtectedRoute permission="plans.view"><ProductionPlans /></ProtectedRoute>} />
         <Route path="/work-orders" element={<ProtectedRoute permission="workOrders.view"><WorkOrders /></ProtectedRoute>} />
+        <Route path="/work-orders/:id/scanner" element={<ProtectedRoute permission="workOrders.view"><WorkOrderScanner /></ProtectedRoute>} />
         <Route path="/cost-centers" element={<ProtectedRoute permission="costs.view"><CostCenters /></ProtectedRoute>} />
         <Route path="/cost-centers/:id" element={<ProtectedRoute permission="costs.view"><CostCenterDistribution /></ProtectedRoute>} />
         <Route path="/cost-settings" element={<ProtectedRoute permission="costs.manage"><CostSettings /></ProtectedRoute>} />
@@ -159,6 +161,7 @@ const App: React.FC = () => {
   const initializeApp = useAppStore((s) => s.initializeApp);
   const subscribeToDashboard = useAppStore((s) => s.subscribeToDashboard);
   const subscribeToLineStatuses = useAppStore((s) => s.subscribeToLineStatuses);
+  const subscribeToScanEventsToday = useAppStore((s) => s.subscribeToScanEventsToday);
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
   const isPendingApproval = useAppStore((s) => s.isPendingApproval);
   const loading = useAppStore((s) => s.loading);
@@ -175,9 +178,11 @@ const App: React.FC = () => {
           if (state.isAuthenticated) {
             const unsubReports = subscribeToDashboard();
             const unsubStatuses = subscribeToLineStatuses();
+            const unsubScans = subscribeToScanEventsToday();
             (window as any).__cleanupSubs = () => {
               unsubReports();
               unsubStatuses();
+              unsubScans();
             };
           }
         });

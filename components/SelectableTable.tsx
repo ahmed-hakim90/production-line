@@ -73,8 +73,9 @@ function usePagination<T>(data: T[], pageSize: number) {
 
   const hasPagination = pageSize > 0 && data.length > pageSize;
   const canLoadMore = pageSize > 0 && visibleCount < data.length;
+  const remainingCount = pageSize > 0 ? Math.max(data.length - visibleCount, 0) : 0;
 
-  return { pageData, hasPagination, canLoadMore, loadMore };
+  return { pageData, hasPagination, canLoadMore, remainingCount, loadMore };
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -162,7 +163,7 @@ export function SelectableTable<T>({
   }, [data, sortCol, sortDir, visibleColumns]);
 
   const effectivePageSize = pageSize > 0 ? Math.min(pageSize, 15) : 0;
-  const { pageData, hasPagination, canLoadMore, loadMore } = usePagination(sortedData, effectivePageSize);
+  const { pageData, hasPagination, canLoadMore, remainingCount, loadMore } = usePagination(sortedData, effectivePageSize);
 
   const {
     selectedItems,
@@ -353,7 +354,7 @@ export function SelectableTable<T>({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all"
               >
                 <span className="material-icons-round text-sm">expand_more</span>
-                تحميل 15 أخرى
+                تحميل المزيد{remainingCount > 0 ? ` (متبقي ${remainingCount})` : ''}
               </button>
             )}
           </div>

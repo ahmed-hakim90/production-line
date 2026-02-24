@@ -208,6 +208,8 @@ export const AdminDashboard: React.FC = () => {
 
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawLines = useAppStore((s) => s._rawLines);
+  const workOrders = useAppStore((s) => s.workOrders);
+  const liveProduction = useAppStore((s) => s.liveProduction);
   const productionPlans = useAppStore((s) => s.productionPlans);
   const planReports = useAppStore((s) => s.planReports);
   const costCenters = useAppStore((s) => s.costCenters);
@@ -525,6 +527,41 @@ export const AdminDashboard: React.FC = () => {
       })
       .slice(0, 6);
   }, [costCenters, costCenterValues, costAllocations]);
+
+  const liveScanKpis = useMemo(() => {
+    const summaries = Object.entries(liveProduction);
+    const totals = summaries.reduce(
+      (acc, [, s]) => {
+        acc.completedUnits += s.completedUnits || 0;
+        acc.inProgressUnits += s.inProgressUnits || 0;
+        acc.activeWorkers += s.activeWorkers || 0;
+        if ((s.avgCycleSeconds || 0) > 0) {
+          acc.avgCycleSecondsTotal += s.avgCycleSeconds || 0;
+          acc.avgCycleCount += 1;
+        }
+        return acc;
+      },
+      { completedUnits: 0, inProgressUnits: 0, activeWorkers: 0, avgCycleSecondsTotal: 0, avgCycleCount: 0 },
+    );
+    const avgCycleSeconds = totals.avgCycleCount > 0
+      ? Math.round(totals.avgCycleSecondsTotal / totals.avgCycleCount)
+      : 0;
+
+    const hottest = summaries
+      .map(([woId, s]) => {
+        const wo = workOrders.find((w) => w.id === woId);
+        const line = _rawLines.find((l) => l.id === wo?.lineId)?.name ?? '—';
+        const product = _rawProducts.find((p) => p.id === wo?.productId)?.name ?? '—';
+        return { woId, produced: s.completedUnits || 0, line, product };
+      })
+      .sort((a, b) => b.produced - a.produced)[0];
+
+    return {
+      ...totals,
+      avgCycleSeconds,
+      hotLineProduct: hottest ? `${hottest.line} — ${hottest.product}` : '—',
+    };
+  }, [liveProduction, workOrders, _rawLines, _rawProducts]);
 
   // ── Product Summary (products worked on during the period) ────────────────
 
@@ -883,6 +920,22 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
       )}
+
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="material-icons-round text-blue-500">bolt</span>
+          <h3 className="text-lg font-bold">الإنتاج اللحظي (الباركود)</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPIBox label="وحدات مكتملة الآن" value={liveScanKpis.completedUnits} icon="check_circle" colorClass="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" />
+          <KPIBox label="وحدات قيد التشغيل" value={liveScanKpis.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" />
+          <KPIBox label="عمالة فعالة" value={liveScanKpis.activeWorkers} icon="groups" colorClass="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" />
+          <KPIBox label="متوسط سيكل تايم" value={liveScanKpis.avgCycleSeconds} unit="ث" icon="timer" colorClass="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400" />
+        </div>
+        <p className="text-xs text-slate-500 mt-4">
+          أعلى نشاط حالي: <span className="font-bold text-slate-700 dark:text-slate-300">{liveScanKpis.hotLineProduct}</span>
+        </p>
+      </Card>
 
       {/* ── Product Summary Table ──────────────────────────────────────────── */}
       {productSummary.length > 0 && (() => {

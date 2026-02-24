@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import { Card, Badge, Button, KPIBox } from '../components/UI';
 import { WorkOrderPrint } from '../components/ProductionReportPrint';
@@ -8,6 +9,7 @@ import { useAppStore, useShallowStore } from '../store/useAppStore';
 import { formatCurrency, formatNumber, getTodayDateString } from '../utils/calculations';
 import { usePermission } from '../utils/permissions';
 import { workOrderService } from '../services/workOrderService';
+import { scanEventService } from '../services/scanEventService';
 import { estimateReportCost, formatCost } from '../utils/costCalculations';
 import type { WorkOrder, WorkOrderStatus } from '../types';
 
@@ -31,6 +33,7 @@ const EMPTY_FORM = {
 };
 
 export const WorkOrders: React.FC = () => {
+  const navigate = useNavigate();
   const { can } = usePermission();
   const {
     workOrders,
@@ -238,7 +241,27 @@ export const WorkOrders: React.FC = () => {
   }, [deleteWorkOrder]);
 
   const handleStatusChange = useCallback(async (wo: WorkOrder, newStatus: WorkOrderStatus) => {
-    await updateWorkOrder(wo.id!, { status: newStatus, ...(newStatus === 'completed' ? { completedAt: new Date().toISOString() } : {}) });
+    if (newStatus !== 'completed') {
+      await updateWorkOrder(wo.id!, { status: newStatus });
+      return;
+    }
+
+    const scanSummary = await scanEventService.buildWorkOrderSummary(wo.id!);
+    if (scanSummary.openSessions.length > 0) {
+      const shouldClose = window.confirm(
+        `يوجد ${scanSummary.openSessions.length} قطعة قيد التشغيل بدون تسجيل خروج. هل تريد إغلاق أمر الشغل رغم ذلك؟`,
+      );
+      if (!shouldClose) return;
+    }
+
+    await updateWorkOrder(wo.id!, {
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      actualWorkersCount: scanSummary.summary.activeWorkers,
+      actualProducedFromScans: scanSummary.summary.completedUnits,
+      scanSummary: scanSummary.summary,
+      scanSessionClosedAt: new Date().toISOString(),
+    });
   }, [updateWorkOrder]);
 
   const triggerWOPrint = useCallback(async (wo: WorkOrder) => {
@@ -424,6 +447,15 @@ export const WorkOrders: React.FC = () => {
                           {can('print') && (
                             <button onClick={() => triggerWOPrint(wo)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" title="طباعة">
                               <span className="material-icons-round text-sm">print</span>
+                            </button>
+                          )}
+                          {can('workOrders.view') && (
+                            <button
+                              onClick={() => navigate(`/work-orders/${wo.id}/scanner`)}
+                              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary"
+                              title="فتح شاشة الاسكان"
+                            >
+                              <span className="material-icons-round text-sm">qr_code_scanner</span>
                             </button>
                           )}
                           {can('workOrders.edit') && wo.status === 'pending' && (

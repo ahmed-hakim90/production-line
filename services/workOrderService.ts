@@ -161,6 +161,20 @@ export const workOrderService = {
     }
   },
 
+  async updateCompletionFromScans(
+    id: string,
+    payload: Pick<WorkOrder, 'actualWorkersCount' | 'actualProducedFromScans' | 'scanSummary' | 'scanSessionClosedAt' | 'completedAt' | 'status'>
+  ): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      const { id: _id, createdAt: _createdAt, ...fields } = payload as any;
+      await updateDoc(doc(db, COLLECTION, id), fields);
+    } catch (error) {
+      console.error('workOrderService.updateCompletionFromScans error:', error);
+      throw error;
+    }
+  },
+
   async generateNextNumber(): Promise<string> {
     if (!isConfigured) return 'WO-0001';
     try {
