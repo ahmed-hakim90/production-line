@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Hakim ERP icon">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Factory app icon">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#8f2424" />
@@ -6,8 +6,15 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="120" fill="url(#bg)" />
-  <rect x="120" y="104" width="272" height="304" rx="36" fill="#ffffff" opacity="0.16" />
-  <path d="M154 292h55v66h32v-66h68l-77-138h-36l-77 138h35zm77-83 38 69h-75z" fill="#fff" />
-  <circle cx="342" cy="350" r="38" fill="#fff" opacity="0.9" />
-  <path d="M329 350h26M342 337v26" stroke="#8f2424" stroke-width="10" stroke-linecap="round" />
+  <rect x="108" y="262" width="296" height="146" rx="20" fill="#fff" />
+  <rect x="132" y="164" width="60" height="98" rx="12" fill="#fff" />
+  <rect x="206" y="130" width="52" height="132" rx="12" fill="#fff" />
+  <polygon points="222,262 272,222 272,262" fill="#fff" />
+  <polygon points="270,262 320,222 320,262" fill="#fff" />
+  <polygon points="318,262 368,222 368,262" fill="#fff" />
+  <rect x="146" y="300" width="40" height="38" rx="6" fill="#8f2424" />
+  <rect x="198" y="300" width="40" height="38" rx="6" fill="#8f2424" />
+  <rect x="250" y="300" width="40" height="38" rx="6" fill="#8f2424" />
+  <rect x="302" y="300" width="40" height="38" rx="6" fill="#8f2424" />
+  <rect x="146" y="348" width="196" height="42" rx="8" fill="#8f2424" />
 </svg>
