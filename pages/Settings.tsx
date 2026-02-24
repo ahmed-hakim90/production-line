@@ -28,6 +28,7 @@ import {
   validateBackupFile,
   type BackupFile,
   type BackupHistoryEntry,
+  type FirebaseUsageEstimate,
   type RestoreMode,
 } from '../services/backupService';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -96,6 +97,21 @@ const SAMPLE_ROWS: ReportPrintRow[] = [
   { date: '2026-02-21', lineName: 'خط 2', productName: 'منتج B', employeeName: 'سعيد علي', quantityProduced: 950, quantityWaste: 20, workersCount: 10, workHours: 8 },
   { date: '2026-02-21', lineName: 'خط 3', productName: 'منتج C', employeeName: 'خالد حسن', quantityProduced: 800, quantityWaste: 15, workersCount: 8, workHours: 7.5 },
 ];
+
+const FIRESTORE_SPARK_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GiB
+const FIRESTORE_SPARK_DAILY = {
+  reads: 50000,
+  writes: 20000,
+  deletes: 20000,
+};
+
+const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, idx);
+  return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+};
 
 const ALERT_FIELDS: { key: keyof AlertSettings; label: string; icon: string; unit: string; description: string }[] = [
   { key: 'wasteThreshold', label: 'حد الهدر', icon: 'delete_sweep', unit: '%', description: 'نسبة الهدر المقبولة — تنبيه عند تجاوزها' },
@@ -181,6 +197,9 @@ export const Settings: React.FC = () => {
   const [backupMessage, setBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [backupHistory, setBackupHistory] = useState<BackupHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [firebaseUsage, setFirebaseUsage] = useState<FirebaseUsageEstimate | null>(null);
+  const [firebaseUsageLoading, setFirebaseUsageLoading] = useState(false);
+  const [firebaseUsageError, setFirebaseUsageError] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -201,11 +220,26 @@ export const Settings: React.FC = () => {
     setHistoryLoading(false);
   }, []);
 
+  const loadFirebaseUsage = useCallback(async () => {
+    setFirebaseUsageLoading(true);
+    setFirebaseUsageError('');
+    try {
+      const usage = await backupService.getUsageEstimate();
+      setFirebaseUsage(usage);
+    } catch (err: any) {
+      setFirebaseUsageError(err?.message || 'تعذر تحميل استهلاك Firebase');
+    }
+    setFirebaseUsageLoading(false);
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'backup' && isAdmin) {
       loadBackupHistory();
+      if (!firebaseUsage && !firebaseUsageLoading) {
+        loadFirebaseUsage();
+      }
     }
-  }, [activeTab, isAdmin, loadBackupHistory]);
+  }, [activeTab, isAdmin, loadBackupHistory, loadFirebaseUsage, firebaseUsage, firebaseUsageLoading]);
 
   const userEmail = useAppStore((s) => s.userEmail);
 
@@ -429,6 +463,13 @@ export const Settings: React.FC = () => {
   // ── Visible tabs ───────────────────────────────────────────────────────────
 
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
+  const projectId = (import.meta as any)?.env?.VITE_FIREBASE_PROJECT_ID || '';
+  const firestoreUsagePercent = firebaseUsage
+    ? Math.min((firebaseUsage.estimatedBytes / FIRESTORE_SPARK_LIMIT_BYTES) * 100, 100)
+    : 0;
+  const firestoreRemainingBytes = firebaseUsage
+    ? Math.max(FIRESTORE_SPARK_LIMIT_BYTES - firebaseUsage.estimatedBytes, 0)
+    : FIRESTORE_SPARK_LIMIT_BYTES;
 
   return (
     <div className="space-y-6">
@@ -1787,6 +1828,77 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Firebase Usage */}
+          <Card title="استهلاك Firebase (تقديري)">
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <Button onClick={loadFirebaseUsage} disabled={firebaseUsageLoading || backupLoading}>
+                  {firebaseUsageLoading && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                  <span className="material-icons-round text-sm">monitoring</span>
+                  تحديث الاستهلاك
+                </Button>
+                {firebaseUsage?.generatedAt && (
+                  <p className="text-xs text-slate-400">
+                    آخر تحديث: {new Date(firebaseUsage.generatedAt).toLocaleString('ar-EG')}
+                  </p>
+                )}
+                {projectId && (
+                  <a
+                    href={`https://console.firebase.google.com/project/${projectId}/usage`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-bold text-primary hover:underline"
+                  >
+                    فتح Firebase Console Usage
+                  </a>
+                )}
+              </div>
+
+              {firebaseUsageError && (
+                <div className="px-4 py-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-400 text-sm font-bold">
+                  {firebaseUsageError}
+                </div>
+              )}
+
+              {firebaseUsage && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                      <p className="text-[11px] text-slate-400">إجمالي المستندات</p>
+                      <p className="text-lg font-black text-slate-700 dark:text-slate-200">{firebaseUsage.totalDocuments.toLocaleString('ar-EG')}</p>
+                    </div>
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                      <p className="text-[11px] text-slate-400">الحجم التقديري الحالي</p>
+                      <p className="text-lg font-black text-slate-700 dark:text-slate-200">{formatBytes(firebaseUsage.estimatedBytes)}</p>
+                    </div>
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                      <p className="text-[11px] text-slate-400">المتبقي من Firestore المجاني</p>
+                      <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatBytes(firestoreRemainingBytes)}</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-bold text-slate-500">استهلاك مساحة Firestore المجانية (1 GiB)</p>
+                      <p className="text-xs font-black text-slate-600 dark:text-slate-300">{firestoreUsagePercent.toFixed(1)}%</p>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${firestoreUsagePercent}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                    <p className="font-bold">حدود Spark اليومية (Firestore)</p>
+                    <p>Reads: {FIRESTORE_SPARK_DAILY.reads.toLocaleString('ar-EG')} / اليوم</p>
+                    <p>Writes: {FIRESTORE_SPARK_DAILY.writes.toLocaleString('ar-EG')} / اليوم</p>
+                    <p>Deletes: {FIRESTORE_SPARK_DAILY.deletes.toLocaleString('ar-EG')} / اليوم</p>
+                    <p className="pt-1">مهم: العدادات اليومية الفعلية (Reads/Writes/Deletes) لا يتيحها Firebase Web SDK مباشرة، تظهر بدقة من Firebase Console.</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </Card>
 
           {/* ── Export Section ──────────────────────────────────────────────── */}
           <Card title="تصدير نسخة احتياطية">

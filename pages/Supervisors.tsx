@@ -691,7 +691,7 @@ export const Supervisors: React.FC = () => {
           emptyIcon="engineering"
           emptyTitle="لا يوجد مشرفين"
           emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لم يتم العثور على مشرفين بمستوى "مشرف" (level 2)'}
-          pageSize={20}
+          pageSize={15}
         />
       </Card>
 

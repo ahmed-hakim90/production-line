@@ -888,7 +888,7 @@ export const Employees: React.FC = () => {
         emptyIcon="groups"
         emptyTitle="لا يوجد موظفون مطابقون للبحث"
         emptySubtitle={can('employees.create') ? 'اضغط "إضافة موظف" لإضافة أول موظف' : undefined}
-        pageSize={20}
+        pageSize={15}
       />
 
       {/* 6. Create/Edit Modal — Professional HR Panel */}

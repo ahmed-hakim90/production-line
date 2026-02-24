@@ -130,6 +130,14 @@ export interface BackupHistoryEntry {
   month?: string;
 }
 
+export interface FirebaseUsageEstimate {
+  generatedAt: string;
+  collectionsScanned: number;
+  totalDocuments: number;
+  estimatedBytes: number;
+  documentCounts: Record<string, number>;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function readCollection(name: string): Promise<Record<string, any>[]> {
@@ -239,6 +247,34 @@ export function validateBackupFile(data: any): {
 // ─── Export Functions ────────────────────────────────────────────────────────
 
 export const backupService = {
+  async getUsageEstimate(): Promise<FirebaseUsageEstimate> {
+    if (!isConfigured) throw new Error('Firebase not configured');
+
+    const documentCounts: Record<string, number> = {};
+    let totalDocuments = 0;
+    let estimatedBytes = 0;
+
+    for (const name of ALL_COLLECTIONS) {
+      const docs = await readCollection(name);
+      documentCounts[name] = docs.length;
+      totalDocuments += docs.length;
+
+      try {
+        estimatedBytes += new Blob([JSON.stringify(docs)]).size;
+      } catch {
+        estimatedBytes += JSON.stringify(docs).length;
+      }
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      collectionsScanned: ALL_COLLECTIONS.length,
+      totalDocuments,
+      estimatedBytes,
+      documentCounts,
+    };
+  },
+
   async exportFullBackup(createdBy: string): Promise<void> {
     if (!isConfigured) throw new Error('Firebase not configured');
 

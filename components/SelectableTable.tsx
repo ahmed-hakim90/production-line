@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useBulkSelection } from '../hooks/useBulkSelection';
 import { BulkActionBar } from './BulkActionBar';
 import type { BulkAction } from './BulkActionBar';
@@ -51,22 +51,30 @@ interface SelectableTableProps<T> {
 // ─── Pagination ──────────────────────────────────────────────────────────────
 
 function usePagination<T>(data: T[], pageSize: number) {
-  const [page, setPage] = useState(0);
-  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(data.length / pageSize)) : 1;
-  const safePage = Math.min(page, totalPages - 1);
+  const [visibleCount, setVisibleCount] = useState(pageSize > 0 ? pageSize : data.length);
+
+  useEffect(() => {
+    if (pageSize <= 0) {
+      setVisibleCount(data.length);
+      return;
+    }
+    // Reset visible rows when dataset changes (new sort/filter/search).
+    setVisibleCount(pageSize);
+  }, [data, data.length, pageSize]);
 
   const pageData = useMemo(() => {
     if (pageSize <= 0) return data;
-    const start = safePage * pageSize;
-    return data.slice(start, start + pageSize);
-  }, [data, safePage, pageSize]);
+    return data.slice(0, visibleCount);
+  }, [data, visibleCount, pageSize]);
 
-  const goTo = useCallback(
-    (p: number) => setPage(Math.max(0, Math.min(p, totalPages - 1))),
-    [totalPages],
-  );
+  const loadMore = useCallback(() => {
+    setVisibleCount((prev) => Math.min(prev + pageSize, data.length));
+  }, [data.length, pageSize]);
 
-  return { page: safePage, totalPages, pageData, goTo, hasPagination: pageSize > 0 && data.length > pageSize };
+  const hasPagination = pageSize > 0 && data.length > pageSize;
+  const canLoadMore = pageSize > 0 && visibleCount < data.length;
+
+  return { pageData, hasPagination, canLoadMore, loadMore };
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -153,7 +161,8 @@ export function SelectableTable<T>({
     });
   }, [data, sortCol, sortDir, visibleColumns]);
 
-  const { page, totalPages, pageData, goTo, hasPagination } = usePagination(sortedData, pageSize);
+  const effectivePageSize = pageSize > 0 ? Math.min(pageSize, 15) : 0;
+  const { pageData, hasPagination, canLoadMore, loadMore } = usePagination(sortedData, effectivePageSize);
 
   const {
     selectedItems,
@@ -335,27 +344,18 @@ export function SelectableTable<T>({
         {hasPagination && (
           <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">
-              صفحة{' '}
-              <span className="text-primary">{page + 1}</span> من{' '}
-              <span className="text-primary">{totalPages}</span>{' '}
-              ({data.length} عنصر)
+              عرض <span className="text-primary">{pageData.length}</span> من{' '}
+              <span className="text-primary">{data.length}</span> عنصر
             </span>
-            <div className="flex items-center gap-1">
+            {canLoadMore && (
               <button
-                onClick={() => goTo(page - 1)}
-                disabled={page === 0}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                onClick={loadMore}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all"
               >
-                <span className="material-icons-round text-lg">chevron_right</span>
+                <span className="material-icons-round text-sm">expand_more</span>
+                تحميل 15 أخرى
               </button>
-              <button
-                onClick={() => goTo(page + 1)}
-                disabled={page >= totalPages - 1}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              >
-                <span className="material-icons-round text-lg">chevron_left</span>
-              </button>
-            </div>
+            )}
           </div>
         )}
 

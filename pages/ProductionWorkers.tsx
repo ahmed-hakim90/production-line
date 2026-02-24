@@ -668,7 +668,7 @@ export const ProductionWorkers: React.FC = () => {
           emptyIcon="construction"
           emptyTitle="لا يوجد عمال إنتاج"
           emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لم يتم العثور على عمال بمنصب "عامل إنتاج"'}
-          pageSize={20}
+          pageSize={15}
         />
       </Card>
 

@@ -4,7 +4,7 @@ import { Card, Badge, LoadingSkeleton } from '../components/UI';
 import type { ActivityLog as ActivityLogType, ActivityAction } from '../types';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 15;
 
 const ACTION_LABELS: Record<ActivityAction, { label: string; icon: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }> = {
   LOGIN: { label: 'تسجيل دخول', icon: 'login', variant: 'info' },

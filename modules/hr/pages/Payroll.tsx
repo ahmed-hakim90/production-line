@@ -26,7 +26,7 @@ import type {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const ROWS_PER_PAGE = 20;
+const ROWS_PER_PAGE = 15;
 
 const STATUS_MAP: Record<string, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' | 'neutral' }> = {
   draft: { label: 'مسودة', variant: 'warning' },
@@ -293,7 +293,7 @@ export const Payroll: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<FirestorePayrollRecord | null>(null);
-  const [page, setPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [employmentFilter, setEmploymentFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -417,11 +417,8 @@ export const Payroll: React.FC = () => {
     return result;
   }, [records, departmentFilter, employmentFilter, searchQuery]);
 
-  const totalPages = Math.ceil(filteredRecords.length / ROWS_PER_PAGE);
-  const paginatedRecords = filteredRecords.slice(
-    (page - 1) * ROWS_PER_PAGE,
-    page * ROWS_PER_PAGE,
-  );
+  const paginatedRecords = filteredRecords.slice(0, visibleCount);
+  const canLoadMoreRecords = paginatedRecords.length < filteredRecords.length;
 
   // Department options from records
   const departments = useMemo(() => {
@@ -480,7 +477,7 @@ export const Payroll: React.FC = () => {
           <input
             type="month"
             value={month}
-            onChange={(e) => { setMonth(e.target.value); setDataLoaded(false); setPage(1); }}
+            onChange={(e) => { setMonth(e.target.value); setDataLoaded(false); setVisibleCount(ROWS_PER_PAGE); }}
             className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
           />
           <Button variant="primary" onClick={loadPayrollData} disabled={loading}>
@@ -627,13 +624,13 @@ export const Payroll: React.FC = () => {
               type="text"
               placeholder="بحث باسم الموظف..."
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
               className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl pr-10 pl-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
             />
           </div>
           <select
             value={departmentFilter}
-            onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }}
+            onChange={(e) => { setDepartmentFilter(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
             className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
           >
             <option value="">كل الأقسام</option>
@@ -643,7 +640,7 @@ export const Payroll: React.FC = () => {
           </select>
           <select
             value={employmentFilter}
-            onChange={(e) => { setEmploymentFilter(e.target.value); setPage(1); }}
+            onChange={(e) => { setEmploymentFilter(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
             className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
           >
             <option value="">كل أنواع التوظيف</option>
@@ -733,43 +730,20 @@ export const Payroll: React.FC = () => {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {filteredRecords.length > ROWS_PER_PAGE && (
             <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <p className="text-xs text-slate-400 font-medium">
-                عرض {(page - 1) * ROWS_PER_PAGE + 1} - {Math.min(page * ROWS_PER_PAGE, filteredRecords.length)} من {filteredRecords.length}
+                عرض {paginatedRecords.length} من {filteredRecords.length}
               </p>
-              <div className="flex items-center gap-1">
+              {canLoadMoreRecords && (
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-30 transition-colors"
+                  onClick={() => setVisibleCount((prev) => prev + ROWS_PER_PAGE)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all"
                 >
-                  <span className="material-icons-round text-sm">chevron_right</span>
+                  <span className="material-icons-round text-sm">expand_more</span>
+                  تحميل 15 أخرى
                 </button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  const pageNum = totalPages <= 5 ? i + 1 : Math.max(1, Math.min(page - 2, totalPages - 4)) + i;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setPage(pageNum)}
-                      className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
-                        page === pageNum
-                          ? 'bg-primary text-white'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-30 transition-colors"
-                >
-                  <span className="material-icons-round text-sm">chevron_left</span>
-                </button>
-              </div>
+              )}
             </div>
           )}
         </Card>
