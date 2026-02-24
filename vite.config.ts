@@ -16,7 +16,12 @@ export default defineConfig(({ mode }) => {
         react(),
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['icons/pwa-icon.svg'],
+          includeAssets: [
+            'icons/pwa-icon.svg',
+            'icons/pwa-icon-180.png',
+            'icons/pwa-icon-192.png',
+            'icons/pwa-icon-512.png',
+          ],
           manifest: {
             name: 'HAKIM PRODUCTION SYSTEM',
             short_name: 'HAKIM ERP',
@@ -30,11 +35,23 @@ export default defineConfig(({ mode }) => {
             orientation: 'portrait-primary',
             icons: [
               {
-                src: '/icons/pwa-icon.svg',
+                src: '/icons/pwa-icon-192.png',
+                sizes: '192x192',
+                type: 'image/png',
+                purpose: 'any',
+              },
+              {
+                src: '/icons/pwa-icon-512.png',
                 sizes: '512x512',
-                type: 'image/svg+xml',
-                purpose: 'any maskable'
-              }
+                type: 'image/png',
+                purpose: 'any',
+              },
+              {
+                src: '/icons/pwa-icon-512.png',
+                sizes: '512x512',
+                type: 'image/png',
+                purpose: 'maskable',
+              },
             ]
           },
           workbox: {
