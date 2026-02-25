@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Badge, Button, SearchableSelect, LoadingSkeleton } from '@/components/UI';
+import { Card, Badge, Button, SearchableSelect, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
 import { leaveRequestService } from '../leaveService';
@@ -58,7 +58,7 @@ const STATUS_MAP: Record<string, { label: string; color: HRTransaction['statusCo
   pending: { label: 'قيد الانتظار', color: 'yellow' },
   rejected: { label: 'مرفوض', color: 'red' },
   active: { label: 'نشط', color: 'green' },
-  closed: { label: 'مغلق', color: 'gray' },
+  closed: { label: '8&788', color: 'gray' },
   stopped: { label: 'متوقف', color: 'red' },
   disbursed: { label: 'تم الصرف', color: 'blue' },
 };
@@ -397,13 +397,13 @@ export const HRTransactions: React.FC = () => {
 
   const handleExport = () => {
     const rows = filtered.map((t) => ({
-      النوع: t.typeLabel,
-      الموظف: getEmpName(t.employeeId),
+      'النوع': t.typeLabel,
+      'الموظف': getEmpName(t.employeeId),
       'كود الموظف': getEmpCode(t.employeeId),
-      الوصف: t.description,
-      المبلغ: t.amount ?? '',
-      الحالة: STATUS_MAP[t.status]?.label || t.status,
-      التاريخ: t.dateLabel,
+      'الوصف': t.description,
+      'المبلغ': t.amount ?? '',
+      'الحالة': STATUS_MAP[t.status]?.label || t.status,
+      'التاريخ': t.dateLabel,
     }));
     exportHRData(rows, 'حركات', 'سجل_حركات_الموارد_البشرية');
   };
@@ -437,10 +437,12 @@ export const HRTransactions: React.FC = () => {
             جميع الإجازات والسلف والبدلات والاستقطاعات في مكان واحد
           </p>
         </div>
-        <Button onClick={handleExport} variant="secondary" size="sm">
-          <span className="material-icons-round text-base ml-1">download</span>
-          تصدير Excel
-        </Button>
+        {can('export') && (
+          <Button onClick={handleExport} variant="secondary" size="sm">
+            <span className="material-icons-round text-base ml-1">download</span>
+            تصدير Excel
+          </Button>
+        )}
       </div>
 
       {/* KPIs */}
@@ -736,3 +738,4 @@ export const HRTransactions: React.FC = () => {
     </div>
   );
 };
+

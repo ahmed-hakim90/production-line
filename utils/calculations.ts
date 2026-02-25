@@ -216,6 +216,7 @@ export const buildProducts = (
       id: p.id!,
       name: p.name,
       code: p.code,
+      imageUrl: p.imageUrl,
       category: p.model || '',
       stockLevel: balance,
       stockStatus:

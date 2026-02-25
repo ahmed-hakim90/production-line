@@ -9,7 +9,7 @@
 ![Firebase](https://img.shields.io/badge/Firebase-12-orange)
 ![Zustand](https://img.shields.io/badge/Zustand-5-purple)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
-![Version](https://img.shields.io/badge/version-4.0.0-green)
+![Version](https://img.shields.io/badge/version-4.0.1-green)
 
 ## 🚀 نظرة عامة
 
@@ -334,6 +334,10 @@ VITE_FIREBASE_APP_ID=your_app_id
 2. انشر **Firestore Security Rules** من ملف `firestore.rules`:
    ```bash
    firebase deploy --only firestore:rules
+   ```
+3. انشر **Firebase Storage Rules** من ملف `storage.rules`:
+   ```bash
+   firebase deploy --only storage
    ```
 
 ### 4. تشغيل السيرفر المحلي

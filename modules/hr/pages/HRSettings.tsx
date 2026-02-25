@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Badge, Button, LoadingSkeleton } from '@/components/UI';
+import { Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -636,11 +636,11 @@ const AuditLogPanel: React.FC<{ module: HRConfigModuleName }> = ({ module }) => 
             <p className="font-medium text-slate-700 dark:text-slate-300">{log.details}</p>
             <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
               <span>v{log.previousVersion} → v{log.newVersion}</span>
-              <span>•</span>
+              <span>⬢</span>
               <span>{log.performedBy}</span>
               {log.timestamp?.toDate && (
                 <>
-                  <span>•</span>
+                  <span>⬢</span>
                   <span>{log.timestamp.toDate().toLocaleDateString('ar-SA')}</span>
                 </>
               )}
@@ -958,3 +958,4 @@ export const HRSettings: React.FC = () => {
     </div>
   );
 };
+

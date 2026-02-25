@@ -5,3 +5,6 @@ export * from './services/qualityWorkersService';
 export * from './services/qualityInspectionService';
 export * from './services/qualityNotificationService';
 export * from './services/qualityPrintService';
+export * from './components';
+export * from './hooks';
+export * from './routes';

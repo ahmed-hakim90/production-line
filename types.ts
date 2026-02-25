@@ -71,6 +71,9 @@ export interface FirestoreProduct {
   model: string;
   code: string;
   openingBalance: number;
+  imageUrl?: string;
+  storagePath?: string;
+  imageCreatedAt?: any;
   chineseUnitCost?: number;
   innerBoxCost?: number;
   outerCartonCost?: number;
@@ -134,7 +137,27 @@ export type ActivityAction =
   | 'TOGGLE_USER_ACTIVE'
   | 'APPROVE_USER'
   | 'REJECT_USER'
-  | 'SALARY_CHANGE';
+  | 'SALARY_CHANGE'
+  | 'QUALITY_CREATE_INSPECTION'
+  | 'QUALITY_UPDATE_INSPECTION'
+  | 'QUALITY_CREATE_DEFECT'
+  | 'QUALITY_CREATE_REWORK'
+  | 'QUALITY_UPDATE_REWORK'
+  | 'QUALITY_CREATE_CAPA'
+  | 'QUALITY_UPDATE_CAPA'
+  | 'QUALITY_CREATE_WORKER'
+  | 'QUALITY_UPDATE_WORKER'
+  | 'QUALITY_DELETE_WORKER'
+  | 'QUALITY_SET_POLICIES'
+  | 'QUALITY_UPDATE_REASON'
+  | 'QUALITY_DELETE_REASON'
+  | 'QUALITY_UPSERT_TEMPLATE'
+  | 'QUALITY_REMOVE_TEMPLATE'
+  | 'QUALITY_UPSERT_SAMPLING_PLAN'
+  | 'QUALITY_REMOVE_SAMPLING_PLAN'
+  | 'QUALITY_UPDATE_REWORK_POLICIES'
+  | 'QUALITY_UPDATE_PRINT_TEMPLATES'
+  | 'QUALITY_EXPORT_DOCUMENT';
 
 export interface ActivityLog {
   id?: string;
@@ -213,6 +236,13 @@ export interface ProductionPlan {
 // ─── Work Orders ─────────────────────────────────────────────────────────────
 
 export type WorkOrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type WorkOrderPauseReason = 'manual';
+
+export interface WorkOrderPauseWindow {
+  startAt: any;
+  endAt?: any;
+  reason: WorkOrderPauseReason;
+}
 
 export interface WorkOrder {
   id?: string;
@@ -229,8 +259,13 @@ export interface WorkOrder {
   actualCost: number;
   status: WorkOrderStatus;
   notes?: string;
+  breakStartTime?: string; // HH:mm
+  breakEndTime?: string; // HH:mm
+  workdayEndTime?: string; // HH:mm
+  scanPauseWindows?: WorkOrderPauseWindow[];
   actualWorkersCount?: number;
   actualProducedFromScans?: number;
+  actualWorkHours?: number;
   scanSummary?: WorkOrderLiveSummary;
   scanSessionClosedAt?: any;
   qualityStatus?: QualityStatus;
@@ -295,6 +330,7 @@ export interface QualityInspection {
   approvedBy?: string;
   approvedAt?: any;
   notes?: string;
+  attachments?: FileAttachmentMeta[];
 }
 
 export type QualityDefectSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -315,6 +351,13 @@ export interface QualityDefect {
   createdBy: string;
   createdAt: any;
   notes?: string;
+  attachments?: FileAttachmentMeta[];
+}
+
+export interface FileAttachmentMeta {
+  imageUrl: string;
+  storagePath: string;
+  createdAt: string;
 }
 
 export interface QualityReasonCatalogItem {

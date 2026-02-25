@@ -1,0 +1,25 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Current single-company structure:
+    // company/{module}/{documentId}/{timestamp}_{filename}
+    match /company/{module}/{documentId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents'];
+    }
+
+    // Reserved for future multi-company isolation:
+    // company/{companyId}/{module}/{documentId}/{fileName}
+    match /company/{companyId}/{module}/{documentId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents'];
+    }
+  }
+}
+

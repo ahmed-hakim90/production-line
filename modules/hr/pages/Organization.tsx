@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, Button, Badge } from '@/components/UI';
+import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
@@ -328,8 +328,8 @@ export const Organization: React.FC = () => {
                   <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{s.name}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.startTime}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.endTime}</td>
-                  <td className="py-3 px-4 text-center">{s.breakMinutes} د</td>
-                  <td className="py-3 px-4 text-center">{s.lateGraceMinutes} د</td>
+                  <td className="py-3 px-4 text-center">{s.breakMinutes} ط¯</td>
+                  <td className="py-3 px-4 text-center">{s.lateGraceMinutes} ط¯</td>
                   <td className="py-3 px-4 text-center"><Badge variant={s.isActive ? 'success' : 'neutral'}>{s.isActive ? 'نشطة' : 'معطلة'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditShift(s)} onDelete={() => setDeleteConfirmId(s.id!)} />}
                 </tr>
@@ -349,7 +349,7 @@ export const Organization: React.FC = () => {
                   <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{p.name}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={p.type === 'disciplinary' ? 'danger' : p.type === 'absence' ? 'warning' : 'info'}>{PENALTY_TYPE_LABELS[p.type]}</Badge></td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[p.valueType]}</td>
-                  <td className="py-3 px-4 text-center font-bold">{p.value}{p.valueType === 'percentage' ? '%' : ' ج.م'}</td>
+                  <td className="py-3 px-4 text-center font-bold">{p.value}{p.valueType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'نشط' : 'معطل'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditPenalty(p)} onDelete={() => setDeleteConfirmId(p.id!)} />}
                 </tr>
@@ -374,7 +374,7 @@ export const Organization: React.FC = () => {
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesFrom}</td>
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesTo}</td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[r.penaltyType]}</td>
-                  <td className="py-3 px-4 text-center font-bold text-rose-600">{r.penaltyValue}{r.penaltyType === 'percentage' ? '%' : ' ج.م'}</td>
+                  <td className="py-3 px-4 text-center font-bold text-rose-600">{r.penaltyValue}{r.penaltyType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
                   {canEdit && <ActionCell onEdit={() => openEditLateRule(r)} onDelete={() => setDeleteConfirmId(r.id!)} />}
                 </tr>
               ))}
@@ -392,7 +392,7 @@ export const Organization: React.FC = () => {
                 <tr key={a.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{a.name}</td>
                   <td className="py-3 px-4 text-center text-sm">{CALC_TYPE_LABELS[a.calculationType]}</td>
-                  <td className="py-3 px-4 text-center font-bold text-emerald-600">{a.value}{a.calculationType === 'percentage' ? '%' : ' ج.م'}</td>
+                  <td className="py-3 px-4 text-center font-bold text-emerald-600">{a.value}{a.calculationType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={a.isActive ? 'success' : 'neutral'}>{a.isActive ? 'نشط' : 'معطل'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditAllowance(a)} onDelete={() => setDeleteConfirmId(a.id!)} />}
                 </tr>
@@ -611,3 +611,4 @@ const DataTable: React.FC<{
     </table>
   </div>
 );
+

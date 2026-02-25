@@ -1,17 +1,23 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Card, KPIBox } from '@/components/UI';
+import { useReactToPrint } from 'react-to-print';
+import { Button, Card, KPIBox } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { qualityInspectionService } from '../services/qualityInspectionService';
 import { qualityPrintService } from '../services/qualityPrintService';
 import type { QualityDefect } from '@/types';
+import { QualityReportPrint } from '../components/QualityReportPrint';
 
 export const QualityReports: React.FC = () => {
   const { can } = usePermission();
   const canPrint = can('quality.print');
   const [searchParams] = useSearchParams();
   const workOrders = useAppStore((s) => s.workOrders);
+  const _rawProducts = useAppStore((s) => s._rawProducts);
+  const _rawLines = useAppStore((s) => s._rawLines);
+  const _rawEmployees = useAppStore((s) => s._rawEmployees);
+  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState(searchParams.get('workOrderId') ?? '');
   const [summary, setSummary] = useState({
     inspectedUnits: 0,
@@ -24,6 +30,7 @@ export const QualityReports: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [defects, setDefects] = useState<QualityDefect[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({ contentRef: printRef });
 
   const selectedWorkOrder = useMemo(
     () => workOrders.find((wo) => wo.id === selectedWorkOrderId) ?? null,
@@ -56,6 +63,14 @@ export const QualityReports: React.FC = () => {
       .slice(0, 5);
   }, [defects]);
 
+  const printSubtitle = useMemo(() => {
+    if (!selectedWorkOrder) return undefined;
+    const productName = _rawProducts.find((p) => p.id === selectedWorkOrder.productId)?.name ?? '—';
+    const lineName = _rawLines.find((l) => l.id === selectedWorkOrder.lineId)?.name ?? '—';
+    const supervisorName = _rawEmployees.find((e) => e.id === selectedWorkOrder.supervisorId)?.name ?? '—';
+    return `${selectedWorkOrder.workOrderNumber} — ${productName} — ${lineName} — المشرف: ${supervisorName}`;
+  }, [_rawEmployees, _rawLines, _rawProducts, selectedWorkOrder]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -64,7 +79,7 @@ export const QualityReports: React.FC = () => {
           <p className="text-sm text-slate-500">ملخص جودة لكل أمر شغل + جاهز للطباعة</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => window.print()} disabled={!canPrint}>طباعة التقرير</Button>
+          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>طباعة التقرير</Button>
           <Button
             variant="outline"
             onClick={async () => {
@@ -144,6 +159,19 @@ export const QualityReports: React.FC = () => {
         </>
       )}
       </div>
+
+      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+        <QualityReportPrint
+          ref={printRef}
+          title="تقرير الجودة"
+          subtitle={printSubtitle}
+          workOrderNumber={selectedWorkOrder?.workOrderNumber}
+          summary={summary}
+          topDefects={topDefectReasons}
+          printSettings={printTemplate}
+        />
+      </div>
     </div>
   );
 };
+

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '@/components/UI';
+import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { loanService } from '../loanService';
@@ -274,10 +274,12 @@ export const LoanRequests: React.FC = () => {
           <p className="text-sm text-slate-500 font-medium">سلف شهرية وسلف مقسطة مع تتبع الصرف</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>
-            <span className="material-icons-round text-sm">download</span>
-            تصدير Excel
-          </Button>
+          {can('export') && (
+            <Button variant="outline" onClick={handleExport}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير Excel
+            </Button>
+          )}
           {(isHR || can('loan.create')) && (
             <Button onClick={() => setShowForm(!showForm)}>
               <span className="material-icons-round text-sm">{showForm ? 'close' : 'add'}</span>
@@ -730,3 +732,4 @@ const InstallmentTable: React.FC<{
     </table>
   </div>
 );
+

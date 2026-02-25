@@ -13,6 +13,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { activityLogService } from '@/services/activityLogService';
 import type {
   QualityInspectionTemplate,
   QualityPolicySettings,
@@ -82,6 +83,20 @@ export const qualitySettingsService = {
       },
       { merge: true },
     );
+    if (payload.reworkPolicies) {
+      await activityLogService.logCurrentUser(
+        'QUALITY_UPDATE_REWORK_POLICIES',
+        'تحديث سياسات إعادة التشغيل',
+        { reworkPolicies: payload.reworkPolicies },
+      );
+    }
+    if (payload.printTemplates) {
+      await activityLogService.logCurrentUser(
+        'QUALITY_UPDATE_PRINT_TEMPLATES',
+        'تحديث إعدادات طباعة الجودة',
+        { printTemplates: payload.printTemplates },
+      );
+    }
   },
 
   async getPolicies(): Promise<QualityPolicySettings> {
@@ -104,6 +119,11 @@ export const qualitySettingsService = {
       },
       { merge: true },
     );
+    await activityLogService.logCurrentUser(
+      'QUALITY_SET_POLICIES',
+      'تحديث سياسات الجودة',
+      { policies: payload },
+    );
   },
 
   async getReasons(onlyActive = false): Promise<QualityReasonCatalogItem[]> {
@@ -121,6 +141,11 @@ export const qualitySettingsService = {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_UPDATE_REASON',
+      `إضافة سبب عيب: ${payload.labelAr}`,
+      { reasonId: ref.id, code: payload.code, category: payload.category },
+    );
     return ref.id;
   },
 
@@ -144,11 +169,21 @@ export const qualitySettingsService = {
       ...payload,
       updatedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_UPDATE_REASON',
+      'تحديث سبب عيب',
+      { reasonId: id, changes: payload },
+    );
   },
 
   async deleteReason(id: string): Promise<void> {
     if (!isConfigured) return;
     await deleteDoc(doc(qualityReasonCatalogRef(), id));
+    await activityLogService.logCurrentUser(
+      'QUALITY_DELETE_REASON',
+      'حذف سبب عيب',
+      { reasonId: id },
+    );
   },
 
   subscribePolicies(cb: (data: QualityPolicySettings) => void): Unsubscribe {
@@ -188,6 +223,11 @@ export const qualitySettingsService = {
       ? settings.inspectionTemplates.map((item) => (item.id === template.id ? template : item))
       : [template, ...settings.inspectionTemplates];
     await this.setSettingsHub({ inspectionTemplates: next });
+    await activityLogService.logCurrentUser(
+      'QUALITY_UPSERT_TEMPLATE',
+      'حفظ نموذج فحص جودة',
+      { templateId: template.id, name: template.name },
+    );
   },
 
   async removeInspectionTemplate(id: string): Promise<void> {
@@ -195,6 +235,11 @@ export const qualitySettingsService = {
     await this.setSettingsHub({
       inspectionTemplates: settings.inspectionTemplates.filter((item) => item.id !== id),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_REMOVE_TEMPLATE',
+      'حذف نموذج فحص جودة',
+      { templateId: id },
+    );
   },
 
   async upsertSamplingPlan(plan: QualitySamplingPlan): Promise<void> {
@@ -203,6 +248,11 @@ export const qualitySettingsService = {
       ? settings.samplingPlans.map((item) => (item.id === plan.id ? plan : item))
       : [plan, ...settings.samplingPlans];
     await this.setSettingsHub({ samplingPlans: next });
+    await activityLogService.logCurrentUser(
+      'QUALITY_UPSERT_SAMPLING_PLAN',
+      'حفظ خطة سحب عينات',
+      { planId: plan.id, frequencyMinutes: plan.frequencyMinutes, sampleSize: plan.sampleSize },
+    );
   },
 
   async removeSamplingPlan(id: string): Promise<void> {
@@ -210,6 +260,11 @@ export const qualitySettingsService = {
     await this.setSettingsHub({
       samplingPlans: settings.samplingPlans.filter((item) => item.id !== id),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_REMOVE_SAMPLING_PLAN',
+      'حذف خطة سحب عينات',
+      { planId: id },
+    );
   },
 
   subscribeReasons(cb: (reasons: QualityReasonCatalogItem[]) => void): Unsubscribe {

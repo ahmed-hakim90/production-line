@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Button, Badge } from '@/components/UI';
+import { Card, Button, Badge } from '../components/UI';
 import { getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { departmentsRef, jobPositionsRef, shiftsRef, employeesRef } from '../collections';
@@ -750,3 +750,4 @@ export const HRImport: React.FC = () => {
     </div>
   );
 };
+

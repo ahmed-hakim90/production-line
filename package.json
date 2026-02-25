@@ -1,13 +1,15 @@
 {
   "name": "pro-tech-erp-production-management",
   "private": true,
-  "version": "1.0.0",
+  "version": "4.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "push": "npm version patch --no-git-tag-version && git add package.json && git commit -m \"bump version\" && git push"
+    "version:auto": "node scripts/auto-version.mjs",
+    "changelog:auto": "node scripts/auto-changelog.mjs",
+    "push": "git push"
   },
   "dependencies": {
     "file-saver": "^2.0.5",

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Card, Button, Badge, KPIBox } from '@/components/UI';
+import { Card, Button, Badge, KPIBox } from '../components/UI';
 import {
   generatePayroll,
   getPayrollMonth,
@@ -31,7 +31,7 @@ const ROWS_PER_PAGE = 15;
 const STATUS_MAP: Record<string, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' | 'neutral' }> = {
   draft: { label: 'مسودة', variant: 'warning' },
   finalized: { label: 'مُعتمد', variant: 'success' },
-  locked: { label: 'مقفل', variant: 'danger' },
+  locked: { label: '8&88~8', variant: 'danger' },
 };
 
 const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
@@ -607,7 +607,7 @@ export const Payroll: React.FC = () => {
               قفل الشهر نهائياً
             </Button>
           )}
-          {records.length > 0 && (
+          {records.length > 0 && can('export') && (
             <Button variant="outline" onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير Excel
@@ -800,3 +800,4 @@ export const Payroll: React.FC = () => {
     </div>
   );
 };
+

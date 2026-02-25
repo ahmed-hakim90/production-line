@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card } from '@/components/UI';
+import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
-import type { QualityInspectionStatus, QualityReasonCatalogItem } from '@/types';
+import type { FileAttachmentMeta, QualityInspectionStatus, QualityReasonCatalogItem } from '@/types';
 import { qualityInspectionService } from '../services/qualityInspectionService';
 import { qualityNotificationService } from '../services/qualityNotificationService';
 import { qualityPrintService } from '../services/qualityPrintService';
 import { qualitySettingsService } from '../services/qualitySettingsService';
+import { storageService } from '@/services/storageService';
+import { eventBus, SystemEvents } from '@/shared/events';
 
 export const FinalInspection: React.FC = () => {
   const { can } = usePermission();
@@ -16,12 +18,18 @@ export const FinalInspection: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const uid = useAppStore((s) => s.uid);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const userEmail = useAppStore((s) => s.userEmail);
   const updateWorkOrder = useAppStore((s) => s.updateWorkOrder);
   const [reasonCatalog, setReasonCatalog] = useState<QualityReasonCatalogItem[]>([]);
   const [workOrderId, setWorkOrderId] = useState('');
   const [status, setStatus] = useState<QualityInspectionStatus>('passed');
   const [reasonCode, setReasonCode] = useState('');
   const [notes, setNotes] = useState('');
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +51,22 @@ export const FinalInspection: React.FC = () => {
     setBusy(true);
     try {
       const reason = reasonCatalog.find((r) => r.code === reasonCode);
+      const attachments: FileAttachmentMeta[] = [];
+      for (let i = 0; i < photoFiles.length; i += 1) {
+        const uploaded = await storageService.uploadImage(
+          photoFiles[i],
+          'qc_reports',
+          selectedWorkOrder.id!,
+          {
+            onProgress: (progress) => {
+              const overall = Math.round(((i + progress / 100) / photoFiles.length) * 100);
+              setUploadProgress(overall);
+            },
+          },
+        );
+        attachments.push(uploaded);
+      }
+
       const inspectionId = await qualityInspectionService.createInspection({
         workOrderId: selectedWorkOrder.id!,
         lineId: selectedWorkOrder.lineId,
@@ -51,6 +75,7 @@ export const FinalInspection: React.FC = () => {
         status,
         inspectedBy: currentEmployee.id,
         notes,
+        attachments,
       });
 
       if (inspectionId && (status === 'failed' || status === 'rework') && reason) {
@@ -66,6 +91,7 @@ export const FinalInspection: React.FC = () => {
           status: status === 'rework' ? 'reworked' : 'open',
           createdBy: currentEmployee.id,
           notes,
+          attachments,
         });
         if (status === 'rework') {
           await qualityInspectionService.createRework({
@@ -86,6 +112,33 @@ export const FinalInspection: React.FC = () => {
           : {}),
       });
 
+      eventBus.emit(
+        status === 'approved' || status === 'passed'
+          ? SystemEvents.QC_APPROVED
+          : SystemEvents.QC_REJECTED,
+        {
+          module: 'quality',
+          entityType: 'work_order',
+          entityId: selectedWorkOrder.id!,
+          action: status === 'approved' || status === 'passed' ? 'approve' : 'reject',
+          description:
+            status === 'approved' || status === 'passed'
+              ? 'QC approved batch'
+              : 'QC rejected batch',
+          batchId: selectedWorkOrder.id!,
+          actor: {
+            userId: uid ?? currentEmployee?.id,
+            userName: userDisplayName ?? userEmail ?? currentEmployee?.name,
+          },
+          metadata: {
+            inspectionId: inspectionId ?? '',
+            inspectionType: 'final',
+            status,
+            workOrderNumber: selectedWorkOrder.workOrderNumber,
+          },
+        },
+      );
+
       const lineName = _rawLines.find((l) => l.id === selectedWorkOrder.lineId)?.name ?? selectedWorkOrder.lineId;
       const productName = _rawProducts.find((p) => p.id === selectedWorkOrder.productId)?.name ?? selectedWorkOrder.productId;
       await qualityNotificationService.notifyReportCreated({
@@ -103,6 +156,9 @@ export const FinalInspection: React.FC = () => {
       setStatus('passed');
       setReasonCode('');
       setNotes('');
+      setPhotoFiles([]);
+      setPhotoPreviews([]);
+      setUploadProgress(0);
     } finally {
       setBusy(false);
     }
@@ -181,6 +237,61 @@ export const FinalInspection: React.FC = () => {
             placeholder="ملاحظات"
             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
           />
+          <div className="md:col-span-2 space-y-2">
+            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">صور الفحص</label>
+            <label className="block cursor-pointer">
+              <input
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                multiple
+                disabled={!canInspect || busy}
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []).slice(0, 3);
+                  const urls = files.map((f) => URL.createObjectURL(f));
+                  setPhotoFiles(files);
+                  setPhotoPreviews(urls);
+                  setUploadProgress(0);
+                }}
+                className="hidden"
+              />
+              <div className="w-full border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 hover:border-primary/60 hover:bg-primary/5 transition-all">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <span className="material-icons-round text-xl">add_photo_alternate</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-slate-700 dark:text-slate-200 truncate">
+                      {photoFiles.length > 0 ? `${photoFiles.length} صورة محددة` : 'اختيار صور الفحص'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">حد أقصى 3 صور — ضغط تلقائي حتى 500KB</p>
+                  </div>
+                </div>
+              </div>
+            </label>
+            {photoPreviews.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                {photoPreviews.map((url, idx) => (
+                  <div key={url} className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                    <img src={url} alt={`qc-${idx}`} className="w-full h-full object-cover" />
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoFiles([]);
+                    setPhotoPreviews([]);
+                    setUploadProgress(0);
+                  }}
+                  className="px-3 py-2 text-xs font-bold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-900/20 transition-all"
+                >
+                  إزالة الصور
+                </button>
+              </div>
+            )}
+            {busy && photoFiles.length > 0 && (
+              <p className="mt-1 text-xs font-bold text-primary">رفع الصور... {uploadProgress}%</p>
+            )}
+          </div>
         </div>
         <div className="mt-4 flex justify-end">
           <Button variant="primary" disabled={!canInspect || busy || !workOrderId || !currentEmployee?.id} onClick={onSubmit}>
@@ -192,3 +303,4 @@ export const FinalInspection: React.FC = () => {
     </div>
   );
 };
+

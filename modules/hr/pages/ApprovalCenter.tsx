@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge } from '@/components/UI';
+import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
@@ -461,3 +461,4 @@ export const ApprovalCenter: React.FC = () => {
     </div>
   );
 };
+

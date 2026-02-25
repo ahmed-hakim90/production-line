@@ -41,15 +41,15 @@ import {
   resetPassword,
   auth,
 } from '../services/firebase';
-import { productService } from '../services/productService';
-import { lineService } from '../services/lineService';
+import { productService } from '../modules/production/services/productService';
+import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
 import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
-import { reportService } from '../services/reportService';
-import { lineStatusService } from '../services/lineStatusService';
-import { lineProductConfigService } from '../services/lineProductConfigService';
-import { productionPlanService } from '../services/productionPlanService';
-import { workOrderService } from '../services/workOrderService';
+import { reportService } from '../modules/production/services/reportService';
+import { lineStatusService } from '../modules/production/services/lineStatusService';
+import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
+import { productionPlanService } from '../modules/production/services/productionPlanService';
+import { workOrderService } from '../modules/production/services/workOrderService';
 import { notificationService } from '../services/notificationService';
 import { costCenterService } from '../services/costCenterService';
 import { costCenterValueService } from '../services/costCenterValueService';
@@ -59,7 +59,7 @@ import { roleService } from '../services/roleService';
 import { userService } from '../services/userService';
 import { activityLogService } from '../services/activityLogService';
 import { systemSettingsService } from '../services/systemSettingsService';
-import { scanEventService } from '../services/scanEventService';
+import { scanEventService } from '../modules/production/services/scanEventService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -69,6 +69,7 @@ import {
   getTodayDateString,
   getMonthDateRange,
 } from '../utils/calculations';
+import { eventBus, SystemEvents } from '../shared/events';
 
 // ─── Helper: build full admin permissions map (fallback) ─────────────────────
 
@@ -246,6 +247,11 @@ interface AppState {
     productId: string;
     serialBarcode: string;
     employeeId?: string;
+    timingConfig?: {
+      breakStartTime?: string;
+      breakEndTime?: string;
+      pauseWindows?: { startAt: any; endAt?: any; reason: 'manual' }[];
+    };
   }) => Promise<{ action: 'IN' | 'OUT'; cycleSeconds?: number }>;
 
   // Internal helpers
@@ -940,6 +946,27 @@ export const useAppStore = create<AppState>((set, get) => ({
             isRead: false,
           });
         }
+
+        const { uid, userDisplayName, userEmail } = get();
+        eventBus.emit(SystemEvents.WORK_ORDER_CREATED, {
+          module: 'production',
+          entityType: 'work_order',
+          entityId: id,
+          action: 'create',
+          description: 'Work order created',
+          batchId: id,
+          actor: {
+            userId: uid ?? undefined,
+            userName: userDisplayName ?? userEmail ?? undefined,
+          },
+          metadata: {
+            workOrderNumber: data.workOrderNumber,
+            lineId: data.lineId,
+            productId: data.productId,
+            quantity: data.quantity,
+            status: data.status,
+          },
+        });
       }
       return id;
     } catch (error) {
@@ -950,30 +977,149 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateWorkOrder: async (id, data) => {
     try {
-      const existing = get().workOrders.find((w) => w.id === id);
+      let existing = get().workOrders.find((w) => w.id === id);
+      if (data.status === 'completed' && !existing) {
+        const fetched = await workOrderService.getById(id);
+        if (fetched) existing = fetched;
+      }
+      if (data.status === 'completed' && !existing) {
+        const msg = 'تعذر تحميل أمر الشغل للتحقق قبل الإغلاق.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
       if (data.status === 'completed' && existing) {
+        const latest = await scanEventService.buildWorkOrderSummary(id);
+        if (latest.openSessions.length > 0) {
+          const msg = `لا يمكن إغلاق أمر الشغل لوجود ${latest.openSessions.length} قطعة قيد التشغيل بدون تسجيل خروج.`;
+          set({ error: msg });
+          throw new Error(msg);
+        }
+
+        const closingWorkHours = Number(data.actualWorkHours ?? existing.actualWorkHours ?? 0);
+        if (!Number.isFinite(closingWorkHours) || closingWorkHours <= 0) {
+          const msg = 'لا يمكن إغلاق أمر الشغل بدون تسجيل ساعات العمل الفعلية.';
+          set({ error: msg });
+          throw new Error(msg);
+        }
         const policies = await qualitySettingsService.getPolicies();
         if (
           policies.closeRequiresQualityApproval &&
           existing.qualityStatus !== 'approved' &&
           existing.qualityStatus !== 'not_required'
         ) {
+          const msg = 'لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة (Policy: closeRequiresQualityApproval).';
           set({
-            error: 'لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة (Policy: closeRequiresQualityApproval).',
+            error: msg,
           });
-          return;
+          throw new Error(msg);
         }
       }
       await workOrderService.update(id, data);
       await get().fetchWorkOrders();
-      if (existing?.supervisorId && data.status !== existing.status) {
+      const updatedWorkOrder = get().workOrders.find((w) => w.id === id) ?? (existing ? { ...existing, ...data } : null);
+
+      const { uid, userDisplayName, userEmail } = get();
+      const actor = {
+        userId: uid ?? undefined,
+        userName: userDisplayName ?? userEmail ?? undefined,
+      };
+
+      if (existing && data.status && data.status !== existing.status) {
+        if (data.status === 'in_progress') {
+          eventBus.emit(SystemEvents.PRODUCTION_STARTED, {
+            module: 'production',
+            entityType: 'work_order',
+            entityId: id,
+            action: 'start',
+            description: 'Production started for work order',
+            batchId: id,
+            actor,
+            metadata: {
+              workOrderNumber: existing.workOrderNumber,
+              previousStatus: existing.status,
+              nextStatus: data.status,
+            },
+          });
+        }
+        if (data.status === 'completed') {
+          eventBus.emit(SystemEvents.PRODUCTION_CLOSED, {
+            module: 'production',
+            entityType: 'work_order',
+            entityId: id,
+            action: 'close',
+            description: 'Production closed for work order',
+            batchId: id,
+            actor,
+            metadata: {
+              workOrderNumber: existing.workOrderNumber,
+              previousStatus: existing.status,
+              nextStatus: data.status,
+            },
+          });
+        }
+      }
+
+      if (data.status === 'completed' && updatedWorkOrder) {
+        const existingReports = await reportService.getByWorkOrderId(id);
+        if (existingReports.length === 0) {
+          const toLocalDateString = (value: any): string => {
+            if (!value) return getTodayDateString();
+            if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+            const dt = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
+            if (Number.isNaN(dt.getTime())) return getTodayDateString();
+            const y = dt.getFullYear();
+            const m = String(dt.getMonth() + 1).padStart(2, '0');
+            const day = String(dt.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+          };
+
+          if (!updatedWorkOrder.supervisorId) {
+            throw new Error('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
+          }
+
+          await reportService.create({
+            employeeId: updatedWorkOrder.supervisorId,
+            productId: updatedWorkOrder.productId,
+            lineId: updatedWorkOrder.lineId,
+            date: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
+            quantityProduced: Number(
+              updatedWorkOrder.actualProducedFromScans ??
+              updatedWorkOrder.producedQuantity ??
+              0,
+            ),
+            quantityWaste: 0,
+            workersCount: Number(
+              updatedWorkOrder.actualWorkersCount ??
+              updatedWorkOrder.maxWorkers ??
+              0,
+            ),
+            workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
+            notes: updatedWorkOrder.notes ?? '',
+            workOrderId: id,
+          });
+
+          const today = getTodayDateString();
+          const { start: monthStart, end: monthEnd } = getMonthDateRange();
+          const [todayReports, monthlyReports] = await Promise.all([
+            reportService.getByDateRange(today, today),
+            reportService.getByDateRange(monthStart, monthEnd),
+          ]);
+          set({ todayReports, monthlyReports, productionReports: monthlyReports });
+          get()._rebuildProducts();
+          get()._rebuildLines();
+        }
+      }
+
+      const notificationRecipientId = data.supervisorId ?? updatedWorkOrder?.supervisorId ?? existing?.supervisorId;
+      if (notificationRecipientId && data.status !== existing?.status) {
         const { _rawProducts } = get();
-        const product = _rawProducts.find((p) => p.id === existing.productId);
+        const productId = updatedWorkOrder?.productId ?? existing?.productId;
+        const product = _rawProducts.find((p) => p.id === productId);
         const statusLabels: Record<string, string> = { in_progress: 'بدأ التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
         const statusLabel = statusLabels[data.status || ''];
         if (statusLabel) {
           await notificationService.create({
-            recipientId: existing.supervisorId,
+            recipientId: notificationRecipientId,
             type: data.status === 'completed' ? 'work_order_completed' : 'work_order_updated',
             title: `تحديث أمر شغل — ${statusLabel}`,
             message: `أمر شغل ${existing.workOrderNumber} — ${product?.name ?? ''} — ${statusLabel}`,
@@ -984,6 +1130,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     } catch (error) {
       set({ error: (error as Error).message });
+      throw error;
     }
   },
 
@@ -1002,8 +1149,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const empId = get().currentEmployee?.id;
       if (!empId) return;
+      const isManager = get().userPermissions['roles.manage'] === true;
+      if (isManager) {
+        const notifications = await notificationService.getAll();
+        set({ notifications });
+        return;
+      }
       const notifications = await notificationService.getByRecipient(empId);
-      set({ notifications });
+      const scopedNotifications = notifications.filter((n) => {
+        if (!n.type.startsWith('work_order')) return true;
+        const linkedWO = get().workOrders.find((w) => w.id === n.referenceId);
+        if (!linkedWO) return n.recipientId === empId;
+        return linkedWO.supervisorId === empId;
+      });
+      set({ notifications: scopedNotifications });
     } catch (error) {
       console.error('fetchNotifications error:', error);
     }
@@ -1032,8 +1191,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   subscribeToNotifications: () => {
     const empId = get().currentEmployee?.id;
     if (!empId) return () => {};
-    return notificationService.subscribeToRecipient(empId, (notifications) => {
-      set({ notifications });
+    const isManager = get().userPermissions['roles.manage'] === true;
+    const subscribe = isManager
+      ? notificationService.subscribeAll.bind(notificationService)
+      : (cb: (notifications: AppNotification[]) => void) =>
+          notificationService.subscribeToRecipient(empId, cb);
+    return subscribe((notifications) => {
+      if (isManager) {
+        set({ notifications });
+        return;
+      }
+      const scopedNotifications = notifications.filter((n) => {
+        if (!n.type.startsWith('work_order')) return true;
+        const linkedWO = get().workOrders.find((w) => w.id === n.referenceId);
+        if (!linkedWO) return n.recipientId === empId;
+        return linkedWO.supervisorId === empId;
+      });
+      set({ notifications: scopedNotifications });
     });
   },
 
@@ -1195,6 +1369,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       get()._rebuildLines();
       if (activePlan) await get().fetchProductionPlans();
 
+      const { uid, userDisplayName, userEmail } = get();
+      eventBus.emit(SystemEvents.USER_ACTION, {
+        module: 'production',
+        entityType: 'production_report',
+        entityId: id ?? '',
+        action: 'create',
+        description: 'Production report created',
+        actor: {
+          userId: uid ?? undefined,
+          userName: userDisplayName ?? userEmail ?? undefined,
+        },
+        metadata: {
+          lineId: data.lineId,
+          productId: data.productId,
+          quantityProduced: data.quantityProduced,
+          workOrderId: activeWO?.id ?? '',
+          productionPlanId: activePlan?.id ?? '',
+        },
+      });
+
       get()._logActivity('CREATE_REPORT', `إنشاء تقرير إنتاج جديد`, { reportId: id, ...data });
 
       return id;
@@ -1217,6 +1411,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       get()._rebuildProducts();
       get()._rebuildLines();
 
+      const { uid, userDisplayName, userEmail } = get();
+      eventBus.emit(SystemEvents.USER_ACTION, {
+        module: 'production',
+        entityType: 'production_report',
+        entityId: id,
+        action: 'update',
+        description: 'Production report updated',
+        actor: {
+          userId: uid ?? undefined,
+          userName: userDisplayName ?? userEmail ?? undefined,
+        },
+        metadata: {
+          changes: data,
+        },
+      });
+
       get()._logActivity('UPDATE_REPORT', `تعديل تقرير إنتاج`, { reportId: id, changes: data });
     } catch (error) {
       set({ error: (error as Error).message });
@@ -1235,6 +1445,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ todayReports, monthlyReports, productionReports: monthlyReports });
       get()._rebuildProducts();
       get()._rebuildLines();
+
+      const { uid, userDisplayName, userEmail } = get();
+      eventBus.emit(SystemEvents.USER_ACTION, {
+        module: 'production',
+        entityType: 'production_report',
+        entityId: id,
+        action: 'delete',
+        description: 'Production report deleted',
+        actor: {
+          userId: uid ?? undefined,
+          userName: userDisplayName ?? userEmail ?? undefined,
+        },
+        metadata: {
+          reportId: id,
+        },
+      });
 
       get()._logActivity('DELETE_REPORT', `حذف تقرير إنتاج`, { reportId: id });
     } catch (error) {

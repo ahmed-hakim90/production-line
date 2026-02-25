@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '@/components/UI';
+import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { getDocs } from 'firebase/firestore';
 import { employeeService } from '../employeeService';
@@ -34,7 +34,7 @@ const TAB_CONFIG: { key: ActiveTab; label: string; icon: string }[] = [
 const DEDUCTION_CATEGORIES: Record<DeductionCategory, string> = {
   manual: 'يدوي',
   disciplinary: 'تأديبي',
-  transport: 'نقل',
+  transport: '8 88',
   override: 'استثنائي',
   other: 'أخرى',
 };
@@ -501,7 +501,7 @@ export const EmployeeFinancials: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {dataCount > 0 && (
+          {dataCount > 0 && can('export') && (
             <Button variant="outline" onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير Excel
@@ -575,7 +575,7 @@ export const EmployeeFinancials: React.FC = () => {
                   }}>
                     <option value="">— اختر —</option>
                     {allowanceTypes.map((a) => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.calculationType === 'fixed' ? `${a.value} ج.م` : `${a.value}%`})</option>
+                      <option key={a.id} value={a.id}>{a.name} ({a.calculationType === 'fixed' ? `${a.value} ط¬.ظ…` : `${a.value}%`})</option>
                     ))}
                   </select>
                 </div>
@@ -788,7 +788,7 @@ export const EmployeeFinancials: React.FC = () => {
                     <th className="text-right py-3 px-3">نوع البدل</th>
                     <th className="text-right py-3 px-3">المبلغ</th>
                     <th className="text-right py-3 px-3">النوع</th>
-                    <th className="text-right py-3 px-3">من</th>
+                    <th className="text-right py-3 px-3">8&8 </th>
                     <th className="text-right py-3 px-3">إجراء</th>
                   </tr>
                 </thead>
@@ -925,7 +925,7 @@ export const EmployeeFinancials: React.FC = () => {
                   <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
                     <th className="text-right py-3 px-3">الموظف</th>
                     <th className="text-right py-3 px-3">النوع</th>
-                    <th className="text-right py-3 px-3">من</th>
+                    <th className="text-right py-3 px-3">8&8 </th>
                     <th className="text-right py-3 px-3">إلى</th>
                     <th className="text-right py-3 px-3">الأيام</th>
                     <th className="text-right py-3 px-3">الحالة</th>
@@ -1002,3 +1002,4 @@ export const EmployeeFinancials: React.FC = () => {
     </div>
   );
 };
+

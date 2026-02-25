@@ -27,6 +27,19 @@ function sortByCreatedAtDesc(a: AppNotification, b: AppNotification): number {
 }
 
 export const notificationService = {
+  async getAll(): Promise<AppNotification[]> {
+    if (!isConfigured) return [];
+    try {
+      const snap = await getDocs(collection(db, COLLECTION));
+      const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
+      results.sort(sortByCreatedAtDesc);
+      return results;
+    } catch (error) {
+      console.error('notificationService.getAll error:', error);
+      return [];
+    }
+  },
+
   async getByRecipient(recipientId: string): Promise<AppNotification[]> {
     if (!isConfigured) return [];
     try {
@@ -100,6 +113,22 @@ export const notificationService = {
       },
       (error) => {
         console.error('notificationService.subscribeToRecipient error:', error);
+        callback([]);
+      },
+    );
+  },
+
+  subscribeAll(callback: (notifications: AppNotification[]) => void): Unsubscribe {
+    if (!isConfigured) return () => {};
+    return onSnapshot(
+      collection(db, COLLECTION),
+      (snap) => {
+        const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
+        results.sort(sortByCreatedAtDesc);
+        callback(results);
+      },
+      (error) => {
+        console.error('notificationService.subscribeAll error:', error);
         callback([]);
       },
     );

@@ -6,6 +6,8 @@ import { MENU_CONFIG } from '../config/menu.config';
 import { useBadgeCounts, useActiveRoute, useSidebarCollapse } from '../hooks/useNavigation';
 import { NotificationBell } from './NotificationBell';
 
+const APP_VERSION = __APP_VERSION__;
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
@@ -346,7 +348,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Header onMenuToggle={() => setSidebarOpen((o) => !o)} />
         <div className="p-4 sm:p-6 lg:p-8 flex-1 animate-in fade-in duration-500 overflow-x-hidden">{children}</div>
         <footer className="mt-auto py-4 sm:py-6 px-4 sm:px-8 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-xs sm:text-sm font-medium">
-          <p>© {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM — v1.0.10</p>
+          <p>© {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM — v{APP_VERSION}</p>
           <div className="flex items-center gap-4 sm:gap-6">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>

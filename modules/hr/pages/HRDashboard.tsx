@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, KPIBox, LoadingSkeleton, Badge, Button, SearchableSelect } from '@/components/UI';
+import { Card, KPIBox, LoadingSkeleton, Badge, Button, SearchableSelect } from '../components/UI';
 import { getDocs } from 'firebase/firestore';
 import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
@@ -596,7 +596,7 @@ export const HRDashboard: React.FC = () => {
                     </select>
                   </div>
                   <div className="w-32 shrink-0">
-                    <label className="block text-[11px] font-bold text-slate-400 mb-1">من</label>
+                    <label className="block text-[11px] font-bold text-slate-400 mb-1">8&8 </label>
                     <input type="date" className={inputCls} value={qaLeaveStart} onChange={(e) => setQaLeaveStart(e.target.value)} />
                   </div>
                   <div className="w-32 shrink-0">
@@ -1065,3 +1065,4 @@ export const HRDashboard: React.FC = () => {
     </div>
   );
 };
+

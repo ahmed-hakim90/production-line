@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, LoadingSkeleton } from '@/components/UI';
+import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
@@ -304,7 +304,7 @@ export const DelegationManagement: React.FC = () => {
                         {formatDate(d.startDate)} → {formatDate(d.endDate)}
                         {' — '}
                         {d.requestTypes === 'all' ? 'جميع الأنواع' :
-                          d.requestTypes.map((t) => REQUEST_TYPE_LABELS[t]).join('، ')}
+                          d.requestTypes.map((t) => REQUEST_TYPE_LABELS[t]).join('7R ')}
                       </p>
                     </div>
                   </div>
@@ -338,3 +338,4 @@ export const DelegationManagement: React.FC = () => {
     </div>
   );
 };
+

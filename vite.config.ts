@@ -90,6 +90,31 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      build: {
+        chunkSizeWarningLimit: 900,
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              // Vendor chunking
+              if (id.includes('node_modules')) {
+                if (id.includes('/firebase/')) return 'vendor-firebase';
+                if (id.includes('/recharts/')) return 'vendor-recharts';
+                if (id.includes('/xlsx/')) return 'vendor-xlsx';
+                if (id.includes('/jspdf/') || id.includes('/html2canvas/') || id.includes('/react-to-print/')) {
+                  return 'vendor-print';
+                }
+                if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/react-router-dom/')) {
+                  return 'vendor-react';
+                }
+                return;
+              }
+
+              // Leave app code to Rollup's default graph-based chunking.
+              return;
+            },
+          },
+        },
+      },
     };
 });

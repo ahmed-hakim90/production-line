@@ -1,0 +1,31 @@
+// Production Module — Public API
+export { Products } from './pages/Products';
+export { ProductDetails } from './pages/ProductDetails';
+export { Lines } from './pages/Lines';
+export { LineDetails } from './pages/LineDetails';
+export { Reports } from './pages/Reports';
+export { QuickAction } from './pages/QuickAction';
+export { ProductionPlans } from './pages/ProductionPlans';
+export { WorkOrders } from './pages/WorkOrders';
+export { WorkOrderScanner } from './pages/WorkOrderScanner';
+export { Supervisors } from './pages/Supervisors';
+export { SupervisorDetails } from './pages/SupervisorDetails';
+export { ProductionWorkers } from './pages/ProductionWorkers';
+export { ProductionWorkerDetails } from './pages/ProductionWorkerDetails';
+export { LineWorkerAssignment } from './pages/LineWorkerAssignment';
+export * from './components';
+export * from './hooks';
+export * from './routes';
+
+export { productService } from './services/productService';
+export { lineService } from './services/lineService';
+export { lineStatusService } from './services/lineStatusService';
+export { lineProductConfigService } from './services/lineProductConfigService';
+export { reportService } from './services/reportService';
+export { productionPlanService } from './services/productionPlanService';
+export { workOrderService } from './services/workOrderService';
+export { scanEventService } from './services/scanEventService';
+export { lineAssignmentService } from './services/lineAssignmentService';
+export { monthlyProductionCostService } from './services/monthlyProductionCostService';
+export { productMaterialService } from './services/productMaterialService';
+export { storageService } from './services/storageService';

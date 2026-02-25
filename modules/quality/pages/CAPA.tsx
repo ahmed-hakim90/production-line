@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card } from '@/components/UI';
+import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import type { QualityCAPA } from '@/types';
@@ -185,3 +185,4 @@ export const CAPA: React.FC = () => {
     </div>
   );
 };
+

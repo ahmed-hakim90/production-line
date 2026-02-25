@@ -9,7 +9,7 @@ import {
   getTodayDateString,
   getMonthDateRange,
 } from '../utils/calculations';
-import { reportService } from '../services/reportService';
+import { reportService } from '../modules/production/services/reportService';
 import type { ProductionReport, ProductionPlan } from '../types';
 
 // ─── Period Filter ───────────────────────────────────────────────────────────

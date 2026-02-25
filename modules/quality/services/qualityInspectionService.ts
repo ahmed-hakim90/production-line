@@ -11,7 +11,9 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { activityLogService } from '@/services/activityLogService';
 import type {
+  FileAttachmentMeta,
   QualityCAPA,
   QualityDefect,
   QualityInspection,
@@ -73,18 +75,29 @@ export const qualityInspectionService = {
     status: QualityInspectionStatus;
     inspectedBy: string;
     notes?: string;
+    attachments?: FileAttachmentMeta[];
   }): Promise<string | null> {
     if (!isConfigured) return null;
     const ref = await addDoc(qualityInspectionsRef(), {
       ...payload,
       inspectedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_CREATE_INSPECTION',
+      `تسجيل فحص جودة (${payload.type})`,
+      { inspectionId: ref.id, workOrderId: payload.workOrderId, status: payload.status },
+    );
     return ref.id;
   },
 
   async updateInspection(id: string, payload: Partial<Omit<QualityInspection, 'id'>>): Promise<void> {
     if (!isConfigured) return;
     await updateDoc(doc(qualityInspectionsRef(), id), payload as Record<string, any>);
+    await activityLogService.logCurrentUser(
+      'QUALITY_UPDATE_INSPECTION',
+      'تحديث فحص جودة',
+      { inspectionId: id, changes: payload },
+    );
   },
 
   async createDefect(payload: Omit<QualityDefect, 'id' | 'createdAt'>): Promise<string | null> {
@@ -93,6 +106,11 @@ export const qualityInspectionService = {
       ...payload,
       createdAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_CREATE_DEFECT',
+      `تسجيل عيب جودة: ${payload.reasonLabel}`,
+      { defectId: ref.id, workOrderId: payload.workOrderId, severity: payload.severity },
+    );
     return ref.id;
   },
 
@@ -103,6 +121,11 @@ export const qualityInspectionService = {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_CREATE_REWORK',
+      'إنشاء أمر إعادة تشغيل',
+      { reworkId: ref.id, workOrderId: payload.workOrderId, defectId: payload.defectId },
+    );
     return ref.id;
   },
 
@@ -112,6 +135,11 @@ export const qualityInspectionService = {
       ...payload,
       updatedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_UPDATE_REWORK',
+      'تحديث أمر إعادة تشغيل',
+      { reworkId: id, changes: payload },
+    );
   },
 
   async createCAPA(payload: Omit<QualityCAPA, 'id' | 'createdAt' | 'updatedAt'>): Promise<string | null> {
@@ -121,6 +149,11 @@ export const qualityInspectionService = {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_CREATE_CAPA',
+      `إنشاء CAPA: ${payload.title}`,
+      { capaId: ref.id, workOrderId: payload.workOrderId, reasonCode: payload.reasonCode },
+    );
     return ref.id;
   },
 
@@ -130,6 +163,11 @@ export const qualityInspectionService = {
       ...payload,
       updatedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_UPDATE_CAPA',
+      'تحديث CAPA',
+      { capaId: id, changes: payload },
+    );
   },
 
   async getInspectionsByWorkOrder(workOrderId: string): Promise<QualityInspection[]> {

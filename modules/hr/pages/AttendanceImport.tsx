@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Card, Button, Badge } from '@/components/UI';
+import { Card, Button, Badge } from '../components/UI';
 import { getDocs } from 'firebase/firestore';
 import { parseCSV, processBatch } from '../attendanceProcessor';
 import { attendanceRawLogService, attendanceLogService } from '../attendanceService';
@@ -412,12 +412,12 @@ export const AttendanceImport: React.FC = () => {
                         <td className="py-2.5 px-2 font-bold">{rec.totalHours}</td>
                         <td className="py-2.5 px-2">
                           {rec.lateMinutes > 0
-                            ? <span className="text-rose-500 font-bold">{rec.lateMinutes} د</span>
+                            ? <span className="text-rose-500 font-bold">{rec.lateMinutes} ط¯</span>
                             : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="py-2.5 px-2">
                           {rec.earlyLeaveMinutes > 0
-                            ? <span className="text-amber-500 font-bold">{rec.earlyLeaveMinutes} د</span>
+                            ? <span className="text-amber-500 font-bold">{rec.earlyLeaveMinutes} ط¯</span>
                             : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="py-2.5 px-2">
@@ -473,3 +473,4 @@ export const AttendanceImport: React.FC = () => {
     </div>
   );
 };
+

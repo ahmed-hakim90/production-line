@@ -51,7 +51,7 @@ export type Permission =
   | 'hrDashboard.view'
   | 'vehicles.view' | 'vehicles.manage'
   | 'hrSettings.view' | 'hrSettings.edit'
-  | 'print' | 'export';
+  | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
 
@@ -66,150 +66,50 @@ export interface PermissionGroup {
   permissions: PermissionItem[];
 }
 
-export const PERMISSION_GROUPS: PermissionGroup[] = [
+const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
   {
-    key: 'dashboard',
-    label: 'لوحة التحكم',
+    key: 'dashboards',
+    label: 'لوحات التحكم',
     permissions: [
       { key: 'dashboard.view', label: 'عرض لوحة التحكم' },
+      { key: 'employeeDashboard.view', label: 'عرض لوحة الموظف' },
+      { key: 'factoryDashboard.view', label: 'عرض لوحة مدير المصنع' },
+      { key: 'adminDashboard.view', label: 'عرض لوحة مدير النظام' },
     ],
   },
   {
-    key: 'products',
-    label: 'المنتجات',
+    key: 'production',
+    label: 'الإنتاج',
     permissions: [
-      { key: 'products.view', label: 'عرض' },
-      { key: 'products.create', label: 'إنشاء' },
+      { key: 'products.view', label: 'عرض المنتجات' },
+      { key: 'products.create', label: 'إنشاء منتج' },
       { key: 'products.createRawMaterial', label: 'إضافة مادة خام' },
-      { key: 'products.edit', label: 'تعديل' },
-      { key: 'products.delete', label: 'حذف' },
-    ],
-  },
-  {
-    key: 'lines',
-    label: 'خطوط الإنتاج',
-    permissions: [
-      { key: 'lines.view', label: 'عرض' },
-      { key: 'lines.create', label: 'إنشاء' },
-      { key: 'lines.edit', label: 'تعديل' },
-      { key: 'lines.delete', label: 'حذف' },
-    ],
-  },
-  {
-    key: 'employees',
-    label: 'الموظفين',
-    permissions: [
-      { key: 'employees.view', label: 'عرض' },
-      { key: 'employees.viewDetails', label: 'عرض ملف الموظف' },
-      { key: 'employees.create', label: 'إنشاء' },
-      { key: 'employees.edit', label: 'تعديل' },
-      { key: 'employees.delete', label: 'حذف' },
-    ],
-  },
-  {
-    key: 'supervisors',
-    label: 'المشرفين',
-    permissions: [
+      { key: 'products.edit', label: 'تعديل المنتجات' },
+      { key: 'products.delete', label: 'حذف المنتجات' },
+      { key: 'lines.view', label: 'عرض خطوط الإنتاج' },
+      { key: 'lines.create', label: 'إنشاء خط إنتاج' },
+      { key: 'lines.edit', label: 'تعديل خطوط الإنتاج' },
+      { key: 'lines.delete', label: 'حذف خطوط الإنتاج' },
       { key: 'supervisors.view', label: 'عرض المشرفين' },
-    ],
-  },
-  {
-    key: 'productionWorkers',
-    label: 'عمال الإنتاج',
-    permissions: [
       { key: 'productionWorkers.view', label: 'عرض عمال الإنتاج' },
-    ],
-  },
-  {
-    key: 'lineWorkers',
-    label: 'ربط العمالة بالخطوط',
-    permissions: [
       { key: 'lineWorkers.view', label: 'عرض وإدارة ربط العمالة' },
-    ],
-  },
-  {
-    key: 'reports',
-    label: 'التقارير',
-    permissions: [
-      { key: 'reports.view', label: 'عرض' },
-      { key: 'reports.create', label: 'إنشاء' },
-      { key: 'reports.edit', label: 'تعديل' },
-      { key: 'reports.delete', label: 'حذف' },
-      { key: 'reports.viewCost', label: 'عرض عمود التكلفة' },
-    ],
-  },
-  {
-    key: 'lineStatus',
-    label: 'حالة الخطوط',
-    permissions: [
-      { key: 'lineStatus.view', label: 'عرض' },
-      { key: 'lineStatus.edit', label: 'تعديل' },
-    ],
-  },
-  {
-    key: 'lineProductConfig',
-    label: 'إعدادات المنتج-الخط',
-    permissions: [
-      { key: 'lineProductConfig.view', label: 'عرض' },
-    ],
-  },
-  {
-    key: 'settings',
-    label: 'الإعدادات',
-    permissions: [
-      { key: 'settings.view', label: 'عرض' },
-      { key: 'settings.edit', label: 'تعديل' },
-    ],
-  },
-  {
-    key: 'roles',
-    label: 'إدارة الأدوار',
-    permissions: [
-      { key: 'roles.view', label: 'عرض الأدوار' },
-      { key: 'roles.manage', label: 'إدارة الأدوار' },
-    ],
-  },
-  {
-    key: 'activityLog',
-    label: 'سجل النشاط',
-    permissions: [
-      { key: 'activityLog.view', label: 'عرض سجل النشاط' },
-    ],
-  },
-  {
-    key: 'quickAction',
-    label: 'إدخال سريع',
-    permissions: [
-      { key: 'quickAction.view', label: 'الإدخال السريع' },
-    ],
-  },
-  {
-    key: 'costs',
-    label: 'إدارة التكاليف',
-    permissions: [
-      { key: 'costs.view', label: 'عرض التكاليف' },
-      { key: 'costs.manage', label: 'إدارة التكاليف' },
-      { key: 'costs.closePeriod', label: 'إغلاق الفترة المحاسبية' },
-    ],
-  },
-  {
-    key: 'plans',
-    label: 'خطط الإنتاج',
-    permissions: [
-      { key: 'plans.view', label: 'عرض الخطط' },
-      { key: 'plans.create', label: 'إنشاء خطة' },
-      { key: 'plans.edit', label: 'تعديل خطة' },
-    ],
-  },
-  {
-    key: 'workOrders',
-    label: 'أوامر الشغل',
-    permissions: [
+      { key: 'plans.view', label: 'عرض خطط الإنتاج' },
+      { key: 'plans.create', label: 'إنشاء خطة إنتاج' },
+      { key: 'plans.edit', label: 'تعديل خطط الإنتاج' },
       { key: 'workOrders.view', label: 'عرض أوامر الشغل' },
       { key: 'workOrders.create', label: 'إنشاء أمر شغل' },
       { key: 'workOrders.edit', label: 'تعديل أمر شغل' },
       { key: 'workOrders.delete', label: 'حذف أمر شغل' },
       { key: 'workOrders.viewCost', label: 'عرض تكاليف أوامر الشغل' },
+      { key: 'reports.view', label: 'عرض التقارير' },
+      { key: 'reports.create', label: 'إنشاء التقارير' },
+      { key: 'reports.edit', label: 'تعديل التقارير' },
+      { key: 'reports.delete', label: 'حذف التقارير' },
+      { key: 'reports.viewCost', label: 'عرض عمود التكلفة' },
+      { key: 'quickAction.view', label: 'الإدخال السريع' },
+      { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
+      { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
+      { key: 'lineProductConfig.view', label: 'عرض إعدادات المنتج-الخط' },
     ],
   },
   {
@@ -237,103 +137,59 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
-    key: 'attendance',
-    label: 'الحضور والانصراف',
+    key: 'hr',
+    label: 'الموارد البشرية',
     permissions: [
+      { key: 'employees.view', label: 'عرض الموظفين' },
+      { key: 'employees.viewDetails', label: 'عرض ملف الموظف' },
+      { key: 'employees.create', label: 'إنشاء موظف' },
+      { key: 'employees.edit', label: 'تعديل الموظفين' },
+      { key: 'employees.delete', label: 'حذف الموظفين' },
       { key: 'attendance.view', label: 'عرض الحضور' },
       { key: 'attendance.import', label: 'استيراد بيانات' },
       { key: 'attendance.edit', label: 'تعديل الحضور' },
-    ],
-  },
-  {
-    key: 'leave',
-    label: 'الإجازات',
-    permissions: [
       { key: 'leave.view', label: 'عرض الإجازات' },
       { key: 'leave.create', label: 'طلب إجازة' },
       { key: 'leave.manage', label: 'إدارة الإجازات' },
-    ],
-  },
-  {
-    key: 'loan',
-    label: 'السُلف والقروض',
-    permissions: [
       { key: 'loan.view', label: 'عرض السُلف' },
       { key: 'loan.create', label: 'طلب سلفة' },
       { key: 'loan.manage', label: 'إدارة السُلف' },
       { key: 'loan.disburse', label: 'صرف السُلف (الحسابات)' },
-    ],
-  },
-  {
-    key: 'approval',
-    label: 'الموافقات',
-    permissions: [
       { key: 'approval.view', label: 'عرض الموافقات' },
       { key: 'approval.manage', label: 'إدارة الموافقات' },
       { key: 'approval.delegate', label: 'تفويض الموافقات' },
       { key: 'approval.escalate', label: 'تصعيد الموافقات' },
       { key: 'approval.override', label: 'تجاوز الموافقات (مدير النظام)' },
-    ],
-  },
-  {
-    key: 'payroll',
-    label: 'الرواتب',
-    permissions: [
       { key: 'payroll.view', label: 'عرض كشف الرواتب' },
       { key: 'payroll.generate', label: 'إنشاء / احتساب الرواتب' },
       { key: 'payroll.finalize', label: 'اعتماد كشف الرواتب' },
       { key: 'payroll.lock', label: 'قفل الشهر نهائياً' },
-    ],
-  },
-  {
-    key: 'hrDashboard',
-    label: 'لوحة HR',
-    permissions: [
       { key: 'hrDashboard.view', label: 'عرض لوحة الموارد البشرية' },
-    ],
-  },
-  {
-    key: 'vehicles',
-    label: 'المركبات',
-    permissions: [
       { key: 'vehicles.view', label: 'عرض المركبات' },
       { key: 'vehicles.manage', label: 'إدارة المركبات' },
-    ],
-  },
-  {
-    key: 'hrSettings',
-    label: 'إعدادات الموارد البشرية',
-    permissions: [
       { key: 'hrSettings.view', label: 'عرض إعدادات HR' },
       { key: 'hrSettings.edit', label: 'تعديل إعدادات HR' },
-    ],
-  },
-  {
-    key: 'employeeDashboard',
-    label: 'لوحة الموظف',
-    permissions: [
-      { key: 'employeeDashboard.view', label: 'عرض لوحة الموظف' },
-    ],
-  },
-  {
-    key: 'selfService',
-    label: 'الخدمة الذاتية',
-    permissions: [
       { key: 'selfService.view', label: 'الخدمة الذاتية للموظف' },
     ],
   },
   {
-    key: 'factoryDashboard',
-    label: 'لوحة مدير المصنع',
+    key: 'costs',
+    label: 'إدارة التكاليف',
     permissions: [
-      { key: 'factoryDashboard.view', label: 'عرض لوحة مدير المصنع' },
+      { key: 'costs.view', label: 'عرض التكاليف' },
+      { key: 'costs.manage', label: 'إدارة التكاليف' },
+      { key: 'costs.closePeriod', label: 'إغلاق الفترة المحاسبية' },
     ],
   },
   {
-    key: 'adminDashboard',
-    label: 'لوحة مدير النظام',
+    key: 'system',
+    label: 'النظام',
     permissions: [
-      { key: 'adminDashboard.view', label: 'عرض لوحة مدير النظام' },
+      { key: 'roles.view', label: 'عرض الأدوار' },
+      { key: 'roles.manage', label: 'إدارة الأدوار' },
+      { key: 'activityLog.view', label: 'عرض سجل النشاط' },
+      { key: 'settings.view', label: 'عرض الإعدادات' },
+      { key: 'settings.edit', label: 'تعديل الإعدادات' },
     ],
   },
   {
@@ -342,9 +198,39 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       { key: 'print', label: 'طباعة' },
       { key: 'export', label: 'تصدير' },
+      { key: 'import', label: 'استيراد' },
     ],
   },
 ];
+
+const PERMISSION_GROUP_ORDER: string[] = [
+  // Dashboards
+  'dashboards',
+  // Production
+  'production',
+  // Quality
+  'quality',
+  // HR
+  'hr',
+  // Costs
+  'costs',
+  // System
+  'system',
+  // Special
+  'special',
+];
+
+const permissionGroupOrderRank = new Map(
+  PERMISSION_GROUP_ORDER.map((key, idx) => [key, idx]),
+);
+
+export const PERMISSION_GROUPS: PermissionGroup[] = [...PERMISSION_GROUPS_RAW].sort(
+  (a, b) => {
+    const aRank = permissionGroupOrderRank.get(a.key) ?? Number.MAX_SAFE_INTEGER;
+    const bRank = permissionGroupOrderRank.get(b.key) ?? Number.MAX_SAFE_INTEGER;
+    return aRank - bRank;
+  },
+);
 
 /** Flat list of every permission key */
 export const ALL_PERMISSIONS: Permission[] =
@@ -365,7 +251,7 @@ export interface SidebarGroup {
   items: SidebarItem[];
 }
 
-export const SIDEBAR_GROUPS: SidebarGroup[] = [
+const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
   {
     key: 'dashboards',
     label: 'لوحات التحكم',
@@ -380,20 +266,13 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     key: 'production',
     label: 'الإنتاج',
     items: [
-      { path: '/lines', icon: 'precision_manufacturing', label: 'خطوط الإنتاج', permission: 'lines.view' },
       { path: '/products', icon: 'inventory_2', label: 'المنتجات', permission: 'products.view' },
+      { path: '/lines', icon: 'precision_manufacturing', label: 'خطوط الإنتاج', permission: 'lines.view' },
       { path: '/production-plans', icon: 'event_note', label: 'خطط الإنتاج', permission: 'plans.view' },
       { path: '/work-orders', icon: 'assignment', label: 'أوامر الشغل', permission: 'workOrders.view' },
       { path: '/supervisors', icon: 'engineering', label: 'المشرفين', permission: 'supervisors.view' },
       { path: '/production-workers', icon: 'construction', label: 'عمال الإنتاج', permission: 'productionWorkers.view' },
       { path: '/reports', icon: 'bar_chart', label: 'التقارير', permission: 'reports.view' },
-      { path: '/quality/settings', icon: 'tune', label: 'إعدادات الجودة', permission: 'quality.settings.view' },
-      { path: '/quality/workers', icon: 'groups', label: 'عمال الجودة', permission: 'quality.workers.view' },
-      { path: '/quality/final-inspection', icon: 'task_alt', label: 'الفحص النهائي', permission: 'quality.finalInspection.view' },
-      { path: '/quality/ipqc', icon: 'rule', label: 'IPQC', permission: 'quality.ipqc.view' },
-      { path: '/quality/rework', icon: 'build', label: 'إعادة التشغيل', permission: 'quality.rework.view' },
-      { path: '/quality/capa', icon: 'fact_check', label: 'CAPA', permission: 'quality.capa.view' },
-      { path: '/quality/reports', icon: 'print', label: 'تقارير الجودة', permission: 'quality.reports.view' },
       { path: '/quick-action', icon: 'bolt', label: 'إدخال سريع', permission: 'quickAction.view' },
     ],
   },
@@ -403,7 +282,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { path: '/hr-dashboard', icon: 'monitoring', label: 'لوحة HR', permission: 'hrDashboard.view' },
       { path: '/employees', icon: 'groups', label: 'الموظفين', permission: 'employees.view' },
-      { path: '/employees/import', icon: 'upload', label: 'استيراد الموظفين', permission: 'employees.create' },
+      { path: '/employees/import', icon: 'upload', label: 'استيراد الموظفين', permission: 'import' },
       { path: '/organization', icon: 'account_tree', label: 'الهيكل التنظيمي', permission: 'hrSettings.view' },
       { path: '/self-service', icon: 'person', label: 'الخدمة الذاتية', permission: 'selfService.view' },
       { path: '/attendance', icon: 'fingerprint', label: 'سجل الحضور', permission: 'attendance.view' },
@@ -433,6 +312,11 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { path: '/quality/settings', icon: 'tune', label: 'إعدادات الجودة', permission: 'quality.settings.view' },
       { path: '/quality/workers', icon: 'groups', label: 'عمال الجودة', permission: 'quality.workers.view' },
+      { path: '/quality/final-inspection', icon: 'task_alt', label: 'الفحص النهائي', permission: 'quality.finalInspection.view' },
+      { path: '/quality/ipqc', icon: 'rule', label: 'IPQC', permission: 'quality.ipqc.view' },
+      { path: '/quality/rework', icon: 'build', label: 'إعادة التشغيل', permission: 'quality.rework.view' },
+      { path: '/quality/capa', icon: 'fact_check', label: 'CAPA', permission: 'quality.capa.view' },
+      { path: '/quality/reports', icon: 'print', label: 'تقارير الجودة', permission: 'quality.reports.view' },
     ],
   },
   {
@@ -445,6 +329,47 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     ],
   },
 ];
+
+const SIDEBAR_GROUP_ORDER: string[] = [
+  'dashboards',
+  'production',
+  'quality',
+  'hr',
+  'costs',
+  'system',
+];
+
+const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
+  dashboards: ['/', '/employee-dashboard', '/factory-dashboard', '/admin-dashboard'],
+  production: ['/products', '/lines', '/production-plans', '/work-orders', '/supervisors', '/production-workers', '/reports', '/quick-action'],
+  quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
+  hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
+  costs: ['/cost-centers', '/cost-settings'],
+  system: ['/roles', '/activity-log', '/settings'],
+};
+
+const sidebarGroupOrderRank = new Map(
+  SIDEBAR_GROUP_ORDER.map((key, idx) => [key, idx]),
+);
+
+export const SIDEBAR_GROUPS: SidebarGroup[] = [...SIDEBAR_GROUPS_RAW]
+  .sort((a, b) => {
+    const aRank = sidebarGroupOrderRank.get(a.key) ?? Number.MAX_SAFE_INTEGER;
+    const bRank = sidebarGroupOrderRank.get(b.key) ?? Number.MAX_SAFE_INTEGER;
+    return aRank - bRank;
+  })
+  .map((group) => {
+    const order = SIDEBAR_ITEM_ORDER[group.key] ?? [];
+    const itemRank = new Map(order.map((path, idx) => [path, idx]));
+    return {
+      ...group,
+      items: [...group.items].sort((a, b) => {
+        const aRank = itemRank.get(a.path) ?? Number.MAX_SAFE_INTEGER;
+        const bRank = itemRank.get(b.path) ?? Number.MAX_SAFE_INTEGER;
+        return aRank - bRank;
+      }),
+    };
+  });
 
 /** Flat list for backward compatibility (route matching, etc.) */
 export const SIDEBAR_ITEMS: SidebarItem[] = SIDEBAR_GROUPS.flatMap((g) => g.items);
@@ -459,7 +384,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/lines': 'lines.view',
   '/lines/:id': 'lines.view',
   '/employees': 'employees.view',
-  '/employees/import': 'employees.create',
+  '/employees/import': 'import',
   '/employees/:id': 'employees.viewDetails',
   '/supervisors': 'supervisors.view',
   '/supervisors/:id': 'supervisors.view',

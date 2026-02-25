@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '@/components/UI';
+import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { vehicleService } from '../vehicleService';
 import { employeeService } from '../employeeService';
 import { exportHRData } from '@/utils/exportExcel';
@@ -216,7 +216,7 @@ export const Vehicles: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {vehicles.length > 0 && (
+          {vehicles.length > 0 && can('export') && (
             <Button variant="outline" onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير Excel
@@ -573,3 +573,4 @@ export const Vehicles: React.FC = () => {
     </div>
   );
 };
+

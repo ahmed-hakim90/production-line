@@ -289,3 +289,10 @@ export {
   employeeAllowancesRef,
   employeeDeductionsRef,
 } from './collections';
+
+export * from './components';
+export * from './hooks';
+export * from './routes';
+export { Employees } from './pages/Employees';
+export { EmployeeProfile } from './pages/EmployeeProfile';
+export { EmployeeSelfService } from './pages/EmployeeSelfService';

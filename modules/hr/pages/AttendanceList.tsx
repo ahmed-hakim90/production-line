@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, Button, Badge } from '@/components/UI';
+import { Card, Button, Badge } from '../components/UI';
 import { attendanceLogService } from '../attendanceService';
 import { employeeService } from '../employeeService';
 import { exportHRData } from '@/utils/exportExcel';
@@ -166,7 +166,7 @@ export const AttendanceList: React.FC = () => {
             عرض ومراجعة وتصحيح سجلات الحضور اليومية.
           </p>
         </div>
-        {filteredLogs.length > 0 && (
+        {filteredLogs.length > 0 && can('export') && (
           <Button variant="outline" onClick={() => {
             const rows = filteredLogs.map((l) => ({
               'الموظف': getEmpName(l.employeeId),
@@ -426,3 +426,4 @@ export const AttendanceList: React.FC = () => {
     </div>
   );
 };
+

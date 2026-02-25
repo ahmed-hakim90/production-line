@@ -4,61 +4,19 @@ import './App.css';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { Login } from './pages/Login';
-import { Setup } from './pages/Setup';
-import { Dashboard } from './pages/Dashboard';
-import { Products } from './pages/Products';
-import { ProductDetails } from './pages/ProductDetails';
-import { Lines } from './pages/Lines';
-import { LineDetails } from './pages/LineDetails';
-import { Employees } from './pages/Employees';
-import { EmployeeProfile } from './pages/EmployeeProfile';
-import { Reports } from './pages/Reports';
-import { RolesManagement } from './pages/RolesManagement';
-import { Settings } from './pages/Settings';
-import { QuickAction } from './pages/QuickAction';
-import { ActivityLogPage } from './pages/ActivityLog';
-import { CostCenters } from './pages/CostCenters';
-import { CostCenterDistribution } from './pages/CostCenterDistribution';
-import { CostSettings } from './pages/CostSettings';
-import { MonthlyProductionCosts } from './pages/MonthlyProductionCosts';
-import { ProductionPlans } from './pages/ProductionPlans';
-import { WorkOrders } from './pages/WorkOrders';
-import { WorkOrderScanner } from './pages/WorkOrderScanner.tsx';
-import { EmployeeDashboard } from './pages/EmployeeDashboard';
-import { EmployeeSelfService } from './pages/EmployeeSelfService';
-import { FactoryManagerDashboard } from './pages/FactoryManagerDashboard';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { PendingApproval } from './pages/PendingApproval';
-import { AttendanceImport } from './modules/hr/pages/AttendanceImport';
-import { AttendanceList } from './modules/hr/pages/AttendanceList';
-import { LeaveRequests } from './modules/hr/pages/LeaveRequests';
-import { LoanRequests } from './modules/hr/pages/LoanRequests';
-import { ApprovalCenter } from './modules/hr/pages/ApprovalCenter';
-import { Payroll } from './modules/hr/pages/Payroll';
-import { HRSettings } from './modules/hr/pages/HRSettings';
-import { Organization } from './modules/hr/pages/Organization';
-import { HRImport } from './modules/hr/pages/HRImport';
-import { DelegationManagement } from './modules/hr/pages/DelegationManagement';
-import { HRDashboard } from './modules/hr/pages/HRDashboard';
-import { Vehicles } from './modules/hr/pages/Vehicles';
-import { EmployeeFinancials } from './modules/hr/pages/EmployeeFinancials';
-import { HRTransactions } from './modules/hr/pages/HRTransactions';
-import { QualitySettings } from './modules/quality/pages/QualitySettings.tsx';
-import { QualityWorkers } from './modules/quality/pages/QualityWorkers.tsx';
-import { Supervisors } from './pages/Supervisors';
-import { SupervisorDetails } from './pages/SupervisorDetails';
-import { ProductionWorkers } from './pages/ProductionWorkers';
-import { ProductionWorkerDetails } from './pages/ProductionWorkerDetails';
-import { LineWorkerAssignment } from './pages/LineWorkerAssignment';
-import { FinalInspection } from './modules/quality/pages/FinalInspection.tsx';
-import { IPQC } from './modules/quality/pages/IPQC.tsx';
-import { ReworkOrders } from './modules/quality/pages/ReworkOrders.tsx';
-import { CAPA } from './modules/quality/pages/CAPA.tsx';
-import { QualityReports } from './modules/quality/pages/QualityReports.tsx';
+import { Dashboard } from './modules/dashboards/pages/Dashboard';
+import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
+import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
+import { PRODUCTION_ROUTES } from './modules/production/routes';
+import { QUALITY_ROUTES } from './modules/quality/routes';
+import { HR_ROUTES } from './modules/hr/routes';
+import { COST_ROUTES } from './modules/costs/routes';
+import { SYSTEM_ROUTES } from './modules/system/routes';
+import type { AppRouteDef } from './modules/shared/routes';
 import { useAppStore } from './store/useAppStore';
 import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
+import { registerSystemEventListeners } from './shared/events';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 
@@ -96,6 +54,15 @@ const HomeRedirect: React.FC = () => {
   return <Navigate to={home} replace />;
 };
 
+const PROTECTED_ROUTES: AppRouteDef[] = [
+  ...DASHBOARD_ROUTES,
+  ...PRODUCTION_ROUTES,
+  ...QUALITY_ROUTES,
+  ...HR_ROUTES,
+  ...COST_ROUTES,
+  ...SYSTEM_ROUTES,
+];
+
 const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
   isAuthenticated,
   isPendingApproval,
@@ -115,56 +82,26 @@ const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApprov
     <Layout>
       <Routes>
         <Route path="/" element={<ProtectedRoute permission="dashboard.view"><HomeRedirect /></ProtectedRoute>} />
-        <Route path="/products" element={<ProtectedRoute permission="products.view"><Products /></ProtectedRoute>} />
-        <Route path="/products/:id" element={<ProtectedRoute permission="products.view"><ProductDetails /></ProtectedRoute>} />
-        <Route path="/lines" element={<ProtectedRoute permission="lines.view"><Lines /></ProtectedRoute>} />
-        <Route path="/lines/:id" element={<ProtectedRoute permission="lines.view"><LineDetails /></ProtectedRoute>} />
-        <Route path="/employees" element={<ProtectedRoute permission="employees.view"><Employees /></ProtectedRoute>} />
-        <Route path="/employees/import" element={<ProtectedRoute permission="employees.create"><HRImport /></ProtectedRoute>} />
-        <Route path="/employees/:id" element={<ProtectedRoute permission="employees.viewDetails"><EmployeeProfile /></ProtectedRoute>} />
-        <Route path="/line-workers" element={<ProtectedRoute permission="lineWorkers.view"><LineWorkerAssignment /></ProtectedRoute>} />
-        <Route path="/reports" element={<ProtectedRoute permission="reports.view"><Reports /></ProtectedRoute>} />
-        <Route path="/quick-action" element={<ProtectedRoute permission="quickAction.view"><QuickAction /></ProtectedRoute>} />
-        <Route path="/users" element={<Navigate to="/employees" replace />} />
-        <Route path="/supervisors" element={<ProtectedRoute permission="supervisors.view"><Supervisors /></ProtectedRoute>} />
-        <Route path="/supervisors/:id" element={<ProtectedRoute permission="supervisors.view"><SupervisorDetails /></ProtectedRoute>} />
-        <Route path="/production-workers" element={<ProtectedRoute permission="productionWorkers.view"><ProductionWorkers /></ProtectedRoute>} />
-        <Route path="/production-workers/:id" element={<ProtectedRoute permission="productionWorkers.view"><ProductionWorkerDetails /></ProtectedRoute>} />
-        <Route path="/activity-log" element={<ProtectedRoute permission="activityLog.view"><ActivityLogPage /></ProtectedRoute>} />
-        <Route path="/employee-dashboard" element={<ProtectedRoute permission="employeeDashboard.view"><EmployeeDashboard /></ProtectedRoute>} />
-        <Route path="/supervisor-dashboard" element={<Navigate to="/employee-dashboard" replace />} />
-        <Route path="/self-service" element={<ProtectedRoute permission="selfService.view"><EmployeeSelfService /></ProtectedRoute>} />
-        <Route path="/factory-dashboard" element={<ProtectedRoute permission="factoryDashboard.view"><FactoryManagerDashboard /></ProtectedRoute>} />
-        <Route path="/admin-dashboard" element={<ProtectedRoute permission="adminDashboard.view"><AdminDashboard /></ProtectedRoute>} />
-        <Route path="/production-plans" element={<ProtectedRoute permission="plans.view"><ProductionPlans /></ProtectedRoute>} />
-        <Route path="/work-orders" element={<ProtectedRoute permission="workOrders.view"><WorkOrders /></ProtectedRoute>} />
-        <Route path="/work-orders/:id/scanner" element={<ProtectedRoute permission="workOrders.view"><WorkOrderScanner /></ProtectedRoute>} />
-        <Route path="/quality/settings" element={<ProtectedRoute permission="quality.settings.view"><QualitySettings /></ProtectedRoute>} />
-        <Route path="/quality/workers" element={<ProtectedRoute permission="quality.workers.view"><QualityWorkers /></ProtectedRoute>} />
-        <Route path="/quality/final-inspection" element={<ProtectedRoute permission="quality.finalInspection.view"><FinalInspection /></ProtectedRoute>} />
-        <Route path="/quality/ipqc" element={<ProtectedRoute permission="quality.ipqc.view"><IPQC /></ProtectedRoute>} />
-        <Route path="/quality/rework" element={<ProtectedRoute permission="quality.rework.view"><ReworkOrders /></ProtectedRoute>} />
-        <Route path="/quality/capa" element={<ProtectedRoute permission="quality.capa.view"><CAPA /></ProtectedRoute>} />
-        <Route path="/quality/reports" element={<ProtectedRoute permission="quality.reports.view"><QualityReports /></ProtectedRoute>} />
-        <Route path="/cost-centers" element={<ProtectedRoute permission="costs.view"><CostCenters /></ProtectedRoute>} />
-        <Route path="/cost-centers/:id" element={<ProtectedRoute permission="costs.view"><CostCenterDistribution /></ProtectedRoute>} />
-        <Route path="/cost-settings" element={<ProtectedRoute permission="costs.manage"><CostSettings /></ProtectedRoute>} />
-        <Route path="/monthly-costs" element={<ProtectedRoute permission="costs.view"><MonthlyProductionCosts /></ProtectedRoute>} />
-        <Route path="/roles" element={<ProtectedRoute permission="roles.manage"><RolesManagement /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute permission="settings.view"><Settings /></ProtectedRoute>} />
-        <Route path="/attendance" element={<ProtectedRoute permission="attendance.view"><AttendanceList /></ProtectedRoute>} />
-        <Route path="/attendance/import" element={<ProtectedRoute permission="attendance.import"><AttendanceImport /></ProtectedRoute>} />
-        <Route path="/leave-requests" element={<ProtectedRoute permission="leave.view"><LeaveRequests /></ProtectedRoute>} />
-        <Route path="/loan-requests" element={<ProtectedRoute permission="loan.view"><LoanRequests /></ProtectedRoute>} />
-        <Route path="/approval-center" element={<ProtectedRoute permission="approval.view"><ApprovalCenter /></ProtectedRoute>} />
-        <Route path="/payroll" element={<ProtectedRoute permission="payroll.view"><Payroll /></ProtectedRoute>} />
-        <Route path="/organization" element={<ProtectedRoute permission="hrSettings.view"><Organization /></ProtectedRoute>} />
-        <Route path="/hr-dashboard" element={<ProtectedRoute permission="hrDashboard.view"><HRDashboard /></ProtectedRoute>} />
-        <Route path="/vehicles" element={<ProtectedRoute permission="vehicles.view"><Vehicles /></ProtectedRoute>} />
-        <Route path="/employee-financials" element={<ProtectedRoute permission="hrSettings.view"><EmployeeFinancials /></ProtectedRoute>} />
-        <Route path="/hr-transactions" element={<ProtectedRoute permission="hrDashboard.view"><HRTransactions /></ProtectedRoute>} />
-        <Route path="/hr-settings" element={<ProtectedRoute permission="hrSettings.view"><HRSettings /></ProtectedRoute>} />
-        <Route path="/delegations" element={<ProtectedRoute permission="approval.delegate"><DelegationManagement /></ProtectedRoute>} />
+        {PROTECTED_ROUTES.map((r) => {
+          if (r.redirectTo) {
+            return (
+              <React.Fragment key={r.path}>
+                <Route path={r.path} element={<Navigate to={r.redirectTo} replace />} />
+              </React.Fragment>
+            );
+          }
+
+          if (!r.component || !r.permission) return null;
+          const Component = r.component;
+          return (
+            <React.Fragment key={r.path}>
+              <Route
+                path={r.path}
+                element={<ProtectedRoute permission={r.permission}><Component /></ProtectedRoute>}
+              />
+            </React.Fragment>
+          );
+        })}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
@@ -191,11 +128,13 @@ const App: React.FC = () => {
         initializeApp().then(() => {
           const state = useAppStore.getState();
           if (state.isAuthenticated) {
+            const cleanupEvents = registerSystemEventListeners();
             const unsubReports = subscribeToDashboard();
             const unsubStatuses = subscribeToLineStatuses();
             const unsubWorkOrders = subscribeToWorkOrders();
             const unsubScans = subscribeToScanEventsToday();
             (window as any).__cleanupSubs = () => {
+              cleanupEvents();
               unsubReports();
               unsubStatuses();
               unsubWorkOrders();
@@ -228,22 +167,18 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <Routes>
-        {/* Public: Setup (first-time only) */}
-        <Route path="/setup" element={<Setup />} />
-
-        {/* Public: Login */}
-        <Route path="/login" element={
-          isAuthenticated
-            ? (isPendingApproval ? <Navigate to="/pending" replace /> : <LoginRedirect />)
-            : <Login />
-        } />
-
-        {/* Pending Approval */}
-        <Route path="/pending" element={
-          !isAuthenticated ? <Navigate to="/login" replace />
-            : isPendingApproval ? <PendingApproval />
-            : <LoginRedirect />
-        } />
+        {AUTH_PUBLIC_ROUTES.map((r) => (
+          <React.Fragment key={r.path}>
+            <Route
+              path={r.path}
+              element={r.resolveElement({
+                isAuthenticated,
+                isPendingApproval,
+                loginRedirectElement: <LoginRedirect />,
+              })}
+            />
+          </React.Fragment>
+        ))}
 
         {/* Protected: All app routes inside Layout */}
         <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />

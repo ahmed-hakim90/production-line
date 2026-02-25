@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '@/components/UI';
+import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { leaveRequestService, leaveBalanceService } from '../leaveService';
@@ -180,12 +180,12 @@ export const LeaveRequests: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {requests.length > 0 && (
+          {requests.length > 0 && can('export') && (
             <Button variant="outline" onClick={() => {
               const rows = requests.map((r) => ({
                 'الموظف': getEmpName(r.employeeId),
                 'النوع': LEAVE_TYPE_LABELS[r.leaveType],
-                'من': r.startDate,
+                '8&8 ': r.startDate,
                 'إلى': r.endDate,
                 'الأيام': r.totalDays,
                 'تؤثر على الراتب': r.affectsSalary ? 'نعم' : 'لا',
@@ -370,7 +370,7 @@ export const LeaveRequests: React.FC = () => {
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
                   {isHR && <th className="text-right py-3 px-3">الموظف</th>}
                   <th className="text-right py-3 px-3">النوع</th>
-                  <th className="text-right py-3 px-3">من</th>
+                  <th className="text-right py-3 px-3">8&8 </th>
                   <th className="text-right py-3 px-3">إلى</th>
                   <th className="text-right py-3 px-3">الأيام</th>
                   <th className="text-right py-3 px-3">تؤثر على الراتب</th>
@@ -464,3 +464,4 @@ export const LeaveRequests: React.FC = () => {
     </div>
   );
 };
+

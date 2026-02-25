@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Card } from '@/components/UI';
+import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import type { QualityReworkOrder } from '@/types';
@@ -112,3 +112,4 @@ export const ReworkOrders: React.FC = () => {
     </div>
   );
 };
+

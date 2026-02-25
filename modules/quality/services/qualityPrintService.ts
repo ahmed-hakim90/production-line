@@ -1,5 +1,6 @@
 import { addDoc, serverTimestamp } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { activityLogService } from '@/services/activityLogService';
 import { exportToPDF } from '@/utils/reportExport';
 import { qualityPrintLogsRef } from '../collections';
 
@@ -20,5 +21,10 @@ export const qualityPrintService = {
       workOrderId: workOrderId ?? null,
       printedAt: serverTimestamp(),
     });
+    await activityLogService.logCurrentUser(
+      'QUALITY_EXPORT_DOCUMENT',
+      `تصدير تقرير جودة (${type})`,
+      { type, fileName, workOrderId: workOrderId ?? null },
+    );
   },
 };

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card, LoadingSkeleton } from '@/components/UI';
+import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { qualitySettingsService } from '../services/qualitySettingsService';
@@ -766,4 +766,5 @@ export const QualitySettings: React.FC = () => {
     </div>
   );
 };
+
 
