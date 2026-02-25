@@ -12,6 +12,7 @@ import { workOrderService } from '../services/workOrderService';
 import { scanEventService } from '../services/scanEventService';
 import { estimateReportCost, formatCost } from '../utils/costCalculations';
 import type { WorkOrder, WorkOrderStatus } from '../types';
+import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 
 const STATUS_CONFIG: Record<WorkOrderStatus, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' }> = {
   pending: { label: 'قيد الانتظار', variant: 'info' },
@@ -252,6 +253,12 @@ export const WorkOrders: React.FC = () => {
       return;
     }
 
+    const qualityPolicies = await qualitySettingsService.getPolicies();
+    if (qualityPolicies.closeRequiresQualityApproval && wo.qualityStatus !== 'approved') {
+      window.alert('لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة.');
+      return;
+    }
+
     const scanSummary = await scanEventService.buildWorkOrderSummary(wo.id!);
     if (scanSummary.openSessions.length > 0) {
       const shouldClose = window.confirm(
@@ -293,6 +300,11 @@ export const WorkOrders: React.FC = () => {
     if (!closingWorkOrder) return;
     setClosingBusy(true);
     try {
+      const qualityPolicies = await qualitySettingsService.getPolicies();
+      if (qualityPolicies.closeRequiresQualityApproval && closingWorkOrder.qualityStatus !== 'approved') {
+        window.alert('لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة.');
+        return;
+      }
       const scanSummary = await scanEventService.buildWorkOrderSummary(closingWorkOrder.id!);
       await updateWorkOrder(closingWorkOrder.id!, {
         status: 'completed',

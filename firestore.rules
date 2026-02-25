@@ -350,6 +350,61 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ── Quality: Settings ──────────────────────────────────────────────────
+    match /quality_settings/{docId} {
+      allow read: if hasPermission('quality.settings.view');
+      allow create, update: if hasPermission('quality.settings.manage');
+      allow delete: if isAdmin();
+    }
+
+    // ── Quality: Reason Catalog ────────────────────────────────────────────
+    match /quality_reason_catalog/{docId} {
+      allow read: if hasPermission('quality.settings.view') || hasPermission('quality.finalInspection.view') || hasPermission('quality.ipqc.view');
+      allow create, update, delete: if hasPermission('quality.settings.manage');
+    }
+
+    // ── Quality: Worker Assignments ────────────────────────────────────────
+    match /quality_workers_assignments/{docId} {
+      allow read: if hasPermission('quality.workers.view');
+      allow create, update, delete: if hasPermission('quality.workers.manage');
+    }
+
+    // ── Quality: Inspections ───────────────────────────────────────────────
+    match /quality_inspections/{docId} {
+      allow read: if hasPermission('quality.finalInspection.view') || hasPermission('quality.ipqc.view') || hasPermission('quality.reports.view');
+      allow create: if hasPermission('quality.finalInspection.inspect') || hasPermission('quality.ipqc.inspect');
+      allow update: if hasPermission('quality.finalInspection.inspect') || hasPermission('quality.ipqc.inspect') || hasPermission('quality.approve');
+      allow delete: if isAdmin();
+    }
+
+    // ── Quality: Defects ───────────────────────────────────────────────────
+    match /quality_defects/{docId} {
+      allow read: if hasPermission('quality.finalInspection.view') || hasPermission('quality.ipqc.view') || hasPermission('quality.reports.view');
+      allow create, update: if hasPermission('quality.finalInspection.inspect') || hasPermission('quality.ipqc.inspect') || hasPermission('quality.rework.manage');
+      allow delete: if isAdmin();
+    }
+
+    // ── Quality: Rework Orders ─────────────────────────────────────────────
+    match /quality_rework_orders/{docId} {
+      allow read: if hasPermission('quality.rework.view') || hasPermission('quality.reports.view');
+      allow create, update: if hasPermission('quality.rework.manage');
+      allow delete: if isAdmin();
+    }
+
+    // ── Quality: CAPA ──────────────────────────────────────────────────────
+    match /quality_capa/{docId} {
+      allow read: if hasPermission('quality.capa.view') || hasPermission('quality.reports.view');
+      allow create, update: if hasPermission('quality.capa.manage');
+      allow delete: if isAdmin();
+    }
+
+    // ── Quality: Print Logs ────────────────────────────────────────────────
+    match /quality_print_logs/{docId} {
+      allow read: if hasPermission('quality.reports.view');
+      allow create: if hasPermission('quality.print');
+      allow update, delete: if false;
+    }
+
     // ── Catch-all: deny everything else ───────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

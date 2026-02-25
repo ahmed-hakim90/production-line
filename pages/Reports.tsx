@@ -672,6 +672,20 @@ export const Reports: React.FC = () => {
     </div>
   );
 
+  const qualityReportRows = useMemo(
+    () =>
+      workOrders
+        .filter((wo) => !!wo.qualitySummary)
+        .slice()
+        .sort((a, b) => {
+          const aMs = a.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.() ?? new Date(a.qualityApprovedAt || 0).getTime();
+          const bMs = b.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.() ?? new Date(b.qualityApprovedAt || 0).getTime();
+          return (bMs || 0) - (aMs || 0);
+        })
+        .slice(0, 8),
+    [workOrders],
+  );
+
   return (
     <div className="space-y-6">
       {/* Hidden file input */}
@@ -690,6 +704,12 @@ export const Reports: React.FC = () => {
           <p className="text-sm text-slate-500 font-medium">إنشاء ومراجعة تقارير الإنتاج اليومية.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {can("quality.reports.view") && (
+            <Button variant="outline" onClick={() => window.location.hash = '#/quality/reports'}>
+              <span className="material-icons-round text-sm">verified</span>
+              <span className="hidden sm:inline">تقارير الجودة</span>
+            </Button>
+          )}
           {displayedReports.length > 0 && can("export") && (
             <>
               <Button
@@ -755,6 +775,49 @@ export const Reports: React.FC = () => {
           <span className="material-icons-round text-rose-500">warning</span>
           <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
         </div>
+      )}
+
+      {can('quality.reports.view') && (
+        <Card title="ملخص تقارير الجودة (آخر أوامر الشغل)">
+          {qualityReportRows.length === 0 ? (
+            <p className="text-sm text-slate-500">لا توجد تقارير جودة مرتبطة بأوامر الشغل حاليًا.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                    <th className="text-right py-2 px-2">أمر الشغل</th>
+                    <th className="text-right py-2 px-2">الحالة</th>
+                    <th className="text-right py-2 px-2">Inspected</th>
+                    <th className="text-right py-2 px-2">Failed</th>
+                    <th className="text-right py-2 px-2">Rework</th>
+                    <th className="text-right py-2 px-2">FPY</th>
+                    <th className="text-right py-2 px-2">Defect Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {qualityReportRows.map((wo) => (
+                    <tr key={wo.id} className="border-b border-slate-100 dark:border-slate-800">
+                      <td className="py-2 px-2 font-bold">#{wo.workOrderNumber}</td>
+                      <td className="py-2 px-2">{wo.qualityStatus ?? 'pending'}</td>
+                      <td className="py-2 px-2">{wo.qualitySummary?.inspectedUnits ?? 0}</td>
+                      <td className="py-2 px-2">{wo.qualitySummary?.failedUnits ?? 0}</td>
+                      <td className="py-2 px-2">{wo.qualitySummary?.reworkUnits ?? 0}</td>
+                      <td className="py-2 px-2">{wo.qualitySummary?.firstPassYield ?? 0}%</td>
+                      <td className="py-2 px-2">{wo.qualitySummary?.defectRate ?? 0}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="mt-3 flex justify-end">
+            <Button variant="outline" onClick={() => (window.location.hash = '#/quality/reports')}>
+              <span className="material-icons-round text-sm">open_in_new</span>
+              <span>فتح تقارير الجودة التفصيلية</span>
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* WhatsApp Share Feedback Toast */}

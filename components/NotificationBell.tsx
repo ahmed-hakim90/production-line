@@ -7,12 +7,16 @@ const TYPE_ICONS: Record<string, string> = {
   work_order_assigned: 'assignment',
   work_order_updated: 'edit_note',
   work_order_completed: 'check_circle',
+  quality_report_created: 'verified',
+  quality_report_updated: 'rule',
 };
 
 const TYPE_COLORS: Record<string, string> = {
   work_order_assigned: 'text-blue-500',
   work_order_updated: 'text-amber-500',
   work_order_completed: 'text-emerald-500',
+  quality_report_created: 'text-violet-500',
+  quality_report_updated: 'text-cyan-500',
 };
 
 function timeAgo(createdAt: any): string {
@@ -74,6 +78,11 @@ export const NotificationBell: React.FC = () => {
     if (n.referenceId && n.type.startsWith('work_order')) {
       setOpen(false);
       navigate(`/work-orders?highlight=${n.referenceId}`);
+      return;
+    }
+    if (n.type.startsWith('quality_report')) {
+      setOpen(false);
+      navigate('/quality/reports');
     }
   }, [markNotificationRead, navigate]);
 

@@ -147,19 +147,6 @@ export const employeeAllowanceService = {
     return { id: snap.id, ...snap.data() } as FirestoreEmployeeAllowance;
   },
 
-  async getAll(): Promise<FirestoreEmployeeAllowance[]> {
-    if (!isConfigured) return [];
-    try {
-      const q = query(employeeAllowancesRef(), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployeeAllowance));
-    } catch {
-      const snap = await getDocs(employeeAllowancesRef());
-      const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployeeAllowance));
-      results.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-      return results;
-    }
-  },
 };
 
 // ─── Deductions ──────────────────────────────────────────────────────────────
@@ -286,19 +273,6 @@ export const employeeDeductionService = {
     return { id: snap.id, ...snap.data() } as FirestoreEmployeeDeduction;
   },
 
-  async getAll(): Promise<FirestoreEmployeeDeduction[]> {
-    if (!isConfigured) return [];
-    try {
-      const q = query(employeeDeductionsRef(), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployeeDeduction));
-    } catch {
-      const snap = await getDocs(employeeDeductionsRef());
-      const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployeeDeduction));
-      results.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-      return results;
-    }
-  },
 };
 
 // ─── Aggregation Helpers (consumed by Payroll Engine & Live Preview) ────────

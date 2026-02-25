@@ -530,7 +530,12 @@ export const AdminDashboard: React.FC = () => {
   }, [costCenters, costCenterValues, costAllocations]);
 
   const liveScanKpis = useMemo(() => {
-    const summaries = Object.entries(liveProduction);
+    const activeWorkOrderIds = new Set(
+      workOrders
+        .map((wo) => wo.id)
+        .filter((id): id is string => !!id),
+    );
+    const summaries = Object.entries(liveProduction).filter(([woId]) => activeWorkOrderIds.has(woId));
     const totals = summaries.reduce(
       (acc, [, s]) => {
         acc.completedUnits += s.completedUnits || 0;
@@ -580,6 +585,38 @@ export const AdminDashboard: React.FC = () => {
       hotLineProduct: hottest ? `${hottest.line} — ${hottest.product}` : '—',
     };
   }, [liveProduction, workOrders, _rawLines, _rawProducts]);
+
+  const qualityKpis = useMemo(() => {
+    const active = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed');
+    const totals = active.reduce(
+      (acc, wo) => {
+        const summary = wo.qualitySummary;
+        if (!summary) return acc;
+        acc.inspected += summary.inspectedUnits || 0;
+        acc.failed += summary.failedUnits || 0;
+        acc.rework += summary.reworkUnits || 0;
+        acc.fpyTotal += summary.firstPassYield || 0;
+        acc.fpyCount += 1;
+        return acc;
+      },
+      { inspected: 0, failed: 0, rework: 0, fpyTotal: 0, fpyCount: 0 },
+    );
+
+    const defectRate = totals.inspected > 0
+      ? Number((((totals.failed + totals.rework) / totals.inspected) * 100).toFixed(2))
+      : 0;
+    const avgFpy = totals.fpyCount > 0 ? Number((totals.fpyTotal / totals.fpyCount).toFixed(2)) : 0;
+    const pendingQuality = active.filter((wo) => wo.qualityStatus && wo.qualityStatus !== 'approved').length;
+
+    return {
+      inspected: totals.inspected,
+      failed: totals.failed,
+      rework: totals.rework,
+      defectRate,
+      avgFpy,
+      pendingQuality,
+    };
+  }, [workOrders]);
 
   // ── Product Summary (products worked on during the period) ────────────────
 
@@ -956,6 +993,21 @@ export const AdminDashboard: React.FC = () => {
         <p className="text-xs text-slate-500 mt-4">
           أعلى نشاط حالي: <span className="font-bold text-slate-700 dark:text-slate-300">{liveScanKpis.hotLineProduct}</span>
         </p>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="material-icons-round text-violet-500">verified</span>
+          <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" />
+          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
+          <KPIBox label="Defect Rate" value={qualityKpis.defectRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
+          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" />
+          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
+        </div>
       </Card>
 {/* ── Active Work Orders (same visual style) ─────────────────────────── */}
 {(() => {

@@ -44,11 +44,18 @@ import { HRDashboard } from './modules/hr/pages/HRDashboard';
 import { Vehicles } from './modules/hr/pages/Vehicles';
 import { EmployeeFinancials } from './modules/hr/pages/EmployeeFinancials';
 import { HRTransactions } from './modules/hr/pages/HRTransactions';
+import { QualitySettings } from './modules/quality/pages/QualitySettings.tsx';
+import { QualityWorkers } from './modules/quality/pages/QualityWorkers.tsx';
 import { Supervisors } from './pages/Supervisors';
 import { SupervisorDetails } from './pages/SupervisorDetails';
 import { ProductionWorkers } from './pages/ProductionWorkers';
 import { ProductionWorkerDetails } from './pages/ProductionWorkerDetails';
 import { LineWorkerAssignment } from './pages/LineWorkerAssignment';
+import { FinalInspection } from './modules/quality/pages/FinalInspection.tsx';
+import { IPQC } from './modules/quality/pages/IPQC.tsx';
+import { ReworkOrders } from './modules/quality/pages/ReworkOrders.tsx';
+import { CAPA } from './modules/quality/pages/CAPA.tsx';
+import { QualityReports } from './modules/quality/pages/QualityReports.tsx';
 import { useAppStore } from './store/useAppStore';
 import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
@@ -132,6 +139,13 @@ const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApprov
         <Route path="/production-plans" element={<ProtectedRoute permission="plans.view"><ProductionPlans /></ProtectedRoute>} />
         <Route path="/work-orders" element={<ProtectedRoute permission="workOrders.view"><WorkOrders /></ProtectedRoute>} />
         <Route path="/work-orders/:id/scanner" element={<ProtectedRoute permission="workOrders.view"><WorkOrderScanner /></ProtectedRoute>} />
+        <Route path="/quality/settings" element={<ProtectedRoute permission="quality.settings.view"><QualitySettings /></ProtectedRoute>} />
+        <Route path="/quality/workers" element={<ProtectedRoute permission="quality.workers.view"><QualityWorkers /></ProtectedRoute>} />
+        <Route path="/quality/final-inspection" element={<ProtectedRoute permission="quality.finalInspection.view"><FinalInspection /></ProtectedRoute>} />
+        <Route path="/quality/ipqc" element={<ProtectedRoute permission="quality.ipqc.view"><IPQC /></ProtectedRoute>} />
+        <Route path="/quality/rework" element={<ProtectedRoute permission="quality.rework.view"><ReworkOrders /></ProtectedRoute>} />
+        <Route path="/quality/capa" element={<ProtectedRoute permission="quality.capa.view"><CAPA /></ProtectedRoute>} />
+        <Route path="/quality/reports" element={<ProtectedRoute permission="quality.reports.view"><QualityReports /></ProtectedRoute>} />
         <Route path="/cost-centers" element={<ProtectedRoute permission="costs.view"><CostCenters /></ProtectedRoute>} />
         <Route path="/cost-centers/:id" element={<ProtectedRoute permission="costs.view"><CostCenterDistribution /></ProtectedRoute>} />
         <Route path="/cost-settings" element={<ProtectedRoute permission="costs.manage"><CostSettings /></ProtectedRoute>} />

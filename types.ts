@@ -233,6 +233,10 @@ export interface WorkOrder {
   actualProducedFromScans?: number;
   scanSummary?: WorkOrderLiveSummary;
   scanSessionClosedAt?: any;
+  qualityStatus?: QualityStatus;
+  qualitySummary?: WorkOrderQualitySummary;
+  qualityApprovedBy?: string;
+  qualityApprovedAt?: any;
   createdBy: string;
   createdAt?: any;
   completedAt?: any;
@@ -268,6 +272,145 @@ export interface WorkOrderScanSession {
   status: WorkOrderScanSessionStatus;
 }
 
+export type QualityInspectionType = 'final' | 'ipqc';
+export type QualityInspectionStatus =
+  | 'pending'
+  | 'passed'
+  | 'failed'
+  | 'rework'
+  | 'approved'
+  | 'rejected';
+
+export interface QualityInspection {
+  id?: string;
+  workOrderId: string;
+  lineId: string;
+  productId: string;
+  sessionId?: string;
+  serialBarcode?: string;
+  type: QualityInspectionType;
+  status: QualityInspectionStatus;
+  inspectedBy: string;
+  inspectedAt: any;
+  approvedBy?: string;
+  approvedAt?: any;
+  notes?: string;
+}
+
+export type QualityDefectSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface QualityDefect {
+  id?: string;
+  workOrderId: string;
+  inspectionId: string;
+  lineId: string;
+  productId: string;
+  sessionId?: string;
+  serialBarcode?: string;
+  reasonCode: string;
+  reasonLabel: string;
+  severity: QualityDefectSeverity;
+  quantity: number;
+  status: 'open' | 'reworked' | 'scrap' | 'closed';
+  createdBy: string;
+  createdAt: any;
+  notes?: string;
+}
+
+export interface QualityReasonCatalogItem {
+  id?: string;
+  code: string;
+  labelAr: string;
+  category: string;
+  severityDefault: QualityDefectSeverity;
+  isActive: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface QualityWorkerAssignment {
+  id?: string;
+  employeeId: string;
+  qualityRole: 'inspector' | 'senior' | 'lead' | 'manager';
+  activeLines?: string[];
+  activeProducts?: string[];
+  isActive: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface QualityReworkOrder {
+  id?: string;
+  workOrderId: string;
+  defectId: string;
+  sessionId?: string;
+  serialBarcode?: string;
+  status: 'open' | 'in_progress' | 'done' | 'scrap';
+  assignedTo?: string;
+  notes?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface QualityCAPA {
+  id?: string;
+  workOrderId?: string;
+  defectId?: string;
+  reasonCode: string;
+  title: string;
+  actionPlan: string;
+  ownerId: string;
+  dueDate?: string;
+  status: 'open' | 'in_progress' | 'done' | 'closed';
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface QualityInspectionTemplate {
+  id: string;
+  name: string;
+  productId?: string;
+  lineId?: string;
+  checklist: string[];
+  criticalChecks: string[];
+  isActive: boolean;
+}
+
+export interface QualitySamplingPlan {
+  id: string;
+  productId?: string;
+  lineId?: string;
+  frequencyMinutes: number;
+  sampleSize: number;
+  isActive: boolean;
+}
+
+export interface QualityReworkPolicySettings {
+  autoCreateReworkOnFail: boolean;
+  allowDirectScrap: boolean;
+  requireCapaForCritical: boolean;
+}
+
+export interface QualityPrintTemplateSettings {
+  headerText: string;
+  footerText: string;
+  showSignatureInspector: boolean;
+  showSignatureSupervisor: boolean;
+  showSignatureQualityManager: boolean;
+}
+
+export interface QualityPolicySettings {
+  closeRequiresQualityApproval: boolean;
+}
+
+export interface QualitySettingsDocument {
+  closeRequiresQualityApproval: boolean;
+  inspectionTemplates: QualityInspectionTemplate[];
+  samplingPlans: QualitySamplingPlan[];
+  reworkPolicies: QualityReworkPolicySettings;
+  printTemplates: QualityPrintTemplateSettings;
+}
+
 export interface WorkOrderLiveSummary {
   completedUnits: number;
   inProgressUnits: number;
@@ -276,12 +419,27 @@ export interface WorkOrderLiveSummary {
   lastScanAt?: any;
 }
 
+export type QualityStatus = 'pending' | 'approved' | 'rejected' | 'not_required';
+
+export interface WorkOrderQualitySummary {
+  inspectedUnits: number;
+  passedUnits: number;
+  failedUnits: number;
+  reworkUnits: number;
+  defectRate: number;
+  firstPassYield: number;
+  lastInspectionAt?: any;
+  topDefectReason?: string;
+}
+
 // ─── Notifications ───────────────────────────────────────────────────────────
 
 export type NotificationType =
   | 'work_order_assigned'
   | 'work_order_updated'
-  | 'work_order_completed';
+  | 'work_order_completed'
+  | 'quality_report_created'
+  | 'quality_report_updated';
 
 export interface AppNotification {
   id?: string;

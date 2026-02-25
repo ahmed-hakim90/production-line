@@ -80,6 +80,15 @@ const ALL_COLLECTIONS = [
   // HR Config collections
   'hr_config_modules',
   'hr_config_audit_logs',
+  // Quality module collections
+  'quality_settings',
+  'quality_reason_catalog',
+  'quality_workers_assignments',
+  'quality_inspections',
+  'quality_defects',
+  'quality_rework_orders',
+  'quality_capa',
+  'quality_print_logs',
 ] as const;
 
 const SETTINGS_COLLECTIONS = [
@@ -97,6 +106,8 @@ const SETTINGS_COLLECTIONS = [
   'departments',
   'job_positions',
   'approval_settings',
+  'quality_settings',
+  'quality_reason_catalog',
 ] as const;
 
 export type RestoreMode = 'merge' | 'replace' | 'full_reset';

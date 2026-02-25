@@ -44,6 +44,7 @@ import {
 import { productService } from '../services/productService';
 import { lineService } from '../services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
+import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 import { reportService } from '../services/reportService';
 import { lineStatusService } from '../services/lineStatusService';
 import { lineProductConfigService } from '../services/lineProductConfigService';
@@ -950,6 +951,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateWorkOrder: async (id, data) => {
     try {
       const existing = get().workOrders.find((w) => w.id === id);
+      if (data.status === 'completed' && existing) {
+        const policies = await qualitySettingsService.getPolicies();
+        if (
+          policies.closeRequiresQualityApproval &&
+          existing.qualityStatus !== 'approved' &&
+          existing.qualityStatus !== 'not_required'
+        ) {
+          set({
+            error: 'لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة (Policy: closeRequiresQualityApproval).',
+          });
+          return;
+        }
+      }
       await workOrderService.update(id, data);
       await get().fetchWorkOrders();
       if (existing?.supervisorId && data.status !== existing.status) {
@@ -1437,8 +1451,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   subscribeToScanEventsToday: () => {
     const today = getTodayDateString();
     return scanEventService.subscribeLiveToday(today, (events) => {
+      const validWorkOrderIds = new Set(
+        get().workOrders
+          .map((order) => order.id)
+          .filter((id): id is string => !!id),
+      );
+      const normalizedEvents = validWorkOrderIds.size > 0
+        ? events.filter((evt) => validWorkOrderIds.has(evt.workOrderId))
+        : events;
+
       const byWorkOrder = new Map<string, WorkOrderScanEvent[]>();
-      for (const evt of events) {
+      for (const evt of normalizedEvents) {
         const arr = byWorkOrder.get(evt.workOrderId) ?? [];
         arr.push(evt);
         byWorkOrder.set(evt.workOrderId, arr);
@@ -1450,7 +1473,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         liveProduction[workOrderId] = scanEventService.summaryFromSessions(sessions);
       });
 
-      set({ scanEventsToday: events, liveProduction });
+      set({ scanEventsToday: normalizedEvents, liveProduction });
     });
   },
 

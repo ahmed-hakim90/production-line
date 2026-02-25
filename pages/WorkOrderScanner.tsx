@@ -4,6 +4,7 @@ import { Badge, Button, Card, KPIBox } from '../components/UI';
 import { useShallowStore } from '../store/useAppStore';
 import { scanEventService } from '../services/scanEventService';
 import { formatNumber } from '../utils/calculations';
+import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 
 const formatTs = (ts: any) => {
   if (!ts) return '—';
@@ -128,6 +129,10 @@ export const WorkOrderScanner: React.FC = () => {
 
   const handleScan = async (rawCode: string) => {
     if (!workOrder || !workOrderId) return;
+    if (workOrder.status === 'completed') {
+      setScanError('تم إغلاق أمر الشغل — المسح غير متاح');
+      return;
+    }
     const code = rawCode.trim();
     if (!code) return;
 
@@ -188,6 +193,12 @@ export const WorkOrderScanner: React.FC = () => {
     setScanMsg(null);
     setScanError(null);
     try {
+      const qualityPolicies = await qualitySettingsService.getPolicies();
+      if (qualityPolicies.closeRequiresQualityApproval && workOrder.qualityStatus !== 'approved') {
+        setScanError('لا يمكن إنهاء أمر الشغل قبل اعتماد الجودة');
+        playFeedbackTone('error');
+        return;
+      }
       const latest = await scanEventService.buildWorkOrderSummary(workOrderId);
       const scannedQty = latest.summary.completedUnits || 0;
       const parsedConfirmedQty = Number(closeConfirmedQty);
@@ -223,6 +234,8 @@ export const WorkOrderScanner: React.FC = () => {
   }, [closeConfirmedQty, closeWorkers, playFeedbackTone, updateWorkOrder, workOrder, workOrderId]);
 
   useEffect(() => {
+    if (workOrder?.status === 'completed') return;
+
     const flushBuffer = () => {
       const code = scanBufferRef.current.trim();
       scanBufferRef.current = '';
@@ -255,7 +268,7 @@ export const WorkOrderScanner: React.FC = () => {
       window.removeEventListener('keydown', onKeyDown);
       if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
     };
-  }, [busy, handleScan]);
+  }, [busy, handleScan, workOrder?.status]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -314,34 +327,38 @@ export const WorkOrderScanner: React.FC = () => {
       </div>
 
       <Card>
-        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-          <div className="flex-1">
-            <label className="block text-xs font-bold text-slate-500 mb-1">باركود القطعة (Serial)</label>
-            <input
-              ref={inputRef}
-              type="text"
-              value={serialInput}
-              onChange={(e) => setSerialInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && serialInput.trim() && !busy) {
-                  handleScan(serialInput);
-                }
-              }}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-              placeholder="امسح أو أدخل السيريال ثم Enter"
-              autoFocus
-              onBlur={() => {
-                setTimeout(() => inputRef.current?.focus(), 0);
-              }}
-            />
+        {workOrder.status !== 'completed' ? (
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-slate-500 mb-1">باركود القطعة (Serial)</label>
+              <input
+                ref={inputRef}
+                type="text"
+                value={serialInput}
+                onChange={(e) => setSerialInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && serialInput.trim() && !busy) {
+                    handleScan(serialInput);
+                  }
+                }}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                placeholder="امسح أو أدخل السيريال ثم Enter"
+                autoFocus
+                onBlur={() => {
+                  setTimeout(() => inputRef.current?.focus(), 0);
+                }}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button variant="primary" onClick={() => handleScan(serialInput)} disabled={busy || !serialInput.trim()}>
+                {busy && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                تسجيل الاسكان
+              </Button>
+            </div>
           </div>
-          <div className="flex items-end gap-2">
-            <Button variant="primary" onClick={() => handleScan(serialInput)} disabled={busy || !serialInput.trim()}>
-              {busy && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              تسجيل الاسكان
-            </Button>
-          </div>
-        </div>
+        ) : (
+          <p className="text-sm font-bold text-slate-500">تم إغلاق أمر الشغل — عرض السجل فقط.</p>
+        )}
         {scanMsg && (
           <p className="mt-3 text-sm font-bold text-emerald-600">{scanMsg}</p>
         )}
@@ -389,19 +406,23 @@ export const WorkOrderScanner: React.FC = () => {
                     {session.cycleSeconds ? `${formatNumber(session.cycleSeconds)} ث` : '—'}
                   </td>
                   <td className="py-3 px-3">
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteSession(session.sessionId)}
-                      disabled={deletingSessionId === session.sessionId}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-60 transition-colors"
-                    >
-                      {deletingSessionId === session.sessionId ? (
-                        <span className="material-icons-round animate-spin text-sm">refresh</span>
-                      ) : (
-                        <span className="material-icons-round text-sm">delete</span>
-                      )}
-                      إزالة
-                    </button>
+                    {workOrder.status !== 'completed' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSession(session.sessionId)}
+                        disabled={deletingSessionId === session.sessionId}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-60 transition-colors"
+                      >
+                        {deletingSessionId === session.sessionId ? (
+                          <span className="material-icons-round animate-spin text-sm">refresh</span>
+                        ) : (
+                          <span className="material-icons-round text-sm">delete</span>
+                        )}
+                        إزالة
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400 font-bold">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

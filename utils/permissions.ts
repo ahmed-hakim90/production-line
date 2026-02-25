@@ -31,6 +31,14 @@ export type Permission =
   | 'costs.view' | 'costs.manage' | 'costs.closePeriod'
   | 'plans.view' | 'plans.create' | 'plans.edit'
   | 'workOrders.view' | 'workOrders.create' | 'workOrders.edit' | 'workOrders.delete' | 'workOrders.viewCost'
+  | 'quality.view' | 'quality.inspect' | 'quality.approve' | 'quality.print' | 'quality.manageWorkers'
+  | 'quality.settings.view' | 'quality.settings.manage'
+  | 'quality.workers.view' | 'quality.workers.manage'
+  | 'quality.finalInspection.view' | 'quality.finalInspection.inspect'
+  | 'quality.ipqc.view' | 'quality.ipqc.inspect'
+  | 'quality.rework.view' | 'quality.rework.manage'
+  | 'quality.capa.view' | 'quality.capa.manage'
+  | 'quality.reports.view'
   | 'employeeDashboard.view'
   | 'selfService.view'
   | 'factoryDashboard.view'
@@ -205,6 +213,30 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    key: 'quality',
+    label: 'الجودة',
+    permissions: [
+      { key: 'quality.view', label: 'عرض الجودة' },
+      { key: 'quality.inspect', label: 'تنفيذ الفحص' },
+      { key: 'quality.approve', label: 'اعتماد الجودة' },
+      { key: 'quality.print', label: 'طباعة مستندات الجودة' },
+      { key: 'quality.manageWorkers', label: 'إدارة عمال الجودة' },
+      { key: 'quality.settings.view', label: 'عرض إعدادات الجودة' },
+      { key: 'quality.settings.manage', label: 'إدارة إعدادات الجودة' },
+      { key: 'quality.workers.view', label: 'عرض عمال الجودة' },
+      { key: 'quality.workers.manage', label: 'إدارة عمال الجودة' },
+      { key: 'quality.finalInspection.view', label: 'عرض الفحص النهائي' },
+      { key: 'quality.finalInspection.inspect', label: 'تنفيذ الفحص النهائي' },
+      { key: 'quality.ipqc.view', label: 'عرض IPQC' },
+      { key: 'quality.ipqc.inspect', label: 'تنفيذ IPQC' },
+      { key: 'quality.rework.view', label: 'عرض إعادة التشغيل' },
+      { key: 'quality.rework.manage', label: 'إدارة إعادة التشغيل' },
+      { key: 'quality.capa.view', label: 'عرض CAPA' },
+      { key: 'quality.capa.manage', label: 'إدارة CAPA' },
+      { key: 'quality.reports.view', label: 'عرض تقارير الجودة' },
+    ],
+  },
+  {
     key: 'attendance',
     label: 'الحضور والانصراف',
     permissions: [
@@ -355,6 +387,13 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { path: '/supervisors', icon: 'engineering', label: 'المشرفين', permission: 'supervisors.view' },
       { path: '/production-workers', icon: 'construction', label: 'عمال الإنتاج', permission: 'productionWorkers.view' },
       { path: '/reports', icon: 'bar_chart', label: 'التقارير', permission: 'reports.view' },
+      { path: '/quality/settings', icon: 'tune', label: 'إعدادات الجودة', permission: 'quality.settings.view' },
+      { path: '/quality/workers', icon: 'groups', label: 'عمال الجودة', permission: 'quality.workers.view' },
+      { path: '/quality/final-inspection', icon: 'task_alt', label: 'الفحص النهائي', permission: 'quality.finalInspection.view' },
+      { path: '/quality/ipqc', icon: 'rule', label: 'IPQC', permission: 'quality.ipqc.view' },
+      { path: '/quality/rework', icon: 'build', label: 'إعادة التشغيل', permission: 'quality.rework.view' },
+      { path: '/quality/capa', icon: 'fact_check', label: 'CAPA', permission: 'quality.capa.view' },
+      { path: '/quality/reports', icon: 'print', label: 'تقارير الجودة', permission: 'quality.reports.view' },
       { path: '/quick-action', icon: 'bolt', label: 'إدخال سريع', permission: 'quickAction.view' },
     ],
   },
@@ -386,6 +425,14 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { path: '/cost-centers', icon: 'account_balance', label: 'مراكز التكلفة', permission: 'costs.view' },
       { path: '/cost-settings', icon: 'payments', label: 'إعدادات التكلفة', permission: 'costs.manage' },
+    ],
+  },
+  {
+    key: 'quality',
+    label: 'الجودة',
+    items: [
+      { path: '/quality/settings', icon: 'tune', label: 'إعدادات الجودة', permission: 'quality.settings.view' },
+      { path: '/quality/workers', icon: 'groups', label: 'عمال الجودة', permission: 'quality.workers.view' },
     ],
   },
   {
@@ -426,6 +473,13 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/work-orders': 'workOrders.view',
   '/factory-dashboard': 'factoryDashboard.view',
   '/admin-dashboard': 'adminDashboard.view',
+  '/quality/settings': 'quality.settings.view',
+  '/quality/workers': 'quality.workers.view',
+  '/quality/final-inspection': 'quality.finalInspection.view',
+  '/quality/ipqc': 'quality.ipqc.view',
+  '/quality/rework': 'quality.rework.view',
+  '/quality/capa': 'quality.capa.view',
+  '/quality/reports': 'quality.reports.view',
   '/cost-centers': 'costs.view',
   '/cost-centers/:id': 'costs.view',
   '/cost-settings': 'costs.manage',
