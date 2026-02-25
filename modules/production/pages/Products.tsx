@@ -12,6 +12,9 @@ import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
 import { exportAllProducts, PRODUCT_EXPORT_DEFAULTS } from '../../../utils/exportExcel';
 import type { ProductExportOptions } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown } from '../../../utils/productCostBreakdown';
+import type { ProductMaterial } from '../../../types';
+import { productMaterialService } from '../../../services/productMaterialService';
+import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -70,6 +73,12 @@ export const Products: React.FC = () => {
   const updateProduct = useAppStore((s) => s.updateProduct);
   const deleteProduct = useAppStore((s) => s.deleteProduct);
   const productsLoading = useAppStore((s) => s.productsLoading);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
 
   const todayReports = useAppStore((s) => s.todayReports);
   const monthlyReports = useAppStore((s) => s.monthlyReports);
@@ -110,6 +119,7 @@ export const Products: React.FC = () => {
   const [importParsing, setImportParsing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
+  const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Search & Filters
@@ -201,6 +211,7 @@ export const Products: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    setImportFileName(file.name);
     setImportParsing(true);
     setShowImportModal(true);
     setImportResult(null);
@@ -218,33 +229,100 @@ export const Products: React.FC = () => {
     if (!importResult) return;
     const validRows = importResult.rows.filter((r) => r.errors.length === 0);
     if (validRows.length === 0) return;
+    const jobId = addJob({
+      fileName: importFileName || 'products.xlsx',
+      jobType: 'Products Import',
+      totalRows: validRows.length,
+      startedBy: userDisplayName || 'Current User',
+    });
 
     setImportSaving(true);
     setImportProgress({ done: 0, total: validRows.length });
-
-    let done = 0;
-    for (const row of validRows) {
-      try {
-        if (row.action === 'update' && row.matchedId) {
-          await updateProduct(row.matchedId, toProductData(row));
-        } else {
-          await createProduct(toProductData(row));
-        }
-      } catch { /* skip failed */ }
-      done++;
-      setImportProgress({ done, total: validRows.length });
-    }
-
-    setImportSaving(false);
+    startJob(jobId, 'Saving to database...');
+    // Close preview immediately; import continues in background jobs panel.
     setShowImportModal(false);
     setImportResult(null);
+    setImportFileName('');
+
+    const syncImportedMaterials = async (productId: string, rowMaterials: ProductImportResult['rows'][number]['materials']) => {
+      if (!rowMaterials || rowMaterials.length === 0) return;
+      const existing = await productMaterialService.getByProduct(productId);
+      await Promise.all(existing.map((m) => (m.id ? productMaterialService.delete(m.id) : Promise.resolve())));
+      for (const mat of rowMaterials) {
+        await productMaterialService.create({
+          productId,
+          materialName: mat.materialName,
+          quantityUsed: mat.quantityUsed,
+          unitCost: mat.unitCost,
+        });
+      }
+    };
+
+    let done = 0;
+    let failed = 0;
+    for (const row of validRows) {
+      try {
+        let productId: string | null = null;
+        if (row.action === 'update' && row.matchedId) {
+          await updateProduct(row.matchedId, toProductData(row));
+          productId = row.matchedId;
+        } else {
+          productId = await createProduct(toProductData(row));
+        }
+        if (productId) {
+          await syncImportedMaterials(productId, row.materials);
+        }
+      } catch { failed++; }
+      done++;
+      setImportProgress({ done, total: validRows.length });
+      setJobProgress(jobId, {
+        processedRows: done,
+        totalRows: validRows.length,
+        statusText: 'Saving to database...',
+        status: 'processing',
+      });
+    }
+
+    const addedRows = Math.max(0, done - failed);
+    if (addedRows === 0 && failed > 0) {
+      failJob(jobId, 'All rows failed during save', 'Failed');
+    } else {
+      completeJob(jobId, {
+        addedRows,
+        failedRows: failed,
+        statusText: 'Completed',
+      });
+    }
+    setImportSaving(false);
   };
 
-  const doExportProducts = (opts: ProductExportOptions) => {
+  const doExportProducts = async (opts: ProductExportOptions) => {
+    const materialsByProduct = new Map<string, ProductMaterial[]>();
+    await Promise.all(_rawProducts.map(async (rp) => {
+      if (!rp.id) return;
+      try {
+        const mats = await productMaterialService.getByProduct(rp.id);
+        materialsByProduct.set(rp.id, mats);
+      } catch {
+        materialsByProduct.set(rp.id, []);
+      }
+    }));
+
     const data = products.map((p) => {
       const raw = _rawProducts.find((r) => r.id === p.id);
-      const breakdown = raw ? calculateProductCostBreakdown(raw, [], productCosts[p.id]?.costPerUnit ?? 0) : null;
-      return { product: p, raw: raw || { name: p.name, model: p.category, code: p.code, openingBalance: p.openingStock }, costBreakdown: breakdown };
+      if (!raw) {
+        return { product: p, raw: { name: p.name, model: p.category, code: p.code, openingBalance: p.openingStock }, costBreakdown: null, rawMaterialsDetails: '—' };
+      }
+
+      const materials = raw.id ? (materialsByProduct.get(raw.id) ?? []) : [];
+      const breakdown = calculateProductCostBreakdown(raw, materials, productCosts[p.id]?.costPerUnit ?? 0);
+      const rawMaterialsDetails = materials.length > 0
+        ? materials
+          .map((m) => `${m.materialName} (${m.quantityUsed} × ${formatCost(m.unitCost)} = ${formatCost((m.quantityUsed || 0) * (m.unitCost || 0))})`)
+          .join(' | ')
+        : '—';
+
+      return { product: p, raw, costBreakdown: breakdown, rawMaterialsDetails };
     });
     const columnLabels: string[] = ['الكود', 'اسم المنتج', 'الفئة'];
     if (visibleColumns.openingStock) columnLabels.push('الرصيد الافتتاحي');
@@ -254,6 +332,8 @@ export const Products: React.FC = () => {
 
     if (canViewCosts && visibleColumns.chineseUnitCost) columnLabels.push('تكلفة الوحدة الصينية');
     if (canViewCosts && visibleColumns.chinesePriceCny) columnLabels.push('السعر باليوان');
+    if (canViewCosts) columnLabels.push('تكلفة المواد الخام');
+    if (canViewCosts) columnLabels.push('تفاصيل المواد الخام');
     if (canViewCosts && visibleColumns.innerBoxCost) columnLabels.push('تكلفة العلبة الداخلية');
     if (canViewCosts && visibleColumns.outerCartonCost) columnLabels.push('تكلفة الكرتونة');
     if (canViewCosts && visibleColumns.unitsPerCarton) columnLabels.push('وحدات/كرتونة');
@@ -299,7 +379,7 @@ export const Products: React.FC = () => {
                   chinesePriceCny: visibleColumns.chinesePriceCny,
                 };
                 setExportOptions(opts);
-                doExportProducts(opts);
+                void doExportProducts(opts);
               }} className="shrink-0">
                 <span className="material-icons-round text-sm">download</span>
                 <span className="hidden sm:inline">تصدير Excel</span>
@@ -720,7 +800,7 @@ export const Products: React.FC = () => {
 
       {/* ── Import Excel Modal ── */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
@@ -730,7 +810,7 @@ export const Products: React.FC = () => {
                   تحميل نموذج
                 </button>
               </div>
-              <button onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -747,7 +827,7 @@ export const Products: React.FC = () => {
                 <div className="text-center py-12">
                   <span className="material-icons-round text-5xl text-slate-300 mb-3 block">warning</span>
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
-                  <p className="text-sm text-slate-400 mt-1">تأكد من أن الملف يحتوي على أعمدة: اسم المنتج، الكود، الفئة، الرصيد الافتتاحي</p>
+                  <p className="text-sm text-slate-400 mt-1">تأكد من وجود شيت المنتجات (اسم المنتج، الكود...) ويمكن إضافة شيت المواد الخام اختياريًا</p>
                   <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
                     <span className="material-icons-round text-sm">download</span>
                     تحميل نموذج المنتجات
@@ -795,6 +875,7 @@ export const Products: React.FC = () => {
                           <th className="px-3 py-3 text-xs font-black text-slate-500">الكرتونة</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">وحدات/كرتونة</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">سعر البيع</th>
+                          <th className="px-3 py-3 text-xs font-black text-slate-500">مواد خام</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">التفاصيل</th>
                         </tr>
                       </thead>
@@ -826,6 +907,7 @@ export const Products: React.FC = () => {
                             <td className="px-3 py-2.5 text-slate-500 font-mono">{row.outerCartonCost || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-500 font-mono">{row.unitsPerCarton || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-500 font-mono">{row.sellingPrice || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.materials.length || '—'}</td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
                                 <ul className="text-xs text-rose-500 space-y-0.5">
@@ -847,7 +929,7 @@ export const Products: React.FC = () => {
             </div>
 
             <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
-              <Button variant="outline" onClick={() => { setShowImportModal(false); setImportResult(null); }} disabled={importSaving}>إلغاء</Button>
+              <Button variant="outline" onClick={() => { setShowImportModal(false); setImportResult(null); }}>إلغاء</Button>
               {importResult && importResult.validCount > 0 && (
                 <Button variant="primary" onClick={handleImportSave} disabled={importSaving}>
                   {importSaving ? (

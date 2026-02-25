@@ -23,6 +23,7 @@ import {
 } from '../components/ProductionReportPrint';
 import { SelectableTable } from '../components/SelectableTable';
 import type { TableColumn, TableBulkAction } from '../components/SelectableTable';
+import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 
 const emptyForm = {
   employeeId: '',
@@ -61,6 +62,12 @@ export const Reports: React.FC = () => {
   const fetchReports = useAppStore((s) => s.fetchReports);
   const reportsLoading = useAppStore((s) => s.reportsLoading);
   const error = useAppStore((s) => s.error);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
 
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
@@ -90,6 +97,7 @@ export const Reports: React.FC = () => {
   const [importParsing, setImportParsing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
+  const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Single-report print state
@@ -122,6 +130,7 @@ export const Reports: React.FC = () => {
   const [filterLineId, setFilterLineId] = useState('');
   const [filterEmployeeId, setFilterEmployeeId] = useState('');
   const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
+  const reportCodesBackfilledRef = useRef(false);
 
   // Employee-only filter: basic employees see only their own reports
   const myEmployeeId = useMemo(() => {
@@ -140,6 +149,23 @@ export const Reports: React.FC = () => {
     }).catch(() => setFormLineWorkers([]));
   }, [showModal, form.lineId, form.date]);
 
+  useEffect(() => {
+    if (reportCodesBackfilledRef.current) return;
+    if (!can('reports.edit')) return;
+    reportCodesBackfilledRef.current = true;
+
+    reportService.backfillMissingReportCodes()
+      .then(async (updated) => {
+        if (updated <= 0) return;
+        if (viewMode === 'range') {
+          await fetchReports(startDate, endDate);
+        }
+      })
+      .catch(() => {
+        // Silent fallback to keep page usable.
+      });
+  }, [can, fetchReports, startDate, endDate, viewMode]);
+
   const allReports = viewMode === 'today' ? todayReports : productionReports;
   const displayedReports = useMemo(() => {
     let list = myEmployeeId
@@ -147,7 +173,24 @@ export const Reports: React.FC = () => {
       : allReports;
     if (filterLineId) list = list.filter((r) => r.lineId === filterLineId);
     if (filterEmployeeId) list = list.filter((r) => r.employeeId === filterEmployeeId);
-    return list;
+
+    const getRegisteredAtMs = (report: ProductionReport): number => {
+      const createdAt = report.createdAt as any;
+      if (createdAt?.toDate) return createdAt.toDate().getTime();
+      if (typeof createdAt?.seconds === 'number') return createdAt.seconds * 1000;
+      if (createdAt) {
+        const parsed = new Date(createdAt).getTime();
+        if (!Number.isNaN(parsed)) return parsed;
+      }
+      const dateOnlyMs = new Date(report.date).getTime();
+      return Number.isNaN(dateOnlyMs) ? 0 : dateOnlyMs;
+    };
+
+    return [...list].sort((a, b) => {
+      const byCreatedAt = getRegisteredAtMs(b) - getRegisteredAtMs(a);
+      if (byCreatedAt !== 0) return byCreatedAt;
+      return (b.date || '').localeCompare(a.date || '');
+    });
   }, [allReports, myEmployeeId, filterLineId, filterEmployeeId]);
 
   const linkedReportId = useMemo(() => {
@@ -457,8 +500,11 @@ export const Reports: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteReport(id);
-    setDeleteConfirmId(null);
+    try {
+      await deleteReport(id);
+    } finally {
+      setDeleteConfirmId(null);
+    }
   };
 
   const handleViewWorkers = async (lineId: string, date: string) => {
@@ -585,6 +631,7 @@ export const Reports: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    setImportFileName(file.name);
     setImportParsing(true);
     setShowImportModal(true);
     setImportResult(null);
@@ -607,24 +654,50 @@ export const Reports: React.FC = () => {
     if (!importResult) return;
     const validRows = importResult.rows.filter((r) => r.errors.length === 0);
     if (validRows.length === 0) return;
+    const jobId = addJob({
+      fileName: importFileName || 'reports.xlsx',
+      jobType: 'Reports Import',
+      totalRows: validRows.length,
+      startedBy: userDisplayName || 'Current User',
+    });
 
     setImportSaving(true);
     setImportProgress({ done: 0, total: validRows.length });
+    startJob(jobId, 'Saving to database...');
+    // Close preview immediately; import continues in background jobs panel.
+    setShowImportModal(false);
+    setImportResult(null);
+    setImportFileName('');
 
     let done = 0;
+    let failed = 0;
     for (const row of validRows) {
       try {
         await createReport(toReportData(row));
       } catch {
-        // skip failed row
+        failed++;
       }
       done++;
       setImportProgress({ done, total: validRows.length });
+      setJobProgress(jobId, {
+        processedRows: done,
+        totalRows: validRows.length,
+        statusText: 'Saving to database...',
+        status: 'processing',
+      });
     }
 
+    const addedRows = Math.max(0, done - failed);
+    if (addedRows === 0 && failed > 0) {
+      failJob(jobId, 'All rows failed during save', 'Failed');
+    } else {
+      completeJob(jobId, {
+        addedRows,
+        failedRows: failed,
+        statusText: 'Completed',
+      });
+    }
     setImportSaving(false);
-    setShowImportModal(false);
-    setImportResult(null);
   };
 
   // ── SelectableTable config ──────────────────────────────────────────────────
@@ -634,6 +707,14 @@ export const Reports: React.FC = () => {
       r.id ?? `${r.date}-${r.lineId}-${r.productId}-${r.employeeId}`;
 
     const cols: TableColumn<ProductionReport>[] = [
+      {
+        header: 'كود التقرير',
+        render: (r) => (
+          <span className="font-mono text-xs font-black text-primary">
+            {r.reportCode || '—'}
+          </span>
+        ),
+      },
       { header: 'التاريخ', render: (r) => <span className="font-bold text-slate-700 dark:text-slate-300">{r.date}</span> },
       { header: 'خط الإنتاج', render: (r) => <span className="font-medium">{getLineName(r.lineId)}</span> },
       { header: 'المنتج', render: (r) => <span className="font-medium">{getProductName(r.productId)}</span> },
@@ -1426,7 +1507,7 @@ export const Reports: React.FC = () => {
 
       {/* ══ Import from Excel Modal ══ */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
             <div className="px-5 sm:px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
@@ -1449,11 +1530,10 @@ export const Reports: React.FC = () => {
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => { if (!importSaving) { setShowImportModal(false); setImportResult(null); } }}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-                disabled={importSaving}
-              >
+                <button
+                  onClick={() => { setShowImportModal(false); setImportResult(null); }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
                 <span className="material-icons-round">close</span>
               </button>
             </div>

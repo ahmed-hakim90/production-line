@@ -255,6 +255,7 @@ interface ProductExportData {
   product: Product;
   raw: FirestoreProduct;
   costBreakdown?: ProductCostBreakdown | null;
+  rawMaterialsDetails?: string;
 }
 
 const fmtCost = (v: number) => v > 0 ? Number(v.toFixed(2)) : 0;
@@ -303,6 +304,7 @@ export const exportAllProducts = (
         base['السعر باليوان'] = fmtCost(d.costBreakdown.chineseUnitCost / cnyToEgpRate);
       }
       base['تكلفة المواد الخام'] = fmtCost(d.costBreakdown.rawMaterialCost);
+      base['تفاصيل المواد الخام'] = d.rawMaterialsDetails || '—';
       base['تكلفة العلبة الداخلية'] = fmtCost(d.costBreakdown.innerBoxCost);
       base['تكلفة الكرتونة'] = fmtCost(d.costBreakdown.outerCartonCost);
       base['وحدات/كرتونة'] = d.costBreakdown.unitsPerCarton;

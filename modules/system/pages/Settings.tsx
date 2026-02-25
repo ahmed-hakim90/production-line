@@ -38,6 +38,7 @@ import type {
   DashboardDisplaySettings, AlertToggleSettings, ThemeMode, UIDensity,
 } from '../../../types';
 import type { ReportPrintRow } from '../../production/components/ProductionReportPrint';
+import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 
 type SettingsTab = 'general' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'backup';
 
@@ -242,6 +243,12 @@ export const Settings: React.FC = () => {
   }, [activeTab, isAdmin, loadBackupHistory, loadFirebaseUsage, firebaseUsage, firebaseUsageLoading]);
 
   const userEmail = useAppStore((s) => s.userEmail);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
 
   const handleExportFull = useCallback(async () => {
     setBackupLoading(true);
@@ -313,20 +320,46 @@ export const Settings: React.FC = () => {
 
   const handleRestore = useCallback(async () => {
     if (!importFile) return;
+    const currentImportFile = importFile;
+    const currentImportFileName = importFileName || 'backup.json';
+    const jobId = addJob({
+      fileName: currentImportFileName,
+      jobType: 'Backup Import',
+      totalRows: 100,
+      startedBy: userDisplayName || userEmail || 'Current User',
+    });
     setShowConfirmRestore(false);
     setBackupLoading(true);
     setBackupMessage(null);
+    startJob(jobId, 'Saving to database...');
+    // Clear selection immediately; restore continues in background jobs panel.
+    setImportFile(null);
+    setImportFileName('');
+    setImportValidation(null);
 
     const result = await backupService.importBackup(
-      importFile,
+      currentImportFile,
       restoreMode,
       userEmail || 'admin',
-      (step, percent) => setBackupProgress({ step, percent })
+      (step, percent) => {
+        setBackupProgress({ step, percent });
+        setJobProgress(jobId, {
+          processedRows: Math.max(0, Math.min(percent, 100)),
+          totalRows: 100,
+          statusText: step || 'Saving to database...',
+          status: 'processing',
+        });
+      }
     );
 
     setBackupProgress(null);
 
     if (result.success) {
+      completeJob(jobId, {
+        addedRows: result.restored || 0,
+        failedRows: 0,
+        statusText: 'Completed',
+      });
       setBackupMessage({
         type: 'success',
         text: `تمت الاستعادة بنجاح — ${result.restored} مستند`,
@@ -336,17 +369,14 @@ export const Settings: React.FC = () => {
         await _loadAppData();
         await fetchSystemSettings();
       } catch { /* ignore */ }
-
-      setImportFile(null);
-      setImportFileName('');
-      setImportValidation(null);
       loadBackupHistory();
     } else {
+      failJob(jobId, result.error || 'Restore failed', 'Failed');
       setBackupMessage({ type: 'error', text: result.error || 'فشلت الاستعادة' });
     }
 
     setBackupLoading(false);
-  }, [importFile, restoreMode, userEmail, _loadAppData, fetchSystemSettings, loadBackupHistory]);
+  }, [importFile, importFileName, restoreMode, userEmail, userDisplayName, _loadAppData, fetchSystemSettings, loadBackupHistory, addJob, startJob, setJobProgress, completeJob, failJob]);
 
   const handleLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

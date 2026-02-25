@@ -245,7 +245,22 @@ export const buildProductionLines = (
   planReports: Record<string, ProductionReport[]> = {},
   workOrders: WorkOrder[] = []
 ): ProductionLine[] => {
+  const normalizeArabicDigits = (value: string) =>
+    value.replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+  const buildCodeFromLineName = (name: string): string => {
+    const normalizedName = normalizeArabicDigits(name || '');
+    const numberMatches = normalizedName.match(/\d+/g);
+    if (!numberMatches?.length) return '';
+    const lineNumber = Number(numberMatches[numberMatches.length - 1]);
+    if (!Number.isFinite(lineNumber)) return '';
+    return `LINE-${String(lineNumber).padStart(2, '0')}`;
+  };
+
   return rawLines.map((line) => {
+    const lineCode =
+      (line.code ?? '').trim() ||
+      buildCodeFromLineName(line.name) ||
+      line.id!;
     const activePlan = productionPlans.find(
       (p) => p.lineId === line.id && (p.status === 'in_progress' || p.status === 'planned')
     );
@@ -283,7 +298,7 @@ export const buildProductionLines = (
       return {
         id: line.id!,
         name: line.name,
-        code: line.id!,
+        code: lineCode,
         employeeName,
         status: line.status as ProductionLineStatus,
         currentProduct,
@@ -328,7 +343,7 @@ export const buildProductionLines = (
     return {
       id: line.id!,
       name: line.name,
-      code: line.id!,
+      code: lineCode,
       employeeName,
       status: line.status as ProductionLineStatus,
       currentProduct,

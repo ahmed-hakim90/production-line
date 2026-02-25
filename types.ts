@@ -92,6 +92,7 @@ export interface ProductMaterial {
 export interface FirestoreProductionLine {
   id?: string;
   name: string;
+  code?: string;
   dailyWorkingHours: number;
   maxWorkers: number;
   status: ProductionLineStatus;
@@ -178,6 +179,7 @@ export interface LineProductConfig {
 
 export interface ProductionReport {
   id?: string;
+  reportCode?: string;
   employeeId: string;
   productId: string;
   lineId: string;

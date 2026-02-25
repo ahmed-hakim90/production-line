@@ -5,6 +5,8 @@ import { usePermission, useCurrentRole } from '../utils/permissions';
 import { MENU_CONFIG } from '../config/menu.config';
 import { useBadgeCounts, useActiveRoute, useSidebarCollapse } from '../hooks/useNavigation';
 import { NotificationBell } from './NotificationBell';
+import { GlobalBackgroundJobs } from './background-jobs/GlobalBackgroundJobs';
+import { TasksNavButton } from './background-jobs/JobsPanel';
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -335,6 +337,7 @@ const Header: React.FC<{ onMenuToggle: () => void }> = ({ onMenuToggle }) => {
             refresh
           </span>
         </button>
+        <TasksNavButton />
         <NotificationBell />
         <div className="hidden md:block h-8 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1"></div>
         <div className="hidden md:flex flex-col items-end">
@@ -376,6 +379,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
           </div>
         </footer>
+        <GlobalBackgroundJobs />
       </main>
     </div>
   );

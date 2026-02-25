@@ -22,8 +22,15 @@ export interface ParsedProductRow {
   outerCartonCost: number;
   unitsPerCarton: number;
   sellingPrice: number;
+  materials: ParsedProductMaterialInput[];
   errors: string[];
   changes?: string[];
+}
+
+export interface ParsedProductMaterialInput {
+  materialName: string;
+  quantityUsed: number;
+  unitCost: number;
 }
 
 export interface ProductImportResult {
@@ -73,6 +80,21 @@ const HEADER_MAP: Record<string, string> = {
   'سعر': 'sellingPrice',
 };
 
+const MATERIAL_HEADER_MAP: Record<string, string> = {
+  'كود المنتج': 'productCode',
+  'الكود': 'productCode',
+  'كود': 'productCode',
+  'اسم المادة الخام': 'materialName',
+  'المادة الخام': 'materialName',
+  'المادة': 'materialName',
+  'الكمية المستخدمة': 'quantityUsed',
+  'الكمية': 'quantityUsed',
+  'الكمية/وحدة': 'quantityUsed',
+  'تكلفة الوحدة': 'unitCost',
+  'تكلفة': 'unitCost',
+  'سعر الوحدة': 'unitCost',
+};
+
 function normalizeHeader(h: string): string {
   return h.trim().replace(/\s+/g, ' ');
 }
@@ -107,6 +129,22 @@ function describeChanges(existing: FirestoreProduct, row: ParsedProductRow): str
   return changes;
 }
 
+function resolveProductsSheetName(sheetNames: string[]): string {
+  const productsSheet = sheetNames.find((n) => /منتج|products?/i.test(n));
+  return productsSheet ?? sheetNames[0];
+}
+
+function resolveMaterialsSheetName(sheetNames: string[], productsSheetName: string): string | null {
+  const preferred = sheetNames.find((n) => /مواد|material/i.test(n));
+  if (preferred) return preferred;
+  const fallback = sheetNames.find((n) => n !== productsSheetName);
+  return fallback ?? null;
+}
+
+function isMaterialRowEmpty(row: Record<string, any>): boolean {
+  return Object.values(row).every((v) => String(v ?? '').trim() === '');
+}
+
 // ─── Main parse function ────────────────────────────────────────────────────
 
 export function parseProductsExcel(
@@ -120,8 +158,8 @@ export function parseProductsExcel(
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
-        const sheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
+        const productsSheetName = resolveProductsSheetName(wb.SheetNames);
+        const ws = wb.Sheets[productsSheetName];
 
         const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
 
@@ -184,6 +222,7 @@ export function parseProductsExcel(
             outerCartonCost,
             unitsPerCarton,
             sellingPrice,
+            materials: [],
             errors,
           };
 
@@ -193,6 +232,56 @@ export function parseProductsExcel(
 
           return parsed;
         });
+
+        const productRowsByCode = new Map<string, ParsedProductRow>();
+        rows.forEach((r) => {
+          if (r.code) productRowsByCode.set(r.code.trim().toLowerCase(), r);
+        });
+
+        const materialsSheetName = resolveMaterialsSheetName(wb.SheetNames, productsSheetName);
+        if (materialsSheetName) {
+          const materialsSheet = wb.Sheets[materialsSheetName];
+          const materialRows = XLSX.utils.sheet_to_json<Record<string, any>>(materialsSheet, { defval: '' });
+
+          if (materialRows.length > 0) {
+            const rawMaterialHeaders = Object.keys(materialRows[0]);
+            const materialHeaderMapping: Record<string, string> = {};
+            for (const rawH of rawMaterialHeaders) {
+              const norm = normalizeHeader(rawH);
+              const mapped = MATERIAL_HEADER_MAP[norm];
+              if (mapped) materialHeaderMapping[rawH] = mapped;
+            }
+
+            materialRows.forEach((materialRow, idx) => {
+              if (isMaterialRowEmpty(materialRow)) return;
+
+              const getMaterialValue = (field: string): any => {
+                const key = rawMaterialHeaders.find((h) => materialHeaderMapping[h] === field);
+                return key ? materialRow[key] : undefined;
+              };
+
+              const productCode = String(getMaterialValue('productCode') ?? '').trim();
+              const materialName = String(getMaterialValue('materialName') ?? '').trim();
+              const quantityUsed = Number(getMaterialValue('quantityUsed')) || 0;
+              const unitCost = Number(getMaterialValue('unitCost')) || 0;
+
+              if (!productCode || !materialName) return;
+
+              const targetProduct = productRowsByCode.get(productCode.toLowerCase());
+              if (!targetProduct) return;
+
+              targetProduct.materials.push({
+                materialName,
+                quantityUsed,
+                unitCost,
+              });
+
+              if (quantityUsed < 0 || unitCost < 0) {
+                targetProduct.errors.push(`صف مادة خام ${idx + 2}: الكمية والتكلفة يجب أن تكونا >= 0`);
+              }
+            });
+          }
+        }
 
         const validRows = rows.filter((r) => r.errors.length === 0);
         const newCount = validRows.filter((r) => r.action === 'create').length;

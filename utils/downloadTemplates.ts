@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 
 export function downloadProductsTemplate() {
   const wb = XLSX.utils.book_new();
-  const aoa: (string | number)[][] = [
+  const productsAoa: (string | number)[][] = [
     ['اسم المنتج', 'الكود', 'الفئة', 'الرصيد الافتتاحي', 'تكلفة الوحدة الصينية', 'تكلفة العلبة الداخلية', 'تكلفة الكرتونة الخارجية', 'عدد الوحدات في الكرتونة', 'سعر البيع'],
     ['خلاط سوكانى 6000 وات', 'SK-999N', 'منزلي', 100, 45.5, 2.5, 18, 6, 150],
     ['صمام V-200', 'PRD-002', 'منزلي', 250, 30, 1.8, 12, 12, 85],
@@ -10,9 +10,22 @@ export function downloadProductsTemplate() {
     ['محور دوران', 'PRD-004', 'سريري', 80, 15, 1, 10, 8, 60],
     ['خلاط يدوي', 'PRD-005', 'منزلي', 2000, 25, 1.5, 14, 10, 90],
   ];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 24 }, { wch: 24 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  const productsWs = XLSX.utils.aoa_to_sheet(productsAoa);
+  productsWs['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 24 }, { wch: 24 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, productsWs, 'المنتجات');
+
+  const materialsAoa: (string | number)[][] = [
+    ['كود المنتج', 'اسم المادة الخام', 'الكمية المستخدمة', 'تكلفة الوحدة'],
+    ['SK-999N', 'موتور نحاس', 1, 18],
+    ['SK-999N', 'هيكل بلاستيك', 1, 7.5],
+    ['PRD-002', 'جلدة مانعة للتسرب', 2, 1.2],
+    ['PRD-003', 'قماش خارجي', 1.5, 22],
+    ['PRD-003', 'إسفنج', 3, 31],
+  ];
+  const materialsWs = XLSX.utils.aoa_to_sheet(materialsAoa);
+  materialsWs['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, materialsWs, 'المواد الخام');
+
   XLSX.writeFile(wb, 'template_products.xlsx');
 }
 

@@ -20,6 +20,7 @@ const statusOptions: { value: ProductionLineStatus; label: string }[] = [
 
 const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
   name: '',
+  code: '',
   dailyWorkingHours: 8,
   maxWorkers: 20,
   status: ProductionLineStatus.IDLE,
@@ -64,6 +65,22 @@ export const Lines: React.FC = () => {
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);
   const [targetForm, setTargetForm] = useState({ currentProductId: '', targetTodayQty: 0 });
   const [targetSaving, setTargetSaving] = useState(false);
+
+  const normalizeLineCode = (value: string) => value.trim().toUpperCase();
+  const normalizeArabicDigits = (value: string) =>
+    value.replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+  const buildCodeFromLineName = (name: string) => {
+    const normalizedName = normalizeArabicDigits(name);
+    const numberMatches = normalizedName.match(/\d+/g);
+    if (!numberMatches?.length) return '';
+    const lineNumber = Number(numberMatches[numberMatches.length - 1]);
+    if (!Number.isFinite(lineNumber)) return '';
+    return `LINE-${String(lineNumber).padStart(2, '0')}`;
+  };
+  const suggestedCode = useMemo(
+    () => buildCodeFromLineName(form.name ?? ''),
+    [form.name]
+  );
 
   const openTargetModal = (lineId: string, lineName: string) => {
     const existing = lineStatuses.find((s) => s.lineId === lineId);
@@ -126,6 +143,7 @@ export const Lines: React.FC = () => {
     setEditId(id);
     setForm({
       name: raw.name,
+      code: raw.code ?? buildCodeFromLineName(raw.name),
       dailyWorkingHours: raw.dailyWorkingHours,
       maxWorkers: raw.maxWorkers,
       status: raw.status,
@@ -135,15 +153,35 @@ export const Lines: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.name) return;
+    const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? ''));
+    if (!form.name || !normalizedCode) {
+      setSaveMsg({ type: 'error', text: 'اسم الخط مطلوب. أضف كود الخط أو اكتب رقمًا داخل اسم الخط (مثال: خط إنتاج 7).' });
+      return;
+    }
+
+    const isDuplicateCode = _rawLines.some(
+      (line) =>
+        line.id !== editId &&
+        normalizeLineCode(line.code ?? '') === normalizedCode
+    );
+    if (isDuplicateCode) {
+      setSaveMsg({ type: 'error', text: 'كود الخط مستخدم بالفعل. استخدم كودًا مختلفًا.' });
+      return;
+    }
+
+    const payload: Omit<FirestoreProductionLine, 'id'> = {
+      ...form,
+      code: normalizedCode,
+    };
+
     setSaving(true);
     setSaveMsg(null);
     try {
       if (editId) {
-        await updateLine(editId, form);
+        await updateLine(editId, payload);
         setSaveMsg({ type: 'success', text: 'تم حفظ تعديلات الخط بنجاح' });
       } else {
-        await createLine(form);
+        await createLine(payload);
         setSaveMsg({ type: 'success', text: 'تم إضافة خط الإنتاج بنجاح' });
         setForm(emptyForm);
       }
@@ -161,18 +199,14 @@ export const Lines: React.FC = () => {
 
   const sortedLines = useMemo(() => {
     return [...productionLines].sort((a, b) => {
-      const aIsActive = a.status === ProductionLineStatus.ACTIVE ? 1 : 0;
-      const bIsActive = b.status === ProductionLineStatus.ACTIVE ? 1 : 0;
-      const aHasWO = workOrders.some((w) => w.lineId === a.id && (w.status === 'pending' || w.status === 'in_progress')) ? 1 : 0;
-      const bHasWO = workOrders.some((w) => w.lineId === b.id && (w.status === 'pending' || w.status === 'in_progress')) ? 1 : 0;
-
-      const aScore = aIsActive * 2 + aHasWO;
-      const bScore = bIsActive * 2 + bHasWO;
-
-      if (bScore !== aScore) return bScore - aScore;
+      const codeCompare = (a.code || '').localeCompare((b.code || ''), 'en', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      if (codeCompare !== 0) return codeCompare;
       return a.name.localeCompare(b.name, 'ar');
     });
-  }, [productionLines, workOrders]);
+  }, [productionLines]);
 
   const latestReportByLine = useMemo(() => {
     const getReportTime = (r: ProductionReport): number => {
@@ -505,6 +539,7 @@ export const Lines: React.FC = () => {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h4 className="font-bold text-lg text-slate-800 dark:text-white">{line.name}</h4>
+                    <p className="text-[11px] font-black text-primary/80 mt-0.5">كود الخط: {line.code || '—'}</p>
                     {activeWO && (
                       <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">أمر شغل #{activeWO.workOrderNumber}</span>
                     )}
@@ -666,6 +701,20 @@ export const Lines: React.FC = () => {
                 </div>
               )}
 
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">كود الخط (اختياري)</label>
+                <input
+                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  value={form.code ?? ''}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  placeholder={suggestedCode || 'مثال: LINE-01'}
+                />
+                {!form.code?.trim() && suggestedCode && (
+                  <p className="text-[11px] font-bold text-slate-500">
+                    سيتم توليد الكود تلقائيًا: <span className="text-primary">{suggestedCode}</span>
+                  </p>
+                )}
+              </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">اسم الخط *</label>
                 <input

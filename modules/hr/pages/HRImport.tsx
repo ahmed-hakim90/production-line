@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
+import { useAppStore } from '../../../store/useAppStore';
 import { getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { departmentsRef, jobPositionsRef, shiftsRef, employeesRef } from '../collections';
@@ -11,6 +12,7 @@ import type { FirestoreEmployee, EmploymentType } from '@/types';
 import { EMPLOYMENT_TYPE_LABELS } from '@/types';
 import { JOB_LEVEL_LABELS } from '../types';
 import { downloadHRTemplate } from '@/utils/downloadTemplates';
+import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 
 type ImportStep = 'upload' | 'preview' | 'importing' | 'done';
 type PreviewTab = 'employees' | 'departments' | 'positions';
@@ -18,6 +20,12 @@ type PreviewTab = 'employees' | 'departments' | 'positions';
 export const HRImport: React.FC = () => {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
 
   const [step, setStep] = useState<ImportStep>('upload');
   const [fileName, setFileName] = useState('');
@@ -86,16 +94,32 @@ export const HRImport: React.FC = () => {
 
   const handleImport = useCallback(async () => {
     if (!result) return;
-    setStep('importing');
+    const currentResult = result;
+    const validDepts = currentResult.departments.rows.filter((r) => r.errors.length === 0);
+    const validPositions = currentResult.positions.rows.filter((r) => r.errors.length === 0);
+    const validEmps = currentResult.employees.rows.filter((r) => r.errors.length === 0);
+    const totalOps = validDepts.length + validPositions.length + validEmps.length;
+    const jobId = addJob({
+      fileName: fileName || 'hr-import.xlsx',
+      jobType: 'HR Import',
+      totalRows: totalOps || 1,
+      startedBy: userDisplayName || 'Current User',
+    });
+
     setImporting(true);
+    startJob(jobId, 'Saving to database...');
+    // Return UI to upload step immediately; processing continues in background panel.
+    setStep('upload');
+    setFileName('');
+    setResult(null);
+    setParseError('');
 
     const errors: string[] = [];
     const createdDeptMap: Record<string, string> = {};
     const createdPosMap: Record<string, string> = {};
     let deptCount = 0, posCount = 0, empCount = 0;
-
+    let doneOps = 0;
     // 1. Create departments
-    const validDepts = result.departments.rows.filter((r) => r.errors.length === 0);
     for (const dept of validDepts) {
       try {
         const ref = await addDoc(departmentsRef(), {
@@ -111,6 +135,8 @@ export const HRImport: React.FC = () => {
       } catch (err) {
         errors.push(`خطأ في إنشاء القسم "${dept.name}": ${err instanceof Error ? err.message : 'خطأ'}`);
       }
+      doneOps++;
+      setJobProgress(jobId, { processedRows: doneOps, totalRows: totalOps || 1, statusText: 'Saving to database...', status: 'processing' });
     }
 
     // Helper: resolve departmentId from name (existing + newly created)
@@ -122,7 +148,6 @@ export const HRImport: React.FC = () => {
     };
 
     // 2. Create positions
-    const validPositions = result.positions.rows.filter((r) => r.errors.length === 0);
     for (const pos of validPositions) {
       try {
         const departmentId = resolveDeptId(pos.departmentName);
@@ -140,6 +165,8 @@ export const HRImport: React.FC = () => {
       } catch (err) {
         errors.push(`خطأ في إنشاء المنصب "${pos.title}": ${err instanceof Error ? err.message : 'خطأ'}`);
       }
+      doneOps++;
+      setJobProgress(jobId, { processedRows: doneOps, totalRows: totalOps || 1, statusText: 'Saving to database...', status: 'processing' });
     }
 
     // Helper: resolve positionId from title
@@ -160,7 +187,6 @@ export const HRImport: React.FC = () => {
 
     // 3. Create or Update employees
     let updatedCount = 0;
-    const validEmps = result.employees.rows.filter((r) => r.errors.length === 0);
     for (const emp of validEmps) {
       try {
         if (emp.existingId) {
@@ -209,13 +235,20 @@ export const HRImport: React.FC = () => {
         const action = emp.existingId ? 'تحديث' : 'إنشاء';
         errors.push(`خطأ في ${action} الموظف "${emp.name}": ${err instanceof Error ? err.message : 'خطأ'}`);
       }
+      doneOps++;
+      setJobProgress(jobId, { processedRows: doneOps, totalRows: totalOps || 1, statusText: 'Saving to database...', status: 'processing' });
     }
 
     setImportDone({ depts: deptCount, positions: posCount, employees: empCount, updated: updatedCount, errors: errors.length });
     setImportErrors(errors);
+    const addedRows = deptCount + posCount + empCount + updatedCount;
+    if (errors.length > 0 && addedRows === 0) {
+      failJob(jobId, errors[0], 'Failed');
+    } else {
+      completeJob(jobId, { addedRows, failedRows: errors.length, statusText: 'Completed' });
+    }
     setImporting(false);
-    setStep('done');
-  }, [result, lookups]);
+  }, [result, lookups, addJob, fileName, userDisplayName, startJob, setJobProgress, failJob, completeJob]);
 
   const handleReset = useCallback(() => {
     setStep('upload');

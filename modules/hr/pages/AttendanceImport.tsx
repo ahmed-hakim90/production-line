@@ -16,6 +16,8 @@ import type {
 } from '../types';
 import type { GeneralConfig } from '../config/types';
 import type { FirestoreEmployee } from '@/types';
+import { useAppStore } from '../../../store/useAppStore';
+import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 
 const FALLBACK_SHIFT: FirestoreShift = {
   id: 'default',
@@ -34,6 +36,12 @@ type ImportStep = 'upload' | 'preview' | 'processing' | 'done';
 
 export const AttendanceImport: React.FC = () => {
   const fileRef = useRef<HTMLInputElement>(null);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
 
   const [step, setStep] = useState<ImportStep>('upload');
   const [csvText, setCsvText] = useState('');
@@ -132,23 +140,46 @@ export const AttendanceImport: React.FC = () => {
 
   const handleSave = useCallback(async () => {
     if (!batchResult || !parseResult) return;
+    const currentBatchResult = batchResult;
+    const currentParseResult = parseResult;
+    const totalRows = currentBatchResult.records.length || currentParseResult.validRows || 1;
+    const jobId = addJob({
+      fileName: fileName || 'attendance.csv',
+      jobType: 'Attendance Import',
+      totalRows,
+      startedBy: userDisplayName || 'Current User',
+    });
     setSaving(true);
     setSaveError('');
+    startJob(jobId, 'Saving to database...');
+    setJobProgress(jobId, { processedRows: 0, totalRows, statusText: 'Saving to database...', status: 'processing' });
+    // Return UI to upload step immediately; processing continues in background panel.
+    setStep('upload');
+    setCsvText('');
+    setFileName('');
+    setParseResult(null);
+    setBatchResult(null);
+    setSavedCount(0);
 
     try {
-      await attendanceRawLogService.saveBatch(parseResult.punches, batchResult.batchId);
+      await attendanceRawLogService.saveBatch(currentParseResult.punches, currentBatchResult.batchId);
+      const mid = Math.max(1, Math.floor(totalRows * 0.5));
+      setJobProgress(jobId, { processedRows: mid, totalRows, statusText: 'Saving to database...', status: 'processing' });
       const count = await attendanceLogService.saveBatch(
-        batchResult.records,
-        batchResult.batchId,
+        currentBatchResult.records,
+        currentBatchResult.batchId,
         'zk_csv',
       );
       setSavedCount(count);
+      completeJob(jobId, { addedRows: count, failedRows: Math.max(0, totalRows - count), statusText: 'Completed' });
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'حدث خطأ أثناء الحفظ');
+      const message = err instanceof Error ? err.message : 'حدث خطأ أثناء الحفظ';
+      setSaveError(message);
+      failJob(jobId, message, 'Failed');
     } finally {
       setSaving(false);
     }
-  }, [batchResult, parseResult]);
+  }, [batchResult, parseResult, addJob, fileName, userDisplayName, startJob, setJobProgress, completeJob, failJob]);
 
   const handleReset = useCallback(() => {
     setStep('upload');
