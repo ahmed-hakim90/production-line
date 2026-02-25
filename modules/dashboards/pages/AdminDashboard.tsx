@@ -995,20 +995,6 @@ export const AdminDashboard: React.FC = () => {
         </p>
       </Card>
 
-      <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-violet-500">verified</span>
-          <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
-          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" />
-          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
-          <KPIBox label="Defect Rate" value={qualityKpis.defectRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
-          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" />
-          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
-        </div>
-      </Card>
 {/* ── Active Work Orders (same visual style) ─────────────────────────── */}
 {(() => {
         const activeWOs = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
@@ -1247,6 +1233,20 @@ export const AdminDashboard: React.FC = () => {
           </Card>
         );
       })()}
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="material-icons-round text-violet-500">verified</span>
+          <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" />
+          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
+          <KPIBox label="Defect Rate" value={qualityKpis.defectRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
+          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" />
+          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
+        </div>
+      </Card>
 
       {/* ── System KPIs ─────────────────────────────────────────────────────── */}
       {isVisible('system_kpis') && <div>
