@@ -1331,10 +1331,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      const activeWOs = await workOrderService.getActiveByLineAndProduct(data.lineId, data.productId);
-      const activeWO = activeWOs[0] ?? null;
+      let activeWO: WorkOrder | null = null;
+      if (data.workOrderId) {
+        const selectedWO = await workOrderService.getById(data.workOrderId);
+        if (selectedWO && (selectedWO.status === 'pending' || selectedWO.status === 'in_progress')) {
+          activeWO = selectedWO;
+        }
+      }
+      if (!activeWO) {
+        const activeWOs = await workOrderService.getActiveByLineAndProduct(data.lineId, data.productId);
+        activeWO = activeWOs[0] ?? null;
+      }
 
-      const reportData = { ...data, workOrderId: activeWO?.id || '' };
+      const reportData = { ...data, workOrderId: activeWO?.id || data.workOrderId || '' };
       const id = await reportService.create(reportData);
 
       const laborCost = (laborSettings?.hourlyRate ?? 0) * (data.workHours || 0) * (data.workersCount || 0);
@@ -1342,7 +1351,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (activeWO?.id) {
         await workOrderService.incrementProduced(activeWO.id, data.quantityProduced, laborCost);
         const newProduced = (activeWO.producedQuantity ?? 0) + data.quantityProduced;
-        if (newProduced >= activeWO.quantity) {
+        const remainingBefore = Math.max(activeWO.quantity - (activeWO.producedQuantity ?? 0), 0);
+        const wasteClosesWorkOrder = Math.abs((data.quantityWaste ?? 0) - remainingBefore) < 0.0001;
+        if (newProduced >= activeWO.quantity || wasteClosesWorkOrder) {
           await workOrderService.update(activeWO.id, { status: 'completed', completedAt: new Date().toISOString() });
         } else if (activeWO.status === 'pending') {
           await workOrderService.update(activeWO.id, { status: 'in_progress' });

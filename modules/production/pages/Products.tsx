@@ -80,6 +80,7 @@ export const Products: React.FC = () => {
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
+  const canViewSellingPrice = can('roles.manage');
   const navigate = useNavigate();
 
   const [showModal, setShowModal] = useState(false);
@@ -258,8 +259,8 @@ export const Products: React.FC = () => {
     if (canViewCosts && visibleColumns.unitsPerCarton) columnLabels.push('وحدات/كرتونة');
     if (canViewCosts && visibleColumns.totalCost) columnLabels.push('إجمالي التكلفة المحسوبة');
     if (canViewCosts && visibleColumns.costPerUnit) columnLabels.push('نصيب المصاريف الصناعية (م. وغ.م)');
-    if (visibleColumns.sellingPrice) columnLabels.push('سعر البيع');
-    if (canViewCosts && visibleColumns.sellingPrice) {
+    if (canViewSellingPrice && visibleColumns.sellingPrice) columnLabels.push('سعر البيع');
+    if (canViewCosts && canViewSellingPrice && visibleColumns.sellingPrice) {
       columnLabels.push('هامش الربح (ج.م)');
       columnLabels.push('نسبة هامش الربح %');
     }
@@ -293,8 +294,8 @@ export const Products: React.FC = () => {
                   stock: visibleColumns.openingStock || visibleColumns.totalProduction || visibleColumns.wasteUnits || visibleColumns.stockLevel,
                   productCosts: visibleColumns.chineseUnitCost || visibleColumns.innerBoxCost || visibleColumns.outerCartonCost || visibleColumns.unitsPerCarton || visibleColumns.totalCost || visibleColumns.chinesePriceCny,
                   manufacturingCosts: visibleColumns.costPerUnit,
-                  sellingPrice: visibleColumns.sellingPrice,
-                  profitMargin: visibleColumns.sellingPrice,
+                  sellingPrice: canViewSellingPrice && visibleColumns.sellingPrice,
+                  profitMargin: canViewSellingPrice && visibleColumns.sellingPrice,
                   chinesePriceCny: visibleColumns.chinesePriceCny,
                 };
                 setExportOptions(opts);
@@ -384,7 +385,7 @@ export const Products: React.FC = () => {
                 {visibleColumns.totalProduction && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الإنتاج</th>}
                 {visibleColumns.wasteUnits && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الهالك</th>}
                 {visibleColumns.stockLevel && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الرصيد الحالي</th>}
-                {visibleColumns.sellingPrice && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">سعر البيع</th>}
+                {canViewSellingPrice && visibleColumns.sellingPrice && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">سعر البيع</th>}
                 {canViewCosts && (
                   <>
                     {visibleColumns.totalCost && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">إجمالي التكلفة</th>}
@@ -456,7 +457,7 @@ export const Products: React.FC = () => {
                       {formatNumber(product.stockLevel)}
                     </span>
                   </td>}
-                  {visibleColumns.sellingPrice && (
+                  {canViewSellingPrice && visibleColumns.sellingPrice && (
                     <td className="px-4 py-4 text-center text-sm font-black tabular-nums">
                       {formatCost((_rawProducts.find((r) => r.id === product.id)?.sellingPrice ?? 0))} ج.م
                     </td>
@@ -891,7 +892,7 @@ export const Products: React.FC = () => {
                 { key: 'totalProduction' as const, label: 'الإنتاج', icon: 'precision_manufacturing' },
                 { key: 'wasteUnits' as const, label: 'الهالك', icon: 'delete_sweep' },
                 { key: 'stockLevel' as const, label: 'الرصيد الحالي', icon: 'inventory_2' },
-                { key: 'sellingPrice' as const, label: 'سعر البيع', icon: 'sell' },
+                ...(canViewSellingPrice ? [{ key: 'sellingPrice' as const, label: 'سعر البيع', icon: 'sell' }] : []),
                 { key: 'totalCost' as const, label: 'إجمالي التكلفة', icon: 'payments' },
                 { key: 'directIndirect' as const, label: 'مباشر / غير مباشر', icon: 'compare_arrows' },
                 { key: 'costPerUnit' as const, label: 'تكلفة الوحدة', icon: 'price_check' },

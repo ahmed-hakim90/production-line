@@ -28,6 +28,7 @@ const emptyForm = {
   employeeId: '',
   productId: '',
   lineId: '',
+  workOrderId: '',
   date: getTodayDateString(),
   quantityProduced: 0,
   quantityWaste: 0,
@@ -36,6 +37,13 @@ const emptyForm = {
   notes: '',
 };
 const NOTE_PREVIEW_LENGTH = 10;
+
+const toDateInputValue = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 export const Reports: React.FC = () => {
   const location = useLocation();
@@ -357,6 +365,39 @@ export const Reports: React.FC = () => {
     setFilterEmployeeId('');
   };
 
+  const handleShowYesterday = async () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterday = toDateInputValue(d);
+    setStartDate(yesterday);
+    setEndDate(yesterday);
+    await fetchReports(yesterday, yesterday);
+    setViewMode('range');
+  };
+
+  const handleShowWeekly = async () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    const startStr = toDateInputValue(start);
+    const endStr = toDateInputValue(end);
+    setStartDate(startStr);
+    setEndDate(endStr);
+    await fetchReports(startStr, endStr);
+    setViewMode('range');
+  };
+
+  const handleShowMonthly = async () => {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    const startStr = toDateInputValue(start);
+    const endStr = toDateInputValue(end);
+    setStartDate(startStr);
+    setEndDate(endStr);
+    await fetchReports(startStr, endStr);
+    setViewMode('range');
+  };
+
   const activeFilterCount = (filterLineId ? 1 : 0) + (filterEmployeeId ? 1 : 0);
 
   const openCreate = () => {
@@ -373,6 +414,7 @@ export const Reports: React.FC = () => {
       employeeId: report.employeeId,
       productId: report.productId,
       lineId: report.lineId,
+      workOrderId: report.workOrderId ?? '',
       date: report.date,
       quantityProduced: report.quantityProduced,
       quantityWaste: report.quantityWaste,
@@ -847,6 +889,37 @@ export const Reports: React.FC = () => {
             <span className="material-icons-round text-sm">today</span>
             اليوم
           </Button>
+          <Button
+            variant={viewMode === 'range' && startDate === endDate && startDate !== getTodayDateString() ? 'primary' : 'outline'}
+            onClick={handleShowYesterday}
+            className="text-xs py-2"
+          >
+            <span className="material-icons-round text-sm">history</span>
+            أمس
+          </Button>
+          <Button
+            variant={viewMode === 'range' && endDate === getTodayDateString() && (() => {
+              const d = new Date();
+              d.setDate(d.getDate() - 6);
+              return startDate === toDateInputValue(d);
+            })() ? 'primary' : 'outline'}
+            onClick={handleShowWeekly}
+            className="text-xs py-2"
+          >
+            <span className="material-icons-round text-sm">date_range</span>
+            أسبوعي
+          </Button>
+          <Button
+            variant={viewMode === 'range' && endDate === getTodayDateString() && (() => {
+              const now = new Date();
+              return startDate === toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+            })() ? 'primary' : 'outline'}
+            onClick={handleShowMonthly}
+            className="text-xs py-2"
+          >
+            <span className="material-icons-round text-sm">calendar_month</span>
+            شهري
+          </Button>
           <div className="hidden sm:block h-8 w-[1px] bg-slate-200 dark:bg-slate-700"></div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <div className="flex items-center gap-2">
@@ -981,12 +1054,16 @@ export const Reports: React.FC = () => {
                     </label>
                     <select
                       className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
-                      value=""
+                      value={form.workOrderId}
                       onChange={(e) => {
                         const wo = activeWOs.find((w) => w.id === e.target.value);
-                        if (!wo) return;
+                        if (!wo) {
+                          setForm({ ...form, workOrderId: '' });
+                          return;
+                        }
                         setForm({
                           ...form,
+                          workOrderId: wo.id ?? '',
                           lineId: wo.lineId,
                           productId: wo.productId,
                           employeeId: wo.supervisorId,
@@ -1035,7 +1112,7 @@ export const Reports: React.FC = () => {
                     placeholder="اختر الخط"
                     options={_rawLines.map((l) => ({ value: l.id!, label: l.name }))}
                     value={form.lineId}
-                    onChange={(v) => setForm({ ...form, lineId: v })}
+                    onChange={(v) => setForm({ ...form, lineId: v, workOrderId: '' })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1044,7 +1121,7 @@ export const Reports: React.FC = () => {
                     placeholder="اختر المنتج"
                     options={_rawProducts.map((p) => ({ value: p.id!, label: p.name }))}
                     value={form.productId}
-                    onChange={(v) => setForm({ ...form, productId: v })}
+                    onChange={(v) => setForm({ ...form, productId: v, workOrderId: '' })}
                   />
                 </div>
               </div>

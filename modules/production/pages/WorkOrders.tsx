@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
-import { Card, Badge, Button, KPIBox } from '../components/UI';
+import { Card, Badge, Button, KPIBox, SearchableSelect } from '../components/UI';
 import { WorkOrderPrint } from '../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../components/ProductionReportPrint';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
@@ -649,13 +649,15 @@ export const WorkOrders: React.FC = () => {
               {/* Product */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">المنتج *</label>
-                <select value={form.productId} onChange={(e) => setForm((f) => ({ ...f, productId: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold">
-                  <option value="">اختر المنتج</option>
-                  {_rawProducts.map((p) => (
-                    <option key={p.id} value={p.id!}>{p.name} ({p.code})</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  options={_rawProducts.map((p) => ({
+                    value: p.id!,
+                    label: `${p.name} (${p.code})`,
+                  }))}
+                  value={form.productId}
+                  onChange={(value) => setForm((f) => ({ ...f, productId: value }))}
+                  placeholder="ابحث واختر المنتج"
+                />
               </div>
 
               {/* Cost Estimate Preview (same as Reports) */}

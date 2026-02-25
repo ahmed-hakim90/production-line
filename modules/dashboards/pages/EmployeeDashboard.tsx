@@ -359,6 +359,16 @@ export const EmployeeDashboard: React.FC = () => {
               الإدخال السريع
             </button>
           )}
+          {can('lineWorkers.view') && (
+            <button
+              type="button"
+              onClick={() => navigate('/line-workers')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all"
+            >
+              <span className="material-icons-round text-base">group_work</span>
+              ربط العمالة بالخط
+            </button>
+          )}
           <DashboardPeriodFilter period={period} onChange={setPeriod} />
         </div>
       </div>
