@@ -106,3 +106,7 @@
 ## [4.0.1] - 2026-02-25
 
 - Add Refactor Code All Project
+
+## [4.0.2] - 2026-02-25
+
+- Add Refactor Code All Project change qc position

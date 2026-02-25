@@ -9,7 +9,7 @@
 ![Firebase](https://img.shields.io/badge/Firebase-12-orange)
 ![Zustand](https://img.shields.io/badge/Zustand-5-purple)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
-![Version](https://img.shields.io/badge/version-4.0.2-green)
+![Version](https://img.shields.io/badge/version-4.0.3-green)
 
 ## 🚀 نظرة عامة
 
@@ -49,6 +49,11 @@
 - تفعيل / تعطيل الحسابات
 - إعادة تعيين كلمة المرور عبر البريد
 - تغيير الدور والصلاحيات
+
+### التوجيه بعد تسجيل الدخول
+- التطبيق يحفظ المسار المطلوب قبل تسجيل الدخول تلقائيًا
+- بعد نجاح تسجيل الدخول يتم إعادة التوجيه لنفس الصفحة (إن كانت صالحة)
+- في حالة عدم وجود مسار محفوظ يتم التحويل لصفحة البداية المناسبة حسب الدور
 
 ---
 
@@ -175,61 +180,43 @@ const { can, canCreateReport, canEditReport, canDeleteReport, canManageUsers } =
 ## 🗂️ هيكل المشروع
 
 ```
+├── App.tsx                         # تجميع routes + auth gate + layout mounting
 ├── components/
-│   ├── Layout.tsx                  # App shell — sidebar + header + footer
-│   ├── ProtectedRoute.tsx          # Route protection (auth + permission check)
-│   ├── ProductionReportPrint.tsx    # مكونات الطباعة (جماعي + فردي)
-│   └── UI.tsx                      # Card, KPIBox, Button, Badge, LoadingSkeleton
+│   ├── Layout.tsx                  # App shell (sidebar + topbar + footer)
+│   └── ProtectedRoute.tsx          # Guard للصلاحيات على مستوى الـ route
 │
-├── pages/
-│   ├── Login.tsx                   # تسجيل الدخول + إنشاء حساب جديد
-│   ├── Dashboard.tsx               # لوحة التحكم + حاسبة التخطيط الذكي
-│   ├── Products.tsx                # قائمة المنتجات + CRUD
-│   ├── ProductDetails.tsx          # تفاصيل المنتج + رسم بياني
-│   ├── Lines.tsx                   # قائمة خطوط الإنتاج
-│   ├── LineDetails.tsx             # تفاصيل الخط + الكفاءة + الاستخدام
-│   ├── Employees.tsx               # إدارة الموظفين + الحسابات
-│   ├── EmployeeProfile.tsx         # الملف الشخصي للموظف
-│   ├── Reports.tsx                 # تقارير الإنتاج + CRUD + طباعة
-│   ├── QuickAction.tsx             # الإدخال السريع (حفظ + طباعة + واتساب)
-│   ├── Users.tsx                   # إدارة المستخدمين (مسار احتياطي)
-│   ├── ActivityLog.tsx             # سجل النشاط مع pagination
-│   ├── RolesManagement.tsx         # إدارة الأدوار والصلاحيات
-│   └── Settings.tsx                # الإعدادات وحالة النظام
+├── modules/
+│   ├── auth/                       # login / setup / pending + auth services
+│   ├── dashboards/                 # admin/factory/employee dashboards
+│   ├── production/                 # products, lines, work orders, scanner, plans
+│   ├── quality/                    # inspections, CAPA, rework, quality reports
+│   ├── hr/                         # employees, attendance, payroll, approvals
+│   ├── costs/                      # cost centers, allocations, monthly costs
+│   ├── system/                     # roles, activity log, system settings
+│   └── shared/                     # shared UI/hooks/routes/types بين الوحدات
 │
-├── modules/hr/                     # وحدة الموارد البشرية
-│   ├── approval/                   # محرك الموافقات المؤسسي
-│   ├── config/                     # إعدادات HR المركزية
-│   ├── payroll/                    # نظام الرواتب
-│   └── pages/                      # صفحات HR
-│
-├── services/
-│   ├── firebase.ts                 # Firebase init + Auth functions
-│   ├── productService.ts           # Products CRUD
-│   ├── lineService.ts              # Production lines CRUD
-│   ├── employeeService.ts          # Employees CRUD (via modules/hr/)
-│   ├── reportService.ts            # Reports CRUD + date queries + real-time
-│   ├── lineStatusService.ts        # Line status real-time updates
-│   ├── lineProductConfigService.ts # إعدادات المنتج-الخط
-│   ├── roleService.ts              # Roles CRUD + default seeding
-│   ├── userService.ts              # User documents CRUD (auth profile)
-│   └── activityLogService.ts       # Activity logging + pagination
-│
-├── store/
-│   └── useAppStore.ts              # Zustand global store + auth + RBAC + logging
-│
-├── utils/
-│   ├── calculations.ts             # حسابات: كفاءة، هالك، طاقة، زمن تجميع
-│   ├── permissions.ts              # Permission system + guards + hooks
-│   ├── exportExcel.ts              # تصدير Excel (SheetJS)
-│   └── reportExport.ts             # تصدير PDF (jsPDF) + مشاركة واتساب
-│
-├── types.ts                        # TypeScript interfaces + enums
-├── App.tsx                         # Router setup + auth gate
-├── index.tsx                       # Entry point
+├── services/                       # خدمات cross-module (firebase, users, logs...)
+├── shared/events/                  # event bus + system events + listeners
+├── store/useAppStore.ts            # Zustand store (auth + RBAC + orchestration)
+├── utils/                          # calculations + permissions + export helpers
+├── types.ts                        # domain & firestore types
 ├── firestore.rules                 # Firestore security rules
-└── package.json                    # Dependencies & scripts
+├── storage.rules                   # Storage security rules
+└── scripts/                        # automation scripts (version/changelog)
 ```
+
+---
+
+## 🧭 نظام المسارات (Modular Routing)
+
+يتم تعريف المسارات داخل كل Module في ملف `routes/index.ts` ثم تجميعها مركزيًا في `App.tsx`:
+
+- `AUTH_PUBLIC_ROUTES` للمسارات العامة (`/login`, `/setup`, `/pending`)
+- `DASHBOARD_ROUTES`, `PRODUCTION_ROUTES`, `QUALITY_ROUTES`, `HR_ROUTES`, `COST_ROUTES`, `SYSTEM_ROUTES`
+- كل مسار محمي بصلاحية محددة عبر `ProtectedRoute`
+- صفحة الجذر `/` تعيد التوجيه تلقائيًا لواجهة البداية المناسبة حسب صلاحيات المستخدم
+
+هذا الأسلوب يسهل إضافة وحدة جديدة بدون تعديل كبير في هيكل التطبيق.
 
 ---
 
@@ -359,6 +346,13 @@ npm run dev
 npm run build
 ```
 
+### 7. سكربتات مساعدة
+
+```bash
+npm run version:auto     # تحديث رقم الإصدار تلقائيًا
+npm run changelog:auto   # توليد CHANGELOG تلقائيًا
+```
+
 ---
 
 ## 🚀 ملاحظات الأداء
@@ -459,6 +453,6 @@ modules/hr/
 
 **HAKIMO — نظام إنتاج متكامل** 🏭
 
-الإصدار 4.0.0 — مع مصادقة + صلاحيات + HR + رواتب + موافقات مؤسسية
+الإصدار 4.0.2 — مع مصادقة + صلاحيات + HR + رواتب + موافقات مؤسسية
 
 </div>

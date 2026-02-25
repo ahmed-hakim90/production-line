@@ -197,6 +197,16 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    // On mobile, focusing while input is still readOnly may block keyboard.
+    // Focus again after render so the soft keyboard opens reliably.
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
   const handleSelect = (val: string) => {
     onChange(val);
     setOpen(false);
@@ -225,7 +235,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
             : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
           }
         `}
-        onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+        onClick={() => { setOpen(true); }}
       >
         <span className="material-icons-round text-slate-400 text-lg pr-3 pl-1 shrink-0">search</span>
         <input
