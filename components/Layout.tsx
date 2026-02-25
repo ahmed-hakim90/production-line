@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { usePermission, useCurrentRole } from '../utils/permissions';
@@ -254,6 +254,7 @@ const Header: React.FC<{ onMenuToggle: () => void }> = ({ onMenuToggle }) => {
   const { isReadOnly } = useCurrentRole();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const isStandalone = () =>
@@ -290,6 +291,11 @@ const Header: React.FC<{ onMenuToggle: () => void }> = ({ onMenuToggle }) => {
     setDeferredPrompt(null);
   };
 
+  const handleRefreshClick = useCallback(() => {
+    setRefreshing(true);
+    window.location.reload();
+  }, []);
+
   return (
     <header className="h-16 sm:h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
       <button onClick={onMenuToggle} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors lg:hidden shrink-0">
@@ -319,6 +325,16 @@ const Header: React.FC<{ onMenuToggle: () => void }> = ({ onMenuToggle }) => {
             قراءة فقط
           </span>
         )}
+        <button
+          onClick={handleRefreshClick}
+          disabled={refreshing}
+          className="inline-flex items-center justify-center p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          title="تحديث كامل للمتصفح"
+        >
+          <span className={`material-icons-round ${refreshing ? 'animate-spin text-primary' : ''}`}>
+            refresh
+          </span>
+        </button>
         <NotificationBell />
         <div className="hidden md:block h-8 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1"></div>
         <div className="hidden md:flex flex-col items-end">

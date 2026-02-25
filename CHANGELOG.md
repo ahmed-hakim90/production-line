@@ -126,3 +126,7 @@
 ## [4.0.6] - 2026-02-25
 
 - dashbaord worker search product add details in worker
+
+## [4.0.7] - 2026-02-25
+
+- refresh

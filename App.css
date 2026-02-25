@@ -11,5 +11,5 @@ body,
 /* Prevent accidental browser pull-to-refresh on mobile drag-down */
 html,
 body {
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y:calc(200px)
 }

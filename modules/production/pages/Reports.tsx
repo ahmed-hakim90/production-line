@@ -106,6 +106,9 @@ export const Reports: React.FC = () => {
   const [formLineWorkers, setFormLineWorkers] = useState<LineWorkerAssignment[]>([]);
   const [viewWorkersData, setViewWorkersData] = useState<{ lineId: string; date: string; workers: LineWorkerAssignment[] } | null>(null);
   const [viewWorkersLoading, setViewWorkersLoading] = useState(false);
+  const [viewWorkersPickerId, setViewWorkersPickerId] = useState('');
+  const [viewWorkersBusy, setViewWorkersBusy] = useState(false);
+  const [viewWorkersError, setViewWorkersError] = useState<string | null>(null);
 
   // Work order detail popup
   const [viewWOReport, setViewWOReport] = useState<ProductionReport | null>(null);
@@ -460,6 +463,8 @@ export const Reports: React.FC = () => {
 
   const handleViewWorkers = async (lineId: string, date: string) => {
     setViewWorkersLoading(true);
+    setViewWorkersError(null);
+    setViewWorkersPickerId('');
     setViewWorkersData({ lineId, date, workers: [] });
     try {
       const workers = await lineAssignmentService.getByLineAndDate(lineId, date);
@@ -470,6 +475,84 @@ export const Reports: React.FC = () => {
       setViewWorkersLoading(false);
     }
   };
+
+  const refreshWorkersForLineDate = useCallback(async (lineId: string, date: string) => {
+    const workers = await lineAssignmentService.getByLineAndDate(lineId, date);
+    setViewWorkersData({ lineId, date, workers });
+    if (showModal && form.lineId === lineId && form.date === date) {
+      setFormLineWorkers(workers);
+      setForm((prev) => ({ ...prev, workersCount: workers.length }));
+    }
+  }, [showModal, form.lineId, form.date]);
+
+  const addWorkerToLineDate = useCallback(async () => {
+    if (!viewWorkersData || !viewWorkersPickerId) return;
+    const selected = _rawEmployees.find((e) => e.id === viewWorkersPickerId);
+    if (!selected) return;
+
+    setViewWorkersBusy(true);
+    setViewWorkersError(null);
+    try {
+      const dayAssignments = await lineAssignmentService.getByDate(viewWorkersData.date);
+      const onSameLine = dayAssignments.find(
+        (a) => a.employeeId === selected.id && a.lineId === viewWorkersData.lineId,
+      );
+      if (onSameLine) {
+        setViewWorkersError('العامل مسجل بالفعل على هذا الخط في نفس اليوم.');
+        return;
+      }
+      const onOtherLine = dayAssignments.find(
+        (a) => a.employeeId === selected.id && a.lineId !== viewWorkersData.lineId,
+      );
+      if (onOtherLine) {
+        setViewWorkersError(`العامل مسجل على خط آخر في نفس اليوم (${getLineName(onOtherLine.lineId)}).`);
+        return;
+      }
+
+      await lineAssignmentService.create({
+        lineId: viewWorkersData.lineId,
+        employeeId: selected.id!,
+        employeeCode: selected.code || '',
+        employeeName: selected.name,
+        date: viewWorkersData.date,
+        assignedBy: uid || '',
+      });
+      setViewWorkersPickerId('');
+      await refreshWorkersForLineDate(viewWorkersData.lineId, viewWorkersData.date);
+    } catch {
+      setViewWorkersError('تعذر إضافة العامل الآن. حاول مرة أخرى.');
+    } finally {
+      setViewWorkersBusy(false);
+    }
+  }, [viewWorkersData, viewWorkersPickerId, _rawEmployees, getLineName, uid, refreshWorkersForLineDate]);
+
+  const removeWorkerFromLineDate = useCallback(async (assignmentId?: string) => {
+    if (!viewWorkersData || !assignmentId) return;
+    setViewWorkersBusy(true);
+    setViewWorkersError(null);
+    try {
+      await lineAssignmentService.delete(assignmentId);
+      await refreshWorkersForLineDate(viewWorkersData.lineId, viewWorkersData.date);
+    } catch {
+      setViewWorkersError('تعذر حذف العامل الآن. حاول مرة أخرى.');
+    } finally {
+      setViewWorkersBusy(false);
+    }
+  }, [viewWorkersData, refreshWorkersForLineDate]);
+
+  const availableWorkersForModal = useMemo(
+    () => {
+      if (!viewWorkersData) return [];
+      const assignedIds = new Set(viewWorkersData.workers.map((w) => w.employeeId));
+      return _rawEmployees
+        .filter((e) => e.isActive !== false && !assignedIds.has(e.id!))
+        .map((e) => ({
+          value: e.id!,
+          label: e.code ? `${e.name} (${e.code})` : e.name,
+        }));
+    },
+    [viewWorkersData, _rawEmployees],
+  );
 
   const handlePDF = async () => {
     if (!bulkPrintRef.current) return;
@@ -961,7 +1044,7 @@ export const Reports: React.FC = () => {
               value={filterLineId}
               onChange={(e) => setFilterLineId(e.target.value)}
             >
-              <option value="">الكل</option>
+              <option c value="">الكل</option>
               {_rawLines.map((l) => (
                 <option key={l.id} value={l.id!}>{l.name}</option>
               ))}
@@ -975,7 +1058,7 @@ export const Reports: React.FC = () => {
                 value={filterEmployeeId}
                 onChange={(e) => setFilterEmployeeId(e.target.value)}
               >
-                <option value="">الكل</option>
+                <option  value="">الكل</option>
                 {employees.filter((e) => e.level === 2).map((emp) => (
                   <option key={emp.id} value={emp.id}>{emp.name}</option>
                 ))}
@@ -1629,7 +1712,7 @@ export const Reports: React.FC = () => {
 
       {/* ══ View Workers Modal ══ */}
       {viewWorkersData && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewWorkersData(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] border border-slate-200 dark:border-slate-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
@@ -1637,9 +1720,36 @@ export const Reports: React.FC = () => {
                 <h3 className="font-bold">عمالة {getLineName(viewWorkersData.lineId)}</h3>
                 <span className="text-xs text-slate-400 font-medium">{viewWorkersData.date}</span>
               </div>
-              <button onClick={() => setViewWorkersData(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }} className="text-slate-400 hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
+            </div>
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <SearchableSelect
+                    placeholder="ابحث عن عامل للإضافة"
+                    options={availableWorkersForModal}
+                    value={viewWorkersPickerId}
+                    onChange={setViewWorkersPickerId}
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={addWorkerToLineDate}
+                  disabled={!viewWorkersPickerId || viewWorkersBusy}
+                >
+                  {viewWorkersBusy ? (
+                    <span className="material-icons-round animate-spin text-sm">refresh</span>
+                  ) : (
+                    <span className="material-icons-round text-sm">person_add</span>
+                  )}
+                  إضافة
+                </Button>
+              </div>
+              {viewWorkersError && (
+                <p className="text-xs font-bold text-rose-500">{viewWorkersError}</p>
+              )}
             </div>
             <div className="p-4 overflow-y-auto flex-1">
               {viewWorkersLoading ? (
@@ -1667,6 +1777,15 @@ export const Reports: React.FC = () => {
                           <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{w.employeeName}</p>
                           <p className="text-xs text-slate-400 font-mono">{w.employeeCode}</p>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => removeWorkerFromLineDate(w.id)}
+                          disabled={viewWorkersBusy}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all disabled:opacity-50"
+                          title="حذف العامل من هذا الخط"
+                        >
+                          <span className="material-icons-round text-base">delete</span>
+                        </button>
                       </div>
                     ))}
                   </div>

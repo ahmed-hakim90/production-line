@@ -5,7 +5,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber, getTodayDateString, calculatePlanProgress, calculateSmartStatus, calculateTimeRatio, calculateProgressRatio } from '../../../utils/calculations';
 import { formatCost } from '../../../utils/costCalculations';
-import { ProductionLineStatus, FirestoreProductionLine, WorkOrder, ProductionPlan } from '../../../types';
+import { ProductionLineStatus, FirestoreProductionLine, WorkOrder, ProductionPlan, ProductionReport } from '../../../types';
 import type { LineWorkerAssignment } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
@@ -38,6 +38,8 @@ export const Lines: React.FC = () => {
   const workOrders = useAppStore((s) => s.workOrders);
   const productionPlans = useAppStore((s) => s.productionPlans);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
+  const todayReports = useAppStore((s) => s.todayReports);
+  const productionReports = useAppStore((s) => s.productionReports);
 
   const { can } = usePermission();
   const navigate = useNavigate();
@@ -171,6 +173,36 @@ export const Lines: React.FC = () => {
       return a.name.localeCompare(b.name, 'ar');
     });
   }, [productionLines, workOrders]);
+
+  const latestReportByLine = useMemo(() => {
+    const getReportTime = (r: ProductionReport): number => {
+      const createdAt = r.createdAt as any;
+      if (createdAt?.toDate) return createdAt.toDate().getTime();
+      if (createdAt?.seconds) return createdAt.seconds * 1000;
+      if (createdAt) {
+        const createdAtMs = new Date(createdAt).getTime();
+        if (!Number.isNaN(createdAtMs)) return createdAtMs;
+      }
+      const dateMs = new Date(r.date).getTime();
+      return Number.isNaN(dateMs) ? 0 : dateMs;
+    };
+
+    const merged = [...todayReports, ...productionReports];
+    const unique = new Map<string, ProductionReport>();
+    merged.forEach((r) => {
+      const key = r.id ?? `${r.lineId}_${r.productId}_${r.employeeId}_${r.date}_${r.quantityProduced}_${r.workHours}`;
+      if (!unique.has(key)) unique.set(key, r);
+    });
+
+    const byLine = new Map<string, ProductionReport>();
+    unique.forEach((report) => {
+      const current = byLine.get(report.lineId);
+      if (!current || getReportTime(report) > getReportTime(current)) {
+        byLine.set(report.lineId, report);
+      }
+    });
+    return byLine;
+  }, [todayReports, productionReports]);
 
   return (
     <div className="space-y-6">
@@ -459,11 +491,14 @@ export const Lines: React.FC = () => {
             const raw = _rawLines.find((l) => l.id === line.id);
             const activeWOs = workOrders.filter((w) => w.lineId === line.id && (w.status === 'pending' || w.status === 'in_progress'));
             const activeWO: WorkOrder | undefined = activeWOs.find((w) => w.status === 'in_progress') ?? activeWOs[0];
+            const lastLineReport = latestReportByLine.get(line.id);
             const woProduct = activeWO ? _rawProducts.find((p) => p.id === activeWO.productId) : null;
             const woProgress = activeWO && activeWO.quantity > 0 ? Math.round((activeWO.producedQuantity / activeWO.quantity) * 100) : 0;
             const woRemaining = activeWO ? activeWO.quantity - (activeWO.producedQuantity ?? 0) : 0;
             const woSupervisor = activeWO ? _rawEmployees.find((e) => e.id === activeWO.supervisorId) : null;
             const woEstCostPerUnit = activeWO && activeWO.quantity > 0 ? activeWO.estimatedCost / activeWO.quantity : 0;
+            const reportProduct = lastLineReport ? _rawProducts.find((p) => p.id === lastLineReport.productId) : null;
+            const reportSupervisor = lastLineReport ? _rawEmployees.find((e) => e.id === lastLineReport.employeeId) : null;
 
             return (
               <Card key={line.id} className="transition-all hover:ring-2 hover:ring-primary/10">
@@ -483,12 +518,12 @@ export const Lines: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="material-icons-round text-slate-400 text-sm">person</span>
                     <p className="text-xs text-slate-400 font-bold">المشرف</p>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 mr-auto">{woSupervisor?.name ?? line.employeeName ?? '—'}</p>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 mr-auto">{woSupervisor?.name ?? reportSupervisor?.name ?? line.currentName ?? '—'}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="material-icons-round text-slate-400 text-sm">inventory_2</span>
                     <p className="text-xs text-slate-400 font-bold">المنتج</p>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 mr-auto truncate max-w-[200px]">{woProduct?.name ?? line.currentProduct ?? '—'}</p>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 mr-auto truncate max-w-[200px]">{woProduct?.name ?? reportProduct?.name ?? line.currentProduct ?? '—'}</p>
                   </div>
                   {can('costs.view') && woEstCostPerUnit > 0 && (
                     <div className="flex items-center gap-2">
@@ -499,7 +534,32 @@ export const Lines: React.FC = () => {
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 mb-4 text-center">
+                <div className="mb-4 rounded-xl border border-primary/15 bg-primary/5 p-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p className="text-xs font-black text-primary">آخر تقرير إنتاج</p>
+                    <span className="text-[11px] font-bold text-slate-500">{lastLineReport?.date ?? 'لا يوجد تقرير'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="bg-white/70 dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] text-slate-400 mb-0.5">الإنتاج</p>
+                      <p className="text-sm font-black text-emerald-600">{lastLineReport ? formatNumber(lastLineReport.quantityProduced || 0) : '—'}</p>
+                    </div>
+                    <div className="bg-white/70 dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] text-slate-400 mb-0.5">الهالك</p>
+                      <p className="text-sm font-black text-rose-500">{lastLineReport ? formatNumber(lastLineReport.quantityWaste || 0) : '—'}</p>
+                    </div>
+                    <div className="bg-white/70 dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] text-slate-400 mb-0.5">عمالة التقرير</p>
+                      <p className="text-sm font-black text-slate-700 dark:text-slate-200">{lastLineReport ? formatNumber(lastLineReport.workersCount || 0) : '—'}</p>
+                    </div>
+                    <div className="bg-white/70 dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] text-slate-400 mb-0.5">ساعات التقرير</p>
+                      <p className="text-sm font-black text-primary">{lastLineReport ? formatNumber(lastLineReport.workHours || 0) : '—'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* <div className="grid grid-cols-3 gap-3 mb-4 text-center">
                   <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
                     <p className="text-xs text-slate-400 mb-1">المطلوب</p>
                     <p className={`text-lg font-black ${activeWO ? 'text-slate-700 dark:text-white' : 'text-slate-400'}`}>{activeWO ? formatNumber(activeWO.quantity) : '—'}</p>
@@ -534,7 +594,7 @@ export const Lines: React.FC = () => {
                     <p className="text-xs text-slate-400 mb-1">التاريخ المستهدف</p>
                     <p className="text-sm font-black text-slate-600 dark:text-slate-300">{activeWO?.targetDate ?? '—'}</p>
                   </div>
-                </div>
+                </div> */}
 
                 <div className="space-y-3 mb-5">
                   <div className="flex justify-between text-xs font-bold">
