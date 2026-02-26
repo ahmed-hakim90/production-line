@@ -309,9 +309,12 @@ export function DataTable<T>({
 
           {enableSearch && <div className="flex-1" />}
 
-          {toolbarContent ? columnsVisibilityControl : null}
           {toolbarContent}
-          {!toolbarContent ? columnsVisibilityControl : null}
+          {columnsVisibilityControl ? (
+            <div className="shrink-0" style={{ marginInlineStart: 'auto' }}>
+              {columnsVisibilityControl}
+            </div>
+          ) : null}
         </div>
 
         <div className="overflow-auto max-h-[70vh]">
