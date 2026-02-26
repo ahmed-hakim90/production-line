@@ -17,7 +17,7 @@ import { reportService } from '../../../services/reportService';
 import { usePermission } from '../../../utils/permissions';
 import type { ProductionReport, WorkOrder } from '../../../types';
 
-type Period = 'daily' | 'weekly' | 'monthly';
+type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
 function getDateRange(period: Period): { start: string; end: string } {
   const now = new Date();
@@ -25,6 +25,16 @@ function getDateRange(period: Period): { start: string; end: string } {
 
   if (period === 'daily') {
     return { start: end, end };
+  }
+
+  if (period === 'yesterday') {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const y = yesterday.getFullYear();
+    const m = String(yesterday.getMonth() + 1).padStart(2, '0');
+    const d = String(yesterday.getDate()).padStart(2, '0');
+    const date = `${y}-${m}-${d}`;
+    return { start: date, end: date };
   }
 
   if (period === 'weekly') {
@@ -45,6 +55,7 @@ function getDateRange(period: Period): { start: string; end: string } {
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'daily', label: 'يومي' },
+  { value: 'yesterday', label: 'أمس' },
   { value: 'weekly', label: 'أسبوعي' },
   { value: 'monthly', label: 'شهري' },
 ];
@@ -158,7 +169,7 @@ export const EmployeeDashboard: React.FC = () => {
 
     let cancelled = false;
     setPeriodLoading(true);
-    const { start, end } = getDateRange('weekly');
+    const { start, end } = getDateRange(period);
     reportService.getByDateRange(start, end).then((reports) => {
       if (!cancelled) {
         setPeriodReports(reports.filter((r) => r.employeeId === employee.id));
@@ -328,25 +339,33 @@ export const EmployeeDashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="space-y-8">
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">لوحة الموظف</h2>
+        {/* <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">لوحة الموظف</h2> */}
         <LoadingSkeleton type="card" rows={6} />
       </div>
     );
   }
 
-  const periodLabel = period === 'daily' ? 'اليوم' : period === 'weekly' ? 'هذا الأسبوع' : 'هذا الشهر';
+  const periodLabel =
+    period === 'daily'
+      ? 'اليوم'
+      : period === 'yesterday'
+        ? 'أمس'
+        : period === 'weekly'
+          ? 'هذا الأسبوع'
+          : 'هذا الشهر';
 
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Header + Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">
+          {/* <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">
             لوحة الموظف
-          </h2>
+          </h2> */}
           <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm">
             {employee?.name ? `مرحباً ${employee.name}` : 'متابعة الأداء التشغيلي'}
           </p>
+             <DashboardPeriodFilter period={period} onChange={setPeriod} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {can('quickAction.view') && (
@@ -369,7 +388,7 @@ export const EmployeeDashboard: React.FC = () => {
               ربط العمالة بالخط
             </button>
           )}
-          <DashboardPeriodFilter period={period} onChange={setPeriod} />
+          {/* <DashboardPeriodFilter period={period} onChange={setPeriod} /> */}
         </div>
       </div>
 

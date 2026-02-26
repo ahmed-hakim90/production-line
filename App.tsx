@@ -17,6 +17,7 @@ import { useAppStore } from './store/useAppStore';
 import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
 import { registerSystemEventListeners } from './shared/events';
+import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 
@@ -85,7 +86,7 @@ const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApprov
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<ProtectedRoute permission="dashboard.view"><HomeRedirect /></ProtectedRoute>} />
+        <Route path="/" element={<HomeRedirect />} />
         {PROTECTED_ROUTES.map((r) => {
           if (r.redirectTo) {
             return (
@@ -113,6 +114,8 @@ const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApprov
 };
 
 const App: React.FC = () => {
+  useTenantTheme();
+
   const initializeApp = useAppStore((s) => s.initializeApp);
   const subscribeToDashboard = useAppStore((s) => s.subscribeToDashboard);
   const subscribeToLineStatuses = useAppStore((s) => s.subscribeToLineStatuses);

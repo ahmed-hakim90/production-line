@@ -1,4 +1,4 @@
-import type { AppRouteDef } from '../../shared/routes';
+﻿import type { AppRouteDef } from '../../shared/routes';
 import { HRDashboard } from '../pages/HRDashboard';
 import { Employees } from '../pages/Employees';
 import { EmployeeProfile } from '../pages/EmployeeProfile';
@@ -36,3 +36,6 @@ export const HR_ROUTES: AppRouteDef[] = [
   { path: '/vehicles', permission: 'vehicles.view', component: Vehicles },
   { path: '/hr-settings', permission: 'hrSettings.view', component: HRSettings },
 ];
+
+
+

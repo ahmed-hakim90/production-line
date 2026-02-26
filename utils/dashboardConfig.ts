@@ -1,6 +1,7 @@
 import type {
   SystemSettings, AlertSettings, KPIThreshold, WidgetConfig, PrintTemplateSettings,
   PlanSettings, BrandingSettings, ThemeSettings, DashboardDisplaySettings, AlertToggleSettings,
+  QuickActionColor, QuickActionType,
 } from '../types';
 
 // ─── Widget Registry ─────────────────────────────────────────────────────────
@@ -49,6 +50,35 @@ export const DASHBOARD_LABELS: Record<string, string> = {
   adminDashboard: 'لوحة مدير النظام',
   factoryDashboard: 'لوحة مدير المصنع',
 };
+
+// ─── Quick Actions Registry ─────────────────────────────────────────────────
+
+export interface QuickActionDefinition {
+  key: string;
+  label: string;
+  icon: string;
+  color: QuickActionColor;
+  actionType: QuickActionType;
+  target?: string;
+  permission?: string;
+}
+
+export const AVAILABLE_QUICK_ACTIONS: QuickActionDefinition[] = [
+  { key: 'quick_action', label: 'إدخال سريع', icon: 'bolt', color: 'amber', actionType: 'navigate', target: '/quick-action', permission: 'quickAction.view' },
+  { key: 'reports', label: 'التقارير', icon: 'bar_chart', color: 'primary', actionType: 'navigate', target: '/reports', permission: 'reports.view' },
+  { key: 'lines', label: 'خطوط الإنتاج', icon: 'precision_manufacturing', color: 'violet', actionType: 'navigate', target: '/lines', permission: 'lines.view' },
+  { key: 'products', label: 'المنتجات', icon: 'inventory_2', color: 'emerald', actionType: 'navigate', target: '/products', permission: 'products.view' },
+  { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', color: 'primary', actionType: 'navigate', target: '/production-plans', permission: 'plans.view' },
+  { key: 'work_orders', label: 'أوامر الشغل', icon: 'assignment', color: 'slate', actionType: 'navigate', target: '/work-orders', permission: 'workOrders.view' },
+  { key: 'employees', label: 'الموظفين', icon: 'groups', color: 'emerald', actionType: 'navigate', target: '/employees', permission: 'employees.view' },
+  { key: 'attendance', label: 'سجل الحضور', icon: 'fingerprint', color: 'violet', actionType: 'navigate', target: '/attendance', permission: 'attendance.view' },
+  { key: 'approval_center', label: 'مركز الموافقات', icon: 'fact_check', color: 'amber', actionType: 'navigate', target: '/approval-center', permission: 'approval.view' },
+  { key: 'payroll', label: 'كشف الرواتب', icon: 'receipt_long', color: 'rose', actionType: 'navigate', target: '/payroll', permission: 'payroll.view' },
+  { key: 'cost_centers', label: 'مراكز التكلفة', icon: 'account_balance', color: 'slate', actionType: 'navigate', target: '/cost-centers', permission: 'costs.view' },
+  { key: 'settings', label: 'الإعدادات', icon: 'settings', color: 'primary', actionType: 'navigate', target: '/settings', permission: 'settings.view' },
+  { key: 'roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings', color: 'rose', actionType: 'navigate', target: '/roles', permission: 'roles.manage' },
+  { key: 'export_product_summary', label: 'تصدير ملخص المنتجات (Excel)', icon: 'download', color: 'emerald', actionType: 'export_excel', permission: 'reports.view' },
+];
 
 // ─── KPI Registry ────────────────────────────────────────────────────────────
 
@@ -166,6 +196,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   theme: DEFAULT_THEME,
   dashboardDisplay: DEFAULT_DASHBOARD_DISPLAY,
   alertToggles: DEFAULT_ALERT_TOGGLES,
+  quickActions: [],
 };
 
 // ─── Selectors / Helpers ─────────────────────────────────────────────────────

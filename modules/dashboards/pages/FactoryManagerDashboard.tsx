@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -8,7 +8,6 @@ import { formatNumber, calculateWasteRatio, calculateProgressRatio, calculateTim
 import {
   formatCost,
   getCurrentMonth,
-  calculateDailyLaborCost,
   calculateDailyIndirectCost,
 } from '../../../utils/costCalculations';
 import {
@@ -424,7 +423,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     <div className="space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+        {/* <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
             <span className="material-icons-round text-blue-600 dark:text-blue-400 text-2xl">analytics</span>
           </div>
@@ -432,7 +431,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             <h2 className="text-2xl font-bold">لوحة مدير المصنع</h2>
             <p className="text-sm text-slate-400">تحليلات متقدمة للإنتاج والتكاليف</p>
           </div>
-        </div>
+        </div> */}
         {loading && (
           <span className="text-xs text-slate-400 flex items-center gap-1">
             <span className="material-icons-round text-sm animate-spin">sync</span>
@@ -998,3 +997,5 @@ export const FactoryManagerDashboard: React.FC = () => {
     </div>
   );
 };
+
+

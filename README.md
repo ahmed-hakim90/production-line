@@ -9,7 +9,7 @@
 ![Firebase](https://img.shields.io/badge/Firebase-12-orange)
 ![Zustand](https://img.shields.io/badge/Zustand-5-purple)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
-![Version](https://img.shields.io/badge/version-4.0.9-green)
+![Version](https://img.shields.io/badge/version-4.0.10-green)
 
 ## 🚀 نظرة عامة
 

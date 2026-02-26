@@ -12,6 +12,7 @@ import {
 import {
   DASHBOARD_WIDGETS,
   DASHBOARD_LABELS,
+  AVAILABLE_QUICK_ACTIONS,
   KPI_DEFINITIONS,
   DEFAULT_ALERT_SETTINGS,
   DEFAULT_KPI_THRESHOLDS,
@@ -35,15 +36,16 @@ import { applyTheme, setupAutoThemeListener } from '../../../utils/themeEngine';
 import type {
   SystemSettings, WidgetConfig, AlertSettings, KPIThreshold, PrintTemplateSettings,
   PaperSize, PaperOrientation, PlanSettings, BrandingSettings, ThemeSettings,
-  DashboardDisplaySettings, AlertToggleSettings, ThemeMode, UIDensity,
+  DashboardDisplaySettings, AlertToggleSettings, ThemeMode, UIDensity, QuickActionItem, QuickActionColor,
 } from '../../../types';
 import type { ReportPrintRow } from '../../production/components/ProductionReportPrint';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 
-type SettingsTab = 'general' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'backup';
+type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'backup';
 
 const TABS: { key: SettingsTab; label: string; icon: string; adminOnly: boolean }[] = [
   { key: 'general', label: 'الإعدادات العامة', icon: 'settings', adminOnly: false },
+  { key: 'quickActions', label: 'الإجراءات السريعة', icon: 'bolt', adminOnly: true },
   { key: 'dashboardWidgets', label: 'إعدادات لوحات التحكم', icon: 'dashboard_customize', adminOnly: true },
   { key: 'alertRules', label: 'قواعد التنبيهات', icon: 'notifications_active', adminOnly: true },
   { key: 'kpiThresholds', label: 'حدود المؤشرات', icon: 'tune', adminOnly: true },
@@ -76,6 +78,27 @@ const TIMEZONES = [
   { value: 'Asia/Amman', label: 'عمّان (GMT+3)' },
   { value: 'Europe/London', label: 'لندن (GMT+0)' },
   { value: 'America/New_York', label: 'نيويورك (GMT-5)' },
+];
+
+const QUICK_ACTION_ICONS = Array.from(new Set([
+  ...AVAILABLE_QUICK_ACTIONS.map((item) => item.icon),
+  'bolt',
+  'analytics',
+  'dashboard',
+  'add_task',
+  'fact_check',
+  'inventory_2',
+  'precision_manufacturing',
+  'groups',
+]));
+
+const QUICK_ACTION_COLORS: { value: QuickActionColor; label: string; classes: string }[] = [
+  { value: 'primary', label: 'أزرق رئيسي', classes: 'bg-primary/10 text-primary border-primary/20' },
+  { value: 'emerald', label: 'أخضر', classes: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 dark:border-emerald-800' },
+  { value: 'amber', label: 'أصفر', classes: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 dark:border-amber-800' },
+  { value: 'rose', label: 'وردي', classes: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200 dark:border-rose-800' },
+  { value: 'violet', label: 'بنفسجي', classes: 'bg-violet-50 dark:bg-violet-900/10 text-violet-600 border-violet-200 dark:border-violet-800' },
+  { value: 'slate', label: 'رمادي', classes: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
 ];
 
 const FONT_FAMILIES = [
@@ -170,6 +193,13 @@ export const Settings: React.FC = () => {
   const [localAlertToggles, setLocalAlertToggles] = useState<AlertToggleSettings>(
     () => ({ ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles })
   );
+  const [localQuickActions, setLocalQuickActions] = useState<QuickActionItem[]>(
+    () => (systemSettings.quickActions ?? [])
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map((item, index) => ({ ...item, order: item.order ?? index }))
+  );
+  const [editingQuickActionId, setEditingQuickActionId] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -412,7 +442,20 @@ export const Settings: React.FC = () => {
     if (brandingLogoRef.current) brandingLogoRef.current.value = '';
   }, []);
 
-  const handleSave = useCallback(async (section: 'general' | 'widgets' | 'alerts' | 'kpis' | 'print') => {
+  const normalizeQuickActions = useCallback(
+    (items: QuickActionItem[]) => items.map((item, index) => ({ ...item, order: index })),
+    []
+  );
+
+  const getQuickActionMatch = useCallback(
+    (item: QuickActionItem) => AVAILABLE_QUICK_ACTIONS.find((def) =>
+      def.actionType === item.actionType &&
+      (def.actionType !== 'navigate' || def.target === item.target)
+    )?.key ?? 'custom',
+    []
+  );
+
+  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print') => {
     setSaving(true);
     setSaveMessage('');
     try {
@@ -427,6 +470,7 @@ export const Settings: React.FC = () => {
         theme: section === 'general' ? localTheme : (systemSettings.theme ?? DEFAULT_THEME),
         dashboardDisplay: section === 'general' ? localDashboardDisplay : (systemSettings.dashboardDisplay ?? DEFAULT_DASHBOARD_DISPLAY),
         alertToggles: section === 'general' ? localAlertToggles : (systemSettings.alertToggles ?? DEFAULT_ALERT_TOGGLES),
+        quickActions: section === 'quickActions' ? normalizeQuickActions(localQuickActions) : (systemSettings.quickActions ?? []),
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم الحفظ بنجاح');
@@ -435,7 +479,7 @@ export const Settings: React.FC = () => {
       setSaveMessage('فشل الحفظ');
     }
     setSaving(false);
-  }, [systemSettings, localWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, updateSystemSettings]);
+  }, [systemSettings, localWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, localQuickActions, updateSystemSettings]);
 
   // ── Widget drag & drop ─────────────────────────────────────────────────────
 
@@ -488,6 +532,45 @@ export const Settings: React.FC = () => {
       );
       return { ...prev, [dashboardKey]: list };
     });
+  };
+
+  const addQuickAction = () => {
+    const template = AVAILABLE_QUICK_ACTIONS[0];
+    const newAction: QuickActionItem = {
+      id: `quick_action_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      label: template?.label ?? 'إجراء سريع',
+      icon: template?.icon ?? 'bolt',
+      color: template?.color ?? 'primary',
+      actionType: template?.actionType ?? 'navigate',
+      target: template?.target,
+      permission: template?.permission,
+      order: localQuickActions.length,
+    };
+    setLocalQuickActions((prev) => normalizeQuickActions([...prev, newAction]));
+    setEditingQuickActionId(newAction.id);
+  };
+
+  const removeQuickAction = (id: string) => {
+    setLocalQuickActions((prev) => normalizeQuickActions(prev.filter((item) => item.id !== id)));
+    if (editingQuickActionId === id) setEditingQuickActionId(null);
+  };
+
+  const moveQuickAction = (id: string, direction: 'up' | 'down') => {
+    setLocalQuickActions((prev) => {
+      const idx = prev.findIndex((item) => item.id === id);
+      if (idx === -1) return prev;
+      const target = direction === 'up' ? idx - 1 : idx + 1;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return normalizeQuickActions(next);
+    });
+  };
+
+  const updateQuickAction = (id: string, patch: Partial<QuickActionItem>) => {
+    setLocalQuickActions((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item))
+    );
   };
 
   // ── Visible tabs ───────────────────────────────────────────────────────────
@@ -1070,6 +1153,165 @@ export const Settings: React.FC = () => {
               <div className="mr-auto text-xs text-slate-400 font-bold">
                 {enabledCount} / {ALL_PERMISSIONS.length} صلاحية مفعلة
               </div>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* ── TAB: Quick Actions ────────────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'quickActions' && isAdmin && (
+        <>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold">الإجراءات السريعة — لوحة مدير النظام</h3>
+              <p className="text-sm text-slate-500">أنشئ أزرار تنقل أو تصدير بسرعة، وخصص الاسم والأيقونة واللون.</p>
+            </div>
+            <Button onClick={() => handleSave('quickActions')} disabled={saving}>
+              {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+              <span className="material-icons-round text-sm">save</span>
+              حفظ التغييرات
+            </Button>
+          </div>
+
+          <Card title="قائمة الأزرار السريعة" subtitle="الترتيب هنا هو نفس ترتيب الظهور في لوحة مدير النظام">
+            <div className="space-y-3">
+              {localQuickActions.length === 0 && (
+                <div className="text-center py-10 bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                  <span className="material-icons-round text-3xl text-slate-300 dark:text-slate-600">bolt</span>
+                  <p className="mt-2 text-sm font-bold text-slate-500">لا توجد إجراءات سريعة حتى الآن</p>
+                </div>
+              )}
+
+              {localQuickActions.map((item, index) => {
+                const selectedColor = QUICK_ACTION_COLORS.find((c) => c.value === item.color) ?? QUICK_ACTION_COLORS[0];
+                return (
+                  <div key={item.id} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-4 bg-white dark:bg-slate-900">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${selectedColor.classes}`}>
+                        <span className="material-icons-round text-base">{item.icon}</span>
+                        <span className="text-sm font-bold">{item.label || 'بدون اسم'}</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full sm:mr-auto">
+                        ترتيب #{index + 1}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => moveQuickAction(item.id, 'up')}
+                          disabled={index === 0}
+                          className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          title="تحريك لأعلى"
+                        >
+                          <span className="material-icons-round text-sm">keyboard_arrow_up</span>
+                        </button>
+                        <button
+                          onClick={() => moveQuickAction(item.id, 'down')}
+                          disabled={index === localQuickActions.length - 1}
+                          className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          title="تحريك لأسفل"
+                        >
+                          <span className="material-icons-round text-sm">keyboard_arrow_down</span>
+                        </button>
+                        <button
+                          onClick={() => setEditingQuickActionId((prev) => prev === item.id ? null : item.id)}
+                          className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary hover:border-primary/30 transition-all"
+                          title="تعديل"
+                        >
+                          <span className="material-icons-round text-sm">edit</span>
+                        </button>
+                        <button
+                          onClick={() => removeQuickAction(item.id)}
+                          className="w-8 h-8 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-all"
+                          title="حذف"
+                        >
+                          <span className="material-icons-round text-sm">delete</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {editingQuickActionId === item.id && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-500">اسم الزر</label>
+                          <input
+                            type="text"
+                            value={item.label}
+                            onChange={(e) => updateQuickAction(item.id, { label: e.target.value })}
+                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                            placeholder="مثال: إدخال سريع"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-500">الإجراء</label>
+                          <select
+                            value={getQuickActionMatch(item)}
+                            onChange={(e) => {
+                              const selected = AVAILABLE_QUICK_ACTIONS.find((def) => def.key === e.target.value);
+                              if (!selected) return;
+                              updateQuickAction(item.id, {
+                                actionType: selected.actionType,
+                                target: selected.target,
+                                permission: selected.permission,
+                                icon: selected.icon,
+                                color: selected.color,
+                              });
+                            }}
+                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                          >
+                            <option value="custom">مخصص (تعديل يدوي)</option>
+                            {AVAILABLE_QUICK_ACTIONS.map((def) => (
+                              <option key={def.key} value={def.key}>{def.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-500">الأيقونة</label>
+                          <select
+                            value={item.icon}
+                            onChange={(e) => updateQuickAction(item.id, { icon: e.target.value })}
+                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                          >
+                            {QUICK_ACTION_ICONS.map((icon) => (
+                              <option key={icon} value={icon}>{icon}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-500">اللون</label>
+                          <div className="flex flex-wrap gap-2">
+                            {QUICK_ACTION_COLORS.map((color) => (
+                              <button
+                                key={color.value}
+                                onClick={() => updateQuickAction(item.id, { color: color.value })}
+                                className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${color.classes} ${item.color === color.value ? 'ring-2 ring-primary/30' : ''}`}
+                              >
+                                {color.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="lg:col-span-2 text-[11px] font-medium text-slate-400 flex flex-wrap items-center gap-3">
+                          <span>النوع: <span className="font-bold text-slate-600 dark:text-slate-300">{item.actionType}</span></span>
+                          {item.target && <span>المسار: <span className="font-mono">{item.target}</span></span>}
+                          {item.permission && <span>الصلاحية: <span className="font-mono">{item.permission}</span></span>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <Button variant="outline" onClick={addQuickAction}>
+                <span className="material-icons-round text-sm">add</span>
+                إضافة زر سريع
+              </Button>
             </div>
           </Card>
         </>

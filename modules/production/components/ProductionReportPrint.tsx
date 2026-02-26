@@ -103,7 +103,9 @@ function shortProductName(name: string): string {
   return `${parts[0]} ${parts[1]}`;
 }
 
-/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  ProductionReportPrint — Bulk report printout                              */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
 export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrintProps>(
   ({ title, subtitle, generatedAt, rows, totals, printSettings }, ref) => {
@@ -112,73 +114,74 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
     const t = totals ?? computePrintTotals(rows, dp);
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
+    const isThermal = ps.paperSize === 'thermal';
 
-    const showWaste = ps.showWaste;
+    const showWaste    = ps.showWaste;
     const showEmployee = ps.showEmployee;
-    const showCosts = ps.showCosts && rows.some((r) => r.costPerUnit != null && r.costPerUnit > 0);
-    const showWO = ps.showWorkOrder && rows.some((r) => !!r.workOrderNumber);
-    const showNotes = rows.some((r) => !!r.notes?.trim());
+    const showCosts    = ps.showCosts && rows.some((r) => r.costPerUnit != null && r.costPerUnit > 0);
+    const showWO       = ps.showWorkOrder && rows.some((r) => !!r.workOrderNumber);
+    const showNotes    = rows.some((r) => !!r.notes?.trim());
 
     return (
       <div
         ref={ref}
         dir="rtl"
         style={{
-          fontFamily: 'Calibri, Segoe UI, Tahoma, sans-serif',
+          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
           width: paper.width,
           minHeight: paper.minHeight,
-          padding: ps.paperSize === 'thermal' ? '4mm 3mm' : '12mm 15mm',
+          padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
           color: '#1e293b',
-          fontSize: ps.paperSize === 'thermal' ? '8pt' : '11pt',
+          fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.5,
           boxSizing: 'border-box',
         }}
       >
-        {/* â”€â”€ Factory Header â”€â”€ */}
-        <div style={{ textAlign: 'center', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: ps.paperSize === 'thermal' ? '2mm' : '6mm' }}>
+        {/* ── Factory Header ── */}
+        <div style={{ textAlign: 'center', marginBottom: isThermal ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '6mm' }}>
           {ps.logoUrl && (
             <img
               src={ps.logoUrl}
               alt="logo"
-              style={{ maxHeight: ps.paperSize === 'thermal' ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
+              style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
             />
           )}
-          <h1 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
+          <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
             {ps.headerText}
           </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: '#64748b', fontWeight: 600 }}>
-            نظام إدارة الإنتاج - تقارير الإنتاج
+          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: '#64748b', fontWeight: 600 }}>
+            نظام إدارة الإنتاج - مؤسسة المغربي
           </p>
         </div>
 
-        {/* â”€â”€ Report Title â”€â”€ */}
-        <div style={{ marginBottom: ps.paperSize === 'thermal' ? '3mm' : '6mm' }}>
-          <h2 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '10pt' : '16pt', fontWeight: 800, color: '#0f172a' }}>{title}</h2>
-          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: '#64748b' }}>{subtitle}</p>}
-          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '6pt' : '9pt', color: '#94a3b8' }}>تاريخ الطباعة: {now}</p>
+        {/* ── Report Title ── */}
+        <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
+          <h2 style={{ margin: 0, fontSize: isThermal ? '10pt' : '16pt', fontWeight: 800, color: '#0f172a' }}>{title}</h2>
+          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: '#64748b' }}>{subtitle}</p>}
+          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '6pt' : '9pt', color: '#94a3b8' }}>تاريخ الطباعة: {now}</p>
         </div>
 
-        {/* â”€â”€ Summary Cards â”€â”€ */}
-        <div style={{ display: 'flex', gap: ps.paperSize === 'thermal' ? '2mm' : '4mm', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '6mm', flexWrap: 'wrap' }}>
-          <SummaryBox label="إجمالي الإنتاج" value={fmtNum(t.totalProduced, dp)} unit="وحدة" color={ps.primaryColor} small={ps.paperSize === 'thermal'} />
+        {/* ── Summary Cards ── */}
+        <div style={{ display: 'flex', gap: isThermal ? '2mm' : '4mm', marginBottom: isThermal ? '3mm' : '6mm', flexWrap: 'wrap' }}>
+          <SummaryBox label="الكمية المنتجة"  value={fmtNum(t.totalProduced, dp)} unit="وحدة" color={ps.primaryColor} small={isThermal} />
           {showWaste && (
             <>
-              <SummaryBox label="إجمالي الهالك" value={fmtNum(t.totalWaste, dp)} unit="وحدة" color="#f43f5e" small={ps.paperSize === 'thermal'} />
-              <SummaryBox label="نسبة الهالك" value={`${t.wasteRatio}%`} color="#f59e0b" small={ps.paperSize === 'thermal'} />
+              <SummaryBox label="الكمية الهالكة" value={fmtNum(t.totalWaste, dp)}    unit="وحدة" color="#f43f5e"    small={isThermal} />
+              <SummaryBox label="نسبة الهالك"    value={`${t.wasteRatio}%`}                       color="#f59e0b"    small={isThermal} />
             </>
           )}
-          <SummaryBox label="إجمالي الساعات" value={fmtNum(t.totalHours, dp)} unit="ساعة" color="#8b5cf6" small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="عدد التقارير" value={String(t.reportsCount)} color="#64748b" small={ps.paperSize === 'thermal'} />
+          <SummaryBox label="ساعات العمل"    value={fmtNum(t.totalHours, dp)}    unit="ساعة" color="#8b5cf6"    small={isThermal} />
+          <SummaryBox label="عدد التقارير"   value={String(t.reportsCount)}                   color="#64748b"    small={isThermal} />
         </div>
 
-        {/* â”€â”€ Data Table â”€â”€ */}
+        {/* ── Data Table ── */}
         <table
           style={{
             width: '100%',
             borderCollapse: 'collapse',
-            fontSize: ps.paperSize === 'thermal' ? '7pt' : '9.5pt',
-            marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm',
+            fontSize: isThermal ? '7pt' : '9.5pt',
+            marginBottom: isThermal ? '3mm' : '8mm',
           }}
         >
           <thead>
@@ -187,14 +190,14 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               <Th>التاريخ</Th>
               <Th>خط الإنتاج</Th>
               <Th>المنتج</Th>
-              {showEmployee && <Th>الموظف</Th>}
-              {showWO && <Th>أمر الشغل</Th>}
-              {showNotes && <Th>ملاحظة</Th>}
+              {showEmployee && <Th>المشرف</Th>}
+              {showWO       && <Th>أمر شغل</Th>}
+              {showNotes    && <Th>ملاحظة</Th>}
               <Th align="center">الكمية المنتجة</Th>
-              {showWaste && <Th align="center">الهالك</Th>}
+              {showWaste    && <Th align="center">الهالك</Th>}
               <Th align="center">عدد العمال</Th>
               <Th align="center">ساعات العمل</Th>
-              {showCosts && <Th align="center">تكلفة الوحدة</Th>}
+              {showCosts    && <Th align="center">تكلفة الوحدة</Th>}
             </tr>
           </thead>
           <tbody>
@@ -205,15 +208,20 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
                 <Td>{row.lineName}</Td>
                 <Td>{shortProductName(row.productName)}</Td>
                 {showEmployee && <Td>{row.employeeName}</Td>}
-                {showWO && <Td>{row.workOrderNumber || '—'}</Td>}
-                {showNotes && <Td>{row.notes?.trim() || '—'}</Td>}
+                {showWO       && <Td>{row.workOrderNumber || '—'}</Td>}
+                {showNotes    && <Td>{row.notes?.trim() || '—'}</Td>}
                 <Td align="center" bold color="#059669">{fmtNum(row.quantityProduced, dp)}</Td>
-                {showWaste && <Td align="center" bold>{fmtNum(row.quantityWaste, dp)}</Td>}
+                {showWaste    && <Td align="center" bold>{fmtNum(row.quantityWaste, dp)}</Td>}
                 <Td align="center">{row.workersCount}</Td>
                 <Td align="center">{fmtNum(row.workHours, dp)}</Td>
-                {showCosts && <Td align="center" bold color={ps.primaryColor}>{row.costPerUnit != null && row.costPerUnit > 0 ? `${fmtNum(row.costPerUnit, 2)}` : '—'}</Td>}
+                {showCosts    && (
+                  <Td align="center" bold color={ps.primaryColor}>
+                    {row.costPerUnit != null && row.costPerUnit > 0 ? fmtNum(row.costPerUnit, 2) : '—'}
+                  </Td>
+                )}
               </tr>
             ))}
+
             {/* Totals Row */}
             <tr style={{ background: '#e2e8f0', fontWeight: 800 }}>
               <Td colSpan={(showEmployee ? 5 : 4) + (showWO ? 1 : 0) + (showNotes ? 1 : 0)}>الإجمالي</Td>
@@ -230,41 +238,43 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           </tbody>
         </table>
 
-        {/* â”€â”€ Signature Section â”€â”€ */}
-        {ps.paperSize !== 'thermal' && (
+        {/* ── Signature Section ── */}
+        {!isThermal && (
           <div style={{ marginTop: '15mm', display: 'flex', justifyContent: 'space-between', gap: '20mm' }}>
-            <SignatureBlock label="مدير الإنتاج" />
-            {showEmployee && <SignatureBlock label="موظف الخط" />}
+            <SignatureBlock label="مدير المصنع" />
+            {showEmployee && <SignatureBlock label="مدير الخط" />}
             <SignatureBlock label="مراقب الجودة" />
           </div>
         )}
 
-        {/* â”€â”€ Footer â”€â”€ */}
-        <div style={{ marginTop: ps.paperSize === 'thermal' ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
+        {/* ── Footer ── */}
+        <div style={{ marginTop: isThermal ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
           {ps.showQRCode && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
                 value={`report-batch|${now}|count:${rows.length}|produced:${t.totalProduced}`}
-                size={ps.paperSize === 'thermal' ? 40 : 64}
+                size={isThermal ? 40 : 64}
                 level="L"
               />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>رمز QR للتحقق من صحة التقرير</p>
+              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>
+                امسح رمز QR للتحقق من صحة التقرير
+              </p>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '6pt' : '8pt', color: '#94a3b8' }}>
+          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: '#94a3b8' }}>
             {ps.footerText} — {now}
           </p>
         </div>
       </div>
     );
-  }
+  },
 );
 
 ProductionReportPrint.displayName = 'ProductionReportPrint';
 
-/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
-/*  SingleReportPrint â€” Printable layout for ONE production report            */
-/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  SingleReportPrint — Printable layout for ONE production report            */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
 export interface SingleReportPrintProps {
   report: ReportPrintRow | null;
@@ -281,6 +291,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const total = report.quantityProduced + report.quantityWaste;
     const wasteRatio = total > 0 ? ((report.quantityWaste / total) * 100).toFixed(dp) : '0';
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
+    const isThermal = ps.paperSize === 'thermal';
 
     const reportLink =
       report.reportId && typeof window !== 'undefined'
@@ -292,42 +303,32 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         ref={ref}
         dir="rtl"
         style={{
-          fontFamily: 'Calibri, Segoe UI, Tahoma, sans-serif',
+          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
           width: paper.width,
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
-          padding: ps.paperSize === 'thermal' ? '4mm 3mm' : '12mm 15mm',
+          padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
           color: '#1e293b',
-          fontSize: ps.paperSize === 'thermal' ? '8pt' : '11pt',
+          fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.6,
           boxSizing: 'border-box',
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: ps.paperSize === 'thermal' ? '2mm' : '6mm' }}>
+        <div style={{ textAlign: 'center', marginBottom: isThermal ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '6mm' }}>
           {ps.logoUrl && (
             <img
               src={ps.logoUrl}
               alt="logo"
-              style={{ maxHeight: ps.paperSize === 'thermal' ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
+              style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
             />
           )}
-          <h1 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
+          <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
             {ps.headerText}
           </h1>
-          <h2 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '9pt' : '15pt', fontWeight: 800, color: '#0f172a' }}>تقرير إنتاج</h2>
-
-          
-        </div>
-
-        {/* Report Title */}
-        <div style={{ marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            
-          </div>
-          {/* <div style={{ textAlign: 'left', fontSize: ps.paperSize === 'thermal' ? '6pt' : '9pt', color: '#94a3b8' }}>
-            طھط§ط±ظٹط® ط§ظ„ط·ط¨ط§ط¹ط©: {now}
-          </div> */}
+          <h2 style={{ margin: '2mm 0 0', fontSize: isThermal ? '9pt' : '14pt', fontWeight: 700, color: '#334155' }}>
+            تقرير إنتاج
+          </h2>
         </div>
 
         {/* Report Details */}
@@ -335,67 +336,73 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           style={{
             width: '100%',
             borderCollapse: 'collapse',
-            fontSize: ps.paperSize === 'thermal' ? '7.5pt' : '10.5pt',
-            marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm',
+            fontSize: isThermal ? '7.5pt' : '10.5pt',
+            marginBottom: isThermal ? '3mm' : '8mm',
           }}
         >
           <tbody>
-            <DetailRow label="التاريخ" value={report.date} />
-            <DetailRow label="خط الإنتاج" value={report.lineName} even />
-            <DetailRow label="المنتج" value={report.productName} />
-            {ps.showEmployee && <DetailRow label="الموظف" value={report.employeeName} even />}
-            {ps.showWorkOrder && report.workOrderNumber && <DetailRow label="أمر الشغل" value={report.workOrderNumber} />}
-            <DetailRow label="الكمية المنتجة" value={`${fmtNum(report.quantityProduced, dp)} وحدة`} highlight="#059669" even />
+            <DetailRow label="التاريخ"           value={report.date} />
+            <DetailRow label="خط الإنتاج"         value={report.lineName}      even />
+            <DetailRow label="المنتج"             value={report.productName} />
+            {ps.showEmployee    && <DetailRow label="المشرف"              value={report.employeeName}  even />}
+            {ps.showWorkOrder && report.workOrderNumber && (
+              <DetailRow label="أمر شغل"          value={report.workOrderNumber} />
+            )}
+            <DetailRow label="الكمية المنتجة"     value={`${fmtNum(report.quantityProduced, dp)} وحدة`} highlight="#059669" even />
             {ps.showWaste && (
               <>
-                <DetailRow label="الهالك" value={`${fmtNum(report.quantityWaste, dp)} وحدة`} highlight="#f43f5e" />
-                <DetailRow label="نسبة الهالك" value={`${wasteRatio}%`} even />
+                <DetailRow label="الهالك"          value={`${fmtNum(report.quantityWaste, dp)} وحدة`}   highlight="#f43f5e" />
+                <DetailRow label="نسبة الهالك"     value={`${wasteRatio}%`}                              even />
               </>
             )}
-            <DetailRow label="عدد العمال" value={String(report.workersCount)} />
-            <DetailRow label="ساعات العمل" value={fmtNum(report.workHours, dp)} even />
+            <DetailRow label="عدد العمال"         value={String(report.workersCount)} />
+            <DetailRow label="ساعات العمل"        value={fmtNum(report.workHours, dp)}               even />
             {ps.showCosts && report.costPerUnit != null && report.costPerUnit > 0 && (
-              <DetailRow label="تكلفة الوحدة" value={`${fmtNum(report.costPerUnit, 2)} ج.م`} highlight={ps.primaryColor} />
+              <DetailRow label="تكلفة الوحدة"     value={`${fmtNum(report.costPerUnit, 2)} ج.م`}     highlight={ps.primaryColor} />
             )}
-            {report.notes?.trim() && <DetailRow label="ملاحظة" value={report.notes} even />}
+            {report.notes?.trim() && (
+              <DetailRow label="ملاحظة"           value={report.notes} even />
+            )}
           </tbody>
         </table>
 
         {/* Signature Section */}
-        {ps.paperSize !== 'thermal' && (
+        {!isThermal && (
           <div style={{ marginTop: '20mm', display: 'flex', justifyContent: 'space-between', gap: '20mm' }}>
-            <SignatureBlock label="مدير الإنتاج" />
-            {ps.showEmployee && <SignatureBlock label="موظف الخط" />}
+            <SignatureBlock label="مدير المصنع" />
+            {ps.showEmployee && <SignatureBlock label="مدير الخط" />}
             <SignatureBlock label="مراقب الجودة" />
           </div>
         )}
 
         {/* Footer */}
-        <div style={{ marginTop: ps.paperSize === 'thermal' ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
+        <div style={{ marginTop: isThermal ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
           {ps.showQRCode && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
                 value={reportLink}
-                size={ps.paperSize === 'thermal' ? 40 : 64}
+                size={isThermal ? 40 : 64}
                 level="L"
               />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>رمز QR للتحقق من صحة التقرير</p>
+              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>
+                امسح رمز QR للرجوع إلى التقرير
+              </p>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '6pt' : '8pt', color: '#94a3b8' }}>
+          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: '#94a3b8' }}>
             {ps.footerText} — {now}
           </p>
         </div>
       </div>
     );
-  }
+  },
 );
 
 SingleReportPrint.displayName = 'SingleReportPrint';
 
-/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
-/*  WorkOrderPrint â€” Printable layout for a single work order                */
-/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  WorkOrderPrint — Printable layout for a single work order                */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
 export interface WorkOrderPrintData {
   workOrderNumber: string;
@@ -427,6 +434,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
     const dp = ps.decimalPlaces;
     const now = new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
+    const isThermal = ps.paperSize === 'thermal';
     const progress = data.quantity > 0 ? Math.min((data.producedQuantity / data.quantity) * 100, 100) : 0;
 
     return (
@@ -434,108 +442,99 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
         ref={ref}
         dir="rtl"
         style={{
-          fontFamily: 'Calibri, Segoe UI, Tahoma, sans-serif',
+          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
           width: paper.width,
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
-          padding: ps.paperSize === 'thermal' ? '4mm 3mm' : '12mm 15mm',
+          padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
           color: '#1e293b',
-          fontSize: ps.paperSize === 'thermal' ? '8pt' : '11pt',
+          fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.6,
           boxSizing: 'border-box',
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: ps.paperSize === 'thermal' ? '2mm' : '6mm' }}>
+        <div style={{ textAlign: 'center', marginBottom: isThermal ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '6mm' }}>
           {ps.logoUrl && (
-            <img src={ps.logoUrl} alt="logo" style={{ maxHeight: ps.paperSize === 'thermal' ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }} />
+            <img src={ps.logoUrl} alt="logo" style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }} />
           )}
-          <h1 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
+          <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
             {ps.headerText}
           </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: '#64748b', fontWeight: 600 }}>
-          أمر شغل رقم: {data.workOrderNumber}
-                 </p>
+          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: '#64748b', fontWeight: 600 }}>
+            أمر شغل رقم: {data.workOrderNumber}
+          </p>
         </div>
-
-        {/* Title Row */}
-        <div style={{ marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-          </div>
-         
-        </div>
-
-        {/* Summary Cards */}
-        {/* <div style={{ display: 'flex', gap: ps.paperSize === 'thermal' ? '2mm' : '4mm', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '6mm', flexWrap: 'wrap' }}>
-          <SummaryBox label="ط§ظ„ظƒظ…ظٹط© ط§ظ„ظ…ط·ظ„ظˆط¨ط©" value={fmtNum(data.quantity, dp)} unit="ظˆط­ط¯ط©" color={ps.primaryColor} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="ط§ظ„ظƒظ…ظٹط© ط§ظ„ظ…ظ†طھط¬ط©" value={fmtNum(data.producedQuantity, dp)} unit="ظˆط­ط¯ط©" color="#059669" small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="ظ†ط³ط¨ط© ط§ظ„ط¥ظ†ط¬ط§ط²" value={`${progress.toFixed(0)}%`} color={progress >= 100 ? '#059669' : progress >= 50 ? '#f59e0b' : '#f43f5e'} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="ط§ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰ ظ„ظ„ط¹ظ…ط§ظ„ط©" value={String(data.maxWorkers)} unit="ط¹ط§ظ…ظ„" color="#8b5cf6" small={ps.paperSize === 'thermal'} />
-        </div> */}
 
         {/* Progress Bar */}
-        <div style={{ marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm' }}>
-          <div style={{ width: '100%', height: ps.paperSize === 'thermal' ? '3mm' : '5mm', background: '#e2e8f0', borderRadius: '3mm', overflow: 'hidden' }}>
-            <div style={{ width: `${Math.min(progress, 100)}%`, height: '100%', background: progress >= 100 ? '#059669' : ps.primaryColor, borderRadius: '3mm', transition: 'width 0.3s' }} />
+        <div style={{ marginBottom: isThermal ? '3mm' : '8mm' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8pt', color: '#64748b', marginBottom: '1mm' }}>
+            <span>نسبة الإنجاز</span>
+            <span style={{ fontWeight: 800, color: progress >= 100 ? '#059669' : ps.primaryColor }}>{progress.toFixed(0)}%</span>
+          </div>
+          <div style={{ width: '100%', height: isThermal ? '3mm' : '5mm', background: '#e2e8f0', borderRadius: '3mm', overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(progress, 100)}%`, height: '100%', background: progress >= 100 ? '#059669' : ps.primaryColor, borderRadius: '3mm' }} />
           </div>
         </div>
 
         {/* Details Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: ps.paperSize === 'thermal' ? '7.5pt' : '10.5pt', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7.5pt' : '10.5pt', marginBottom: isThermal ? '3mm' : '8mm' }}>
           <tbody>
-            <DetailRow label="رقم أمر الشغل" value={data.workOrderNumber} />
-            <DetailRow label="المنتج" value={data.productName} even />
-            <DetailRow label="خط الإنتاج" value={data.lineName} />
-            <DetailRow label="المشرف" value={data.supervisorName} even />
-            <DetailRow label="الكمية المطلوبة" value={`${fmtNum(data.quantity, dp)} وحدة`} highlight={ps.primaryColor} />
-            <DetailRow label="الكمية المنتجة" value={`${fmtNum(data.producedQuantity, dp)} وحدة`} highlight="#059669" even />
-            <DetailRow label="نسبة الإنجاز" value={`${progress.toFixed(dp)}%`} highlight={progress >= 100 ? '#059669' : progress >= 50 ? '#f59e0b' : '#f43f5e'} />
-            <DetailRow label="الحد الأقصى للعمالة" value={`${data.maxWorkers} عامل`} even />
-            <DetailRow label="تاريخ التسليم المستهدف" value={data.targetDate} />
-            <DetailRow label="الحالة" value={data.statusLabel} even />
+            <DetailRow label="رقم أمر الشغل"             value={data.workOrderNumber} />
+            <DetailRow label="المنتج"                     value={data.productName}     even />
+            <DetailRow label="خط الإنتاج"                value={data.lineName} />
+            <DetailRow label="المشرف"                     value={data.supervisorName}  even />
+            <DetailRow label="الكمية المطلوبة"            value={`${fmtNum(data.quantity, dp)} وحدة`}          highlight={ps.primaryColor} />
+            <DetailRow label="الكمية المنتجة"             value={`${fmtNum(data.producedQuantity, dp)} وحدة`}   highlight="#059669"         even />
+            <DetailRow label="نسبة الإنجاز"              value={`${progress.toFixed(dp)}%`}                    highlight={progress >= 100 ? '#059669' : progress >= 50 ? '#f59e0b' : '#f43f5e'} />
+            <DetailRow label="الحد الأقصى للعمالة"        value={`${data.maxWorkers} عامل`}                    even />
+            <DetailRow label="التاريخ المستهدف للإنجاز"   value={data.targetDate} />
+            <DetailRow label="الحالة"                     value={data.statusLabel}     even />
             {data.showCosts && data.estimatedCost != null && (
-              <DetailRow label="التكلفة المقدرة" value={`${fmtNum(data.estimatedCost, 2)} ج.م`} highlight={ps.primaryColor} />
+              <DetailRow label="التكلفة التقديرية"        value={`${fmtNum(data.estimatedCost, 2)} ج.م`}       highlight={ps.primaryColor} />
             )}
             {data.showCosts && data.actualCost != null && data.actualCost > 0 && (
-              <DetailRow label="التكلفة الفعلية" value={`${fmtNum(data.actualCost, 2)} ج.م`} highlight="#059669" even />
+              <DetailRow label="التكلفة الفعلية"          value={`${fmtNum(data.actualCost, 2)} ج.م`}          highlight="#059669"         even />
             )}
-            {data.notes && <DetailRow label="ملاحظات" value={data.notes} />}
+            {data.notes && <DetailRow label="ملاحظات"     value={data.notes} />}
           </tbody>
         </table>
 
         {/* Signature Section */}
-        {ps.paperSize !== 'thermal' && (
+        {!isThermal && (
           <div style={{ marginTop: '20mm', display: 'flex', justifyContent: 'space-between', gap: '20mm' }}>
-            <SignatureBlock label="مدير الإنتاج" />
+            <SignatureBlock label="مدير المصنع" />
             <SignatureBlock label="المشرف" />
             <SignatureBlock label="مراقب الجودة" />
           </div>
         )}
 
         {/* Footer */}
-        <div style={{ marginTop: ps.paperSize === 'thermal' ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
+        <div style={{ marginTop: isThermal ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
           {ps.showQRCode && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
                 value={`work-order|${data.workOrderNumber}|${data.productName}|qty:${data.quantity}|produced:${data.producedQuantity}`}
-                size={ps.paperSize === 'thermal' ? 40 : 64}
+                size={isThermal ? 40 : 64}
                 level="L"
               />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>رمز QR للتحقق من صحة أمر الشغل</p>
+              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>
+                امسح رمز QR للرجوع إلى أمر الشغل
+              </p>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '6pt' : '8pt', color: '#94a3b8' }}>
+          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: '#94a3b8' }}>
             {ps.footerText} — {now}
           </p>
         </div>
       </div>
     );
-  }
+  },
 );
 
 WorkOrderPrint.displayName = 'WorkOrderPrint';
 
-/* â”€â”€â”€ Helper sub-components (inline styled for print isolation) â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─── Helper sub-components (inline styled for print isolation) ─────────── */
 
 const DetailRow: React.FC<{
   label: string;
@@ -584,7 +583,7 @@ const Th: React.FC<{ children: React.ReactNode; align?: string }> = ({ children,
   <th
     style={{
       padding: '2.5mm 3mm',
-      textAlign: (align || 'right') as any,
+      textAlign: (align || 'right') as React.CSSProperties['textAlign'],
       fontWeight: 800,
       fontSize: '8.5pt',
       color: '#475569',
@@ -603,7 +602,7 @@ const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; 
     colSpan={colSpan}
     style={{
       padding: '2mm 3mm',
-      textAlign: (align || 'right') as any,
+      textAlign: (align || 'right') as React.CSSProperties['textAlign'],
       fontWeight: bold ? 700 : 400,
       color: color || '#334155',
       borderBottom: '1px solid #e2e8f0',
@@ -618,7 +617,6 @@ const SignatureBlock: React.FC<{ label: string }> = ({ label }) => (
   <div style={{ flex: 1, textAlign: 'center' }}>
     <p style={{ margin: 0, fontSize: '9pt', fontWeight: 700, color: '#475569' }}>{label}</p>
     <div style={{ marginTop: '12mm', borderBottom: '1px solid #94a3b8', width: '80%', marginLeft: 'auto', marginRight: 'auto' }} />
-    <p style={{ margin: '2mm 0 0', fontSize: '8pt', color: '#94a3b8' }}>التوقيع / التاريخ</p>
+    <p style={{ margin: '2mm 0 0', fontSize: '8pt', color: '#94a3b8' }}>الاسم / التوقيع</p>
   </div>
 );
-

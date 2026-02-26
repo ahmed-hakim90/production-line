@@ -18,9 +18,8 @@ import {
   getKPIColor,
   KPI_COLOR_CLASSES,
   isWidgetVisible,
-  getWidgetOrder,
 } from '../../../utils/dashboardConfig';
-import type { ProductionReport, ActivityLog } from '../../../types';
+import type { ProductionReport, ActivityLog, QuickActionItem, QuickActionColor } from '../../../types';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -39,7 +38,7 @@ import {
 
 // ── Period filter types (local to this dashboard) ────────────────────────────
 
-type PeriodPreset = 'today' | 'week' | 'month' | '3months' | 'custom';
+type PeriodPreset = 'today' | 'yesterday' | 'week' | 'month' | '3months' | 'custom';
 
 const getPresetRange = (preset: PeriodPreset): { start: string; end: string } => {
   const now = new Date();
@@ -54,6 +53,12 @@ const getPresetRange = (preset: PeriodPreset): { start: string; end: string } =>
   switch (preset) {
     case 'today':
       return { start: end, end };
+    case 'yesterday': {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const date = fmt(y);
+      return { start: date, end: date };
+    }
     case 'week': {
       const s = new Date(now);
       s.setDate(s.getDate() - 6);
@@ -78,10 +83,20 @@ const PIE_COLORS = ['#1392ec', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4
 
 const PRESET_LABELS: Record<PeriodPreset, string> = {
   today: 'اليوم',
+  yesterday: 'أمس',
   week: 'هذا الأسبوع',
   month: 'هذا الشهر',
   '3months': 'آخر 3 أشهر',
   custom: 'مخصص',
+};
+
+const QUICK_ACTION_COLOR_CLASSES: Record<QuickActionColor, string> = {
+  primary: 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15',
+  emerald: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/20',
+  amber: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/20',
+  rose: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/20',
+  violet: 'bg-violet-50 dark:bg-violet-900/10 text-violet-600 border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/20',
+  slate: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -221,7 +236,6 @@ export const AdminDashboard: React.FC = () => {
   const systemSettings = useAppStore((s) => s.systemSettings);
 
   const alertCfg = useMemo(() => getAlertSettings(systemSettings), [systemSettings]);
-  const widgetOrder = useMemo(() => getWidgetOrder(systemSettings, 'adminDashboard'), [systemSettings]);
   const isVisible = useCallback(
     (widgetId: string) => isWidgetVisible(systemSettings, 'adminDashboard', widgetId),
     [systemSettings]
@@ -676,6 +690,33 @@ export const AdminDashboard: React.FC = () => {
       .sort((a, b) => a.localeCompare(b, 'ar'));
   }, [productSummary]);
 
+  const filteredProductSummary = useMemo(() => {
+    const q = productSearch.trim().toLowerCase();
+    const byCategory = productCategoryFilter === 'all'
+      ? productSummary
+      : productSummary.filter((p) => p.category === productCategoryFilter);
+    return q
+      ? byCategory.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+      : byCategory;
+  }, [productSummary, productSearch, productCategoryFilter]);
+
+  const quickActions = useMemo(() => {
+    const configured = (systemSettings?.quickActions ?? [])
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return configured.filter((item) => !item.permission || can(item.permission as any));
+  }, [systemSettings, can]);
+
+  const runQuickAction = useCallback((action: QuickActionItem) => {
+    if (action.actionType === 'navigate' && action.target) {
+      navigate(action.target);
+      return;
+    }
+    if (action.actionType === 'export_excel') {
+      exportProductSummary(filteredProductSummary, canViewCosts);
+    }
+  }, [navigate, filteredProductSummary, canViewCosts]);
+
   // ── Alerts ────────────────────────────────────────────────────────────────
 
   const alerts = useMemo(() => {
@@ -799,10 +840,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="w-12 h-12 bg-rose-100 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
             <span className="material-icons-round text-rose-600 dark:text-rose-400 text-2xl">shield</span>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold">لوحة مدير النظام</h2>
-            <p className="text-sm text-slate-400">جاري تحميل البيانات...</p>
-          </div>
+          
         </div>
         <LoadingSkeleton rows={6} type="card" />
       </div>
@@ -903,7 +941,30 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       </Card>
- 
+
+      {quickActions.length > 0 && (
+        <Card>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="material-icons-round text-primary">bolt</span>
+              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">إجراءات سريعة</h3>
+            </div>
+            <div className="flex flex-wrap gap-2 sm:mr-auto">
+              {quickActions.map((action) => (
+                <button
+                  key={action.id}
+                  onClick={() => runQuickAction(action)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-bold transition-all ${QUICK_ACTION_COLOR_CLASSES[action.color]}`}
+                >
+                  <span className="material-icons-round text-sm">{action.icon}</span>
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
 
       {/* ── Operational KPIs ────────────────────────────────────────────────── */}
       {isVisible('operational_kpis') && (
@@ -1123,13 +1184,6 @@ export const AdminDashboard: React.FC = () => {
       })()}
       {/* ── Product Summary Table ──────────────────────────────────────────── */}
       {productSummary.length > 0 && (() => {
-        const q = productSearch.trim().toLowerCase();
-        const byCategory = productCategoryFilter === 'all'
-          ? productSummary
-          : productSummary.filter((p) => p.category === productCategoryFilter);
-        const filtered = q
-          ? byCategory.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
-          : byCategory;
         return (
           <Card>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
@@ -1164,7 +1218,7 @@ export const AdminDashboard: React.FC = () => {
                   </select>
                 </div>
                 <button
-                  onClick={() => exportProductSummary(filtered, canViewCosts)}
+                  onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all"
                   title="تصدير Excel"
                 >
@@ -1187,14 +1241,14 @@ export const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length === 0 ? (
+                  {filteredProductSummary.length === 0 ? (
                     <tr>
                       <td colSpan={canViewCosts ? 5 : 4} className="py-8 text-center text-slate-400 text-sm">
                         لا توجد نتائج مطابقة للفلاتر الحالية
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((p, i) => (
+                    filteredProductSummary.map((p, i) => (
                       <tr key={i} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="py-3 px-4 text-slate-400 font-mono text-xs">{i + 1}</td>
                         <td className="py-3 px-4 font-bold">
@@ -1212,15 +1266,15 @@ export const AdminDashboard: React.FC = () => {
                     ))
                   )}
                 </tbody>
-                {filtered.length > 0 && (
+                {filteredProductSummary.length > 0 && (
                   <tfoot>
                     <tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                       <td colSpan={3} className="py-3 px-4 font-black text-slate-600 dark:text-slate-300">الإجمالي</td>
-                      <td className="py-3 px-4 font-mono font-black text-primary">{formatNumber(filtered.reduce((s, p) => s + p.qty, 0))}</td>
+                      <td className="py-3 px-4 font-mono font-black text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</td>
                       {canViewCosts && (
                         <td className="py-3 px-4 font-mono font-bold text-amber-600 dark:text-amber-400">
-                          {formatCost(filtered.reduce((s, p) => s + p.qty, 0) > 0
-                            ? filtered.reduce((s, p) => s + p.avgCost * p.qty, 0) / filtered.reduce((s, p) => s + p.qty, 0)
+                          {formatCost(filteredProductSummary.reduce((s, p) => s + p.qty, 0) > 0
+                            ? filteredProductSummary.reduce((s, p) => s + p.avgCost * p.qty, 0) / filteredProductSummary.reduce((s, p) => s + p.qty, 0)
                             : 0
                           )} ج.م
                         </td>
@@ -1663,3 +1717,5 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 };
+
+

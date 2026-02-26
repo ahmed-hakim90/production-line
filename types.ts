@@ -629,6 +629,20 @@ export interface AlertToggleSettings {
   enableCostVarianceAlert: boolean;
 }
 
+export type QuickActionColor = 'primary' | 'emerald' | 'amber' | 'rose' | 'violet' | 'slate';
+export type QuickActionType = 'navigate' | 'export_excel';
+
+export interface QuickActionItem {
+  id: string;
+  label: string;
+  icon: string;
+  color: QuickActionColor;
+  actionType: QuickActionType;
+  target?: string;
+  permission?: string;
+  order: number;
+}
+
 export interface SystemSettings {
   dashboardWidgets: Record<string, WidgetConfig[]>;
   alertSettings: AlertSettings;
@@ -639,6 +653,7 @@ export interface SystemSettings {
   theme?: ThemeSettings;
   dashboardDisplay?: DashboardDisplaySettings;
   alertToggles?: AlertToggleSettings;
+  quickActions?: QuickActionItem[];
 }
 
 // ─── Dynamic Roles & Permissions ─────────────────────────────────────────────
@@ -659,6 +674,7 @@ export interface FirestoreUser {
   displayName: string;
   code?: string;
   roleId: string;
+  tenantId?: string;
   isActive: boolean;
   createdAt?: any;
   createdBy?: string;

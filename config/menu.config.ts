@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Sidebar Menu Configuration
  * Single source of truth for navigation structure and badge sources.
  */
@@ -128,3 +128,4 @@ export const MENU_CONFIG: MenuGroup[] = [
 ];
 
 export const ALL_MENU_ITEMS: MenuItem[] = MENU_CONFIG.flatMap((g) => g.children);
+

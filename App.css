@@ -2,6 +2,16 @@
   font-family: var(--font-family-base, 'Cairo', 'Noto Sans Arabic', sans-serif);
 }
 
+:root {
+  --color-bg: #f8fafc;
+  --color-card: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #0f172a;
+  --color-primary: #a80008;
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-text: #334155;
+}
+
 html,
 body,
 #root {

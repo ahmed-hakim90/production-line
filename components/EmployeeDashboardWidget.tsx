@@ -1,25 +1,24 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Badge, LoadingSkeleton } from './UI';
-import { useAppStore, useShallowStore } from '../store/useAppStore';
+import { useShallowStore } from '../store/useAppStore';
 import {
   formatNumber,
   calculateWasteRatio,
   calculatePlanProgress,
   countUniqueDays,
-  getTodayDateString,
-  getMonthDateRange,
 } from '../utils/calculations';
 import { reportService } from '../modules/production/services/reportService';
 import type { ProductionReport, ProductionPlan } from '../types';
 
 // ─── Period Filter ───────────────────────────────────────────────────────────
 
-type Period = 'daily' | 'weekly' | 'monthly';
+type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
 const PERIOD_OPTIONS: { value: Period; label: string; icon: string }[] = [
-  { value: 'daily', label: 'يومي', icon: 'today' },
-  { value: 'weekly', label: 'أسبوعي', icon: 'date_range' },
-  { value: 'monthly', label: 'شهري', icon: 'calendar_month' },
+  { value: 'daily',     label: 'اليوم',   icon: 'today' },
+  { value: 'yesterday', label: 'أمس',     icon: 'history' },
+  { value: 'weekly',    label: 'أسبوعي',  icon: 'date_range' },
+  { value: 'monthly',   label: 'شهري',    icon: 'calendar_month' },
 ];
 
 const DashboardPeriodFilter: React.FC<{ value: Period; onChange: (p: Period) => void }> = ({ value, onChange }) => (
@@ -43,17 +42,24 @@ const DashboardPeriodFilter: React.FC<{ value: Period; onChange: (p: Period) => 
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 
+function fmtDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getYesterdayDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return fmtDate(d);
+}
+
 function getWeekDateRange(): { start: string; end: string } {
   const end = new Date();
   const start = new Date();
   start.setDate(end.getDate() - 6);
-  const fmt = (d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-  return { start: fmt(start), end: fmt(end) };
+  return { start: fmtDate(start), end: fmtDate(end) };
 }
 
 // ─── Employee Dashboard Widget ───────────────────────────────────────────────
@@ -78,8 +84,21 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
   }));
 
   const [period, setPeriod] = useState<Period>('daily');
+  const [yesterdayReports, setYesterdayReports] = useState<ProductionReport[]>([]);
+  const [yesterdayLoading, setYesterdayLoading] = useState(false);
   const [weeklyReports, setWeeklyReports] = useState<ProductionReport[]>([]);
   const [weeklyLoading, setWeeklyLoading] = useState(false);
+
+  useEffect(() => {
+    if (period !== 'yesterday') return;
+    let cancelled = false;
+    setYesterdayLoading(true);
+    const date = getYesterdayDate();
+    reportService.getByDateRange(date, date).then((reports) => {
+      if (!cancelled) { setYesterdayReports(reports); setYesterdayLoading(false); }
+    }).catch(() => { if (!cancelled) setYesterdayLoading(false); });
+    return () => { cancelled = true; };
+  }, [period]);
 
   useEffect(() => {
     if (period !== 'weekly') return;
@@ -94,11 +113,12 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
   const allPeriodReports = useMemo((): ProductionReport[] => {
     switch (period) {
-      case 'daily': return todayReports;
-      case 'weekly': return weeklyReports;
-      case 'monthly': return monthlyReports;
+      case 'daily':     return todayReports;
+      case 'yesterday': return yesterdayReports;
+      case 'weekly':    return weeklyReports;
+      case 'monthly':   return monthlyReports;
     }
-  }, [period, todayReports, weeklyReports, monthlyReports]);
+  }, [period, todayReports, yesterdayReports, weeklyReports, monthlyReports]);
 
   const myReports = useMemo(
     () => allPeriodReports.filter((r) => r.employeeId === employeeId),
@@ -188,7 +208,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
   }, [activePlan, kpis]);
 
   const periodLabel = period === 'daily' ? 'اليوم' : period === 'weekly' ? 'هذا الأسبوع' : 'هذا الشهر';
-  const isLoadingData = (period === 'weekly' && weeklyLoading);
+  const isLoadingData = (period === 'yesterday' && yesterdayLoading) || (period === 'weekly' && weeklyLoading);
 
   if (loading) {
     return (
@@ -482,3 +502,5 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
     </div>
   );
 };
+
+
