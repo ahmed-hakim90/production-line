@@ -9,6 +9,8 @@ import { leaveRequestService, leaveBalanceService } from '../leaveService';
 import { allowanceTypesRef } from '../collections';
 import { exportHRData } from '@/utils/exportExcel';
 import { formatCurrency } from '@/utils/calculations';
+import { usePermission } from '@/utils/permissions';
+import { getExportImportPageControl } from '@/utils/exportImportControls';
 import type { FirestoreEmployee } from '@/types';
 import type {
   FirestoreEmployeeAllowance,
@@ -127,6 +129,8 @@ const EmployeePicker: React.FC<EmployeePickerProps> = ({ employees, selected, on
 
 export const EmployeeFinancials: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const { can } = usePermission();
   const [activeTab, setActiveTab] = useState<ActiveTab>('allowances');
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
@@ -173,6 +177,11 @@ export const EmployeeFinancials: React.FC = () => {
   const [bPenName, setBPenName] = useState('جزاء تأديبي');
   const [bPenAmount, setBPenAmount] = useState(0);
   const [bPenReason, setBPenReason] = useState('');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'employeeFinancials'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -501,8 +510,8 @@ export const EmployeeFinancials: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {dataCount > 0 && can('export') && (
-            <Button variant="outline" onClick={handleExport}>
+          {dataCount > 0 && canExportFromPage && (
+            <Button variant={pageControl.exportVariant} onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير Excel
             </Button>

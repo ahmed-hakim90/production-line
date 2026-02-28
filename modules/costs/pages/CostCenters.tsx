@@ -5,6 +5,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import type { CostCenter } from '../../../types';
 import { getCurrentMonth, getDaysInMonth } from '../../../utils/costCalculations';
+import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -13,13 +14,18 @@ export const CostCenters: React.FC = () => {
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
   const _rawLines = useAppStore((s) => s._rawLines);
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const createCostCenter = useAppStore((s) => s.createCostCenter);
   const updateCostCenter = useAppStore((s) => s.updateCostCenter);
   const deleteCostCenter = useAppStore((s) => s.deleteCostCenter);
   const navigate = useNavigate();
   const { can } = usePermission();
   const canManage = can('costs.manage');
-  const canExport = can('export');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'costCenters'),
+    [exportImportSettings]
+  );
+  const canExport = can('export') && pageControl.exportEnabled;
 
   const [modal, setModal] = useState<CostCenter | 'new' | null>(null);
   const [form, setForm] = useState({ name: '', type: 'indirect' as 'indirect' | 'direct', isActive: true });
@@ -153,7 +159,7 @@ export const CostCenters: React.FC = () => {
             className="h-10 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
           />
           {canExport && costCenters.length > 0 && (
-            <Button variant="outline" onClick={handleExportCenters}>
+            <Button variant={pageControl.exportVariant} onClick={handleExportCenters}>
               <span className="material-icons-round text-sm">file_download</span>
               تصدير التوزيع
             </Button>

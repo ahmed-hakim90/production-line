@@ -11,6 +11,7 @@ import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
 import { formatNumber, calculateWasteRatio, getTodayDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
+import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -102,6 +103,7 @@ export const ProductionWorkers: React.FC = () => {
   const employees = useAppStore((s) => s.employees);
   const productionPlans = useAppStore((s) => s.productionPlans);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
 
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
   const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
@@ -120,6 +122,11 @@ export const ProductionWorkers: React.FC = () => {
   const [bulkPrintReports, setBulkPrintReports] = useState<ProductionReport[] | null>(null);
   const bulkPrintRef = useRef<HTMLDivElement>(null);
   const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'productionWorkers'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   const loadRefData = useCallback(async () => {
     setDataLoading(true);
@@ -335,10 +342,21 @@ export const ProductionWorkers: React.FC = () => {
     setTimeout(() => handleBulkPrint(), 100);
   }, [handleBulkPrint]);
 
-  const bulkActions = useMemo<TableBulkAction<WorkerRow>[]>(() => [
-    { label: 'تصدير Excel', icon: 'download', action: exportSelectedCSV, variant: 'primary', permission: 'export' },
-    { label: 'طباعة تقرير', icon: 'print', action: printSelected, variant: 'default' },
-  ], [exportSelectedCSV, printSelected]);
+  const bulkActions = useMemo<TableBulkAction<WorkerRow>[]>(() => {
+    const actions: TableBulkAction<WorkerRow>[] = [
+      { label: 'طباعة تقرير', icon: 'print', action: printSelected, variant: 'default' },
+    ];
+    if (canExportFromPage) {
+      actions.unshift({
+        label: 'تصدير Excel',
+        icon: 'download',
+        action: exportSelectedCSV,
+        variant: pageControl.exportVariant === 'primary' ? 'primary' : 'default',
+        permission: 'export',
+      });
+    }
+    return actions;
+  }, [exportSelectedCSV, printSelected, canExportFromPage, pageControl.exportVariant]);
 
   const columns = useMemo<TableColumn<WorkerRow>[]>(() => [
     {

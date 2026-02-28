@@ -17,6 +17,7 @@ import { vehicleService } from '../vehicleService';
 import type { JobLevel } from '../types';
 import { getTodayDateString } from '../../../utils/calculations';
 import { exportAllEmployees } from '../../../utils/exportExcel';
+import { getExportImportPageControl } from '../../../utils/exportImportControls';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -46,6 +47,7 @@ export const Employees: React.FC = () => {
   const roles = useAppStore((s) => s.roles);
   const createUser = useAppStore((s) => s.createUser);
   const resetUserPassword = useAppStore((s) => s.resetUserPassword);
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
 
   const uid = useAppStore((s) => s.uid);
   const userEmail = useAppStore((s) => s.userEmail);
@@ -77,6 +79,12 @@ export const Employees: React.FC = () => {
   const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
   const [formTab, setFormTab] = useState<'job' | 'salary' | 'access'>('job');
   const [recreateAccount, setRecreateAccount] = useState(false);
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'employees'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
+  const canImportFromPage = can('import') && pageControl.importEnabled;
 
   // Quick-add states
   const [quickAddType, setQuickAddType] = useState<'department' | 'position' | 'shift' | null>(null);
@@ -690,11 +698,16 @@ export const Employees: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [departments, jobPositions]);
 
-  const employeeBulkActions = useMemo<TableBulkAction<FirestoreEmployee>[]>(() => [
-    { label: 'تفعيل المحدد', icon: 'check_circle', action: handleBulkActivate, permission: 'employees.edit', variant: 'primary' },
-    { label: 'تعطيل المحدد', icon: 'block', action: handleBulkDeactivate, permission: 'employees.edit', variant: 'danger' },
-    { label: 'تصدير CSV', icon: 'download', action: handleBulkExport, permission: 'export' },
-  ], [handleBulkActivate, handleBulkDeactivate, handleBulkExport]);
+  const employeeBulkActions = useMemo<TableBulkAction<FirestoreEmployee>[]>(() => {
+    const actions: TableBulkAction<FirestoreEmployee>[] = [
+      { label: 'تفعيل المحدد', icon: 'check_circle', action: handleBulkActivate, permission: 'employees.edit', variant: 'primary' },
+      { label: 'تعطيل المحدد', icon: 'block', action: handleBulkDeactivate, permission: 'employees.edit', variant: 'danger' },
+    ];
+    if (canExportFromPage) {
+      actions.push({ label: 'تصدير CSV', icon: 'download', action: handleBulkExport, permission: 'export' });
+    }
+    return actions;
+  }, [handleBulkActivate, handleBulkDeactivate, handleBulkExport, canExportFromPage]);
 
   const hasActiveFilters =
     search.trim() ||
@@ -736,8 +749,8 @@ export const Employees: React.FC = () => {
           <p className="text-sm text-slate-500 font-medium">إدارة الموظفين والتسلسل الوظيفي والحسابات</p>
         </div>
         <div className="flex gap-2 self-start sm:self-auto flex-wrap">
-          {_rawEmployees.length > 0 && can('export') && (
-            <Button variant="secondary" onClick={() => {
+          {_rawEmployees.length > 0 && canExportFromPage && (
+            <Button variant={pageControl.exportVariant} onClick={() => {
               const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
               const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
               const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
@@ -747,8 +760,8 @@ export const Employees: React.FC = () => {
               تصدير Excel
             </Button>
           )}
-          {can('import') && (
-            <Button variant="outline" onClick={() => navigate('/employees/import')} className="shrink-0">
+          {canImportFromPage && (
+            <Button variant={pageControl.importVariant} onClick={() => navigate('/employees/import')} className="shrink-0">
               <span className="material-icons-round text-sm">upload_file</span>
               استيراد Excel
             </Button>

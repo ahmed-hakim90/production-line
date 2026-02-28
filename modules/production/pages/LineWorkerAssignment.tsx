@@ -181,16 +181,7 @@ export const LineWorkerAssignment: React.FC = () => {
     }
   };
 
-  const getYesterday = (dateStr: string) => {
-    const d = new Date(dateStr);
-    d.setDate(d.getDate() - 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  const handleCopyFromYesterday = async () => {
+  const handleCopyFromLastAvailableDay = async () => {
     const existingToday = selectedLineId
       ? assignments
       : allDayAssignments;
@@ -206,21 +197,28 @@ export const LineWorkerAssignment: React.FC = () => {
     setCopying(true);
     setShowCopyConfirm(false);
     try {
-      const yesterday = getYesterday(selectedDate);
+      const sourceDate = await lineAssignmentService.getLatestSourceDateBefore(
+        selectedDate,
+        selectedLineId || undefined,
+      );
+      if (!sourceDate) {
+        showFeedback('warning', 'لا يوجد يوم سابق مسجل فيه عمالة للنسخ');
+        return;
+      }
       const activeIds = new Set(
         _rawEmployees.filter((e) => e.isActive !== false).map((e) => e.id!)
       );
       const count = await lineAssignmentService.copyFromDate(
-        yesterday,
+        sourceDate,
         selectedDate,
         selectedLineId || undefined,
         uid || '',
         activeIds
       );
       if (count > 0) {
-        showFeedback('success', `تم نسخ ${count} عامل من أمس`);
+        showFeedback('success', `تم نسخ ${count} عامل من ${sourceDate}`);
       } else {
-        showFeedback('warning', 'لا يوجد عمالة جديدة لنسخها من أمس');
+        showFeedback('warning', `لا يوجد عمالة جديدة لنسخها من ${sourceDate}`);
       }
       await loadAssignments();
     } catch {
@@ -330,7 +328,7 @@ export const LineWorkerAssignment: React.FC = () => {
           </div>
           <Button
             variant="outline"
-            onClick={handleCopyFromYesterday}
+            onClick={handleCopyFromLastAvailableDay}
             disabled={copying}
             className="shrink-0"
           >
@@ -339,7 +337,7 @@ export const LineWorkerAssignment: React.FC = () => {
             ) : (
               <span className="material-icons-round text-sm">content_copy</span>
             )}
-            نسخ من أمس
+            نسخ من آخر يوم
           </Button>
         </div>
       </Card>
@@ -602,7 +600,7 @@ export const LineWorkerAssignment: React.FC = () => {
             <div className="w-14 h-14 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-amber-500 text-2xl">content_copy</span>
             </div>
-            <h3 className="text-lg font-bold text-center mb-2">نسخ من أمس</h3>
+            <h3 className="text-lg font-bold text-center mb-2">نسخ من آخر يوم</h3>
             <p className="text-sm text-slate-500 text-center mb-6">
               يوجد عمالة مسجلة بالفعل لهذا اليوم. سيتم إضافة العمالة الناقصة فقط (بدون تكرار).
             </p>

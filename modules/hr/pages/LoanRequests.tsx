@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
+import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
 import { loanService } from '../loanService';
 import { employeeService } from '../employeeService';
@@ -36,6 +37,7 @@ function getCurrentMonth(): string {
 
 export const LoanRequests: React.FC = () => {
   const { can } = usePermission();
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const uid = useAppStore((s) => s.uid);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const currentUser = useAppStore((s) => s.currentUser);
@@ -65,6 +67,11 @@ export const LoanRequests: React.FC = () => {
   const isHR = can('loan.manage');
   const canDisburse = can('loan.disburse');
   const canDelete = can('loan.manage') || can('hrSettings.edit');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'loanRequests'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
   const employeeId = currentEmployee?.id || uid || '';
 
   useEffect(() => {
@@ -274,8 +281,8 @@ export const LoanRequests: React.FC = () => {
           <p className="text-sm text-slate-500 font-medium">سلف شهرية وسلف مقسطة مع تتبع الصرف</p>
         </div>
         <div className="flex gap-2">
-          {can('export') && (
-            <Button variant="outline" onClick={handleExport}>
+          {canExportFromPage && (
+            <Button variant={pageControl.exportVariant} onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير Excel
             </Button>

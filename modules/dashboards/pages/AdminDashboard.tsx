@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
+import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
 import { reportService } from '../../../services/reportService';
@@ -235,6 +236,11 @@ export const AdminDashboard: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const pageControl = useMemo(
+    () => getExportImportPageControl(systemSettings.exportImport, 'adminDashboard'),
+    [systemSettings.exportImport]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   const alertCfg = useMemo(() => getAlertSettings(systemSettings), [systemSettings]);
   const isVisible = useCallback(
@@ -705,18 +711,21 @@ export const AdminDashboard: React.FC = () => {
     const configured = (systemSettings?.quickActions ?? [])
       .slice()
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    return configured.filter((item) => !item.permission || can(item.permission as any));
-  }, [systemSettings, can]);
+    return configured.filter((item) => {
+      if (item.actionType === 'export_excel' && !canExportFromPage) return false;
+      return !item.permission || can(item.permission as any);
+    });
+  }, [systemSettings, can, canExportFromPage]);
 
   const runQuickAction = useCallback((action: QuickActionItem) => {
     if (action.actionType === 'navigate' && action.target) {
       navigate(action.target);
       return;
     }
-    if (action.actionType === 'export_excel') {
+    if (action.actionType === 'export_excel' && canExportFromPage) {
       exportProductSummary(filteredProductSummary, canViewCosts);
     }
-  }, [navigate, filteredProductSummary, canViewCosts]);
+  }, [navigate, filteredProductSummary, canViewCosts, canExportFromPage]);
 
   // ── Alerts ────────────────────────────────────────────────────────────────
 
@@ -1220,6 +1229,7 @@ export const AdminDashboard: React.FC = () => {
                     ))}
                   </select>
                 </div>
+                {canExportFromPage && (
                 <button
                   onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all"
@@ -1228,6 +1238,7 @@ export const AdminDashboard: React.FC = () => {
                   <span className="material-icons-round text-sm">download</span>
                   <span className="hidden sm:inline">Excel</span>
                 </button>
+                )}
               </div>
             </div>
             <div className="overflow-x-auto">

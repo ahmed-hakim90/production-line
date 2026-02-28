@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { useAppStore } from '@/store/useAppStore';
+import { usePermission } from '@/utils/permissions';
+import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { vehicleService } from '../vehicleService';
 import { employeeService } from '../employeeService';
 import { exportHRData } from '@/utils/exportExcel';
@@ -21,8 +24,10 @@ const EMPTY_VEHICLE: Omit<FirestoreVehicle, 'id'> = {
 };
 
 export const Vehicles: React.FC = () => {
+  const { can } = usePermission();
   const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -30,6 +35,11 @@ export const Vehicles: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'vehicles'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -216,8 +226,8 @@ export const Vehicles: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {vehicles.length > 0 && can('export') && (
-            <Button variant="outline" onClick={handleExport}>
+          {vehicles.length > 0 && canExportFromPage && (
+            <Button variant={pageControl.exportVariant} onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير Excel
             </Button>

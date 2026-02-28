@@ -6,6 +6,8 @@ import {
   deleteDoc,
   query,
   where,
+  orderBy,
+  limit,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
@@ -114,6 +116,38 @@ export const lineAssignmentService = {
       return count;
     } catch (error) {
       console.error('lineAssignmentService.copyFromDate error:', error);
+      throw error;
+    }
+  },
+
+  async getLatestSourceDateBefore(targetDate: string, lineId?: string): Promise<string | null> {
+    if (!isConfigured) return null;
+    try {
+      // For line-specific copy, use a simple line query to avoid requiring a composite index.
+      if (lineId) {
+        const q = query(collection(db, COLLECTION), where('lineId', '==', lineId));
+        const snap = await getDocs(q);
+        let latest: string | null = null;
+        snap.docs.forEach((d) => {
+          const date = (d.data() as Partial<LineWorkerAssignment>).date;
+          if (!date || date >= targetDate) return;
+          if (!latest || date > latest) latest = date;
+        });
+        return latest;
+      }
+
+      const q = query(
+        collection(db, COLLECTION),
+        where('date', '<', targetDate),
+        orderBy('date', 'desc'),
+        limit(1),
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) return null;
+      const date = (snap.docs[0].data() as Partial<LineWorkerAssignment>).date;
+      return date || null;
+    } catch (error) {
+      console.error('lineAssignmentService.getLatestSourceDateBefore error:', error);
       throw error;
     }
   },

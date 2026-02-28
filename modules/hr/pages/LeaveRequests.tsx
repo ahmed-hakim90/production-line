@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
+import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
 import { leaveRequestService, leaveBalanceService } from '../leaveService';
 import { employeeService } from '../employeeService';
@@ -33,6 +34,7 @@ function calculateDays(start: string, end: string): number {
 
 export const LeaveRequests: React.FC = () => {
   const { can } = usePermission();
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const uid = useAppStore((s) => s.uid);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
 
@@ -56,6 +58,11 @@ export const LeaveRequests: React.FC = () => {
 
   const isHR = can('leave.manage');
   const canDelete = can('leave.manage') || can('hrSettings.edit');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'leaveRequests'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
   const employeeId = currentEmployee?.id || uid || '';
 
   const empNameMap = useMemo(() => {
@@ -180,8 +187,8 @@ export const LeaveRequests: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {requests.length > 0 && can('export') && (
-            <Button variant="outline" onClick={() => {
+          {requests.length > 0 && canExportFromPage && (
+            <Button variant={pageControl.exportVariant} onClick={() => {
               const rows = requests.map((r) => ({
                 'الموظف': getEmpName(r.employeeId),
                 'النوع': LEAVE_TYPE_LABELS[r.leaveType],

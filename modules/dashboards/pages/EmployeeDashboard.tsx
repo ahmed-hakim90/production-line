@@ -310,6 +310,13 @@ export const EmployeeDashboard: React.FC = () => {
     };
   }, [periodReports]);
 
+  const todayProductionHours = useMemo(() => {
+    if (!employee?.id) return 0;
+    return todayReports
+      .filter((r) => r.employeeId === employee.id)
+      .reduce((sum, r) => sum + (r.workHours || 0), 0);
+  }, [employee?.id, todayReports]);
+
   // ── Alerts ────────────────────────────────────────────────────────────────
 
   const alerts = useMemo(() => {
@@ -415,6 +422,36 @@ export const EmployeeDashboard: React.FC = () => {
         <LoadingSkeleton type="card" rows={4} />
       ) : (
         <>
+         {/* Personal Performance */}
+         <Card>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
+                    <span className="material-icons-round text-emerald-600 dark:text-emerald-400">person</span>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800 dark:text-white">الأداء الشخصي</h3>
+                    <p className="text-[11px] text-slate-400 font-medium">{periodLabel}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
+                    <p className="text-[11px] font-bold text-slate-400 mb-2">عدد التقارير</p>
+                    <h3 className="text-2xl font-black text-primary">{performance.reportsCount}</h3>
+                    <span className="text-[10px] font-medium text-slate-400">تقرير</span>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
+                    <p className="text-[11px] font-bold text-slate-400 mb-2">متوسط الإنتاج/ساعة</p>
+                    <h3 className="text-2xl font-black text-blue-600">{formatNumber(performance.avgPerHour)}</h3>
+                    <span className="text-[10px] font-medium text-slate-400">وحدة/ساعة</span>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
+                    <p className="text-[11px] font-bold text-slate-400 mb-2">ساعات الإنتاج (اليوم)</p>
+                    <h3 className="text-2xl font-black text-emerald-600">{todayProductionHours}</h3>
+                    <span className="text-[10px] font-medium text-slate-400">ساعة</span>
+                  </div>
+                </div>
+              </Card>
           {/* ── KPI Cards ────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {/* Total Production */}
@@ -452,7 +489,7 @@ export const EmployeeDashboard: React.FC = () => {
             </div>
 
             {/* Waste % */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            {/* <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="flex items-center gap-4 mb-4">
                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${
                   kpis.wasteRatio <= 3
@@ -471,7 +508,7 @@ export const EmployeeDashboard: React.FC = () => {
                 {kpis.wasteRatio}%
               </h3>
               <span className="text-xs font-medium text-slate-400">{formatNumber(kpis.totalWaste)} وحدة هالك</span>
-            </div>
+            </div> */}
 
             {/* Average per day — weekly/monthly only */}
             {period !== 'daily' && (
@@ -490,9 +527,11 @@ export const EmployeeDashboard: React.FC = () => {
 
           {/* ── Main Content ─────────────────────────────────────── */}
           <div className="space-y-6">
-              {/* Active Plan Card */}
-              {activePlan ? (
-                <Card>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+              <div className="order-2">
+                {/* Active Plan Card */}
+                {activePlan ? (
+                  <Card>
                   <div className="flex items-center gap-3 mb-5">
                     <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                       <span className="material-icons-round text-primary">event_note</span>
@@ -543,32 +582,34 @@ export const EmployeeDashboard: React.FC = () => {
                       {formatNumber(activePlan.globalProduced)} من {formatNumber(activePlan.plannedQuantity)} وحدة
                     </p>
                   </div>
-                </Card>
-              ) : (
-                <Card>
-                  <div className="text-center py-6 text-slate-400">
-                    <span className="material-icons-round text-4xl mb-2 block opacity-30">event_note</span>
-                    <p className="font-bold">لا توجد خطة إنتاج نشطة حالياً</p>
-                    <p className="text-sm mt-1">تواصل مع موظف الصالة لإنشاء خطة جديدة</p>
-                  </div>
-                </Card>
-              )}
+                  </Card>
+                ) : (
+                  <Card>
+                    <div className="text-center py-6 text-slate-400">
+                      <span className="material-icons-round text-4xl mb-2 block opacity-30">event_note</span>
+                      <p className="font-bold">لا توجد خطة إنتاج نشطة حالياً</p>
+                      <p className="text-sm mt-1">تواصل مع موظف الصالة لإنشاء خطة جديدة</p>
+                    </div>
+                  </Card>
+                )}
+              </div>
 
-              {/* Employee Work Orders */}
-              {employee && can('workOrders.view') && (() => {
-                const myWOs = workOrders.filter((w) => {
-                  if (w.status !== 'pending' && w.status !== 'in_progress') return false;
-                  if (w.supervisorId === employee.id) return true;
-                  const employeeLineIds = [...new Set(
-                    [...todayReports, ...monthlyReports]
-                      .filter((r) => r.employeeId === employee.id)
-                      .map((r) => r.lineId)
-                  )];
-                  return employeeLineIds.includes(w.lineId);
-                });
-                if (myWOs.length === 0) return null;
-                return (
-                  <Card className="!p-0 overflow-hidden">
+              <div className="order-1">
+                {/* Employee Work Orders */}
+                {employee && can('workOrders.view') && (() => {
+                  const myWOs = workOrders.filter((w) => {
+                    if (w.status !== 'pending' && w.status !== 'in_progress') return false;
+                    if (w.supervisorId === employee.id) return true;
+                    const employeeLineIds = [...new Set(
+                      [...todayReports, ...monthlyReports]
+                        .filter((r) => r.employeeId === employee.id)
+                        .map((r) => r.lineId)
+                    )];
+                    return employeeLineIds.includes(w.lineId);
+                  });
+                  if (myWOs.length === 0) return null;
+                  return (
+                    <Card className="!p-0 overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
                       <span className="material-icons-round text-amber-500">assignment</span>
                       <h3 className="text-base font-bold text-slate-800 dark:text-white">أوامر الشغل الخاصة بك</h3>
@@ -676,40 +717,11 @@ export const EmployeeDashboard: React.FC = () => {
                         );
                       })}
                     </div>
-                  </Card>
-                );
-              })()}
-
-              {/* Personal Performance */}
-              <Card>
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
-                    <span className="material-icons-round text-emerald-600 dark:text-emerald-400">person</span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-white">الأداء الشخصي</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">{periodLabel}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[11px] font-bold text-slate-400 mb-2">عدد التقارير</p>
-                    <h3 className="text-2xl font-black text-primary">{performance.reportsCount}</h3>
-                    <span className="text-[10px] font-medium text-slate-400">تقرير</span>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[11px] font-bold text-slate-400 mb-2">متوسط الإنتاج/ساعة</p>
-                    <h3 className="text-2xl font-black text-blue-600">{formatNumber(performance.avgPerHour)}</h3>
-                    <span className="text-[10px] font-medium text-slate-400">وحدة/ساعة</span>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[11px] font-bold text-slate-400 mb-2">إجمالي ساعات العمل</p>
-                    <h3 className="text-2xl font-black text-emerald-600">{performance.totalHours}</h3>
-                    <span className="text-[10px] font-medium text-slate-400">ساعة</span>
-                  </div>
-                </div>
-              </Card>
+                    </Card>
+                  );
+                })()}
+              </div>
+            </div>
           </div>
         </>
       )}

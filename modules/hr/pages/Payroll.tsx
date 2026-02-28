@@ -1,5 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Card, Button, Badge, KPIBox } from '../components/UI';
+import { usePermission } from '@/utils/permissions';
+import { getExportImportPageControl } from '@/utils/exportImportControls';
+import { useAppStore } from '@/store/useAppStore';
 import {
   generatePayroll,
   getPayrollMonth,
@@ -283,6 +286,8 @@ const AuditPanel: React.FC<{ logs: FirestorePayrollAuditLog[] }> = ({ logs }) =>
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export const Payroll: React.FC = () => {
+  const { can } = usePermission();
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   // State
   const [month, setMonth] = useState(getCurrentMonth());
   const [payrollMonth, setPayrollMonth] = useState<FirestorePayrollMonth | null>(null);
@@ -300,6 +305,11 @@ export const Payroll: React.FC = () => {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [payrollEmployees, setPayrollEmployees] = useState<PayrollEmployeeData[]>([]);
   const [employeesLoaded, setEmployeesLoaded] = useState(false);
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'payroll'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   useEffect(() => {
     loadPayrollEmployees()
@@ -607,8 +617,8 @@ export const Payroll: React.FC = () => {
               قفل الشهر نهائياً
             </Button>
           )}
-          {records.length > 0 && can('export') && (
-            <Button variant="outline" onClick={handleExport}>
+          {records.length > 0 && canExportFromPage && (
+            <Button variant={pageControl.exportVariant} onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير Excel
             </Button>

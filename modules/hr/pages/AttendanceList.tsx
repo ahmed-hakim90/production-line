@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button, Badge } from '../components/UI';
+import { usePermission } from '@/utils/permissions';
+import { getExportImportPageControl } from '@/utils/exportImportControls';
+import { useAppStore } from '@/store/useAppStore';
 import { attendanceLogService } from '../attendanceService';
 import { employeeService } from '../employeeService';
 import { exportHRData } from '@/utils/exportExcel';
@@ -26,6 +29,8 @@ function getMonthStart(): string {
 }
 
 export const AttendanceList: React.FC = () => {
+  const { can } = usePermission();
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const [logs, setLogs] = useState<FirestoreAttendanceLog[]>([]);
   const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +39,11 @@ export const AttendanceList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [shiftFilter, setShiftFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'attendanceList'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   // editing state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -166,8 +176,8 @@ export const AttendanceList: React.FC = () => {
             عرض ومراجعة وتصحيح سجلات الحضور اليومية.
           </p>
         </div>
-        {filteredLogs.length > 0 && can('export') && (
-          <Button variant="outline" onClick={() => {
+        {filteredLogs.length > 0 && canExportFromPage && (
+          <Button variant={pageControl.exportVariant} onClick={() => {
             const rows = filteredLogs.map((l) => ({
               'الموظف': getEmpName(l.employeeId),
               'كود الموظف': l.employeeCode || '—',

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Badge, Button, SearchableSelect, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
+import { usePermission } from '@/utils/permissions';
+import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { employeeService } from '../employeeService';
 import { leaveRequestService } from '../leaveService';
 import { loanService } from '../loanService';
@@ -72,7 +74,9 @@ function toDate(val: any): Date {
 
 export const HRTransactions: React.FC = () => {
   const navigate = useNavigate();
+  const { can } = usePermission();
   const permissions = useAppStore((s) => s.userPermissions);
+  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
 
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
@@ -93,6 +97,11 @@ export const HRTransactions: React.FC = () => {
   const [editReason, setEditReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<HRTransaction | null>(null);
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'hrTransactions'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   const canManage = permissions['hrSettings.edit'] || permissions['admin'];
 
@@ -437,8 +446,8 @@ export const HRTransactions: React.FC = () => {
             جميع الإجازات والسلف والبدلات والاستقطاعات في مكان واحد
           </p>
         </div>
-        {can('export') && (
-          <Button onClick={handleExport} variant="secondary" size="sm">
+        {canExportFromPage && (
+          <Button onClick={handleExport} variant={pageControl.exportVariant} size="sm">
             <span className="material-icons-round text-base ml-1">download</span>
             تصدير Excel
           </Button>

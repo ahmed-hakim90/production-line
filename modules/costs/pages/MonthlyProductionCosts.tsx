@@ -8,6 +8,7 @@ import { reportService } from '../../../services/reportService';
 import { getCurrentMonth, formatCost, calculateDailyIndirectCost, buildSupervisorHourlyRatesMap } from '../../../utils/costCalculations';
 import { productMaterialService } from '../../../services/productMaterialService';
 import type { MonthlyProductionCost } from '../../../types';
+import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -35,6 +36,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     costCenterValues,
     costAllocations,
     laborSettings,
+    systemSettings,
   } = useShallowStore((s) => ({
     products: s.products,
     _rawProducts: s._rawProducts,
@@ -43,6 +45,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     costCenterValues: s.costCenterValues,
     costAllocations: s.costAllocations,
     laborSettings: s.laborSettings,
+    systemSettings: s.systemSettings,
   }));
 
   const supervisorHourlyRates = useMemo(
@@ -53,6 +56,11 @@ export const MonthlyProductionCosts: React.FC = () => {
   const { can } = usePermission();
   const canManage = can('costs.manage');
   const canClose = can('costs.closePeriod');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(systemSettings.exportImport, 'monthlyProductionCosts'),
+    [systemSettings.exportImport]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   const [month, setMonth] = useState(getCurrentMonth());
   const [records, setRecords] = useState<MonthlyProductionCost[]>([]);
@@ -397,8 +405,8 @@ export const MonthlyProductionCosts: React.FC = () => {
                   <span className="material-icons-round text-[18px] ml-1">view_column</span>
                   الأعمدة
                 </Button>
-                {can('export') && (
-                  <Button variant="outline" onClick={handleExport}>
+                {canExportFromPage && (
+                  <Button variant={pageControl.exportVariant} onClick={handleExport}>
                     <span className="material-icons-round text-[18px] ml-1">file_download</span>
                     تصدير Excel
                   </Button>
