@@ -207,22 +207,6 @@ function downloadJSON(data: BackupFile, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
-function downloadText(content: string, fileName: string, mimeType = 'text/plain'): void {
-  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function escapeSqlLiteral(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
 function getTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 }
@@ -269,92 +253,6 @@ export function validateBackupFile(data: any): {
   }
 
   return { valid: true };
-}
-
-function resolveSupabaseRows(data: any): any[] | null {
-  if (Array.isArray(data)) return data;
-  if (!data || typeof data !== 'object') return null;
-
-  const candidates = [
-    data.rows,
-    data.data,
-    data.records,
-    data.firebase_backup_raw,
-    data.firebaseBackupRaw,
-    data.result,
-  ];
-  for (const c of candidates) {
-    if (Array.isArray(c)) return c;
-  }
-  return null;
-}
-
-export function convertSupabaseRawToBackupFile(
-  data: any,
-  createdBy = 'supabase-import'
-): { valid: boolean; backup?: BackupFile; error?: string } {
-  const rows = resolveSupabaseRows(data);
-  if (!rows) {
-    return {
-      valid: false,
-      error: 'صيغة ملف Supabase غير معروفة. المطلوب Array من الصفوف أو كائن يحتوي rows/data.',
-    };
-  }
-
-  const collections: Record<string, Record<string, any>[]> = {};
-  const documentCounts: Record<string, number> = {};
-  let totalDocuments = 0;
-
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const collectionName = row.collection_name ?? row.collectionName;
-    if (typeof collectionName !== 'string' || !collectionName.trim()) continue;
-    if (!ALL_COLLECTIONS.includes(collectionName as any)) continue;
-
-    const rawDocId = row.doc_id ?? row.docId;
-    const docId = typeof rawDocId === 'string' && rawDocId.trim()
-      ? rawDocId
-      : `supabase_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-
-    const rawData = row.data ?? row.payload ?? row.document;
-    let fields: any = rawData;
-    if (typeof fields === 'string') {
-      try {
-        fields = JSON.parse(fields);
-      } catch {
-        continue;
-      }
-    }
-    if (!fields || typeof fields !== 'object' || Array.isArray(fields)) continue;
-
-    if (!collections[collectionName]) collections[collectionName] = [];
-    collections[collectionName].push({ _docId: docId, ...fields });
-    documentCounts[collectionName] = (documentCounts[collectionName] || 0) + 1;
-    totalDocuments++;
-  }
-
-  const collectionsIncluded = Object.keys(collections);
-  if (collectionsIncluded.length === 0 || totalDocuments === 0) {
-    return {
-      valid: false,
-      error: 'لم يتم العثور على بيانات قابلة للاستيراد داخل ملف Supabase.',
-    };
-  }
-
-  const backup: BackupFile = {
-    metadata: {
-      version: BACKUP_VERSION,
-      createdAt: new Date().toISOString(),
-      type: 'full',
-      collectionsIncluded,
-      documentCounts,
-      totalDocuments,
-      createdBy,
-    },
-    collections,
-  };
-
-  return { valid: true, backup };
 }
 
 // ─── Export Functions ────────────────────────────────────────────────────────
@@ -529,86 +427,6 @@ export const backupService = {
       fileName,
       totalDocuments,
       collectionsIncluded: [...SETTINGS_COLLECTIONS],
-      createdBy,
-      createdAt: serverTimestamp(),
-    });
-  },
-
-  async exportSupabaseSQL(createdBy: string): Promise<void> {
-    if (!isConfigured) throw new Error('Firebase not configured');
-
-    const exportedAt = new Date().toISOString();
-    const rows: string[] = [];
-    const documentCounts: Record<string, number> = {};
-    let totalDocuments = 0;
-
-    for (const name of ALL_COLLECTIONS) {
-      const docs = await readCollection(name);
-      documentCounts[name] = docs.length;
-      totalDocuments += docs.length;
-
-      for (const docData of docs) {
-        const { _docId, ...fields } = docData;
-        const docId = typeof _docId === 'string' && _docId.trim()
-          ? _docId
-          : `generated_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        const jsonPayload = JSON.stringify(fields ?? {});
-        rows.push(
-          `('${escapeSqlLiteral(name)}', '${escapeSqlLiteral(docId)}', '${escapeSqlLiteral(jsonPayload)}'::jsonb, '${escapeSqlLiteral(exportedAt)}'::timestamptz, '${escapeSqlLiteral(createdBy)}', 'full', '${escapeSqlLiteral(BACKUP_VERSION)}')`
-        );
-      }
-    }
-
-    const statements: string[] = [
-      '-- ProTech ERP Firestore -> Supabase raw backup',
-      '-- Run this file in Supabase SQL Editor',
-      '',
-      'create table if not exists public.firebase_backup_raw (',
-      '  id bigserial primary key,',
-      '  collection_name text not null,',
-      '  doc_id text not null,',
-      '  data jsonb not null,',
-      '  exported_at timestamptz not null default now(),',
-      '  created_by text not null,',
-      '  backup_type text not null,',
-      '  backup_version text not null,',
-      '  unique (collection_name, doc_id)',
-      ');',
-      '',
-      'create index if not exists idx_firebase_backup_raw_collection_name on public.firebase_backup_raw(collection_name);',
-      '',
-    ];
-
-    const chunkSize = 500;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      statements.push(
-        'insert into public.firebase_backup_raw (collection_name, doc_id, data, exported_at, created_by, backup_type, backup_version)',
-        `values\n${chunk.join(',\n')}`,
-        'on conflict (collection_name, doc_id) do update set',
-        '  data = excluded.data,',
-        '  exported_at = excluded.exported_at,',
-        '  created_by = excluded.created_by,',
-        '  backup_type = excluded.backup_type,',
-        '  backup_version = excluded.backup_version;',
-        ''
-      );
-    }
-
-    if (rows.length === 0) {
-      statements.push('-- No documents found in configured collections.');
-    }
-
-    const sql = statements.join('\n');
-    const fileName = `backup_supabase_full_${getTimestamp()}.sql`;
-    downloadText(sql, fileName, 'application/sql');
-
-    await this.saveHistory({
-      type: 'full',
-      action: 'export',
-      fileName,
-      totalDocuments,
-      collectionsIncluded: [...ALL_COLLECTIONS],
       createdBy,
       createdAt: serverTimestamp(),
     });

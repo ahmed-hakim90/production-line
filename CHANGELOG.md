@@ -166,7 +166,3 @@
 ## [4.0.16] - 2026-02-28
 
 - All Edit Settings
-
-## [4.0.17] - 2026-02-28
-
-- Copy From Last day Worker
