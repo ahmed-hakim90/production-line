@@ -12,6 +12,7 @@ import { QUALITY_ROUTES } from './modules/quality/routes';
 import { HR_ROUTES } from './modules/hr/routes';
 import { COST_ROUTES } from './modules/costs/routes';
 import { SYSTEM_ROUTES } from './modules/system/routes';
+import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import type { AppRouteDef } from './modules/shared/routes';
 import { useAppStore } from './store/useAppStore';
 import { onAuthChange } from './services/firebase';
@@ -66,6 +67,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...HR_ROUTES,
   ...COST_ROUTES,
   ...SYSTEM_ROUTES,
+  ...INVENTORY_ROUTES,
 ];
 
 const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({

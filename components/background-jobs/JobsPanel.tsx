@@ -42,6 +42,7 @@ export const JobsPanel: React.FC = () => {
   const cancelJob = useJobsStore((s) => s.cancelJob);
   const retryJob = useJobsStore((s) => s.retryJob);
   const viewJobReport = useJobsStore((s) => s.viewJobReport);
+  const removeJob = useJobsStore((s) => s.removeJob);
   const activeCount = jobs.filter((j) => activeStatuses.has(j.status)).length;
   const floatingCount = jobs.filter((j) => floatingVisibleStatuses.has(j.status)).length;
 
@@ -100,6 +101,7 @@ export const JobsPanel: React.FC = () => {
             onCancel={cancelJob}
             onRetry={retryJob}
             onViewReport={viewJobReport}
+            onRemove={removeJob}
           />
         ))}
       </div>

@@ -69,6 +69,18 @@ export const MENU_CONFIG: MenuGroup[] = [
     ],
   },
   {
+    key: 'inventory',
+    label: 'المخازن',
+    icon: 'warehouse',
+    children: [
+      { key: 'inv-dashboard', label: 'لوحة المخزون', icon: 'inventory', path: '/inventory', permission: 'inventory.view' },
+      { key: 'inv-balances', label: 'الأرصدة', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
+      { key: 'inv-transactions', label: 'الحركات', icon: 'sync_alt', path: '/inventory/transactions', permission: 'inventory.view' },
+      { key: 'inv-movements', label: 'إدخال حركة', icon: 'add_circle', path: '/inventory/movements', permission: 'inventory.transactions.create' },
+      { key: 'inv-counts', label: 'الجرد', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
+    ],
+  },
+  {
     key: 'hr',
     label: 'فريق العمل',
     icon: 'badge',

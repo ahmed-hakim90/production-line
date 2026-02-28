@@ -164,6 +164,7 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   allowReportWithoutPlan: true,
   allowOverProduction: true,
   autoClosePlan: true,
+  defaultProductionWarehouseId: '',
   maxWasteThreshold: 5,
   efficiencyCalculationMode: 'standard',
   averageProductionMode: 'daily',

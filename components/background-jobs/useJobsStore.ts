@@ -44,6 +44,7 @@ interface JobsStore {
   cancelJob: (id: string) => void;
   retryJob: (id: string) => void;
   viewJobReport: (id: string) => void;
+  removeJob: (id: string) => void;
 
   setPanelMinimized: (value: boolean) => void;
   togglePanelMinimized: () => void;
@@ -230,6 +231,13 @@ export const useJobsStore = create<JobsStore>()(
 
       viewJobReport: (id) => {
         set({ historyOpen: true, selectedJobId: id, panelHidden: false, panelMinimized: false });
+      },
+
+      removeJob: (id) => {
+        set((state) => ({
+          jobs: state.jobs.filter((job) => job.id !== id),
+          selectedJobId: state.selectedJobId === id ? null : state.selectedJobId,
+        }));
       },
 
       setPanelMinimized: (value) => set({ panelMinimized: value, panelHidden: false }),

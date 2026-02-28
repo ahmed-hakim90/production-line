@@ -36,12 +36,14 @@ import {
   type RestoreMode,
 } from '../../../services/backupService';
 import { applyTheme, setupAutoThemeListener } from '../../../utils/themeEngine';
+import { warehouseService } from '../../inventory/services/warehouseService';
 import type {
   SystemSettings, WidgetConfig, AlertSettings, KPIThreshold, PrintTemplateSettings,
   PaperSize, PaperOrientation, PlanSettings, BrandingSettings, ThemeSettings,
   DashboardDisplaySettings, AlertToggleSettings, ThemeMode, UIDensity, QuickActionItem, QuickActionColor,
   CustomWidgetConfig, CustomWidgetType, ExportImportSettings,
 } from '../../../types';
+import type { Warehouse } from '../../inventory/types';
 import type { ReportPrintRow } from '../../production/components/ProductionReportPrint';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 
@@ -231,6 +233,7 @@ export const Settings: React.FC = () => {
   const [localExportImport, setLocalExportImport] = useState<ExportImportSettings>(
     () => ({ pages: { ...(systemSettings.exportImport?.pages ?? {}) } })
   );
+  const [inventoryWarehouses, setInventoryWarehouses] = useState<Warehouse[]>([]);
   const [editingQuickActionId, setEditingQuickActionId] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -244,6 +247,18 @@ export const Settings: React.FC = () => {
       setupAutoThemeListener(localTheme);
     }
   }, [localTheme, activeTab]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void (async () => {
+      try {
+        const whs = await warehouseService.getAll();
+        setInventoryWarehouses(whs.filter((w) => w.isActive !== false));
+      } catch {
+        setInventoryWarehouses([]);
+      }
+    })();
+  }, [isAdmin]);
 
   // Revert to saved theme when leaving general tab
   useEffect(() => {
@@ -1196,6 +1211,26 @@ export const Settings: React.FC = () => {
                       <option value="monthly">شهري</option>
                     </select>
                   </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-icons-round text-primary text-lg">warehouse</span>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن استقبال الإنتاج</p>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    أي تقرير إنتاج جديد أو إغلاق أمر شغل سيتم ترحيل الكمية المنتجة تلقائياً إلى هذا المخزن.
+                  </p>
+                  <select
+                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    value={localPlanSettings.defaultProductionWarehouseId ?? ''}
+                    onChange={(e) => setLocalPlanSettings((p) => ({ ...p, defaultProductionWarehouseId: e.target.value }))}
+                  >
+                    <option value="">بدون ترحيل تلقائي</option>
+                    {inventoryWarehouses.map((w) => (
+                      <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </Card>

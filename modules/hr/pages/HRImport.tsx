@@ -7,12 +7,13 @@ import { db } from '@/services/firebase';
 import { departmentsRef, jobPositionsRef, shiftsRef, employeesRef } from '../collections';
 import { HR_COLLECTIONS } from '../collections';
 import { parseHRExcel, type HRImportResult, type ParsedDepartmentRow, type ParsedPositionRow, type ParsedEmployeeRow, type HRLookups } from '../importHR';
-import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, JobLevel } from '../types';
+import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, FirestoreVehicle, JobLevel } from '../types';
 import type { FirestoreEmployee, EmploymentType } from '@/types';
 import { EMPLOYMENT_TYPE_LABELS } from '@/types';
 import { JOB_LEVEL_LABELS } from '../types';
 import { downloadHRTemplate } from '@/utils/downloadTemplates';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
+import { vehicleService } from '../vehicleService';
 
 type ImportStep = 'upload' | 'preview' | 'importing' | 'done';
 type PreviewTab = 'employees' | 'departments' | 'positions';
@@ -45,16 +46,18 @@ export const HRImport: React.FC = () => {
     (async () => {
       setLookupsLoading(true);
       try {
-        const [deptSnap, posSnap, shiftSnap, empSnap] = await Promise.all([
+        const [deptSnap, posSnap, shiftSnap, empSnap, vehicleList] = await Promise.all([
           getDocs(departmentsRef()),
           getDocs(jobPositionsRef()),
           getDocs(shiftsRef()),
           getDocs(employeesRef()),
+          vehicleService.getAll(),
         ]);
         setLookups({
           departments: deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)),
           positions: posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)),
           shifts: shiftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift)),
+          vehicles: vehicleList.map((v) => ({ ...v } as FirestoreVehicle)),
           employees: empSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployee)),
         });
       } catch (e) {
@@ -185,6 +188,14 @@ export const HRImport: React.FC = () => {
       return existing?.id ?? '';
     };
 
+    // Helper: resolve vehicleId from vehicle name
+    const resolveVehicleId = (name: string): string => {
+      if (!name) return '';
+      const n = name.trim().toLowerCase();
+      const existing = lookups?.vehicles.find((v) => v.name.trim().toLowerCase() === n);
+      return existing?.id ?? '';
+    };
+
     // 3. Create or Update employees
     let updatedCount = 0;
     for (const emp of validEmps) {
@@ -201,6 +212,7 @@ export const HRImport: React.FC = () => {
           if (emp.providedFields.includes('baseSalary')) updateData.baseSalary = emp.baseSalary;
           if (emp.providedFields.includes('hourlyRate')) updateData.hourlyRate = emp.hourlyRate;
           if (emp.providedFields.includes('shiftName')) updateData.shiftId = resolveShiftId(emp.shiftName);
+          if (emp.providedFields.includes('vehicleName')) updateData.vehicleId = resolveVehicleId(emp.vehicleName);
           if (emp.providedFields.includes('email')) updateData.email = emp.email;
           if (emp.providedFields.includes('isActive')) updateData.isActive = emp.isActive;
           if (emp.providedFields.includes('hasSystemAccess')) updateData.hasSystemAccess = emp.hasSystemAccess;
@@ -221,9 +233,9 @@ export const HRImport: React.FC = () => {
             baseSalary: emp.baseSalary,
             hourlyRate: emp.hourlyRate,
             shiftId: resolveShiftId(emp.shiftName),
+            vehicleId: resolveVehicleId(emp.vehicleName),
             email: emp.email || '',
             managerId: '',
-            vehicleId: '',
             hasSystemAccess: emp.hasSystemAccess,
             isActive: emp.isActive,
             createdAt: serverTimestamp(),
@@ -572,6 +584,7 @@ export const HRImport: React.FC = () => {
                           <th className="text-right py-3 px-3">المستوى</th>
                           <th className="text-right py-3 px-3">نوع التوظيف</th>
                           <th className="text-right py-3 px-3">الراتب</th>
+                          <th className="text-right py-3 px-3">المركبة</th>
                           <th className="text-right py-3 px-3">البريد</th>
                           <th className="text-right py-3 px-3">نشط</th>
                           <th className="text-right py-3 px-3">الأخطاء</th>
@@ -601,6 +614,7 @@ export const HRImport: React.FC = () => {
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('level') ? (JOB_LEVEL_LABELS[row.level] ?? row.level) : '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('employmentType') ? (EMPLOYMENT_TYPE_LABELS[row.employmentType] ?? row.employmentType) : '—'}</td>
                             <td className="py-2.5 px-3 font-mono text-xs">{row.providedFields.includes('baseSalary') ? row.baseSalary.toLocaleString('en-US') : '—'}</td>
+                            <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('vehicleName') ? row.vehicleName : '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('email') ? row.email : '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('isActive') ? (row.isActive ? 'نشط' : 'غير نشط') : '—'}</td>
                             <td className="py-2.5 px-3">

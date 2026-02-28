@@ -6,6 +6,7 @@ interface JobCardProps {
   onCancel: (jobId: string) => void;
   onRetry: (jobId: string) => void;
   onViewReport: (jobId: string) => void;
+  onRemove: (jobId: string) => void;
 }
 
 const statusPillClass: Record<BackgroundJob['status'], string> = {
@@ -16,7 +17,7 @@ const statusPillClass: Record<BackgroundJob['status'], string> = {
   failed: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
 };
 
-export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onViewReport }) => {
+export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onViewReport, onRemove }) => {
   const isProcessing = job.status === 'pending' || job.status === 'uploading' || job.status === 'processing';
   const isDone = job.status === 'completed' || job.status === 'failed';
   const progressWidth = Math.max(2, Math.min(100, job.progress));
@@ -108,6 +109,15 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
             className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 hover:opacity-90 transition-opacity"
           >
             Retry
+          </button>
+        )}
+
+        {isDone && (
+          <button
+            onClick={() => onRemove(job.id)}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            Delete
           </button>
         )}
       </div>

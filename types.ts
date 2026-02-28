@@ -610,6 +610,7 @@ export interface PlanSettings {
   allowReportWithoutPlan: boolean;
   allowOverProduction: boolean;
   autoClosePlan: boolean;
+  defaultProductionWarehouseId?: string;
   maxWasteThreshold: number;
   efficiencyCalculationMode: 'standard' | 'weighted';
   averageProductionMode: 'daily' | 'weekly' | 'monthly';

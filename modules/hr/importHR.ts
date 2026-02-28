@@ -11,7 +11,7 @@
 import * as XLSX from 'xlsx';
 import type { FirestoreEmployee, EmploymentType } from '../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../types';
-import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, JobLevel } from './types';
+import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, FirestoreVehicle, JobLevel } from './types';
 import { JOB_LEVEL_LABELS } from './types';
 
 // ─── Parsed Row Types ────────────────────────────────────────────────────────
@@ -46,6 +46,8 @@ export interface ParsedEmployeeRow {
   hourlyRate: number;
   shiftName: string;
   shiftId: string;
+  vehicleName: string;
+  vehicleId: string;
   email: string;
   isActive: boolean;
   hasSystemAccess: boolean;
@@ -66,6 +68,7 @@ export interface HRLookups {
   departments: FirestoreDepartment[];
   positions: FirestoreJobPosition[];
   shifts: FirestoreShift[];
+  vehicles: FirestoreVehicle[];
   employees: FirestoreEmployee[];
 }
 
@@ -92,6 +95,7 @@ const EMP_HEADERS: Record<string, string> = {
   'الراتب الأساسي': 'baseSalary', 'الراتب': 'baseSalary',
   'أجر الساعة': 'hourlyRate', 'سعر الساعة': 'hourlyRate',
   'الوردية': 'shiftName', 'اسم الوردية': 'shiftName',
+  'المركبة': 'vehicleName', 'اسم المركبة': 'vehicleName', 'مركبة': 'vehicleName',
   'البريد الإلكتروني': 'email', 'الإيميل': 'email', 'ايميل': 'email', 'البريد': 'email',
   'الحالة': 'isActive', 'حالة': 'isActive',
   'صلاحية النظام': 'hasSystemAccess', 'صلاحية': 'hasSystemAccess',
@@ -269,6 +273,7 @@ function parseEmployeeSheet(
     const hourlyRateRaw = getValue(row, rawHeaders, hMap, 'hourlyRate');
     const hourlyRate = Number(hourlyRateRaw) || 0;
     const shiftName = String(getValue(row, rawHeaders, hMap, 'shiftName') ?? '').trim();
+    const vehicleName = String(getValue(row, rawHeaders, hMap, 'vehicleName') ?? '').trim();
     const emailRaw = String(getValue(row, rawHeaders, hMap, 'email') ?? '').trim();
     const isActiveRaw = String(getValue(row, rawHeaders, hMap, 'isActive') ?? '').trim();
     const hasSystemAccessRaw = String(getValue(row, rawHeaders, hMap, 'hasSystemAccess') ?? '').trim();
@@ -293,6 +298,7 @@ function parseEmployeeSheet(
     if (baseSalaryRaw !== '' && baseSalaryRaw != null && !isNaN(Number(baseSalaryRaw))) providedFields.push('baseSalary');
     if (hourlyRateRaw !== '' && hourlyRateRaw != null && !isNaN(Number(hourlyRateRaw))) providedFields.push('hourlyRate');
     if (shiftName) providedFields.push('shiftName');
+    if (vehicleName) providedFields.push('vehicleName');
     if (emailRaw) providedFields.push('email');
     if (isActiveRaw) providedFields.push('isActive');
     if (hasSystemAccessRaw) providedFields.push('hasSystemAccess');
@@ -321,6 +327,9 @@ function parseEmployeeSheet(
     const shift = shiftName ? matchName(lookups.shifts.map((s) => ({ ...s, name: s.name })), shiftName) : undefined;
     if (shiftName && !shift) errors.push(`الوردية "${shiftName}" غير موجودة`);
 
+    const vehicle = vehicleName ? matchName(lookups.vehicles.map((v) => ({ ...v, name: v.name })), vehicleName) : undefined;
+    if (vehicleName && !vehicle) errors.push(`المركبة "${vehicleName}" غير موجودة`);
+
     return {
       rowIndex: idx + 2,
       name,
@@ -335,6 +344,8 @@ function parseEmployeeSheet(
       hourlyRate,
       shiftName,
       shiftId: (shift as FirestoreShift)?.id ?? '',
+      vehicleName,
+      vehicleId: (vehicle as FirestoreVehicle)?.id ?? '',
       email,
       isActive,
       hasSystemAccess,

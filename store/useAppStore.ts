@@ -60,6 +60,7 @@ import { userService } from '../services/userService';
 import { activityLogService } from '../services/activityLogService';
 import { systemSettingsService } from '../services/systemSettingsService';
 import { scanEventService } from '../modules/production/services/scanEventService';
+import { stockService } from '../modules/inventory/services/stockService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -1077,7 +1078,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             throw new Error('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
           }
 
-          await reportService.create({
+          const autoCloseReportId = await reportService.create({
             employeeId: updatedWorkOrder.supervisorId,
             productId: updatedWorkOrder.productId,
             lineId: updatedWorkOrder.lineId,
@@ -1097,6 +1098,29 @@ export const useAppStore = create<AppState>((set, get) => ({
             notes: updatedWorkOrder.notes ?? '',
             workOrderId: id,
           });
+
+          const autoWarehouseId = get().systemSettings.planSettings?.defaultProductionWarehouseId ?? '';
+          if (autoWarehouseId) {
+            const product = get()._rawProducts.find((p) => p.id === updatedWorkOrder.productId);
+            if (product) {
+              await stockService.createMovement({
+                warehouseId: autoWarehouseId,
+                itemType: 'finished_good',
+                itemId: updatedWorkOrder.productId,
+                itemName: product.name,
+                itemCode: product.code,
+                movementType: 'IN',
+                quantity: Number(
+                  updatedWorkOrder.actualProducedFromScans ??
+                  updatedWorkOrder.producedQuantity ??
+                  0,
+                ),
+                note: `Auto from work order close ${id}`,
+                referenceNo: autoCloseReportId ? `PR-${autoCloseReportId}` : `WO-${id}`,
+                createdBy: get().userDisplayName || get().userEmail || 'System',
+              });
+            }
+          }
 
           const today = getTodayDateString();
           const { start: monthStart, end: monthEnd } = getMonthDateRange();
@@ -1345,6 +1369,25 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const reportData = { ...data, workOrderId: activeWO?.id || data.workOrderId || '' };
       const id = await reportService.create(reportData);
+
+      const defaultProductionWarehouseId = planSettings.defaultProductionWarehouseId ?? '';
+      if (id && defaultProductionWarehouseId) {
+        const product = get()._rawProducts.find((p) => p.id === data.productId);
+        if (product) {
+          await stockService.createMovement({
+            warehouseId: defaultProductionWarehouseId,
+            itemType: 'finished_good',
+            itemId: data.productId,
+            itemName: product.name,
+            itemCode: product.code,
+            movementType: 'IN',
+            quantity: Number(data.quantityProduced || 0),
+            note: `Auto from production report ${id}`,
+            referenceNo: `PR-${id}`,
+            createdBy: get().userDisplayName || get().userEmail || 'System',
+          });
+        }
+      }
 
       const laborCost = (laborSettings?.hourlyRate ?? 0) * (data.workHours || 0) * (data.workersCount || 0);
 

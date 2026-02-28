@@ -143,6 +143,7 @@ export const Employees: React.FC = () => {
   const getDepartmentName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const getJobPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '—';
   const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name ?? '—';
+  const getVehicleName = (id: string) => vehicles.find((v) => v.id === id)?.name ?? '—';
   const getManagerName = (id: string) => _rawEmployees.find((e) => e.id === id)?.name ?? '—';
 
   const summaryKpis = useMemo(() => {
@@ -576,6 +577,11 @@ export const Employees: React.FC = () => {
     {
       header: 'نوع التوظيف',
       render: (emp) => <span className="text-sm">{EMPLOYMENT_TYPE_LABELS[(emp.employmentType as EmploymentType)] ?? emp.employmentType}</span>,
+    },
+    {
+      header: 'المركبة',
+      sortKey: (emp) => getVehicleName(emp.vehicleId ?? ''),
+      render: (emp) => <span className="text-sm text-slate-600 dark:text-slate-400">{getVehicleName(emp.vehicleId ?? '')}</span>,
     },
     {
       header: 'دخول النظام',

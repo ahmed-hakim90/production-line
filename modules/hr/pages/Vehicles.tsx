@@ -76,6 +76,22 @@ export const Vehicles: React.FC = () => {
     return emp?.code || '';
   }, [employees]);
 
+  const assignedByVehicle = useMemo(() => {
+    const map = new Map<string, string[]>();
+    employees.forEach((e) => {
+      if (!e.id || !e.vehicleId) return;
+      const list = map.get(e.vehicleId) ?? [];
+      list.push(e.id);
+      map.set(e.vehicleId, list);
+    });
+    return map;
+  }, [employees]);
+
+  const getAssignedEmployeeIds = useCallback((vehicle: FirestoreVehicle) => {
+    const fromEmployeeLinks = assignedByVehicle.get(vehicle.id ?? '') ?? [];
+    return fromEmployeeLinks.length > 0 ? fromEmployeeLinks : vehicle.assignedEmployees;
+  }, [assignedByVehicle]);
+
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return vehicles;
     const q = searchQuery.trim().toLowerCase();
@@ -89,10 +105,10 @@ export const Vehicles: React.FC = () => {
   const stats = useMemo(() => {
     const active = vehicles.filter((v) => v.isActive);
     const totalCapacity = active.reduce((s, v) => s + v.capacity, 0);
-    const totalAssigned = active.reduce((s, v) => s + v.assignedEmployees.length, 0);
+    const totalAssigned = active.reduce((s, v) => s + getAssignedEmployeeIds(v).length, 0);
     const totalMonthlyCost = active.reduce((s, v) => s + v.dailyRate * v.workingDaysPerMonth, 0);
     return { total: vehicles.length, active: active.length, totalCapacity, totalAssigned, totalMonthlyCost };
-  }, [vehicles]);
+  }, [vehicles, getAssignedEmployeeIds]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -101,6 +117,7 @@ export const Vehicles: React.FC = () => {
   };
 
   const openEdit = (v: FirestoreVehicle) => {
+    const assignedEmployeeIds = getAssignedEmployeeIds(v);
     setEditingId(v.id!);
     setForm({
       name: v.name,
@@ -110,7 +127,7 @@ export const Vehicles: React.FC = () => {
       workingDaysPerMonth: v.workingDaysPerMonth,
       driverName: v.driverName,
       driverPhone: v.driverPhone,
-      assignedEmployees: [...v.assignedEmployees],
+      assignedEmployees: [...assignedEmployeeIds],
       notes: v.notes,
       isActive: v.isActive,
     });
@@ -159,7 +176,8 @@ export const Vehicles: React.FC = () => {
   const handleExport = () => {
     const rows: Record<string, any>[] = [];
     vehicles.forEach((v) => {
-      if (v.assignedEmployees.length === 0) {
+      const assignedEmployeeIds = getAssignedEmployeeIds(v);
+      if (assignedEmployeeIds.length === 0) {
         rows.push({
           'اسم المركبة': v.name,
           'رقم اللوحة': v.plateNumber,
@@ -175,10 +193,10 @@ export const Vehicles: React.FC = () => {
           'تكلفة الموظف/شهر': '',
         });
       } else {
-        const costPerEmp = v.assignedEmployees.length > 0
-          ? (v.dailyRate * v.workingDaysPerMonth) / v.assignedEmployees.length
+        const costPerEmp = assignedEmployeeIds.length > 0
+          ? (v.dailyRate * v.workingDaysPerMonth) / assignedEmployeeIds.length
           : 0;
-        v.assignedEmployees.forEach((empId) => {
+        assignedEmployeeIds.forEach((empId) => {
           rows.push({
             'اسم المركبة': v.name,
             'رقم اللوحة': v.plateNumber,
@@ -453,10 +471,11 @@ export const Vehicles: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filtered.map((v) => {
+            const assignedEmployeeIds = getAssignedEmployeeIds(v);
             const monthlyCost = v.dailyRate * v.workingDaysPerMonth;
-            const costPerEmp = v.assignedEmployees.length > 0 ? monthlyCost / v.assignedEmployees.length : 0;
+            const costPerEmp = assignedEmployeeIds.length > 0 ? monthlyCost / assignedEmployeeIds.length : 0;
             const isExpanded = expandedId === v.id;
-            const occupancy = v.capacity > 0 ? (v.assignedEmployees.length / v.capacity) * 100 : 0;
+            const occupancy = v.capacity > 0 ? (assignedEmployeeIds.length / v.capacity) * 100 : 0;
 
             return (
               <div
@@ -496,7 +515,7 @@ export const Vehicles: React.FC = () => {
                     <p className="text-[10px] text-slate-500 font-medium">السعة</p>
                   </div>
                   <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">{v.assignedEmployees.length}</p>
+                    <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">{assignedEmployeeIds.length}</p>
                     <p className="text-[10px] text-slate-500 font-medium">مربوطين</p>
                   </div>
                   <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
@@ -555,14 +574,14 @@ export const Vehicles: React.FC = () => {
                     className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
                   >
                     <span className="material-icons-round text-sm">{isExpanded ? 'expand_less' : 'expand_more'}</span>
-                    {isExpanded ? 'إخفاء' : 'عرض'} الموظفين ({v.assignedEmployees.length})
+                    {isExpanded ? 'إخفاء' : 'عرض'} الموظفين ({assignedEmployeeIds.length})
                   </button>
                   {isExpanded && (
                     <div className="mt-2 space-y-1">
-                      {v.assignedEmployees.length === 0 ? (
+                      {assignedEmployeeIds.length === 0 ? (
                         <p className="text-xs text-slate-400">لا يوجد موظفين مربوطين</p>
                       ) : (
-                        v.assignedEmployees.map((empId) => (
+                        assignedEmployeeIds.map((empId) => (
                           <div key={empId} className="flex items-center gap-2 py-1.5 px-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-sm">
                             <span className="material-icons-round text-slate-400 text-sm">person</span>
                             <span className="font-medium text-slate-700 dark:text-slate-300">{getEmpName(empId)}</span>
