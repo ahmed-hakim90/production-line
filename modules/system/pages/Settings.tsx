@@ -29,6 +29,7 @@ import { EXPORT_IMPORT_PAGE_REGISTRY, getExportImportPageControl } from '../../.
 import { ProductionReportPrint, computePrintTotals } from '../../production/components/ProductionReportPrint';
 import {
   backupService,
+  convertSupabaseRawToBackupFile,
   validateBackupFile,
   type BackupFile,
   type BackupHistoryEntry,
@@ -273,6 +274,7 @@ export const Settings: React.FC = () => {
   const [restoreMode, setRestoreMode] = useState<RestoreMode>('merge');
   const [showConfirmRestore, setShowConfirmRestore] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const supabaseImportInputRef = useRef<HTMLInputElement>(null);
 
   const loadBackupHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -351,6 +353,19 @@ export const Settings: React.FC = () => {
     setBackupLoading(false);
   }, [userEmail, loadBackupHistory]);
 
+  const handleExportSupabase = useCallback(async () => {
+    setBackupLoading(true);
+    setBackupMessage(null);
+    try {
+      await backupService.exportSupabaseSQL(userEmail || 'admin');
+      setBackupMessage({ type: 'success', text: 'تم إنشاء ملف SQL متوافق مع Supabase بنجاح' });
+      loadBackupHistory();
+    } catch (err: any) {
+      setBackupMessage({ type: 'error', text: err.message || 'فشل تصدير ملف Supabase' });
+    }
+    setBackupLoading(false);
+  }, [userEmail, loadBackupHistory]);
+
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -376,6 +391,37 @@ export const Settings: React.FC = () => {
     reader.readAsText(file);
     if (importInputRef.current) importInputRef.current.value = '';
   }, []);
+
+  const handleSupabaseFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFileName(file.name);
+    setImportFile(null);
+    setImportValidation(null);
+    setBackupMessage(null);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        const converted = convertSupabaseRawToBackupFile(
+          parsed,
+          userEmail || 'supabase-import'
+        );
+        if (!converted.valid || !converted.backup) {
+          setImportValidation({ valid: false, error: converted.error || 'ملف Supabase غير صالح' });
+          return;
+        }
+        setImportValidation({ valid: true });
+        setImportFile(converted.backup);
+      } catch {
+        setImportValidation({ valid: false, error: 'ملف JSON غير صالح — تأكد من صحة الملف' });
+      }
+    };
+    reader.readAsText(file);
+    if (supabaseImportInputRef.current) supabaseImportInputRef.current.value = '';
+  }, [userEmail]);
 
   const _loadAppData = useAppStore((s) => s._loadAppData);
   const fetchSystemSettings = useAppStore((s) => s.fetchSystemSettings);
@@ -2673,6 +2719,24 @@ export const Settings: React.FC = () => {
                   تصدير الإعدادات
                 </Button>
               </div>
+
+              {/* Supabase SQL Export */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                    <span className="material-icons-round text-emerald-600 text-xl">database</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">تصدير متوافق مع Supabase</p>
+                    <p className="text-xs text-slate-400">ينشئ ملف SQL يحتوي كل البيانات بصيغة JSONB داخل جدول firebase_backup_raw وجاهز للتشغيل في Supabase SQL Editor</p>
+                  </div>
+                </div>
+                <Button onClick={handleExportSupabase} disabled={backupLoading}>
+                  {backupLoading && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                  <span className="material-icons-round text-sm">download</span>
+                  تصدير SQL
+                </Button>
+              </div>
             </div>
           </Card>
 
@@ -2717,7 +2781,7 @@ export const Settings: React.FC = () => {
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
                         {importFileName || 'اختر ملف النسخة الاحتياطية'}
                       </p>
-                      <p className="text-xs text-slate-400">ملف JSON تم تصديره من النظام</p>
+                      <p className="text-xs text-slate-400">ملف JSON تم تصديره من النظام أو من Supabase</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -2734,7 +2798,22 @@ export const Settings: React.FC = () => {
                       className="px-4 py-2.5 rounded-xl text-sm font-bold bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
                     >
                       <span className="material-icons-round text-sm">folder_open</span>
-                      اختيار ملف
+                      اختيار ملف النظام
+                    </button>
+                    <input
+                      ref={supabaseImportInputRef}
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={handleSupabaseFileSelect}
+                    />
+                    <button
+                      onClick={() => supabaseImportInputRef.current?.click()}
+                      disabled={backupLoading}
+                      className="px-4 py-2.5 rounded-xl text-sm font-bold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <span className="material-icons-round text-sm">cloud_upload</span>
+                      امبورت Supabase
                     </button>
                     {importFileName && (
                       <button
