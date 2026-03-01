@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 interface CardProps {
   children: React.ReactNode;
@@ -173,7 +174,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
   const selectedLabel = useMemo(
     () => options.find((o) => o.value === value)?.label ?? '',
@@ -188,7 +191,10 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideTrigger = !!containerRef.current?.contains(target);
+      const insideMenu = !!menuRef.current?.contains(target);
+      if (!insideTrigger && !insideMenu) {
         setOpen(false);
         setQuery('');
       }
@@ -205,6 +211,39 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       inputRef.current?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updateMenuPosition = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom - 8;
+      const spaceAbove = rect.top - 8;
+      const placeTop = spaceAbove > spaceBelow;
+
+      setMenuStyle({
+        position: 'fixed',
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+        maxHeight: Math.max(120, Math.min(320, placeTop ? spaceAbove - 8 : spaceBelow - 8)),
+        ...(placeTop
+          ? { top: rect.top - 4, transform: 'translateY(-100%)' }
+          : { top: rect.bottom + 4 }),
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
   }, [open]);
 
   const handleSelect = (val: string) => {
@@ -262,8 +301,12 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         </span>
       </div>
 
-      {open && (
-        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-black/30 max-h-56 overflow-y-auto">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          style={menuStyle}
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-black/30 overflow-y-auto"
+        >
           {filtered.length === 0 ? (
             <div className="px-4 py-3 text-sm text-slate-400 text-center">لا توجد نتائج</div>
           ) : (
@@ -287,7 +330,8 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
@@ -7,7 +7,7 @@ import { formatNumber } from '../../../utils/calculations';
 import { buildProductCosts, buildProductAvgCost, formatCost, type ProductCostData } from '../../../utils/costCalculations';
 import { FirestoreProduct } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { parseProductsExcel, toProductData, ProductImportResult } from '../../../utils/importProducts';
+import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
 import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
 import { exportAllProducts, PRODUCT_EXPORT_DEFAULTS } from '../../../utils/exportExcel';
 import type { ProductExportOptions } from '../../../utils/exportExcel';
@@ -16,6 +16,8 @@ import type { ProductMaterial } from '../../../types';
 import { productMaterialService } from '../../../services/productMaterialService';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
+import { stockService } from '../../inventory/services/stockService';
+import type { StockItemBalance } from '../../inventory/types';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -88,6 +90,7 @@ export const Products: React.FC = () => {
   const costAllocations = useAppStore((s) => s.costAllocations);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const planSettings = useAppStore((s) => s.systemSettings.planSettings);
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
@@ -134,6 +137,7 @@ export const Products: React.FC = () => {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState('');
+  const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -146,6 +150,31 @@ export const Products: React.FC = () => {
       return matchSearch && matchCategory && matchStock;
     });
   }, [products, search, categoryFilter, stockFilter]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rows = await stockService.getBalances();
+        setInventoryBalances(rows);
+      } catch {
+        setInventoryBalances([]);
+      }
+    })();
+  }, []);
+
+  const productWarehouseBalances = useMemo(() => {
+    const keyOf = (warehouseId: string, productId: string) => `${warehouseId}__${productId}`;
+    const map = new Map<string, number>();
+    inventoryBalances
+      .filter((row) => row.itemType === 'finished_good')
+      .forEach((row) => {
+        if (!row.warehouseId || !row.itemId) return;
+        map.set(keyOf(row.warehouseId, row.itemId), Number(row.quantity || 0));
+      });
+    const getValue = (warehouseId?: string, productId?: string) =>
+      warehouseId && productId ? Number(map.get(keyOf(warehouseId, productId)) || 0) : 0;
+    return { getValue };
+  }, [inventoryBalances]);
 
   const productCosts = useMemo(() => {
     if (!canViewCosts) return {} as Record<string, ProductCostData>;
@@ -272,7 +301,11 @@ export const Products: React.FC = () => {
       try {
         let productId: string | null = null;
         if (row.action === 'update' && row.matchedId) {
-          await updateProduct(row.matchedId, toProductData(row));
+          const existingProduct = _rawProducts.find((p) => p.id === row.matchedId);
+          if (!existingProduct) {
+            throw new Error('Existing product not found for update');
+          }
+          await updateProduct(row.matchedId, toProductDataWithExisting(row, existingProduct));
           productId = row.matchedId;
         } else {
           productId = await createProduct(toProductData(row));
@@ -333,10 +366,10 @@ export const Products: React.FC = () => {
       return { product: p, raw, costBreakdown: breakdown, rawMaterialsDetails };
     });
     const columnLabels: string[] = ['الكود', 'اسم المنتج', 'الفئة'];
-    if (visibleColumns.openingStock) columnLabels.push('الرصيد الافتتاحي');
-    if (visibleColumns.totalProduction) columnLabels.push('إجمالي الإنتاج');
-    if (visibleColumns.wasteUnits) columnLabels.push('إجمالي الهالك');
-    if (visibleColumns.stockLevel) columnLabels.push('الرصيد الحالي');
+    if (visibleColumns.openingStock) columnLabels.push('رصيد مفكك');
+    if (visibleColumns.totalProduction) columnLabels.push('تم الصنع');
+    if (visibleColumns.wasteUnits) columnLabels.push('الهالك');
+    if (visibleColumns.stockLevel) columnLabels.push('منتج تام');
 
     if (canViewCosts && visibleColumns.chineseUnitCost) columnLabels.push('تكلفة الوحدة الصينية');
     if (canViewCosts && visibleColumns.chinesePriceCny) columnLabels.push('السعر باليوان');
@@ -469,10 +502,10 @@ export const Products: React.FC = () => {
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                 <th className="px-5 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400">المنتج</th>
-                {visibleColumns.openingStock && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الرصيد الافتتاحي</th>}
-                {visibleColumns.totalProduction && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الإنتاج</th>}
+                {visibleColumns.openingStock && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">رصيد مفكك</th>}
+                {visibleColumns.totalProduction && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">تم الصنع</th>}
                 {visibleColumns.wasteUnits && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الهالك</th>}
-                {visibleColumns.stockLevel && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الرصيد الحالي</th>}
+                {visibleColumns.stockLevel && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">منتج تام</th>}
                 {canViewSellingPrice && visibleColumns.sellingPrice && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">سعر البيع</th>}
                 {canViewCosts && (
                   <>
@@ -503,7 +536,12 @@ export const Products: React.FC = () => {
                   </td>
                 </tr>
               )}
-              {filtered.map((product) => (
+              {filtered.map((product) => {
+                const decomposedBalance = productWarehouseBalances.getValue(planSettings?.decomposedSourceWarehouseId, product.id);
+                const finishedBalance = productWarehouseBalances.getValue(planSettings?.finishedReceiveWarehouseId, product.id);
+                const wasteBalance = productWarehouseBalances.getValue(planSettings?.wasteReceiveWarehouseId, product.id);
+                const finalBalance = productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, product.id);
+                return (
                 <tr key={product.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -527,22 +565,22 @@ export const Products: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-slate-700 dark:text-slate-300 tabular-nums">{formatNumber(product.openingStock)}</td>}
+                  {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-slate-700 dark:text-slate-300 tabular-nums">{formatNumber(decomposedBalance)}</td>}
                   {visibleColumns.totalProduction && <td className="px-4 py-4 text-center">
                     <span className="inline-block px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-sm font-black tabular-nums">
-                      {formatNumber(product.totalProduction)}
+                      {formatNumber(finishedBalance)}
                     </span>
                   </td>}
                   {visibleColumns.wasteUnits && <td className="px-4 py-4 text-center">
-                    {product.wasteUnits > 0 ? (
-                      <span className="text-sm font-bold text-rose-500 tabular-nums">{formatNumber(product.wasteUnits)}</span>
+                    {wasteBalance > 0 ? (
+                      <span className="text-sm font-bold text-rose-500 tabular-nums">{formatNumber(wasteBalance)}</span>
                     ) : (
                       <span className="text-sm text-slate-300">0</span>
                     )}
                   </td>}
                   {visibleColumns.stockLevel && <td className="px-4 py-4 text-center">
-                    <span className={`text-sm font-black tabular-nums ${product.stockLevel > 100 ? 'text-slate-700 dark:text-slate-200' : product.stockLevel > 0 ? 'text-amber-600' : 'text-rose-500'}`}>
-                      {formatNumber(product.stockLevel)}
+                    <span className={`text-sm font-black tabular-nums ${finalBalance > 100 ? 'text-slate-700 dark:text-slate-200' : finalBalance > 0 ? 'text-amber-600' : 'text-rose-500'}`}>
+                      {formatNumber(finalBalance)}
                     </span>
                   </td>}
                   {canViewSellingPrice && visibleColumns.sellingPrice && (
@@ -630,7 +668,7 @@ export const Products: React.FC = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
@@ -978,10 +1016,10 @@ export const Products: React.FC = () => {
             </div>
             <div className="p-6 space-y-3 overflow-y-auto flex-1 min-h-0">
               {[
-                { key: 'openingStock' as const, label: 'الرصيد الافتتاحي', icon: 'inventory' },
-                { key: 'totalProduction' as const, label: 'الإنتاج', icon: 'precision_manufacturing' },
+                { key: 'openingStock' as const, label: 'رصيد مفكك', icon: 'call_split' },
+                { key: 'totalProduction' as const, label: 'تم الصنع', icon: 'precision_manufacturing' },
                 { key: 'wasteUnits' as const, label: 'الهالك', icon: 'delete_sweep' },
-                { key: 'stockLevel' as const, label: 'الرصيد الحالي', icon: 'inventory_2' },
+                { key: 'stockLevel' as const, label: 'منتج تام', icon: 'inventory_2' },
                 ...(canViewSellingPrice ? [{ key: 'sellingPrice' as const, label: 'سعر البيع', icon: 'sell' }] : []),
                 { key: 'totalCost' as const, label: 'إجمالي التكلفة', icon: 'payments' },
                 { key: 'directIndirect' as const, label: 'مباشر / غير مباشر', icon: 'compare_arrows' },

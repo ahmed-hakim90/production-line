@@ -77,10 +77,19 @@ export function useSidebarBadges() {
 }
 
 export function useSidebarActiveRoute() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   const isActiveItem = useCallback(
     (item: MenuItem) => {
+      if (item.path.includes('?')) {
+        const [itemPath, itemQuery = ''] = item.path.split('?');
+        if (pathname !== itemPath) {
+          return false;
+        }
+        const currentParams = new URLSearchParams(search);
+        const targetParams = new URLSearchParams(itemQuery);
+        return Array.from(targetParams.entries()).every(([key, value]) => currentParams.get(key) === value);
+      }
       if (pathname === item.path) {
         return true;
       }
@@ -89,7 +98,7 @@ export function useSidebarActiveRoute() {
       }
       return item.path !== '/' && pathname.startsWith(`${item.path}/`);
     },
-    [pathname],
+    [pathname, search],
   );
 
   const activeGroupKey = useMemo(() => {

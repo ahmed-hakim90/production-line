@@ -17,7 +17,7 @@ export type Permission =
   | 'dashboard.view'
   | 'products.view' | 'products.create' | 'products.edit' | 'products.delete' | 'products.createRawMaterial'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
-  | 'inventory.view' | 'inventory.transactions.create' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage'
+  | 'inventory.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage' | 'inventory.transfers.approve'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
@@ -119,9 +119,14 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     permissions: [
       { key: 'inventory.view', label: 'عرض المخازن' },
       { key: 'inventory.transactions.create', label: 'تسجيل حركات المخزون' },
+      { key: 'inventory.transactions.edit', label: 'تعديل حركات المخزون' },
+      { key: 'inventory.transactions.print', label: 'طباعة حركات المخزون' },
+      { key: 'inventory.transactions.export', label: 'تصدير حركات المخزون' },
+      { key: 'inventory.transactions.delete', label: 'حذف حركات المخزون' },
       { key: 'inventory.counts.manage', label: 'إدارة الجرد واعتماد الفروق' },
       { key: 'inventory.warehouses.manage', label: 'إدارة المخازن' },
       { key: 'inventory.items.manage', label: 'إدارة الأصناف الخام' },
+      { key: 'inventory.transfers.approve', label: 'اعتماد تحويلات المخازن' },
     ],
   },
   {
@@ -293,6 +298,7 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
       { path: '/inventory', icon: 'inventory', label: 'لوحة المخزون', permission: 'inventory.view' },
       { path: '/inventory/balances', icon: 'inventory_2', label: 'أرصدة المخزون', permission: 'inventory.view' },
       { path: '/inventory/transactions', icon: 'sync_alt', label: 'حركات المخزون', permission: 'inventory.view' },
+      { path: '/inventory/transfer-approvals', icon: 'verified_user', label: 'اعتماد التحويلات', permission: 'inventory.view' },
       { path: '/inventory/movements', icon: 'add_circle', label: 'إدخال حركة', permission: 'inventory.transactions.create' },
       { path: '/inventory/counts', icon: 'fact_check', label: 'جرد المخزون', permission: 'inventory.counts.manage' },
     ],
@@ -364,7 +370,7 @@ const SIDEBAR_GROUP_ORDER: string[] = [
 const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   dashboards: ['/', '/employee-dashboard', '/factory-dashboard', '/admin-dashboard'],
   production: ['/products', '/lines', '/production-plans', '/work-orders', '/supervisors', '/production-workers', '/reports', '/quick-action'],
-  inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/movements', '/inventory/counts'],
+  inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/inventory/movements', '/inventory/counts'],
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
   hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
   costs: ['/cost-centers', '/cost-settings'],
@@ -407,6 +413,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/inventory': 'inventory.view',
   '/inventory/balances': 'inventory.view',
   '/inventory/transactions': 'inventory.view',
+  '/inventory/transfer-approvals': 'inventory.view',
   '/inventory/movements': 'inventory.transactions.create',
   '/inventory/counts': 'inventory.counts.manage',
   '/lines': 'lines.view',
@@ -493,6 +500,14 @@ export function checkPermission(
   }
   if (permission === 'quality.workers.manage') {
     return permissions['quality.manageWorkers'] === true;
+  }
+  if (
+    permission === 'inventory.transactions.edit' ||
+    permission === 'inventory.transactions.print' ||
+    permission === 'inventory.transactions.export' ||
+    permission === 'inventory.transactions.delete'
+  ) {
+    return permissions['inventory.transactions.create'] === true;
   }
 
   return false;

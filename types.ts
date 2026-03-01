@@ -611,6 +611,12 @@ export interface PlanSettings {
   allowOverProduction: boolean;
   autoClosePlan: boolean;
   defaultProductionWarehouseId?: string;
+  decomposedSourceWarehouseId?: string;
+  finishedReceiveWarehouseId?: string;
+  wasteReceiveWarehouseId?: string;
+  finalProductWarehouseId?: string;
+  transferApprovalPermission?: string;
+  allowNegativeDecomposedStock?: boolean;
   maxWasteThreshold: number;
   efficiencyCalculationMode: 'standard' | 'weighted';
   averageProductionMode: 'daily' | 'weekly' | 'monthly';

@@ -139,6 +139,26 @@ export const reportService = {
     }
   },
 
+  async updateByReportCode(reportCode: string, fields: Partial<ProductionReport>): Promise<boolean> {
+    if (!isConfigured || !reportCode) return false;
+    try {
+      const q = query(
+        collection(db, COLLECTION),
+        where('reportCode', '==', reportCode),
+        limit(1),
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) return false;
+      const { id: _id, createdAt: _ts, reportCode: _code, ...updatable } = fields as any;
+      if (Object.keys(updatable).length === 0) return false;
+      await updateDoc(snap.docs[0].ref, updatable);
+      return true;
+    } catch (error) {
+      console.error('reportService.updateByReportCode error:', error);
+      throw error;
+    }
+  },
+
   async delete(id: string): Promise<void> {
     if (!isConfigured) return;
     try {

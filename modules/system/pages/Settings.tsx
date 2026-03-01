@@ -1139,6 +1139,7 @@ export const Settings: React.FC = () => {
                   { key: 'allowReportWithoutPlan' as keyof PlanSettings, label: 'السماح بالتقارير بدون خطة', icon: 'assignment', desc: 'عند التعطيل، لن يتمكن المشرفون من إنشاء تقارير إنتاج بدون خطة نشطة.' },
                   { key: 'allowOverProduction' as keyof PlanSettings, label: 'السماح بالإنتاج الزائد', icon: 'trending_up', desc: 'عند التعطيل، لن يُسمح بإضافة تقارير بعد الوصول إلى الكمية المخططة.' },
                   { key: 'autoClosePlan' as keyof PlanSettings, label: 'إغلاق الخطة تلقائياً عند الاكتمال', icon: 'event_available', desc: 'عند التفعيل، يتم تغيير حالة الخطة إلى "مكتملة" تلقائياً عند الوصول للكمية المخططة.' },
+                  { key: 'allowNegativeDecomposedStock' as keyof PlanSettings, label: 'السماح بالسالب في مخزن المفكك', icon: 'remove_circle_outline', desc: 'عند التفعيل، يمكن خصم مواد خام من مخزن المفكك حتى لو الرصيد الحالي غير كافٍ.' },
                 ]).map((setting) => (
                   <div key={setting.key} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
                     <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
@@ -1229,6 +1230,95 @@ export const Settings: React.FC = () => {
                     <option value="">بدون ترحيل تلقائي</option>
                     {inventoryWarehouses.map((w) => (
                       <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="material-icons-round text-primary text-lg">call_split</span>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن المفكك (خصم الخامات)</p>
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={localPlanSettings.decomposedSourceWarehouseId ?? ''}
+                      onChange={(e) => setLocalPlanSettings((p) => ({ ...p, decomposedSourceWarehouseId: e.target.value }))}
+                    >
+                      <option value="">غير محدد</option>
+                      {inventoryWarehouses.map((w) => (
+                        <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="material-icons-round text-primary text-lg">inventory_2</span>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن تم الصنع</p>
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={localPlanSettings.finishedReceiveWarehouseId ?? ''}
+                      onChange={(e) => setLocalPlanSettings((p) => ({ ...p, finishedReceiveWarehouseId: e.target.value }))}
+                    >
+                      <option value="">غير محدد</option>
+                      {inventoryWarehouses.map((w) => (
+                        <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="material-icons-round text-primary text-lg">delete_sweep</span>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن الهالك</p>
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={localPlanSettings.wasteReceiveWarehouseId ?? ''}
+                      onChange={(e) => setLocalPlanSettings((p) => ({ ...p, wasteReceiveWarehouseId: e.target.value }))}
+                    >
+                      <option value="">غير محدد</option>
+                      {inventoryWarehouses.map((w) => (
+                        <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="material-icons-round text-primary text-lg">inventory</span>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن المنتج التام</p>
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={localPlanSettings.finalProductWarehouseId ?? ''}
+                      onChange={(e) => setLocalPlanSettings((p) => ({ ...p, finalProductWarehouseId: e.target.value }))}
+                    >
+                      <option value="">غير محدد</option>
+                      {inventoryWarehouses.map((w) => (
+                        <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-icons-round text-primary text-lg">verified_user</span>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">صلاحية معتمد تحويلات المخازن</p>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    أي مستخدم يملك هذه الصلاحية يمكنه قبول/رفض التحويلات المعلقة.
+                  </p>
+                  <select
+                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    value={localPlanSettings.transferApprovalPermission ?? ''}
+                    onChange={(e) => setLocalPlanSettings((p) => ({ ...p, transferApprovalPermission: e.target.value }))}
+                  >
+                    {ALL_PERMISSIONS.map((permission) => (
+                      <option key={permission} value={permission}>{permission}</option>
                     ))}
                   </select>
                 </div>

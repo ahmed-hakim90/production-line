@@ -61,6 +61,9 @@ import { activityLogService } from '../services/activityLogService';
 import { systemSettingsService } from '../services/systemSettingsService';
 import { scanEventService } from '../modules/production/services/scanEventService';
 import { stockService } from '../modules/inventory/services/stockService';
+import { warehouseService } from '../modules/inventory/services/warehouseService';
+import { rawMaterialService } from '../modules/inventory/services/rawMaterialService';
+import { productMaterialService } from '../services/productMaterialService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -84,6 +87,62 @@ function emptyPermissions(): Record<string, boolean> {
   const perms: Record<string, boolean> = {};
   ALL_PERMISSIONS.forEach((p) => { perms[p] = false; });
   return perms;
+}
+
+let _cachedProductionWarehouseId: string | null = null;
+
+async function resolveProductionWarehouseId(systemSettings: SystemSettings): Promise<string> {
+  const fromSettings = systemSettings.planSettings?.defaultProductionWarehouseId?.trim() ?? '';
+  if (fromSettings) return fromSettings;
+
+  if (_cachedProductionWarehouseId) return _cachedProductionWarehouseId;
+
+  try {
+    const warehouses = await warehouseService.getAll();
+    const finishedWarehouse = warehouses.find((w) => {
+      const name = (w.name || '').trim().toLowerCase();
+      return name === 'تم الصنع' || name.includes('تم الصنع');
+    });
+    if (finishedWarehouse?.id) {
+      _cachedProductionWarehouseId = finishedWarehouse.id;
+      return finishedWarehouse.id;
+    }
+  } catch {
+    // keep graceful fallback to empty when warehouse module is unavailable
+  }
+
+  return '';
+}
+
+type InventoryRoutingConfig = {
+  decomposedSourceWarehouseId: string;
+  finishedReceiveWarehouseId: string;
+  wasteReceiveWarehouseId: string;
+  finalProductWarehouseId: string;
+  allowNegativeDecomposedStock: boolean;
+};
+
+async function resolveInventoryRouting(systemSettings: SystemSettings): Promise<InventoryRoutingConfig> {
+  const fallbackFinished = await resolveProductionWarehouseId(systemSettings);
+  const plan = systemSettings.planSettings ?? ({} as any);
+  return {
+    decomposedSourceWarehouseId: (plan.decomposedSourceWarehouseId || '').trim(),
+    finishedReceiveWarehouseId: (plan.finishedReceiveWarehouseId || '').trim() || fallbackFinished,
+    wasteReceiveWarehouseId: (plan.wasteReceiveWarehouseId || '').trim(),
+    finalProductWarehouseId: (plan.finalProductWarehouseId || '').trim(),
+    allowNegativeDecomposedStock: Boolean(plan.allowNegativeDecomposedStock),
+  };
+}
+
+function normalizeText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ');
 }
 
 // ─── State Shape ────────────────────────────────────────────────────────────
@@ -1099,27 +1158,71 @@ export const useAppStore = create<AppState>((set, get) => ({
             workOrderId: id,
           });
 
-          const autoWarehouseId = get().systemSettings.planSettings?.defaultProductionWarehouseId ?? '';
-          if (autoWarehouseId) {
-            const product = get()._rawProducts.find((p) => p.id === updatedWorkOrder.productId);
-            if (product) {
+          const routing = await resolveInventoryRouting(get().systemSettings);
+          const product = get()._rawProducts.find((p) => p.id === updatedWorkOrder.productId);
+          const actorName = get().userDisplayName || get().userEmail || 'System';
+          const producedQty = Number(
+            updatedWorkOrder.actualProducedFromScans ??
+            updatedWorkOrder.producedQuantity ??
+            0,
+          );
+          if (product && routing.finishedReceiveWarehouseId && producedQty > 0) {
+            await stockService.createMovement({
+              warehouseId: routing.finishedReceiveWarehouseId,
+              itemType: 'finished_good',
+              itemId: updatedWorkOrder.productId,
+              itemName: product.name,
+              itemCode: product.code,
+              movementType: 'IN',
+              quantity: producedQty,
+              note: `Auto from work order close ${id}`,
+              createdBy: actorName,
+            });
+          }
+          if (routing.decomposedSourceWarehouseId && producedQty > 0) {
+            const [materials, rawMaterials] = await Promise.all([
+              productMaterialService.getByProduct(updatedWorkOrder.productId),
+              rawMaterialService.getAll(),
+            ]);
+            const rawByName = new Map(
+              rawMaterials.map((rm) => [normalizeText(rm.name), rm]),
+            );
+            for (const material of materials) {
+              const raw = rawByName.get(normalizeText(material.materialName || ''));
+              if (!raw?.id) continue;
+              const qtyToConsume = Number(material.quantityUsed || 0) * producedQty;
+              if (qtyToConsume <= 0) continue;
               await stockService.createMovement({
-                warehouseId: autoWarehouseId,
-                itemType: 'finished_good',
-                itemId: updatedWorkOrder.productId,
-                itemName: product.name,
-                itemCode: product.code,
-                movementType: 'IN',
-                quantity: Number(
-                  updatedWorkOrder.actualProducedFromScans ??
-                  updatedWorkOrder.producedQuantity ??
-                  0,
-                ),
-                note: `Auto from work order close ${id}`,
-                referenceNo: autoCloseReportId ? `PR-${autoCloseReportId}` : `WO-${id}`,
-                createdBy: get().userDisplayName || get().userEmail || 'System',
+                warehouseId: routing.decomposedSourceWarehouseId,
+                itemType: 'raw_material',
+                itemId: raw.id,
+                itemName: raw.name,
+                itemCode: raw.code,
+                movementType: 'OUT',
+                quantity: qtyToConsume,
+                note: `Auto raw consumption from work order close ${id}`,
+                createdBy: actorName,
+                allowNegative: routing.allowNegativeDecomposedStock,
               });
             }
+          }
+          if (
+            product &&
+            routing.finalProductWarehouseId &&
+            routing.finalProductWarehouseId !== routing.finishedReceiveWarehouseId &&
+            producedQty > 0
+          ) {
+            await stockService.createMovement({
+              warehouseId: routing.finalProductWarehouseId,
+              itemType: 'finished_good',
+              itemId: updatedWorkOrder.productId,
+              itemName: product.name,
+              itemCode: product.code,
+              movementType: 'IN',
+              quantity: producedQty,
+              note: `Auto final product from work order close ${id}`,
+              createdBy: actorName,
+            });
           }
 
           const today = getTodayDateString();
@@ -1370,21 +1473,88 @@ export const useAppStore = create<AppState>((set, get) => ({
       const reportData = { ...data, workOrderId: activeWO?.id || data.workOrderId || '' };
       const id = await reportService.create(reportData);
 
-      const defaultProductionWarehouseId = planSettings.defaultProductionWarehouseId ?? '';
-      if (id && defaultProductionWarehouseId) {
+      const routing = await resolveInventoryRouting(systemSettings);
+      if (id) {
         const product = get()._rawProducts.find((p) => p.id === data.productId);
-        if (product) {
+        const actorName = get().userDisplayName || get().userEmail || 'System';
+        const producedQty = Number(data.quantityProduced || 0);
+        const wasteQty = Number(data.quantityWaste || 0);
+
+        if (product && routing.finishedReceiveWarehouseId && producedQty > 0) {
           await stockService.createMovement({
-            warehouseId: defaultProductionWarehouseId,
+            warehouseId: routing.finishedReceiveWarehouseId,
             itemType: 'finished_good',
             itemId: data.productId,
             itemName: product.name,
             itemCode: product.code,
             movementType: 'IN',
-            quantity: Number(data.quantityProduced || 0),
+            quantity: producedQty,
             note: `Auto from production report ${id}`,
-            referenceNo: `PR-${id}`,
-            createdBy: get().userDisplayName || get().userEmail || 'System',
+            createdBy: actorName,
+          });
+        }
+
+        if (product && routing.wasteReceiveWarehouseId && wasteQty > 0) {
+          await stockService.createMovement({
+            warehouseId: routing.wasteReceiveWarehouseId,
+            itemType: 'finished_good',
+            itemId: data.productId,
+            itemName: product.name,
+            itemCode: product.code,
+            movementType: 'IN',
+            quantity: wasteQty,
+            note: `Auto waste from production report ${id}`,
+            createdBy: actorName,
+          });
+        }
+
+        if (routing.decomposedSourceWarehouseId) {
+          const baseUnits = producedQty + wasteQty;
+          if (baseUnits > 0) {
+            const [materials, rawMaterials] = await Promise.all([
+              productMaterialService.getByProduct(data.productId),
+              rawMaterialService.getAll(),
+            ]);
+            const rawByName = new Map(
+              rawMaterials.map((rm) => [normalizeText(rm.name), rm]),
+            );
+            for (const material of materials) {
+              const raw = rawByName.get(normalizeText(material.materialName || ''));
+              if (!raw?.id) continue;
+              const qtyToConsume = Number(material.quantityUsed || 0) * baseUnits;
+              if (qtyToConsume <= 0) continue;
+              await stockService.createMovement({
+                warehouseId: routing.decomposedSourceWarehouseId,
+                itemType: 'raw_material',
+                itemId: raw.id,
+                itemName: raw.name,
+                itemCode: raw.code,
+                movementType: 'OUT',
+                quantity: qtyToConsume,
+                note: `Auto raw consumption from production report ${id}`,
+                createdBy: actorName,
+                allowNegative: routing.allowNegativeDecomposedStock,
+              });
+            }
+          }
+        }
+
+        if (
+          product &&
+          routing.finalProductWarehouseId &&
+          routing.finalProductWarehouseId !== routing.finishedReceiveWarehouseId &&
+          producedQty > 0
+        ) {
+          await stockService.createMovement({
+            warehouseId: routing.finalProductWarehouseId,
+            itemType: 'finished_good',
+            itemId: data.productId,
+            itemName: product.name,
+            itemCode: product.code,
+            movementType: 'IN',
+            quantity: producedQty,
+            note: `Auto final product from production report ${id}`,
+            createdBy: actorName,
           });
         }
       }
@@ -1490,6 +1660,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteReport: async (id) => {
     try {
       const reportToDelete = await reportService.getById(id);
+      if (!reportToDelete) {
+        throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
+      }
+
+      const autoWarehouseId = await resolveProductionWarehouseId(get().systemSettings);
+      if (autoWarehouseId && Number(reportToDelete.quantityProduced || 0) > 0) {
+        const noteKey = `Auto from production report ${id}`;
+        const [byNote, byLegacyReference] = await Promise.all([
+          stockService.getTransactionsByNote(noteKey),
+          stockService.getTransactionsByReferenceNo(`PR-${id}`),
+        ]);
+        const linkedRows = [...byNote, ...byLegacyReference].filter(
+          (tx) =>
+            tx.movementType === 'IN' &&
+            tx.itemType === 'finished_good' &&
+            tx.itemId === reportToDelete.productId &&
+            tx.warehouseId === autoWarehouseId,
+        );
+        const uniqueRows = Array.from(new Map(linkedRows.map((tx) => [tx.id, tx])).values());
+        for (const tx of uniqueRows) {
+          try {
+            await stockService.deleteMovement(tx);
+          } catch (error: any) {
+            throw new Error(
+              error?.message ||
+              'لا يمكن حذف التقرير لأن كمية الإنتاج تم سحبها من مخزن تم الصنع. احذف التحويلة أولاً لإرجاع الرصيد.',
+            );
+          }
+        }
+      }
+
       if (reportToDelete?.workOrderId) {
         const linkedWorkOrder = await workOrderService.getById(reportToDelete.workOrderId);
         if (linkedWorkOrder?.id) {

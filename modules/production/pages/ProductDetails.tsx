@@ -25,6 +25,8 @@ import { usePermission } from '../../../utils/permissions';
 import { ProductionReport, MonthlyProductionCost, ProductMaterial } from '../../../types';
 import { monthlyProductionCostService } from '../../../services/monthlyProductionCostService';
 import { productMaterialService } from '../../../services/productMaterialService';
+import { stockService } from '../../inventory/services/stockService';
+import type { StockItemBalance } from '../../inventory/types';
 import { calculateProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import { exportProductReports, exportSingleProduct } from '../../../utils/exportExcel';
 import type { SingleProductExportData } from '../../../utils/exportExcel';
@@ -60,6 +62,7 @@ export const ProductDetails: React.FC = () => {
   const costAllocations = useAppStore((s) => s.costAllocations);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const planSettings = useAppStore((s) => s.systemSettings.planSettings);
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
@@ -72,6 +75,7 @@ export const ProductDetails: React.FC = () => {
   const [currentMonthCost, setCurrentMonthCost] = useState<MonthlyProductionCost | null>(null);
   const [previousMonthCost, setPreviousMonthCost] = useState<MonthlyProductionCost | null>(null);
   const [materials, setMaterials] = useState<ProductMaterial[]>([]);
+  const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<ProductMaterial | null>(null);
   const [materialForm, setMaterialForm] = useState({ materialName: '', quantityUsed: 0, unitCost: 0 });
@@ -116,6 +120,17 @@ export const ProductDetails: React.FC = () => {
   }, [id]);
 
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rows = await stockService.getBalances();
+        setInventoryBalances(rows);
+      } catch {
+        setInventoryBalances([]);
+      }
+    })();
+  }, []);
 
   const costBreakdown = useMemo(() => {
     if (!rawProduct) return null;
@@ -269,10 +284,33 @@ export const ProductDetails: React.FC = () => {
     return config?.standardAssemblyTime ?? 0;
   }, [lineProductConfigs, id]);
 
-  const currentBalance = useMemo(() => {
-    if (!rawProduct) return 0;
-    return rawProduct.openingBalance + totalProduced - totalWaste;
-  }, [rawProduct, totalProduced, totalWaste]);
+  const getWarehouseBalance = useCallback(
+    (warehouseId?: string, productId?: string) => {
+      if (!warehouseId || !productId) return 0;
+      const row = inventoryBalances.find(
+        (x) => x.warehouseId === warehouseId && x.itemType === 'finished_good' && x.itemId === productId,
+      );
+      return Number(row?.quantity || 0);
+    },
+    [inventoryBalances],
+  );
+
+  const decomposedBalance = useMemo(
+    () => getWarehouseBalance(planSettings?.decomposedSourceWarehouseId, id),
+    [getWarehouseBalance, planSettings?.decomposedSourceWarehouseId, id],
+  );
+  const finishedBalance = useMemo(
+    () => getWarehouseBalance(planSettings?.finishedReceiveWarehouseId, id),
+    [getWarehouseBalance, planSettings?.finishedReceiveWarehouseId, id],
+  );
+  const wasteBalance = useMemo(
+    () => getWarehouseBalance(planSettings?.wasteReceiveWarehouseId, id),
+    [getWarehouseBalance, planSettings?.wasteReceiveWarehouseId, id],
+  );
+  const finalBalance = useMemo(
+    () => getWarehouseBalance(planSettings?.finalProductWarehouseId, id),
+    [getWarehouseBalance, planSettings?.finalProductWarehouseId, id],
+  );
 
   const todayCost = useMemo(() => {
     if (!canViewCosts || !id) return null;
@@ -351,9 +389,9 @@ export const ProductDetails: React.FC = () => {
     if (!rawProduct) return;
     const exportData: SingleProductExportData = {
       raw: rawProduct,
-      stockLevel: currentBalance || product?.stockLevel || 0,
-      totalProduction: totalProduced || product?.totalProduction || 0,
-      totalWaste: totalWaste || product?.wasteUnits || 0,
+      stockLevel: finalBalance,
+      totalProduction: finishedBalance,
+      totalWaste: wasteBalance,
       wasteRatio: `${wasteRatio}%`,
       avgDailyProduction,
       costBreakdown: costBreakdown ?? null,
@@ -556,29 +594,29 @@ export const ProductDetails: React.FC = () => {
       {/* Basic Product Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5">
         <KPIBox
-          label="الرصيد الافتتاحي"
-          value={formatNumber(rawProduct?.openingBalance ?? product?.openingStock ?? 0)}
+          label="رصيد مفكك"
+          value={formatNumber(decomposedBalance)}
           unit="وحدة"
-          icon="account_balance"
+          icon="call_split"
           colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
         />
         <KPIBox
-          label="إجمالي الإنتاج"
-          value={formatNumber(totalProduced || product?.totalProduction || 0)}
+          label="تم الصنع"
+          value={formatNumber(finishedBalance)}
           unit="وحدة"
           icon="inventory"
           colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
         />
         <KPIBox
-          label="إجمالي الهالك"
-          value={formatNumber(totalWaste || product?.wasteUnits || 0)}
+          label="الهالك"
+          value={formatNumber(wasteBalance)}
           unit="وحدة"
           icon="delete_sweep"
           colorClass="bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400"
         />
         <KPIBox
-          label="الرصيد الحالي"
-          value={formatNumber(currentBalance || product?.stockLevel || 0)}
+          label="منتج تام"
+          value={formatNumber(finalBalance)}
           unit="وحدة"
           icon="warehouse"
           colorClass="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"

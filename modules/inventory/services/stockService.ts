@@ -9,6 +9,7 @@ import {
   limit,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type {
@@ -23,13 +24,37 @@ import type {
 const BALANCES_COLLECTION = 'stock_items';
 const TRANSACTIONS_COLLECTION = 'stock_transactions';
 const COUNTS_COLLECTION = 'stock_counts';
+const INV_REF_REGEX = /^INV-(\d+)$/i;
+const formatInvReference = (seq: number) => `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
 
 const balanceDocId = (warehouseId: string, itemType: InventoryItemType, itemId: string) =>
   `${warehouseId}__${itemType}__${itemId}`;
 
 const toIsoNow = () => new Date().toISOString();
+const stripUndefined = <T extends Record<string, any>>(obj: T): Partial<T> =>
+  Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
+const chunkArray = <T>(items: T[], size: number): T[][] => {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
 
 export const stockService = {
+  async getNextInvReferenceNo(): Promise<string> {
+    if (!isConfigured) return formatInvReference(1);
+    const q = query(collection(db, TRANSACTIONS_COLLECTION), orderBy('createdAt', 'desc'), limit(500));
+    const snap = await getDocs(q);
+    const maxInv = snap.docs.reduce((max, d) => {
+      const ref = String((d.data() as any)?.referenceNo || '').trim();
+      const match = ref.match(INV_REF_REGEX);
+      if (!match) return max;
+      return Math.max(max, Number(match[1] || 0));
+    }, 0);
+    return formatInvReference(maxInv + 1);
+  },
+
   async getBalances(warehouseId?: string): Promise<StockItemBalance[]> {
     if (!isConfigured) return [];
     const base = collection(db, BALANCES_COLLECTION);
@@ -50,6 +75,26 @@ export const stockService = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
   },
 
+  async getTransactionsByReferenceNo(referenceNo: string): Promise<StockTransaction[]> {
+    if (!isConfigured || !referenceNo.trim()) return [];
+    const q = query(
+      collection(db, TRANSACTIONS_COLLECTION),
+      where('referenceNo', '==', referenceNo.trim()),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
+  },
+
+  async getTransactionsByNote(note: string): Promise<StockTransaction[]> {
+    if (!isConfigured || !note.trim()) return [];
+    const q = query(
+      collection(db, TRANSACTIONS_COLLECTION),
+      where('note', '==', note.trim()),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
+  },
+
   async createMovement(input: CreateStockMovementInput): Promise<string | null> {
     if (!isConfigured) return null;
     if (input.movementType === 'ADJUSTMENT') {
@@ -59,6 +104,7 @@ export const stockService = {
     }
 
     const txRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+    const resolvedReferenceNo = input.referenceNo?.trim() || await this.getNextInvReferenceNo();
 
     if (input.movementType === 'TRANSFER') {
       if (!input.toWarehouseId || input.toWarehouseId === input.warehouseId) {
@@ -100,8 +146,9 @@ export const stockService = {
           movementType: 'TRANSFER',
           quantity: input.quantity,
           note: input.note,
-          referenceNo: input.referenceNo,
+          referenceNo: resolvedReferenceNo,
           relatedTransactionId: linkedRef.id,
+          transferDirection: 'OUT',
           createdBy: input.createdBy,
           createdAt: now,
         };
@@ -110,10 +157,11 @@ export const stockService = {
           warehouseId: input.toWarehouseId!,
           toWarehouseId: input.warehouseId,
           relatedTransactionId: txRef.id,
+          transferDirection: 'IN',
         };
 
-        t.set(txRef, outPayload);
-        t.set(linkedRef, inPayload);
+        t.set(txRef, stripUndefined(outPayload));
+        t.set(linkedRef, stripUndefined(inPayload));
 
         t.set(sourceBalanceRef, {
           warehouseId: input.warehouseId,
@@ -149,7 +197,7 @@ export const stockService = {
       if (input.movementType === 'ADJUSTMENT') delta = input.quantity;
 
       const nextQty = currentQty + delta;
-      if (nextQty < 0) {
+      if (nextQty < 0 && !input.allowNegative) {
         throw new Error('لا يمكن تنفيذ العملية: الرصيد الحالي لا يسمح بهذه الحركة.');
       }
 
@@ -163,12 +211,12 @@ export const stockService = {
         movementType: input.movementType,
         quantity: delta,
         note: input.note,
-        referenceNo: input.referenceNo,
+        referenceNo: resolvedReferenceNo,
         createdBy: input.createdBy,
         createdAt: now,
       };
 
-      t.set(txRef, payload);
+      t.set(txRef, stripUndefined(payload));
       t.set(
         balRef,
         {
@@ -186,6 +234,212 @@ export const stockService = {
     });
 
     return txRef.id;
+  },
+
+  async updateMovement(
+    tx: StockTransaction,
+    updates: { quantity: number; referenceNo?: string },
+  ): Promise<void> {
+    if (!isConfigured || !tx.id) return;
+    if (tx.movementType === 'TRANSFER') {
+      throw new Error('تعديل التحويلة غير مدعوم مباشرة. احذف التحويلة ثم أنشئها من جديد.');
+    }
+
+    const typedQty = Number(updates.quantity || 0);
+    if (tx.movementType === 'ADJUSTMENT') {
+      if (typedQty === 0) throw new Error('قيمة التسوية لا يمكن أن تساوي صفر.');
+    } else if (typedQty <= 0) {
+      throw new Error('الكمية يجب أن تكون أكبر من صفر.');
+    }
+
+    const nextSignedQty =
+      tx.movementType === 'OUT'
+        ? -Math.abs(typedQty)
+        : tx.movementType === 'IN'
+          ? Math.abs(typedQty)
+          : typedQty;
+
+    await runTransaction(db, async (t) => {
+      const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(tx.warehouseId, tx.itemType, tx.itemId));
+      const txRef = doc(db, TRANSACTIONS_COLLECTION, tx.id!);
+      const balSnap = await t.get(balRef);
+      const currentQty = balSnap.exists() ? Number(balSnap.data().quantity || 0) : 0;
+      const delta = nextSignedQty - Number(tx.quantity || 0);
+      const nextQty = currentQty + delta;
+      if (nextQty < 0) {
+        throw new Error('تعذر تعديل الحركة لأن الرصيد الحالي لا يسمح بهذه الكمية.');
+      }
+
+      const now = toIsoNow();
+      t.set(
+        balRef,
+        {
+          warehouseId: tx.warehouseId,
+          itemType: tx.itemType,
+          itemId: tx.itemId,
+          itemName: tx.itemName,
+          itemCode: tx.itemCode,
+          minStock: 0,
+          quantity: nextQty,
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+      t.update(txRef, stripUndefined({
+        quantity: nextSignedQty,
+        referenceNo: updates.referenceNo?.trim() || tx.referenceNo,
+      }));
+    });
+  },
+
+  async deleteMovement(tx: StockTransaction): Promise<void> {
+    if (!isConfigured || !tx.id) return;
+
+    if (tx.movementType === 'TRANSFER') {
+      if (tx.referenceNo?.trim()) {
+        await this.deleteTransferByReference(tx.referenceNo.trim());
+        return;
+      }
+      throw new Error('لا يمكن حذف تحويلة بدون رقم مرجع.');
+    }
+
+    await runTransaction(db, async (t) => {
+      const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(tx.warehouseId, tx.itemType, tx.itemId));
+      const balSnap = await t.get(balRef);
+      const currentQty = balSnap.exists() ? Number(balSnap.data().quantity || 0) : 0;
+      const nextQty = currentQty - Number(tx.quantity || 0);
+      if (nextQty < 0) {
+        throw new Error('تعذر حذف الحركة لأن رصيد الصنف الحالي لا يسمح بعكسها.');
+      }
+
+      const txRef = doc(db, TRANSACTIONS_COLLECTION, tx.id!);
+      t.set(
+        balRef,
+        {
+          warehouseId: tx.warehouseId,
+          itemType: tx.itemType,
+          itemId: tx.itemId,
+          itemName: tx.itemName,
+          itemCode: tx.itemCode,
+          minStock: 0,
+          quantity: nextQty,
+          updatedAt: toIsoNow(),
+        },
+        { merge: true },
+      );
+      t.delete(txRef);
+    });
+  },
+
+  async deleteTransferByReference(referenceNo: string): Promise<void> {
+    if (!isConfigured || !referenceNo.trim()) return;
+    const base = query(
+      collection(db, TRANSACTIONS_COLLECTION),
+      where('movementType', '==', 'TRANSFER'),
+      where('referenceNo', '==', referenceNo.trim()),
+    );
+    const snap = await getDocs(base);
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
+    if (rows.length === 0) return;
+
+    const txById = new Map(rows.map((row) => [row.id!, row]));
+    const outRows = rows.filter((row) => row.transferDirection === 'OUT');
+    if (outRows.length === 0) {
+      throw new Error('هذه التحويلة قديمة وغير مدعومة للحذف التلقائي. أنشئ تحويلة عكسية بدلًا من الحذف.');
+    }
+
+    await runTransaction(db, async (t) => {
+      for (const row of outRows) {
+        if (!row.id || !row.toWarehouseId) continue;
+        const sourceRef = doc(db, BALANCES_COLLECTION, balanceDocId(row.warehouseId, row.itemType, row.itemId));
+        const targetRef = doc(db, BALANCES_COLLECTION, balanceDocId(row.toWarehouseId, row.itemType, row.itemId));
+
+        const sourceSnap = await t.get(sourceRef);
+        const targetSnap = await t.get(targetRef);
+        const sourceQty = sourceSnap.exists() ? Number(sourceSnap.data().quantity || 0) : 0;
+        const targetQty = targetSnap.exists() ? Number(targetSnap.data().quantity || 0) : 0;
+        const qty = Number(row.quantity || 0);
+        const nextSource = sourceQty + qty;
+        const nextTarget = targetQty - qty;
+        if (nextTarget < 0) {
+          throw new Error(`تعذر حذف التحويلة لأن رصيد المخزن الوجهة للصنف "${row.itemName}" أقل من الكمية المحولة.`);
+        }
+
+        t.set(
+          sourceRef,
+          {
+            warehouseId: row.warehouseId,
+            itemType: row.itemType,
+            itemId: row.itemId,
+            itemName: row.itemName,
+            itemCode: row.itemCode,
+            minStock: 0,
+            quantity: nextSource,
+            updatedAt: toIsoNow(),
+          },
+          { merge: true },
+        );
+        t.set(
+          targetRef,
+          {
+            warehouseId: row.toWarehouseId,
+            itemType: row.itemType,
+            itemId: row.itemId,
+            itemName: row.itemName,
+            itemCode: row.itemCode,
+            minStock: 0,
+            quantity: nextTarget,
+            updatedAt: toIsoNow(),
+          },
+          { merge: true },
+        );
+
+        const outRef = doc(db, TRANSACTIONS_COLLECTION, row.id);
+        t.delete(outRef);
+        if (row.relatedTransactionId && txById.has(row.relatedTransactionId)) {
+          const inRef = doc(db, TRANSACTIONS_COLLECTION, row.relatedTransactionId);
+          t.delete(inRef);
+        }
+      }
+    });
+  },
+
+  async deleteMovements(rows: StockTransaction[]): Promise<void> {
+    if (!isConfigured || rows.length === 0) return;
+
+    const transferRefs = new Set(
+      rows
+        .filter((row) => row.movementType === 'TRANSFER' && row.referenceNo?.trim())
+        .map((row) => row.referenceNo!.trim()),
+    );
+    for (const ref of transferRefs) {
+      await this.deleteTransferByReference(ref);
+    }
+
+    const nonTransferRows = rows.filter((row) => row.movementType !== 'TRANSFER' && row.id);
+    for (const row of nonTransferRows) {
+      await this.deleteMovement(row);
+    }
+  },
+
+  async purgeAllMovements(): Promise<void> {
+    if (!isConfigured) return;
+    const [txSnap, balancesSnap] = await Promise.all([
+      getDocs(collection(db, TRANSACTIONS_COLLECTION)),
+      getDocs(collection(db, BALANCES_COLLECTION)),
+    ]);
+
+    const docsToDelete = [...txSnap.docs, ...balancesSnap.docs];
+    if (docsToDelete.length === 0) return;
+
+    const chunks = chunkArray(docsToDelete, 400);
+    for (const group of chunks) {
+      const batch = writeBatch(db);
+      for (const row of group) {
+        batch.delete(row.ref);
+      }
+      await batch.commit();
+    }
   },
 
   async createCountSession(payload: {

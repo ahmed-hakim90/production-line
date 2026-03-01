@@ -13,6 +13,19 @@ export interface ParsedProductRow {
   rowIndex: number;
   action: ImportAction;
   matchedId?: string;
+  currentCode?: string;
+  newCode?: string;
+  providedFields: {
+    name: boolean;
+    code: boolean;
+    model: boolean;
+    openingBalance: boolean;
+    chineseUnitCost: boolean;
+    innerBoxCost: boolean;
+    outerCartonCost: boolean;
+    unitsPerCarton: boolean;
+    sellingPrice: boolean;
+  };
   name: string;
   code: string;
   model: string;
@@ -46,12 +59,17 @@ export interface ProductImportResult {
 
 const HEADER_MAP: Record<string, string> = {
   'اسم المنتج': 'name',
+  'اسم متعدل': 'name',
   'المنتج': 'name',
   'الاسم': 'name',
   'اسم': 'name',
   'الكود': 'code',
   'كود': 'code',
   'كود المنتج': 'code',
+  'الكود الحالي': 'currentCode',
+  'كود حالي': 'currentCode',
+  'الكود الجديد': 'newCode',
+  'كود جديد': 'newCode',
   'الفئة': 'model',
   'فئة': 'model',
   'الموديل': 'model',
@@ -116,16 +134,17 @@ function buildLookup(products: FirestoreProduct[]): ProductLookup {
   return { byCode, byName };
 }
 
-function describeChanges(existing: FirestoreProduct, row: ParsedProductRow): string[] {
+function describeChanges(existing: FirestoreProduct, next: Omit<FirestoreProduct, 'id'>): string[] {
   const changes: string[] = [];
-  if (existing.name !== row.name) changes.push(`الاسم: ${existing.name} ← ${row.name}`);
-  if ((existing.model || '') !== row.model) changes.push(`الفئة`);
-  if ((existing.openingBalance || 0) !== row.openingBalance) changes.push(`الرصيد: ${existing.openingBalance || 0} ← ${row.openingBalance}`);
-  if ((existing.chineseUnitCost || 0) !== row.chineseUnitCost) changes.push(`تكلفة صينية`);
-  if ((existing.innerBoxCost || 0) !== row.innerBoxCost) changes.push(`علبة داخلية`);
-  if ((existing.outerCartonCost || 0) !== row.outerCartonCost) changes.push(`كرتونة خارجية`);
-  if ((existing.unitsPerCarton || 0) !== row.unitsPerCarton) changes.push(`وحدات/كرتونة`);
-  if ((existing.sellingPrice || 0) !== row.sellingPrice) changes.push(`سعر البيع`);
+  if (existing.code !== next.code) changes.push(`الكود: ${existing.code} ← ${next.code}`);
+  if (existing.name !== next.name) changes.push(`الاسم: ${existing.name} ← ${next.name}`);
+  if ((existing.model || '') !== next.model) changes.push(`الفئة`);
+  if ((existing.openingBalance || 0) !== next.openingBalance) changes.push(`الرصيد: ${existing.openingBalance || 0} ← ${next.openingBalance}`);
+  if ((existing.chineseUnitCost || 0) !== next.chineseUnitCost) changes.push(`تكلفة صينية`);
+  if ((existing.innerBoxCost || 0) !== next.innerBoxCost) changes.push(`علبة داخلية`);
+  if ((existing.outerCartonCost || 0) !== next.outerCartonCost) changes.push(`كرتونة خارجية`);
+  if ((existing.unitsPerCarton || 0) !== next.unitsPerCarton) changes.push(`وحدات/كرتونة`);
+  if ((existing.sellingPrice || 0) !== next.sellingPrice) changes.push(`سعر البيع`);
   return changes;
 }
 
@@ -175,9 +194,21 @@ export function parseProductsExcel(
           const mapped = HEADER_MAP[norm];
           if (mapped) headerMapping[rawH] = mapped;
         }
+        const hasField = (field: string) => rawHeaders.some((h) => headerMapping[h] === field);
+        const providedFields = {
+          name: hasField('name'),
+          code: hasField('code') || hasField('newCode'),
+          model: hasField('model'),
+          openingBalance: hasField('openingBalance'),
+          chineseUnitCost: hasField('chineseUnitCost'),
+          innerBoxCost: hasField('innerBoxCost'),
+          outerCartonCost: hasField('outerCartonCost'),
+          unitsPerCarton: hasField('unitsPerCarton'),
+          sellingPrice: hasField('sellingPrice'),
+        };
 
         const lookup = buildLookup(existingProducts);
-        const seenCodes = new Set<string>();
+        const seenTargetCodes = new Set<string>();
 
         const rows: ParsedProductRow[] = jsonRows.map((row, idx) => {
           const errors: string[] = [];
@@ -188,14 +219,28 @@ export function parseProductsExcel(
           };
 
           const name = String(getValue('name') ?? '').trim();
-          if (!name) errors.push('اسم المنتج مفقود');
 
-          const code = String(getValue('code') ?? '').trim();
-          if (!code) errors.push('الكود مفقود');
-          else if (seenCodes.has(code.toLowerCase())) {
-            errors.push(`الكود "${code}" مكرر في الملف`);
+          const legacyCode = String(getValue('code') ?? '').trim();
+          const currentCode = String(getValue('currentCode') ?? '').trim();
+          const explicitNewCode = String(getValue('newCode') ?? '').trim();
+
+          const matchCode = currentCode || legacyCode;
+          const existingByMatchCode = matchCode ? lookup.byCode.get(matchCode.toLowerCase()) : undefined;
+          const fallbackCode = existingByMatchCode?.code ?? '';
+          const targetCode = explicitNewCode || legacyCode || fallbackCode;
+          const existingByTargetCode = targetCode ? lookup.byCode.get(targetCode.toLowerCase()) : undefined;
+          const matched = existingByMatchCode ?? existingByTargetCode;
+          const action: ImportAction = matched ? 'update' : 'create';
+          const matchedId = matched?.id;
+
+          if (action === 'create' && !name) errors.push('اسم المنتج مفقود');
+          if (action === 'update' && providedFields.name && !name) errors.push('اسم المنتج مفقود');
+
+          if (!targetCode) errors.push('الكود مفقود (أدخل "الكود" أو "الكود الجديد" أو "الكود الحالي" لمنتج موجود)');
+          else if (seenTargetCodes.has(targetCode.toLowerCase())) {
+            errors.push(`الكود النهائي "${targetCode}" مكرر في الملف`);
           }
-          if (code) seenCodes.add(code.toLowerCase());
+          if (targetCode) seenTargetCodes.add(targetCode.toLowerCase());
 
           const model = String(getValue('model') ?? '').trim();
           const openingBalance = Number(getValue('openingBalance')) || 0;
@@ -205,16 +250,29 @@ export function parseProductsExcel(
           const unitsPerCarton = Number(getValue('unitsPerCarton')) || 0;
           const sellingPrice = Number(getValue('sellingPrice')) || 0;
 
-          const existingByCode = code ? lookup.byCode.get(code.toLowerCase()) : undefined;
-          const action: ImportAction = existingByCode ? 'update' : 'create';
-          const matchedId = existingByCode?.id;
+          if (action === 'create' && currentCode) {
+            errors.push(`الكود الحالي "${currentCode}" غير موجود`);
+          }
+
+          if (targetCode) {
+            const targetOwner = lookup.byCode.get(targetCode.toLowerCase());
+            if (targetOwner && matchedId && targetOwner.id !== matchedId) {
+              errors.push(`الكود الجديد "${targetCode}" مستخدم بواسطة منتج آخر`);
+            }
+            if (targetOwner && action === 'create') {
+              errors.push(`الكود "${targetCode}" مستخدم بالفعل`);
+            }
+          }
 
           const parsed: ParsedProductRow = {
             rowIndex: idx + 2,
             action,
             matchedId,
+            currentCode: currentCode || undefined,
+            newCode: explicitNewCode || undefined,
+            providedFields,
             name,
-            code,
+            code: targetCode,
             model,
             openingBalance,
             chineseUnitCost,
@@ -226,8 +284,8 @@ export function parseProductsExcel(
             errors,
           };
 
-          if (action === 'update' && existingByCode && errors.length === 0) {
-            parsed.changes = describeChanges(existingByCode, parsed);
+          if (action === 'update' && matched && errors.length === 0) {
+            parsed.changes = describeChanges(matched, toProductDataWithExisting(parsed, matched));
           }
 
           return parsed;
@@ -236,6 +294,7 @@ export function parseProductsExcel(
         const productRowsByCode = new Map<string, ParsedProductRow>();
         rows.forEach((r) => {
           if (r.code) productRowsByCode.set(r.code.trim().toLowerCase(), r);
+          if (r.currentCode) productRowsByCode.set(r.currentCode.trim().toLowerCase(), r);
         });
 
         const materialsSheetName = resolveMaterialsSheetName(wb.SheetNames, productsSheetName);
@@ -306,15 +365,55 @@ export function parseProductsExcel(
 }
 
 export function toProductData(row: ParsedProductRow): Omit<FirestoreProduct, 'id'> {
+  const fallback: Omit<FirestoreProduct, 'id'> = {
+    name: '',
+    code: '',
+    model: '',
+    openingBalance: 0,
+    chineseUnitCost: 0,
+    innerBoxCost: 0,
+    outerCartonCost: 0,
+    unitsPerCarton: 0,
+    sellingPrice: 0,
+  };
+  const base = fallback;
   return {
-    name: row.name,
-    code: row.code,
-    model: row.model,
-    openingBalance: row.openingBalance,
-    chineseUnitCost: row.chineseUnitCost,
-    innerBoxCost: row.innerBoxCost,
-    outerCartonCost: row.outerCartonCost,
-    unitsPerCarton: row.unitsPerCarton,
-    sellingPrice: row.sellingPrice,
+    name: row.providedFields.name ? row.name : base.name,
+    code: row.providedFields.code ? row.code : base.code,
+    model: row.providedFields.model ? row.model : base.model,
+    openingBalance: row.providedFields.openingBalance ? row.openingBalance : base.openingBalance,
+    chineseUnitCost: row.providedFields.chineseUnitCost ? row.chineseUnitCost : base.chineseUnitCost,
+    innerBoxCost: row.providedFields.innerBoxCost ? row.innerBoxCost : base.innerBoxCost,
+    outerCartonCost: row.providedFields.outerCartonCost ? row.outerCartonCost : base.outerCartonCost,
+    unitsPerCarton: row.providedFields.unitsPerCarton ? row.unitsPerCarton : base.unitsPerCarton,
+    sellingPrice: row.providedFields.sellingPrice ? row.sellingPrice : base.sellingPrice,
+  };
+}
+
+export function toProductDataWithExisting(
+  row: ParsedProductRow,
+  existing: FirestoreProduct,
+): Omit<FirestoreProduct, 'id'> {
+  const base: Omit<FirestoreProduct, 'id'> = {
+    name: existing.name || '',
+    code: existing.code || '',
+    model: existing.model || '',
+    openingBalance: Number(existing.openingBalance || 0),
+    chineseUnitCost: Number(existing.chineseUnitCost || 0),
+    innerBoxCost: Number(existing.innerBoxCost || 0),
+    outerCartonCost: Number(existing.outerCartonCost || 0),
+    unitsPerCarton: Number(existing.unitsPerCarton || 0),
+    sellingPrice: Number(existing.sellingPrice || 0),
+  };
+  return {
+    name: row.providedFields.name ? row.name : base.name,
+    code: row.providedFields.code ? row.code : base.code,
+    model: row.providedFields.model ? row.model : base.model,
+    openingBalance: row.providedFields.openingBalance ? row.openingBalance : base.openingBalance,
+    chineseUnitCost: row.providedFields.chineseUnitCost ? row.chineseUnitCost : base.chineseUnitCost,
+    innerBoxCost: row.providedFields.innerBoxCost ? row.innerBoxCost : base.innerBoxCost,
+    outerCartonCost: row.providedFields.outerCartonCost ? row.outerCartonCost : base.outerCartonCost,
+    unitsPerCarton: row.providedFields.unitsPerCarton ? row.unitsPerCarton : base.unitsPerCarton,
+    sellingPrice: row.providedFields.sellingPrice ? row.sellingPrice : base.sellingPrice,
   };
 }

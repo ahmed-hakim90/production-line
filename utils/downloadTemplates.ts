@@ -3,15 +3,15 @@ import * as XLSX from 'xlsx';
 export function downloadProductsTemplate() {
   const wb = XLSX.utils.book_new();
   const productsAoa: (string | number)[][] = [
-    ['اسم المنتج', 'الكود', 'الفئة', 'الرصيد الافتتاحي', 'تكلفة الوحدة الصينية', 'تكلفة العلبة الداخلية', 'تكلفة الكرتونة الخارجية', 'عدد الوحدات في الكرتونة', 'سعر البيع'],
-    ['خلاط سوكانى 6000 وات', 'SK-999N', 'منزلي', 100, 45.5, 2.5, 18, 6, 150],
-    ['صمام V-200', 'PRD-002', 'منزلي', 250, 30, 1.8, 12, 12, 85],
-    ['مرتبة طبية 120', 'PRD-003', 'سريري', 500, 40, 3, 20, 4, 200],
-    ['محور دوران', 'PRD-004', 'سريري', 80, 15, 1, 10, 8, 60],
-    ['خلاط يدوي', 'PRD-005', 'منزلي', 2000, 25, 1.5, 14, 10, 90],
+    ['اسم المنتج', 'الكود الحالي', 'الكود الجديد', 'الفئة', 'الرصيد الافتتاحي', 'تكلفة الوحدة الصينية', 'تكلفة العلبة الداخلية', 'تكلفة الكرتونة الخارجية', 'عدد الوحدات في الكرتونة', 'سعر البيع'],
+    ['خلاط سوكانى 6000 وات', '', 'SK-999N', 'منزلي', 100, 45.5, 2.5, 18, 6, 150],
+    ['صمام V-200', '', 'PRD-002', 'منزلي', 250, 30, 1.8, 12, 12, 85],
+    ['مرتبة طبية 120', '', 'PRD-003', 'سريري', 500, 40, 3, 20, 4, 200],
+    ['محور دوران', '', 'PRD-004', 'سريري', 80, 15, 1, 10, 8, 60],
+    ['خلاط يدوي', '', 'PRD-005', 'منزلي', 2000, 25, 1.5, 14, 10, 90],
   ];
   const productsWs = XLSX.utils.aoa_to_sheet(productsAoa);
-  productsWs['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 24 }, { wch: 24 }, { wch: 14 }];
+  productsWs['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 24 }, { wch: 24 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, productsWs, 'المنتجات');
 
   const materialsAoa: (string | number)[][] = [
@@ -182,4 +182,20 @@ export function downloadHRTemplate() {
   XLSX.utils.book_append_sheet(wb, wsEmp, 'الموظفين');
 
   XLSX.writeFile(wb, 'template_hr_import.xlsx');
+}
+
+export function downloadInventoryInByCodeTemplate() {
+  const wb = XLSX.utils.book_new();
+  const rows: (string | number)[][] = [
+    ['كود المنتج', 'الكمية'],
+    ['SK-999N', 120],
+    ['PRD-002', 45],
+    ['PRD-003', 200],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 20 }, { wch: 14 }];
+  if (!ws['!views']) ws['!views'] = [];
+  (ws['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, ws, 'إضافة منتج نهائي');
+  XLSX.writeFile(wb, 'template_inventory_in_by_code.xlsx');
 }

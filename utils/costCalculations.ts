@@ -514,6 +514,7 @@ export const estimateReportCost = (
   hourlyRate: number,
   supervisorHourlyRate: number,
   lineId: string,
+  reportDate: string | undefined,
   costCenters: CostCenter[],
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[]
@@ -522,7 +523,7 @@ export const estimateReportCost = (
 
   const laborCost = workersCount * workHours * hourlyRate;
   const supervisorIndirectCost = Math.max(0, supervisorHourlyRate || 0) * workHours;
-  const month = getCurrentMonth();
+  const month = reportDate?.slice(0, 7) || getCurrentMonth();
   const sharedIndirectCost = lineId
     ? calculateDailyIndirectCost(lineId, month, costCenters, costCenterValues, costAllocations)
     : 0;

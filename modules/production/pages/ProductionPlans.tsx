@@ -97,6 +97,7 @@ export const ProductionPlans: React.FC = () => {
 
   // ── Form state ──
   const [formProductId, setFormProductId] = useState(searchParams.get('productId') || '');
+  const [formProductSearch, setFormProductSearch] = useState('');
   const [formLineId, setFormLineId] = useState('');
   const [formQuantity, setFormQuantity] = useState<number>(Number(searchParams.get('quantity')) || 0);
   const [formStartDate, setFormStartDate] = useState(() => getTodayDateString());
@@ -164,6 +165,21 @@ export const ProductionPlans: React.FC = () => {
 
     return { avgAssemblyTime: effectiveTime, dailyCapacity, estimatedDays, estimatedCost, plannedEndDate, avgDailyTarget };
   }, [formProductId, formLineId, formQuantity, formStartDate, productReports, _rawLines, lineProductConfigs, laborSettings]);
+
+  const formProductOptions = useMemo(() => {
+    const q = formProductSearch.trim().toLowerCase();
+    if (!q) return products;
+    const filtered = products.filter((p) => {
+      const name = (p.name ?? '').toLowerCase();
+      const code = (p.code ?? '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    });
+    if (formProductId && !filtered.some((p) => p.id === formProductId)) {
+      const selected = products.find((p) => p.id === formProductId);
+      if (selected) return [selected, ...filtered];
+    }
+    return filtered;
+  }, [products, formProductSearch, formProductId]);
 
   // ── Enriched plans with computed metrics ──
   const enrichedPlans = useMemo(() => {
@@ -251,6 +267,7 @@ export const ProductionPlans: React.FC = () => {
       createdBy: uid,
     });
     setFormProductId('');
+    setFormProductSearch('');
     setFormLineId('');
     setFormQuantity(0);
     setFormPriority('medium');
@@ -354,10 +371,27 @@ export const ProductionPlans: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <div className="space-y-2">
               <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المنتج *</label>
+              <div className="relative">
+                <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+                <input
+                  type="text"
+                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 pr-10 outline-none font-medium transition-all"
+                  value={formProductSearch}
+                  onChange={(e) => setFormProductSearch(e.target.value)}
+                  placeholder="ابحث باسم المنتج أو الكود..."
+                />
+              </div>
               <select className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={formProductId} onChange={(e) => setFormProductId(e.target.value)}>
                 <option value="">اختر المنتج...</option>
-                {products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                {formProductOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.code ? ` (${p.code})` : ''}
+                  </option>
+                ))}
               </select>
+              {formProductSearch && formProductOptions.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">لا توجد نتائج مطابقة</p>
+              )}
             </div>
 
             <div className="space-y-2">

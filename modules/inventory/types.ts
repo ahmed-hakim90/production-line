@@ -48,6 +48,7 @@ export interface StockTransaction {
   note?: string;
   referenceNo?: string;
   relatedTransactionId?: string;
+  transferDirection?: 'OUT' | 'IN';
   createdAt: string;
   createdBy: string;
 }
@@ -87,4 +88,35 @@ export interface CreateStockMovementInput {
   note?: string;
   referenceNo?: string;
   createdBy: string;
+  allowNegative?: boolean;
+}
+
+export type TransferRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface TransferRequestLine {
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  quantity: number;
+  minStock?: number;
+}
+
+export interface InventoryTransferRequest {
+  id?: string;
+  fromWarehouseId: string;
+  fromWarehouseName?: string;
+  toWarehouseId: string;
+  toWarehouseName?: string;
+  referenceNo: string;
+  note?: string;
+  lines: TransferRequestLine[];
+  status: TransferRequestStatus;
+  createdBy: string;
+  createdAt: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
 }

@@ -9,7 +9,14 @@ import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus } from
 import { usePermission } from '../../../utils/permissions';
 import { exportReportsByDateRange, exportWorkOrders } from '../../../utils/exportExcel';
 import { exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
-import { parseExcelFile, toReportData, ImportResult, ParsedReportRow } from '../../../utils/importExcel';
+import {
+  parseExcelFile,
+  parseReportDateUpdateExcelFile,
+  toReportData,
+  ImportResult,
+  ParsedReportRow,
+  ReportDateUpdateImportResult,
+} from '../../../utils/importExcel';
 import { downloadReportsTemplate, ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { reportService } from '../../../services/reportService';
@@ -101,7 +108,9 @@ export const Reports: React.FC = () => {
 
   // Import from Excel state
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importMode, setImportMode] = useState<'create' | 'updateDate'>('create');
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importDateUpdateResult, setImportDateUpdateResult] = useState<ReportDateUpdateImportResult | null>(null);
   const [importParsing, setImportParsing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
@@ -248,12 +257,16 @@ export const Reports: React.FC = () => {
     return () => clearTimeout(timer);
   }, [linkedReportId, displayedReports]);
 
+  const supervisorHourlyRates = useMemo(
+    () => buildSupervisorHourlyRatesMap(_rawEmployees),
+    [_rawEmployees]
+  );
+
   const reportCosts = useMemo(() => {
     if (!canViewCosts) return new Map<string, number>();
     const hourlyRate = laborSettings?.hourlyRate ?? 0;
-    const supervisorHourlyRates = buildSupervisorHourlyRatesMap(_rawEmployees);
     return buildReportsCosts(displayedReports, hourlyRate, costCenters, costCenterValues, costAllocations, supervisorHourlyRates);
-  }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations, _rawEmployees]);
+  }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates]);
 
   // ── Template lookups (for dynamic Excel template) ──────────────────────────
 
@@ -604,8 +617,33 @@ export const Reports: React.FC = () => {
     setShowModal(true);
   };
 
+  const hasDuplicateLineSupervisorReport = useCallback(
+    async (
+      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId'>,
+      excludeReportId?: string | null,
+    ) => {
+      const sameDayReports = await reportService.getByDateRange(payload.date, payload.date);
+      return sameDayReports.some(
+        (r) =>
+          r.lineId === payload.lineId &&
+          r.employeeId === payload.employeeId &&
+          r.id !== excludeReportId,
+      );
+    },
+    [],
+  );
+
   const handleSave = async (printAfterSave = false) => {
     if (!form.lineId || !form.productId || !form.employeeId) return;
+    const duplicated = await hasDuplicateLineSupervisorReport(
+      { date: form.date, lineId: form.lineId, employeeId: form.employeeId },
+      editId,
+    );
+    if (duplicated) {
+      setSaveToast('هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف');
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
     setSaving(true);
     setSaveToast(null);
 
@@ -760,6 +798,12 @@ export const Reports: React.FC = () => {
 
   // ── Import from Excel ────────────────────────────────────────────────────
 
+  const resetImportState = () => {
+    setImportResult(null);
+    setImportDateUpdateResult(null);
+    setImportMode('create');
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -767,8 +811,17 @@ export const Reports: React.FC = () => {
     setImportFileName(file.name);
     setImportParsing(true);
     setShowImportModal(true);
-    setImportResult(null);
+    resetImportState();
+    let dateUpdateTemplateDetected = false;
     try {
+      const dateUpdateResult = await parseReportDateUpdateExcelFile(file);
+      if (dateUpdateResult.detectedTemplate) {
+        dateUpdateTemplateDetected = true;
+        setImportMode('updateDate');
+        setImportDateUpdateResult(dateUpdateResult);
+        return;
+      }
+
       const result = await parseExcelFile(file, {
         products: _rawProducts,
         lines: _rawLines,
@@ -777,13 +830,75 @@ export const Reports: React.FC = () => {
       });
       setImportResult(result);
     } catch {
-      setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0, warningCount: 0, duplicateCount: 0 });
+      if (dateUpdateTemplateDetected) {
+        setImportDateUpdateResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0, detectedTemplate: true });
+      } else {
+        setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0, warningCount: 0, duplicateCount: 0 });
+      }
     } finally {
       setImportParsing(false);
     }
   };
 
   const handleImportSave = async () => {
+    if (importMode === 'updateDate') {
+      if (!importDateUpdateResult) return;
+      const validRows = importDateUpdateResult.rows.filter((r) => r.errors.length === 0);
+      if (validRows.length === 0) return;
+
+      const jobId = addJob({
+        fileName: importFileName || 'reports-bulk-update.xlsx',
+        jobType: 'Reports Bulk Update Import',
+        totalRows: validRows.length,
+        startedBy: userDisplayName || 'Current User',
+      });
+
+      setImportSaving(true);
+      setImportProgress({ done: 0, total: validRows.length });
+      startJob(jobId, 'Updating report fields...');
+      setShowImportModal(false);
+      resetImportState();
+      setImportFileName('');
+
+      let done = 0;
+      let failed = 0;
+      for (const row of validRows) {
+        try {
+          const updated = await reportService.updateByReportCode(row.reportCode, {
+            ...(row.date ? { date: row.date } : {}),
+            ...(row.quantityProduced !== undefined ? { quantityProduced: row.quantityProduced } : {}),
+            ...(row.quantityWaste !== undefined ? { quantityWaste: row.quantityWaste } : {}),
+            ...(row.workersCount !== undefined ? { workersCount: row.workersCount } : {}),
+            ...(row.workHours !== undefined ? { workHours: row.workHours } : {}),
+          });
+          if (!updated) failed++;
+        } catch {
+          failed++;
+        }
+        done++;
+        setImportProgress({ done, total: validRows.length });
+        setJobProgress(jobId, {
+          processedRows: done,
+          totalRows: validRows.length,
+          statusText: 'Updating report fields...',
+          status: 'processing',
+        });
+      }
+
+      const updatedRows = Math.max(0, done - failed);
+      if (updatedRows === 0 && failed > 0) {
+        failJob(jobId, 'All rows failed during update', 'Failed');
+      } else {
+        completeJob(jobId, {
+          addedRows: updatedRows,
+          failedRows: failed,
+          statusText: 'Completed',
+        });
+      }
+      setImportSaving(false);
+      return;
+    }
+
     if (!importResult) return;
     const validRows = importResult.rows.filter((r) => r.errors.length === 0);
     if (validRows.length === 0) return;
@@ -799,7 +914,7 @@ export const Reports: React.FC = () => {
     startJob(jobId, 'Saving to database...');
     // Close preview immediately; import continues in background jobs panel.
     setShowImportModal(false);
-    setImportResult(null);
+    resetImportState();
     setImportFileName('');
 
     let done = 0;
@@ -1072,6 +1187,11 @@ export const Reports: React.FC = () => {
       )}
     </div>
   );
+
+  const importValidCount = importMode === 'updateDate'
+    ? (importDateUpdateResult?.validCount ?? 0)
+    : (importResult?.validCount ?? 0);
+  const hasImportPreview = importMode === 'updateDate' ? !!importDateUpdateResult : !!importResult;
 
   return (
     <div className="space-y-6">
@@ -1383,12 +1503,13 @@ export const Reports: React.FC = () => {
             </div>
             {canViewCosts && form.workersCount > 0 && form.workHours > 0 && form.quantityProduced > 0 && form.lineId && (
               (() => {
-                const selectedSupervisorRate = _rawEmployees.find((e) => e.id === form.employeeId)?.hourlyRate ?? 0;
+                const selectedSupervisorRate = supervisorHourlyRates.get(form.employeeId) ?? 0;
                 const est = estimateReportCost(
                   form.workersCount, form.workHours, form.quantityProduced,
                   laborSettings?.hourlyRate ?? 0,
                   selectedSupervisorRate > 0 ? selectedSupervisorRate : (laborSettings?.hourlyRate ?? 0),
                   form.lineId,
+                  form.date,
                   costCenters, costCenterValues, costAllocations
                 );
                 return (
@@ -1530,7 +1651,7 @@ export const Reports: React.FC = () => {
 
       {/* ══ Import from Excel Modal ══ */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
             <div className="px-5 sm:px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
@@ -1546,15 +1667,20 @@ export const Reports: React.FC = () => {
                       تحميل نموذج
                     </button>
                   </div>
-                  {importResult && (
+                  {importMode === 'create' && importResult && (
                     <p className="text-xs text-slate-400 mt-0.5">
                       {importResult.totalRows} صف — {importResult.validCount} صالح — {importResult.errorCount} خطأ
+                    </p>
+                  )}
+                  {importMode === 'updateDate' && importDateUpdateResult && (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      وضع تحديث الحقول: {importDateUpdateResult.totalRows} صف — {importDateUpdateResult.validCount} صالح — {importDateUpdateResult.errorCount} خطأ
                     </p>
                   )}
                 </div>
               </div>
                 <button
-                  onClick={() => { setShowImportModal(false); setImportResult(null); }}
+                  onClick={() => { setShowImportModal(false); resetImportState(); }}
                   className="text-slate-400 hover:text-slate-600 transition-colors"
                 >
                 <span className="material-icons-round">close</span>
@@ -1568,7 +1694,7 @@ export const Reports: React.FC = () => {
                   <span className="material-icons-round text-4xl text-primary animate-spin block mb-3">refresh</span>
                   <p className="font-bold text-slate-600 dark:text-slate-400">جاري قراءة الملف...</p>
                 </div>
-              ) : importResult && importResult.rows.length === 0 ? (
+              ) : importMode === 'create' && importResult && importResult.rows.length === 0 ? (
                 <div className="text-center py-12">
                   <span className="material-icons-round text-5xl text-slate-300 block mb-3">warning</span>
                   <p className="font-bold text-slate-600 dark:text-slate-400">لا توجد بيانات في الملف</p>
@@ -1577,6 +1703,91 @@ export const Reports: React.FC = () => {
                     <span className="material-icons-round text-sm">download</span>
                     تحميل نموذج التقارير
                   </button>
+                </div>
+              ) : importMode === 'updateDate' && importDateUpdateResult && importDateUpdateResult.rows.length === 0 ? (
+                <div className="text-center py-12">
+                  <span className="material-icons-round text-5xl text-slate-300 block mb-3">warning</span>
+                  <p className="font-bold text-slate-600 dark:text-slate-400">لا توجد بيانات صالحة للتحديث</p>
+                  <p className="text-sm text-slate-400 mt-1">استخدم ملف يحتوي على كود التقرير + واحد أو أكثر من: تاريخ جديد، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
+                </div>
+              ) : importMode === 'updateDate' && importDateUpdateResult ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400">
+                      <span className="material-icons-round text-sm">description</span>
+                      {importDateUpdateResult.totalRows} صف
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      <span className="material-icons-round text-sm">check_circle</span>
+                      {importDateUpdateResult.validCount} صالح
+                    </div>
+                    {importDateUpdateResult.errorCount > 0 && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 dark:bg-rose-900/20 rounded-lg text-xs font-bold text-rose-500">
+                        <span className="material-icons-round text-sm">error</span>
+                        {importDateUpdateResult.errorCount} خطأ
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                    <table className="w-full text-right border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">#</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">الحالة</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">كود التقرير</th>
+                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">التحديثات</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {importDateUpdateResult.rows.map((row) => {
+                          const isValid = row.errors.length === 0;
+                          return (
+                            <tr key={row.rowIndex} className={isValid ? '' : 'bg-rose-50/50 dark:bg-rose-900/5'}>
+                              <td className="px-3 py-2 text-slate-400 font-mono text-xs">{row.rowIndex}</td>
+                              <td className="px-3 py-2">
+                                {isValid ? (
+                                  <span className="material-icons-round text-emerald-500 text-sm">check_circle</span>
+                                ) : (
+                                  <span className="material-icons-round text-rose-500 text-sm" title={row.errors.join('\n')}>error</span>
+                                )}
+                              </td>
+                              <td className={`px-3 py-2 font-mono text-xs ${row.reportCode ? '' : 'text-rose-500'}`}>{row.reportCode || '—'}</td>
+                              <td className={`px-3 py-2 text-sm ${row.updatedFieldsCount > 0 ? '' : 'text-rose-500'}`}>
+                                {row.updatedFieldsCount > 0 ? (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {row.date && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 text-xs">تاريخ: {row.date}</span>}
+                                    {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 text-xs">إنتاج: {row.quantityProduced}</span>}
+                                    {row.quantityWaste !== undefined && <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300 text-xs">هالك: {row.quantityWaste}</span>}
+                                    {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 text-xs">عمال: {row.workersCount}</span>}
+                                    {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 text-xs">ساعات: {row.workHours}</span>}
+                                  </div>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {importDateUpdateResult.errorCount > 0 && (
+                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-4">
+                      <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mb-2">
+                        <span className="material-icons-round text-sm align-middle ml-1">error</span>
+                        الصفوف التالية تحتاج تعديل ولن يتم تحديثها:
+                      </p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {importDateUpdateResult.rows.filter((r) => r.errors.length > 0).map((row) => (
+                          <p key={row.rowIndex} className="text-xs text-rose-600 dark:text-rose-400">
+                            صف {row.rowIndex}: {row.errors.join(' · ')}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : importResult ? (
                 <div className="space-y-4">
@@ -1707,7 +1918,7 @@ export const Reports: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            {importResult && importResult.validCount > 0 && (
+            {hasImportPreview && importValidCount > 0 && (
               <div className="px-5 sm:px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
                 {importSaving ? (
                   <div className="flex items-center gap-3 flex-1">
@@ -1723,10 +1934,10 @@ export const Reports: React.FC = () => {
                   </div>
                 ) : (
                   <>
-                    <Button variant="outline" onClick={() => { setShowImportModal(false); setImportResult(null); }}>إلغاء</Button>
+                    <Button variant="outline" onClick={() => { setShowImportModal(false); resetImportState(); }}>إلغاء</Button>
                     <Button variant="primary" onClick={handleImportSave}>
                       <span className="material-icons-round text-sm">save</span>
-                      حفظ {importResult.validCount} تقرير
+                      {importMode === 'updateDate' ? `تحديث ${importValidCount} صف` : `حفظ ${importValidCount} تقرير`}
                     </Button>
                   </>
                 )}

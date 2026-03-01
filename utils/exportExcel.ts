@@ -9,6 +9,7 @@ import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, Wo
 import type { ProductCostBreakdown } from './productCostBreakdown';
 
 interface ReportRow {
+  'كود التقرير': string;
   التاريخ: string;
   'خط الإنتاج': string;
   المنتج: string;
@@ -48,6 +49,7 @@ const mapReportsToRows = (
         ? (((r.quantityWaste || 0) / total) * 100).toFixed(1)
         : '0';
     const row: ReportRow = {
+      'كود التقرير': r.reportCode || '—',
       التاريخ: r.date,
       'خط الإنتاج': lookups.getLineName(r.lineId),
       المنتج: lookups.getProductName(r.productId),
@@ -85,6 +87,7 @@ const appendSummary = (rows: ReportRow[]): ReportRow[] => {
   const wasteRatio = total > 0 ? ((totalWaste / total) * 100).toFixed(1) : '0';
 
   const summaryRow: ReportRow = {
+    'كود التقرير': '',
     التاريخ: 'الإجمالي',
     'خط الإنتاج': '',
     المنتج: '',

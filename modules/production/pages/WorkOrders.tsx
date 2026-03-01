@@ -220,6 +220,7 @@ export const WorkOrders: React.FC = () => {
           laborSettings?.hourlyRate ?? 0,
           (_rawEmployees.find((e) => e.id === form.supervisorId)?.hourlyRate ?? 0),
           form.lineId,
+          form.targetDate,
           costCenters, costCenterValues, costAllocations
         );
         const createdId = await createWorkOrder({
@@ -668,6 +669,7 @@ export const WorkOrders: React.FC = () => {
                     laborSettings?.hourlyRate ?? 0,
                     (_rawEmployees.find((e) => e.id === form.supervisorId)?.hourlyRate ?? 0),
                     form.lineId,
+                    form.targetDate,
                     costCenters, costCenterValues, costAllocations
                   );
                   return (

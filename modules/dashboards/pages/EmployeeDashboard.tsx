@@ -375,6 +375,16 @@ export const EmployeeDashboard: React.FC = () => {
              <DashboardPeriodFilter period={period} onChange={setPeriod} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {can('inventory.transactions.create') && (
+            <button
+              type="button"
+              onClick={() => navigate('/inventory/movements')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all"
+            >
+              <span className="material-icons-round text-base">warehouse</span>
+              حركة المخزون
+            </button>
+          )}
           {can('quickAction.view') && (
             <button
               type="button"
