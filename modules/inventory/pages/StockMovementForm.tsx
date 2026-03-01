@@ -11,8 +11,8 @@ import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
 import { shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
 import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../../../utils/importInventoryInByCode';
-import { downloadInventoryInByCodeTemplate } from '../../../utils/downloadTemplates';
 import { StockTransferPrint, type StockTransferPrintData } from '../components';
+import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
@@ -40,6 +40,9 @@ export const StockMovementForm: React.FC = () => {
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const defaultProductionWarehouseId = useAppStore(
     (s) => s.systemSettings.planSettings?.defaultProductionWarehouseId ?? '',
+  );
+  const transferDisplayUnit = useAppStore(
+    (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
   const { can } = usePermission();
 
@@ -112,6 +115,9 @@ export const StockMovementForm: React.FC = () => {
     }
     if (action === 'create-raw-material' && can('inventory.items.manage')) {
       setShowRawMaterialModal(true);
+    }
+    if (action === 'import-in-by-code' && can('inventory.transactions.create')) {
+      setShowImportModal(true);
     }
   }, [location.search, can]);
 
@@ -240,13 +246,21 @@ export const StockMovementForm: React.FC = () => {
         const item = getItemById(line.itemId);
         if (!item) return null;
         const quantityPieces = lineQuantityInPieces(line);
+        const display = getTransferDisplay(
+          {
+            itemType,
+            quantity: quantityPieces,
+            requestQuantity: Number(line.quantity || 0),
+            requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
+            unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
+          },
+          transferDisplayUnit,
+        );
         return {
           itemName: item.name,
           itemCode: item.code,
-          unitLabel: itemType === 'finished_good'
-            ? (line.unit === 'carton' ? 'كرتونة' : 'قطعة')
-            : 'وحدة',
-          quantity: Number(line.quantity || 0),
+          unitLabel: display.unitLabel,
+          quantity: display.quantity,
           quantityPieces,
           unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
         };
@@ -270,11 +284,6 @@ export const StockMovementForm: React.FC = () => {
     setMessage({ type: 'success', text: msg });
   };
 
-  const openImportPicker = () => {
-    if (!can('inventory.transactions.create')) return;
-    importFileRef.current?.click();
-  };
-
   const handleImportFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -292,6 +301,10 @@ export const StockMovementForm: React.FC = () => {
     } finally {
       setImportParsing(false);
     }
+  };
+
+  const openImportFilePicker = () => {
+    importFileRef.current?.click();
   };
 
   const handleImportSave = async () => {
@@ -392,6 +405,9 @@ export const StockMovementForm: React.FC = () => {
               itemName: item.name,
               itemCode: item.code,
               quantity: lineQuantityInPieces(line),
+              requestQuantity: Number(line.quantity || 0),
+              requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
+              unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
               minStock: item.minStock,
             };
           })
@@ -599,30 +615,11 @@ export const StockMovementForm: React.FC = () => {
       <div>
         <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدخال حركة مخزون</h2>
         <p className="text-sm text-slate-500 font-medium">وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة.</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={downloadInventoryInByCodeTemplate}>
-            <span className="material-icons-round text-sm">download</span>
-            تحميل قالب الاستيراد
-          </Button>
-          <Button variant="outline" onClick={openImportPicker} disabled={!can('inventory.transactions.create')}>
-            <span className="material-icons-round text-sm">upload_file</span>
-            استيراد بالكود والكمية
-          </Button>
-        </div>
       </div>
 
       <Card>
         <div className="mb-4 sm:mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-base sm:text-lg font-black text-slate-800 dark:text-white">تسجيل الحركة</h3>
-          <Button
-            variant="outline"
-            onClick={handlePreviewWithoutSave}
-            disabled={saving}
-            className="w-full sm:w-auto"
-          >
-            <span className="material-icons-round text-sm">preview</span>
-            معاينة بدون حفظ
-          </Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2 md:col-span-2">
@@ -732,13 +729,13 @@ export const StockMovementForm: React.FC = () => {
           )}
           {movementType === 'TRANSFER' && (
             <div className="space-y-3 md:col-span-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center justify-between">
                 <label className="text-sm font-bold text-slate-600 dark:text-slate-300">أصناف التحويلة</label>
                 <Button
                   variant="outline"
                   onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                   disabled={saving}
-                  className="w-full sm:w-auto"
+                  className="hidden sm:inline-flex"
                 >
                   <span className="material-icons-round text-sm">add</span>
                   إضافة منتج
@@ -851,6 +848,15 @@ export const StockMovementForm: React.FC = () => {
                   );
                 })}
               </div>
+              <Button
+                variant="outline"
+                onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
+                disabled={saving}
+                className="w-full sm:hidden"
+              >
+                <span className="material-icons-round text-sm">add</span>
+                إضافة منتج
+              </Button>
             </div>
           )}
         </div>
@@ -947,19 +953,31 @@ export const StockMovementForm: React.FC = () => {
                 <h3 className="text-lg font-bold">استيراد منتج نهائي بالكود</h3>
                 <p className="text-xs text-slate-500 mt-1">{importFileName || '—'}</p>
               </div>
-              <button
-                onClick={() => !importSaving && setShowImportModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-                disabled={importSaving}
-              >
-                <span className="material-icons-round">close</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
+                  <span className="material-icons-round text-sm">upload_file</span>
+                  اختيار ملف
+                </Button>
+                <button
+                  onClick={() => !importSaving && setShowImportModal(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                  disabled={importSaving}
+                >
+                  <span className="material-icons-round">close</span>
+                </button>
+              </div>
             </div>
             <div className="p-6 overflow-auto flex-1">
               {importParsing ? (
                 <p className="text-sm text-slate-500">جاري تحليل الملف...</p>
               ) : !importResult ? (
-                <p className="text-sm text-slate-500">لا توجد بيانات.</p>
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-500">اختر ملف Excel للبدء في الاستيراد.</p>
+                  <Button variant="primary" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
+                    <span className="material-icons-round text-sm">upload_file</span>
+                    اختيار ملف الاستيراد
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

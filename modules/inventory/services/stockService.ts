@@ -32,7 +32,7 @@ const balanceDocId = (warehouseId: string, itemType: InventoryItemType, itemId: 
 
 const toIsoNow = () => new Date().toISOString();
 const stripUndefined = <T extends Record<string, any>>(obj: T): Partial<T> =>
-  Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
+  Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined)) as Partial<T>;
 const chunkArray = <T>(items: T[], size: number): T[][] => {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -127,7 +127,7 @@ export const stockService = {
         const sourceSnap = await t.get(sourceBalanceRef);
         const sourceQty = sourceSnap.exists() ? Number(sourceSnap.data().quantity || 0) : 0;
         const nextSource = sourceQty - input.quantity;
-        if (nextSource < 0) {
+        if (nextSource < 0 && !input.allowNegative) {
           throw new Error('لا يمكن تنفيذ التحويل: الرصيد غير كافٍ في المخزن المصدر.');
         }
 
@@ -145,6 +145,9 @@ export const stockService = {
           itemCode: input.itemCode,
           movementType: 'TRANSFER',
           quantity: input.quantity,
+          requestQuantity: input.requestQuantity,
+          requestUnit: input.requestUnit,
+          unitsPerCarton: input.unitsPerCarton,
           note: input.note,
           referenceNo: resolvedReferenceNo,
           relatedTransactionId: linkedRef.id,

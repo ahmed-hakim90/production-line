@@ -27,6 +27,15 @@ type CreateTransferRequestInput = {
   createdBy: string;
 };
 
+type UpdateTransferRequestInput = {
+  note?: string;
+  lines?: TransferRequestLine[];
+};
+
+type ApproveRequestOptions = {
+  allowNegativeFromSource?: boolean;
+};
+
 export const transferApprovalService = {
   async getAll(): Promise<InventoryTransferRequest[]> {
     if (!isConfigured) return [];
@@ -83,7 +92,7 @@ export const transferApprovalService = {
     return ref.id;
   },
 
-  async approveRequest(id: string, approvedBy: string): Promise<void> {
+  async approveRequest(id: string, approvedBy: string, options?: ApproveRequestOptions): Promise<void> {
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
     if (!request) throw new Error('طلب التحويل غير موجود.');
@@ -101,10 +110,14 @@ export const transferApprovalService = {
         itemCode: line.itemCode,
         movementType: 'TRANSFER',
         quantity: Number(line.quantity || 0),
+        requestQuantity: Number(line.requestQuantity ?? line.quantity ?? 0),
+        requestUnit: line.requestUnit || (line.itemType === 'finished_good' ? 'piece' : 'unit'),
+        unitsPerCarton: Number(line.unitsPerCarton || 0) || undefined,
         minStock: line.minStock,
         note: request.note,
         referenceNo: request.referenceNo,
         createdBy: approvedBy,
+        allowNegative: Boolean(options?.allowNegativeFromSource),
       });
     }
 
@@ -128,6 +141,50 @@ export const transferApprovalService = {
       rejectedAt: toIsoNow(),
       rejectionReason: rejectionReason?.trim() || '',
     });
+  },
+
+  async cancelRequest(id: string, cancelledBy: string, cancellationReason?: string): Promise<void> {
+    if (!isConfigured || !id) return;
+    const request = await this.getById(id);
+    if (!request) throw new Error('طلب التحويل غير موجود.');
+    if (request.status !== 'approved') {
+      throw new Error('يمكن إلغاء التحويلات المعتمدة فقط.');
+    }
+    if (!request.referenceNo?.trim()) {
+      throw new Error('لا يمكن إلغاء الحركة بدون رقم مرجع.');
+    }
+
+    await stockService.deleteTransferByReference(request.referenceNo.trim());
+    await updateDoc(doc(db, COLLECTION, id), {
+      status: 'cancelled',
+      cancelledBy,
+      cancelledAt: toIsoNow(),
+      cancellationReason: cancellationReason?.trim() || '',
+    });
+  },
+
+  async updateRequest(id: string, updates: UpdateTransferRequestInput): Promise<void> {
+    if (!isConfigured || !id) return;
+    const request = await this.getById(id);
+    if (!request) throw new Error('طلب التحويل غير موجود.');
+    if (request.status !== 'pending') {
+      throw new Error('يمكن تعديل الطلبات المعلقة فقط.');
+    }
+
+    const patch: Record<string, any> = {};
+    if (typeof updates.note === 'string') patch.note = updates.note.trim();
+    if (updates.lines) {
+      const lines = updates.lines
+        .filter((line) => Number(line.quantity) > 0)
+        .map((line) => ({ ...line, quantity: Number(line.quantity || 0) }));
+      if (!lines.length) {
+        throw new Error('لا توجد أصناف صالحة بعد التعديل.');
+      }
+      patch.lines = lines;
+    }
+    if (Object.keys(patch).length === 0) return;
+    patch.updatedAt = toIsoNow();
+    await updateDoc(doc(db, COLLECTION, id), patch);
   },
 };
 

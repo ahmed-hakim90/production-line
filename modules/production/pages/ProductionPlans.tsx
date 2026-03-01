@@ -142,6 +142,7 @@ export const ProductionPlans: React.FC = () => {
 
     const line = _rawLines.find((l) => l.id === formLineId);
     if (!line) return null;
+    const selectedProduct = products.find((p) => p.id === formProductId);
 
     const lineProductReports = productReports.filter((r) => r.lineId === formLineId);
     const reportsForCalc = lineProductReports.length > 0 ? lineProductReports : productReports;
@@ -151,20 +152,33 @@ export const ProductionPlans: React.FC = () => {
     );
     const avgTime = calculateAvgAssemblyTime(reportsForCalc);
     const effectiveTime = config?.standardAssemblyTime ?? (avgTime > 0 ? avgTime : 0);
+    const dailyCapacity = effectiveTime > 0
+      ? calculateDailyCapacity(line.maxWorkers, line.dailyWorkingHours, effectiveTime)
+      : 0;
 
-    if (effectiveTime <= 0) return { avgAssemblyTime: 0, dailyCapacity: 0, estimatedDays: 0, estimatedCost: 0, plannedEndDate: '', avgDailyTarget: 0 };
-
-    const dailyCapacity = calculateDailyCapacity(line.maxWorkers, line.dailyWorkingHours, effectiveTime);
-    const estimatedDays = calculateEstimatedDays(formQuantity, dailyCapacity);
-    const avgDailyTarget = estimatedDays > 0 ? Math.ceil(formQuantity / estimatedDays) : 0;
+    const productAvgDailyProduction = Number(selectedProduct?.avgDailyProduction || 0);
+    const usesProductAverage = productAvgDailyProduction > 0;
+    const effectiveDailyRate = usesProductAverage ? productAvgDailyProduction : dailyCapacity;
+    const estimatedDays = calculateEstimatedDays(formQuantity, effectiveDailyRate);
+    const avgDailyTarget = effectiveDailyRate > 0 ? Math.ceil(effectiveDailyRate) : 0;
     const plannedEndDate = estimatedDays > 0 ? addDaysToDate(formStartDate, estimatedDays) : '';
 
     const hourlyRate = laborSettings?.hourlyRate ?? 0;
     const laborCostPerUnit = effectiveTime > 0 ? (hourlyRate * effectiveTime) / 60 : 0;
     const estimatedCost = laborCostPerUnit * formQuantity;
 
-    return { avgAssemblyTime: effectiveTime, dailyCapacity, estimatedDays, estimatedCost, plannedEndDate, avgDailyTarget };
-  }, [formProductId, formLineId, formQuantity, formStartDate, productReports, _rawLines, lineProductConfigs, laborSettings]);
+    return {
+      avgAssemblyTime: effectiveTime,
+      dailyCapacity,
+      productAvgDailyProduction,
+      usesProductAverage,
+      effectiveDailyRate,
+      estimatedDays,
+      estimatedCost,
+      plannedEndDate,
+      avgDailyTarget,
+    };
+  }, [formProductId, formLineId, formQuantity, formStartDate, productReports, _rawLines, lineProductConfigs, laborSettings, products]);
 
   const formProductOptions = useMemo(() => {
     const q = formProductSearch.trim().toLowerCase();
@@ -445,9 +459,12 @@ export const ProductionPlans: React.FC = () => {
                   </p>
                 </div>
                 <div className="text-center p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <p className="text-[11px] font-bold text-slate-400 mb-1">الطاقة اليومية</p>
+                  <p className="text-[11px] font-bold text-slate-400 mb-1">متوسط الإنتاج اليومي</p>
                   <p className="text-lg font-black text-blue-600">
-                    {calculations.dailyCapacity > 0 ? `${formatNumber(calculations.dailyCapacity)} وحدة` : '—'}
+                    {calculations.effectiveDailyRate > 0 ? `${formatNumber(calculations.effectiveDailyRate)} وحدة` : '—'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {calculations.usesProductAverage ? 'من سجل المنتج' : 'احتساب من طاقة الخط'}
                   </p>
                 </div>
                 <div className="text-center p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">

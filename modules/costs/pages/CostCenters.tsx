@@ -4,7 +4,7 @@ import { Card, Badge, Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import type { CostCenter } from '../../../types';
-import { getCurrentMonth, getDaysInMonth } from '../../../utils/costCalculations';
+import { getCurrentMonth, getWorkingDaysForMonth } from '../../../utils/costCalculations';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -65,18 +65,17 @@ export const CostCenters: React.FC = () => {
     setDeleteConfirm(null);
   };
 
-  const getCurrentMonthValue = (centerId: string) => {
-    const month = new Date().toISOString().slice(0, 7);
-    return costCenterValues.find((v) => v.costCenterId === centerId && v.month === month)?.amount ?? 0;
+  const getSelectedMonthValue = (centerId: string) => {
+    return costCenterValues.find((v) => v.costCenterId === centerId && v.month === selectedMonth)?.amount ?? 0;
   };
 
   const handleExportCenters = () => {
-    const daysInMonth = getDaysInMonth(selectedMonth);
-
     const summaryRows = costCenters.map((center) => {
-      const monthlyAmount = costCenterValues.find(
+      const centerValue = costCenterValues.find(
         (value) => value.costCenterId === center.id && value.month === selectedMonth
-      )?.amount ?? 0;
+      );
+      const monthlyAmount = centerValue?.amount ?? 0;
+      const workingDays = getWorkingDaysForMonth(centerValue, selectedMonth);
       const allocationDoc = costAllocations.find(
         (allocation) => allocation.costCenterId === center.id && allocation.month === selectedMonth
       );
@@ -85,10 +84,11 @@ export const CostCenters: React.FC = () => {
         0
       );
       const distributedMonthly = monthlyAmount * (totalAllocationPct / 100);
-      const dailyAmount = daysInMonth > 0 ? monthlyAmount / daysInMonth : 0;
+      const dailyAmount = workingDays > 0 ? monthlyAmount / workingDays : 0;
 
       return {
         'الشهر': selectedMonth,
+        'أيام الشغل': workingDays,
         'معرف المركز': center.id || '',
         'اسم مركز التكلفة': center.name,
         'النوع': center.type === 'indirect' ? 'غير مباشر' : 'مباشر',
@@ -103,9 +103,11 @@ export const CostCenters: React.FC = () => {
 
     const detailsRows: Array<Record<string, string | number>> = [];
     costCenters.forEach((center) => {
-      const monthlyAmount = costCenterValues.find(
+      const centerValue = costCenterValues.find(
         (value) => value.costCenterId === center.id && value.month === selectedMonth
-      )?.amount ?? 0;
+      );
+      const monthlyAmount = centerValue?.amount ?? 0;
+      const workingDays = getWorkingDaysForMonth(centerValue, selectedMonth);
       const allocationDoc = costAllocations.find(
         (allocation) => allocation.costCenterId === center.id && allocation.month === selectedMonth
       );
@@ -113,6 +115,7 @@ export const CostCenters: React.FC = () => {
       if (allocations.length === 0) {
         detailsRows.push({
           'الشهر': selectedMonth,
+          'أيام الشغل': workingDays,
           'اسم مركز التكلفة': center.name,
           'النوع': center.type === 'indirect' ? 'غير مباشر' : 'مباشر',
           'الخط': center.type === 'indirect' ? 'بدون توزيع' : 'مركز مباشر (غير موزع على خطوط)',
@@ -127,12 +130,13 @@ export const CostCenters: React.FC = () => {
         const allocatedMonthly = monthlyAmount * ((allocation.percentage || 0) / 100);
         detailsRows.push({
           'الشهر': selectedMonth,
+          'أيام الشغل': workingDays,
           'اسم مركز التكلفة': center.name,
           'النوع': center.type === 'indirect' ? 'غير مباشر' : 'مباشر',
           'الخط': lineNameMap.get(allocation.lineId) || allocation.lineId,
           'النسبة %': allocation.percentage || 0,
           'المبلغ الشهري الموزع': allocatedMonthly,
-          'المبلغ اليومي': daysInMonth > 0 ? allocatedMonthly / daysInMonth : 0,
+          'المبلغ اليومي': workingDays > 0 ? allocatedMonthly / workingDays : 0,
         });
       });
     });
@@ -209,9 +213,9 @@ export const CostCenters: React.FC = () => {
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 mb-4">
-                <p className="text-[11px] font-bold text-slate-400 mb-1">قيمة الشهر الحالي</p>
+                <p className="text-[11px] font-bold text-slate-400 mb-1">قيمة الشهر المحدد</p>
                 <p className="text-lg font-black text-slate-800 dark:text-white">
-                  {getCurrentMonthValue(cc.id!).toLocaleString('en-US')} ج.م
+                  {getSelectedMonthValue(cc.id!).toLocaleString('en-US')} ج.م
                 </p>
               </div>
 

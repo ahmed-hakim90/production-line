@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
-import { getCurrentMonth, getDaysInMonth, formatCost } from '../../../utils/costCalculations';
+import { getCurrentMonth, getDaysInMonth, getWorkingDaysForMonth, formatCost } from '../../../utils/costCalculations';
 
 export const CostCenterDistribution: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,10 +22,13 @@ export const CostCenterDistribution: React.FC = () => {
   const center = costCenters.find((c) => c.id === id);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [monthlyAmount, setMonthlyAmount] = useState<number>(0);
+  const [workingDays, setWorkingDays] = useState<number>(0);
   const [allocations, setAllocations] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState('');
   const [editMode, setEditMode] = useState(false);
+  const [sourceMonth, setSourceMonth] = useState('');
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
 
   const existingValue = useMemo(() => {
     if (!id) return null;
@@ -37,9 +40,20 @@ export const CostCenterDistribution: React.FC = () => {
     return costAllocations.find((a) => a.costCenterId === id && a.month === selectedMonth) ?? null;
   }, [costAllocations, id, selectedMonth]);
 
+  const availableSourceMonths = useMemo(() => {
+    if (!id) return [];
+    const uniqueMonths = new Set(
+      costAllocations
+        .filter((a) => a.costCenterId === id && a.month !== selectedMonth && (a.allocations?.length ?? 0) > 0)
+        .map((a) => a.month)
+    );
+    return Array.from(uniqueMonths).sort((a, b) => b.localeCompare(a));
+  }, [costAllocations, id, selectedMonth]);
+
   React.useEffect(() => {
     setMonthlyAmount(existingValue?.amount ?? 0);
-  }, [existingValue]);
+    setWorkingDays(getWorkingDaysForMonth(existingValue, selectedMonth));
+  }, [existingValue, selectedMonth]);
 
   React.useEffect(() => {
     const map: Record<string, number> = {};
@@ -54,18 +68,34 @@ export const CostCenterDistribution: React.FC = () => {
     if (center) setEditName(center.name);
   }, [center]);
 
+  React.useEffect(() => {
+    if (availableSourceMonths.length === 0) {
+      setSourceMonth('');
+      return;
+    }
+    if (!sourceMonth || !availableSourceMonths.includes(sourceMonth)) {
+      setSourceMonth(availableSourceMonths[0]);
+    }
+  }, [availableSourceMonths, sourceMonth]);
+
+  React.useEffect(() => {
+    setCopyNotice(null);
+  }, [selectedMonth]);
+
   const totalPercentage = useMemo(
     () => Object.values(allocations).reduce((s: number, v: number) => s + (v || 0), 0),
     [allocations]
   );
   const remainingPercentage = 100 - totalPercentage;
-  const daysInMonth = getDaysInMonth(selectedMonth);
+  const monthDays = getDaysInMonth(selectedMonth);
+  const normalizedWorkingDays = Number.isFinite(workingDays) ? Math.round(workingDays) : 0;
+  const appliedWorkingDays = normalizedWorkingDays > 0 ? normalizedWorkingDays : monthDays;
 
   const handleSaveValue = async () => {
     if (!id) return;
     setSaving(true);
     await saveCostCenterValue(
-      { costCenterId: id, month: selectedMonth, amount: monthlyAmount },
+      { costCenterId: id, month: selectedMonth, amount: monthlyAmount, workingDays: Math.min(31, Math.max(1, appliedWorkingDays)) },
       existingValue?.id
     );
     setSaving(false);
@@ -88,6 +118,39 @@ export const CostCenterDistribution: React.FC = () => {
     if (!id || !editName.trim()) return;
     await updateCostCenter(id, { name: editName.trim() });
     setEditMode(false);
+  };
+
+  const handleCopyAllocationsFromMonth = () => {
+    if (!id || !sourceMonth) return;
+    const sourceAllocation = costAllocations.find(
+      (a) => a.costCenterId === id && a.month === sourceMonth
+    );
+    const sourceValue = costCenterValues.find(
+      (v) => v.costCenterId === id && v.month === sourceMonth
+    );
+    if (!sourceAllocation && !sourceValue) return;
+
+    const copied: Record<string, number> = {};
+    _rawLines.forEach((line) => {
+      copied[line.id!] = 0;
+    });
+    if (sourceAllocation) {
+      sourceAllocation.allocations.forEach((allocation) => {
+        copied[allocation.lineId] = Number(allocation.percentage) || 0;
+      });
+      setAllocations(copied);
+    }
+
+    if (sourceValue) {
+      setMonthlyAmount(Number(sourceValue.amount) || 0);
+      setWorkingDays(getWorkingDaysForMonth(sourceValue, sourceMonth));
+    }
+
+    const copiedMonthLabel = new Date(`${sourceMonth}-01`).toLocaleDateString('ar-EG', {
+      year: 'numeric',
+      month: 'long',
+    });
+    setCopyNotice(`تم سحب نسب التوزيع وقيمة المركز من ${copiedMonthLabel} — اضغط حفظ القيمة وحفظ التوزيع للتأكيد.`);
   };
 
   const generateMonths = () => {
@@ -142,6 +205,48 @@ export const CostCenterDistribution: React.FC = () => {
                   <span className="material-icons-round text-lg">edit</span>
                 </button>
               )}
+              {canManage && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg text-sm p-2 outline-none focus:border-primary min-w-[170px]"
+                    value={sourceMonth}
+                    onChange={(e) => setSourceMonth(e.target.value)}
+                    disabled={availableSourceMonths.length === 0}
+                  >
+                    {availableSourceMonths.length === 0 ? (
+                      <option value="">لا توجد بيانات محفوظة في شهور سابقة</option>
+                    ) : (
+                      availableSourceMonths.map((m) => (
+                        <option key={m} value={m}>
+                          {new Date(`${m}-01`).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <Button
+                    variant="outline"
+                    onClick={handleCopyAllocationsFromMonth}
+                    disabled={!sourceMonth || availableSourceMonths.length === 0}
+                  >
+                    <span className="material-icons-round text-sm">content_copy</span>
+                    سحب النسب والقيمة
+                  </Button>
+                </div>
+              )}
+               {canManage && (
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <Button
+                      variant="primary"
+                      onClick={handleSaveAllocations}
+                      disabled={saving || totalPercentage > 100}
+                    >
+                      {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                      <span className="material-icons-round text-sm">save</span>
+                      حفظ التوزيع
+                    </Button>
+                  </div>
+                )}
+             
             </div>
           )}
           <p className="text-sm text-slate-500 font-medium mt-1">إدارة القيمة الشهرية وتوزيع التكلفة على خطوط الإنتاج</p>
@@ -167,7 +272,7 @@ export const CostCenterDistribution: React.FC = () => {
 
       {/* Monthly Value */}
       <Card title="القيمة الشهرية">
-        <div className="flex items-end gap-4">
+        <div className="flex items-end gap-4 flex-wrap">
           <div className="flex-1 space-y-2">
             <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المبلغ (ج.م)</label>
             <input
@@ -180,10 +285,23 @@ export const CostCenterDistribution: React.FC = () => {
               placeholder="أدخل المبلغ الشهري..."
             />
           </div>
+          <div className="w-full sm:w-48 space-y-2">
+            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">أيام الشغل / الشهر</label>
+            <input
+              type="number"
+              min={1}
+              max={31}
+              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+              value={workingDays || ''}
+              onChange={(e) => setWorkingDays(Number(e.target.value))}
+              disabled={!canManage}
+              placeholder={`${monthDays}`}
+            />
+          </div>
           <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center min-w-[120px]">
-            <p className="text-[11px] font-bold text-slate-400 mb-1">يومي ({daysInMonth} يوم)</p>
+            <p className="text-[11px] font-bold text-slate-400 mb-1">يومي ({appliedWorkingDays} يوم)</p>
             <p className="text-lg font-black text-primary">
-              {monthlyAmount > 0 ? formatCost(monthlyAmount / daysInMonth) : '—'}
+              {monthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(monthlyAmount / appliedWorkingDays) : '—'}
             </p>
           </div>
           {canManage && (
@@ -216,18 +334,14 @@ export const CostCenterDistribution: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                {canManage && (
-                  <Button
-                    variant="primary"
-                    onClick={handleSaveAllocations}
-                    disabled={saving || totalPercentage > 100}
-                  >
-                    {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                    <span className="material-icons-round text-sm">save</span>
-                    حفظ التوزيع
-                  </Button>
-                )}
+               
               </div>
+      {copyNotice && (
+        <p className="text-xs font-bold text-emerald-600 -mt-2 flex items-center gap-1">
+          <span className="material-icons-round text-sm">check_circle</span>
+          {copyNotice}
+        </p>
+      )}
       {/* Allocation Table (indirect only) */}
       {center.type === 'indirect' && (
         <Card title="توزيع التكلفة على الخطوط">
@@ -249,7 +363,7 @@ export const CostCenterDistribution: React.FC = () => {
                     {_rawLines.map((line) => {
                       const pct = allocations[line.id!] || 0;
                       const allocated = monthlyAmount * (pct / 100);
-                      const daily = daysInMonth > 0 ? allocated / daysInMonth : 0;
+                      const daily = appliedWorkingDays > 0 ? allocated / appliedWorkingDays : 0;
                       return (
                         <tr key={line.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                           <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-300">{line.name}</td>

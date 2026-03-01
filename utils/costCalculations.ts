@@ -56,10 +56,7 @@ export const calculateDailyIndirectCost = (
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[]
 ): number => {
-  const daysInMonth = getDaysInMonth(month);
-  if (daysInMonth <= 0) return 0;
-
-  let totalMonthly = 0;
+  let totalDaily = 0;
 
   const indirectCenters = costCenters.filter(
     (c) => c.type === 'indirect' && c.isActive
@@ -79,10 +76,12 @@ export const calculateDailyIndirectCost = (
     const lineAlloc = allocation.allocations.find((a) => a.lineId === lineId);
     if (!lineAlloc || lineAlloc.percentage <= 0) continue;
 
-    totalMonthly += value.amount * (lineAlloc.percentage / 100);
+    const monthlyAllocated = value.amount * (lineAlloc.percentage / 100);
+    const workingDays = getWorkingDaysForMonth(value, month);
+    totalDaily += workingDays > 0 ? monthlyAllocated / workingDays : 0;
   }
 
-  return totalMonthly / daysInMonth;
+  return totalDaily;
 };
 
 /**
@@ -96,11 +95,10 @@ export const buildLineAllocatedCostSummary = (
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[]
 ): LineAllocatedCostSummary => {
-  const daysInMonth = getDaysInMonth(month);
-  if (!lineId || daysInMonth <= 0) {
+  if (!lineId) {
     return {
       month,
-      daysInMonth: Math.max(daysInMonth, 0),
+      daysInMonth: 0,
       totalMonthlyAllocated: 0,
       totalDailyAllocated: 0,
       centers: [],
@@ -126,25 +124,31 @@ export const buildLineAllocatedCostSummary = (
     if (!lineAlloc || lineAlloc.percentage <= 0) continue;
 
     const monthlyAllocated = value.amount * (lineAlloc.percentage / 100);
+    const workingDays = getWorkingDaysForMonth(value, month);
     if (monthlyAllocated <= 0) continue;
 
     centers.push({
       costCenterId: center.id,
       costCenterName: center.name,
       monthlyAllocated,
-      dailyAllocated: monthlyAllocated / daysInMonth,
+      dailyAllocated: workingDays > 0 ? monthlyAllocated / workingDays : 0,
       percentage: lineAlloc.percentage,
     });
   }
 
   centers.sort((a, b) => b.monthlyAllocated - a.monthlyAllocated);
   const totalMonthlyAllocated = centers.reduce((sum, c) => sum + c.monthlyAllocated, 0);
+  const totalDailyAllocated = centers.reduce((sum, c) => sum + c.dailyAllocated, 0);
+  const fallbackDays = getDaysInMonth(month) || 0;
+  const daysInMonth = totalDailyAllocated > 0
+    ? totalMonthlyAllocated / totalDailyAllocated
+    : fallbackDays;
 
   return {
     month,
     daysInMonth,
     totalMonthlyAllocated,
-    totalDailyAllocated: totalMonthlyAllocated / daysInMonth,
+    totalDailyAllocated,
     centers,
   };
 };
@@ -540,6 +544,17 @@ export const getCurrentMonth = (): string => {
 export const getDaysInMonth = (month: string): number => {
   const [y, m] = month.split('-').map(Number);
   return new Date(y, m, 0).getDate();
+};
+
+export const getWorkingDaysForMonth = (
+  value: Pick<CostCenterValue, 'workingDays'> | undefined | null,
+  month: string
+): number => {
+  const customDays = Number(value?.workingDays ?? 0);
+  if (Number.isFinite(customDays) && customDays > 0) {
+    return customDays;
+  }
+  return getDaysInMonth(month);
 };
 
 export const formatCost = (amount: number): string => {

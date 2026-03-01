@@ -231,6 +231,7 @@ export const buildProducts = (
 ): Product[] => {
   return raw.map((p) => {
     const prodReports = reports.filter((r) => r.productId === p.id);
+    const productiveReports = prodReports.filter((r) => Number(r.quantityProduced || 0) > 0);
     const totalProduction = prodReports.reduce(
       (sum, r) => sum + (r.quantityProduced || 0),
       0
@@ -241,6 +242,15 @@ export const buildProducts = (
     );
     const config = configs.find((c) => c.productId === p.id);
     const balance = p.openingBalance + totalProduction - totalWaste;
+    const uniqueProductionDays = countUniqueDays(productiveReports);
+    const calculatedAvgDailyProduction = uniqueProductionDays > 0
+      ? Number((totalProduction / uniqueProductionDays).toFixed(2))
+      : 0;
+    const avgDailyProduction = Number(
+      p.avgDailyProduction && p.avgDailyProduction > 0
+        ? p.avgDailyProduction
+        : calculatedAvgDailyProduction
+    );
 
     return {
       id: p.id!,
@@ -253,6 +263,7 @@ export const buildProducts = (
         balance > 100 ? 'available' : balance > 0 ? 'low' : ('out' as const),
       openingStock: p.openingBalance,
       totalProduction,
+      avgDailyProduction,
       wasteUnits: totalWaste,
       avgAssemblyTime: config?.standardAssemblyTime ?? 0,
     };

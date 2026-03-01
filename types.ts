@@ -32,6 +32,7 @@ export interface Product {
   stockStatus: 'available' | 'low' | 'out';
   openingStock: number;
   totalProduction: number;
+  avgDailyProduction: number;
   wasteUnits: number;
   avgAssemblyTime: number;
   imageUrl?: string;
@@ -71,6 +72,7 @@ export interface FirestoreProduct {
   model: string;
   code: string;
   openingBalance: number;
+  avgDailyProduction?: number;
   imageUrl?: string;
   storagePath?: string;
   imageCreatedAt?: any;
@@ -515,6 +517,7 @@ export interface CostCenterValue {
   costCenterId: string;
   month: string;
   amount: number;
+  workingDays?: number;
 }
 
 export interface CostAllocation {
@@ -616,7 +619,9 @@ export interface PlanSettings {
   wasteReceiveWarehouseId?: string;
   finalProductWarehouseId?: string;
   transferApprovalPermission?: string;
+  transferDisplayUnit?: 'piece' | 'carton';
   allowNegativeDecomposedStock?: boolean;
+  allowNegativeFinishedTransferStock?: boolean;
   maxWasteThreshold: number;
   efficiencyCalculationMode: 'standard' | 'weighted';
   averageProductionMode: 'daily' | 'weekly' | 'monthly';
@@ -722,6 +727,17 @@ export interface FirestoreUser {
   roleId: string;
   tenantId?: string;
   isActive: boolean;
+  uiPreferences?: {
+    modalWorkspace?: {
+      items: Array<{
+        id: string;
+        title: string;
+        route: string;
+        favorite: boolean;
+        openerText?: string;
+      }>;
+    };
+  };
   createdAt?: any;
   createdBy?: string;
 }

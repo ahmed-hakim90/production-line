@@ -145,6 +145,25 @@ function normalizeText(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
+async function syncProductAvgDailyProduction(productId: string): Promise<void> {
+  if (!productId) return;
+
+  const reports = await reportService.getByProduct(productId);
+  const productiveReports = reports.filter(
+    (report) => Number(report.quantityProduced || 0) > 0 && Boolean(report.date)
+  );
+  const uniqueDays = new Set(productiveReports.map((report) => report.date)).size;
+  const totalProduced = productiveReports.reduce(
+    (sum, report) => sum + Number(report.quantityProduced || 0),
+    0
+  );
+  const avgDailyProduction = uniqueDays > 0
+    ? Number((totalProduced / uniqueDays).toFixed(2))
+    : 0;
+
+  await productService.update(productId, { avgDailyProduction });
+}
+
 // ─── State Shape ────────────────────────────────────────────────────────────
 
 interface AppState {
@@ -1206,24 +1225,6 @@ export const useAppStore = create<AppState>((set, get) => ({
               });
             }
           }
-          if (
-            product &&
-            routing.finalProductWarehouseId &&
-            routing.finalProductWarehouseId !== routing.finishedReceiveWarehouseId &&
-            producedQty > 0
-          ) {
-            await stockService.createMovement({
-              warehouseId: routing.finalProductWarehouseId,
-              itemType: 'finished_good',
-              itemId: updatedWorkOrder.productId,
-              itemName: product.name,
-              itemCode: product.code,
-              movementType: 'IN',
-              quantity: producedQty,
-              note: `Auto final product from work order close ${id}`,
-              createdBy: actorName,
-            });
-          }
 
           const today = getTodayDateString();
           const { start: monthStart, end: monthEnd } = getMonthDateRange();
@@ -1472,6 +1473,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const reportData = { ...data, workOrderId: activeWO?.id || data.workOrderId || '' };
       const id = await reportService.create(reportData);
+      await syncProductAvgDailyProduction(data.productId);
 
       const routing = await resolveInventoryRouting(systemSettings);
       if (id) {
@@ -1539,24 +1541,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         }
 
-        if (
-          product &&
-          routing.finalProductWarehouseId &&
-          routing.finalProductWarehouseId !== routing.finishedReceiveWarehouseId &&
-          producedQty > 0
-        ) {
-          await stockService.createMovement({
-            warehouseId: routing.finalProductWarehouseId,
-            itemType: 'finished_good',
-            itemId: data.productId,
-            itemName: product.name,
-            itemCode: product.code,
-            movementType: 'IN',
-            quantity: producedQty,
-            note: `Auto final product from production report ${id}`,
-            createdBy: actorName,
-          });
-        }
       }
 
       const laborCost = (laborSettings?.hourlyRate ?? 0) * (data.workHours || 0) * (data.workersCount || 0);
@@ -1624,7 +1608,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateReport: async (id, data) => {
     try {
+      const existingReport = await reportService.getById(id);
       await reportService.update(id, data);
+      const affectedProductIds = new Set<string>();
+      if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
+      if (data.productId) affectedProductIds.add(data.productId);
+      await Promise.all(
+        Array.from(affectedProductIds).map((productId) =>
+          syncProductAvgDailyProduction(productId)
+        )
+      );
       const today = getTodayDateString();
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports] = await Promise.all([
@@ -1713,6 +1706,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       await reportService.delete(id);
+      await syncProductAvgDailyProduction(reportToDelete.productId);
       const today = getTodayDateString();
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, workOrders] = await Promise.all([

@@ -101,10 +101,12 @@ export const monthlyProductionCostService = {
       return { id: docId(productId, month), ...emptyDoc };
     }
 
-    const lineDateTotals = new Map<string, number>();
+    const lineDateQtyTotals = new Map<string, number>();
+    const lineDateHoursTotals = new Map<string, number>();
     allReports.forEach((r) => {
       const key = `${r.lineId}_${r.date}`;
-      lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
+      lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + (r.quantityProduced || 0));
+      lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, r.workHours || 0));
     });
 
     const indirectCache = new Map<string, number>();
@@ -128,9 +130,15 @@ export const monthlyProductionCostService = {
       }
       const lineIndirect = indirectCache.get(cacheKey) || 0;
       const lineDateKey = `${r.lineId}_${r.date}`;
-      const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-      if (lineDateTotal > 0) {
-        totalIndirect += lineIndirect * (r.quantityProduced / lineDateTotal);
+      const lineDateTotalHours = lineDateHoursTotals.get(lineDateKey) || 0;
+      const reportHours = Math.max(0, r.workHours || 0);
+      if (lineDateTotalHours > 0 && reportHours > 0) {
+        totalIndirect += lineIndirect * (reportHours / lineDateTotalHours);
+      } else {
+        const lineDateTotalQty = lineDateQtyTotals.get(lineDateKey) || 0;
+        if (lineDateTotalQty > 0) {
+          totalIndirect += lineIndirect * (r.quantityProduced / lineDateTotalQty);
+        }
       }
       totalIndirect += (supervisorHourlyRates?.get(r.employeeId) || 0) * (r.workHours || 0);
     }

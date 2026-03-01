@@ -1140,6 +1140,7 @@ export const Settings: React.FC = () => {
                   { key: 'allowOverProduction' as keyof PlanSettings, label: 'السماح بالإنتاج الزائد', icon: 'trending_up', desc: 'عند التعطيل، لن يُسمح بإضافة تقارير بعد الوصول إلى الكمية المخططة.' },
                   { key: 'autoClosePlan' as keyof PlanSettings, label: 'إغلاق الخطة تلقائياً عند الاكتمال', icon: 'event_available', desc: 'عند التفعيل، يتم تغيير حالة الخطة إلى "مكتملة" تلقائياً عند الوصول للكمية المخططة.' },
                   { key: 'allowNegativeDecomposedStock' as keyof PlanSettings, label: 'السماح بالسالب في مخزن المفكك', icon: 'remove_circle_outline', desc: 'عند التفعيل، يمكن خصم مواد خام من مخزن المفكك حتى لو الرصيد الحالي غير كافٍ.' },
+                  { key: 'allowNegativeFinishedTransferStock' as keyof PlanSettings, label: 'السماح بتحويل تم الصنع بالسالب', icon: 'swap_horiz', desc: 'عند التفعيل، يمكن اعتماد تحويلات مخزن "تم الصنع" حتى لو الرصيد الحالي أقل من الكمية المطلوبة.' },
                 ]).map((setting) => (
                   <div key={setting.key} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
                     <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
@@ -1240,6 +1241,9 @@ export const Settings: React.FC = () => {
                       <span className="material-icons-round text-primary text-lg">call_split</span>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن المفكك (خصم الخامات)</p>
                     </div>
+                    <p className="text-xs text-slate-400 mb-3">
+                      عند تسجيل تقرير إنتاج، النظام يخصم مكونات المنتج (الخامات) من هذا المخزن.
+                    </p>
                     <select
                       className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.decomposedSourceWarehouseId ?? ''}
@@ -1257,6 +1261,9 @@ export const Settings: React.FC = () => {
                       <span className="material-icons-round text-primary text-lg">inventory_2</span>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن تم الصنع</p>
                     </div>
+                    <p className="text-xs text-slate-400 mb-3">
+                      الكمية المنتجة (تم الصنع) تُضاف تلقائيًا إلى هذا المخزن من تقرير الإنتاج.
+                    </p>
                     <select
                       className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.finishedReceiveWarehouseId ?? ''}
@@ -1274,6 +1281,9 @@ export const Settings: React.FC = () => {
                       <span className="material-icons-round text-primary text-lg">delete_sweep</span>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن الهالك</p>
                     </div>
+                    <p className="text-xs text-slate-400 mb-3">
+                      كمية الهالك في تقرير الإنتاج تُرحَّل تلقائيًا إلى هذا المخزن.
+                    </p>
                     <select
                       className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.wasteReceiveWarehouseId ?? ''}
@@ -1291,6 +1301,9 @@ export const Settings: React.FC = () => {
                       <span className="material-icons-round text-primary text-lg">inventory</span>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن المنتج التام</p>
                     </div>
+                    <p className="text-xs text-slate-400 mb-3">
+                      يستخدم للعرض في مؤشرات "منتج تام". لا يتم إضافة حركة إنتاج تلقائية عليه حاليًا.
+                    </p>
                     <select
                       className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.finalProductWarehouseId ?? ''}
@@ -1320,6 +1333,23 @@ export const Settings: React.FC = () => {
                     {ALL_PERMISSIONS.map((permission) => (
                       <option key={permission} value={permission}>{permission}</option>
                     ))}
+                  </select>
+                </div>
+                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-icons-round text-primary text-lg">straighten</span>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">وحدة عرض تحويلات المنتج النهائي</p>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    يحدد طريقة عرض كميات تحويلات المنتج النهائي في الشاشات والطباعة: قطعة أو كرتونة.
+                  </p>
+                  <select
+                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    value={localPlanSettings.transferDisplayUnit ?? 'piece'}
+                    onChange={(e) => setLocalPlanSettings((p) => ({ ...p, transferDisplayUnit: e.target.value as 'piece' | 'carton' }))}
+                  >
+                    <option value="piece">قطعة</option>
+                    <option value="carton">كرتونة</option>
                   </select>
                 </div>
               </div>

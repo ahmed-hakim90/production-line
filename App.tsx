@@ -19,6 +19,7 @@ import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
 import { registerSystemEventListeners } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
+import { GlobalModalEnhancer } from './components/GlobalModalEnhancer';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 
@@ -192,6 +193,7 @@ const App: React.FC = () => {
         {/* Protected: All app routes inside Layout */}
         <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
       </Routes>
+      {isAuthenticated && !isPendingApproval && !loading && <GlobalModalEnhancer />}
     </HashRouter>
   );
 };

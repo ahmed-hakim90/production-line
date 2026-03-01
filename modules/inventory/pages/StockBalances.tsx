@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Badge } from '../components/UI';
+import { useNavigate } from 'react-router-dom';
+import { Card, Badge, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
 import type { StockItemBalance, Warehouse } from '../types';
 import { formatNumber } from '../../../utils/calculations';
+import { usePermission } from '../../../utils/permissions';
+import { downloadInventoryInByCodeTemplate } from '../../../utils/downloadTemplates';
 
 export const StockBalances: React.FC = () => {
+  const navigate = useNavigate();
+  const { can } = usePermission();
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseFilter, setWarehouseFilter] = useState('');
@@ -50,6 +55,18 @@ export const StockBalances: React.FC = () => {
       <div>
         <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">أرصدة المخزون</h2>
         <p className="text-sm text-slate-500 font-medium">عرض الرصيد الحالي لكل صنف داخل كل مخزن.</p>
+        {can('inventory.transactions.create') && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={downloadInventoryInByCodeTemplate}>
+              <span className="material-icons-round text-sm">download</span>
+              تحميل قالب الاستيراد
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/inventory/movements?action=import-in-by-code')}>
+              <span className="material-icons-round text-sm">upload_file</span>
+              استيراد بالكود والكمية
+            </Button>
+          </div>
+        )}
       </div>
 
       <Card className="!p-4">

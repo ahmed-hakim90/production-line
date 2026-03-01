@@ -45,6 +45,9 @@ export interface StockTransaction {
   itemCode: string;
   movementType: StockMovementType;
   quantity: number;
+  requestQuantity?: number;
+  requestUnit?: 'piece' | 'carton' | 'unit';
+  unitsPerCarton?: number;
   note?: string;
   referenceNo?: string;
   relatedTransactionId?: string;
@@ -84,6 +87,9 @@ export interface CreateStockMovementInput {
   itemCode: string;
   movementType: StockMovementType;
   quantity: number;
+  requestQuantity?: number;
+  requestUnit?: 'piece' | 'carton' | 'unit';
+  unitsPerCarton?: number;
   minStock?: number;
   note?: string;
   referenceNo?: string;
@@ -99,6 +105,9 @@ export interface TransferRequestLine {
   itemName: string;
   itemCode: string;
   quantity: number;
+  requestQuantity?: number;
+  requestUnit?: 'piece' | 'carton' | 'unit';
+  unitsPerCarton?: number;
   minStock?: number;
 }
 

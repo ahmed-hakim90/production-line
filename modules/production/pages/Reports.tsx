@@ -134,6 +134,11 @@ export const Reports: React.FC = () => {
   const [viewWorkersPickerId, setViewWorkersPickerId] = useState('');
   const [viewWorkersBusy, setViewWorkersBusy] = useState(false);
   const [viewWorkersError, setViewWorkersError] = useState<string | null>(null);
+  const getOperatorsCount = useCallback(
+    (workers: LineWorkerAssignment[], supervisorId?: string) =>
+      workers.filter((w) => w.employeeId !== supervisorId).length,
+    [],
+  );
 
   // Work order detail popup
   const [viewWOReport, setViewWOReport] = useState<ProductionReport | null>(null);
@@ -162,10 +167,10 @@ export const Reports: React.FC = () => {
     lineAssignmentService.getByLineAndDate(form.lineId, form.date).then((list) => {
       setFormLineWorkers(list);
       if (list.length > 0 && !editId && form.workersCount === 0) {
-        setForm((prev) => ({ ...prev, workersCount: list.length }));
+        setForm((prev) => ({ ...prev, workersCount: getOperatorsCount(list, prev.employeeId) }));
       }
     }).catch(() => setFormLineWorkers([]));
-  }, [showModal, form.lineId, form.date]);
+  }, [showModal, form.lineId, form.date, editId, form.workersCount, getOperatorsCount]);
 
   useEffect(() => {
     if (reportCodesBackfilledRef.current) return;
@@ -698,9 +703,9 @@ export const Reports: React.FC = () => {
     setViewWorkersData({ lineId, date, workers });
     if (showModal && form.lineId === lineId && form.date === date) {
       setFormLineWorkers(workers);
-      setForm((prev) => ({ ...prev, workersCount: workers.length }));
+      setForm((prev) => ({ ...prev, workersCount: getOperatorsCount(workers, prev.employeeId) }));
     }
-  }, [showModal, form.lineId, form.date]);
+  }, [showModal, form.lineId, form.date, getOperatorsCount]);
 
   const addWorkerToLineDate = useCallback(async () => {
     if (!viewWorkersData || !viewWorkersPickerId) return;
@@ -798,11 +803,11 @@ export const Reports: React.FC = () => {
 
   // ── Import from Excel ────────────────────────────────────────────────────
 
-  const resetImportState = () => {
+  function resetImportState() {
     setImportResult(null);
     setImportDateUpdateResult(null);
     setImportMode('create');
-  };
+  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1330,8 +1335,11 @@ export const Reports: React.FC = () => {
 
       {/* ══ Create / Edit Report Modal ══ */}
       {showModal && (can("reports.create") || can("reports.edit")) && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-start p-4" onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }}>
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <h3 className="text-lg font-bold">{editId ? 'تعديل تقرير إنتاج' : 'إنشاء تقرير إنتاج'}</h3>
               <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -1457,7 +1465,7 @@ export const Reports: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">عدد العمال *</label>
+                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">عدد عمال التشغيل (بدون المشرف) *</label>
                   <input
                     type="number"
                     min={1}
@@ -1473,7 +1481,7 @@ export const Reports: React.FC = () => {
                       className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
                     >
                       <span className="material-icons-round text-xs">groups</span>
-                      تم جلب {formLineWorkers.length} عامل مسجل — اضغط للعرض
+                      تم جلب {getOperatorsCount(formLineWorkers, form.employeeId)} عامل تشغيل مسجل — اضغط للعرض
                     </button>
                   )}
                 </div>

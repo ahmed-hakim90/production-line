@@ -101,10 +101,12 @@ export const MonthlyProductionCosts: React.FC = () => {
       const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
       const allReports = await reportService.getByDateRange(startDate, endDate);
 
-      const lineDateTotals = new Map<string, number>();
+      const lineDateQtyTotals = new Map<string, number>();
+      const lineDateHoursTotals = new Map<string, number>();
       allReports.forEach((r) => {
         const key = `${r.lineId}_${r.date}`;
-        lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
+        lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + (r.quantityProduced || 0));
+        lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, r.workHours || 0));
       });
 
       const indirectCache = new Map<string, number>();
@@ -124,9 +126,15 @@ export const MonthlyProductionCosts: React.FC = () => {
         }
         const lineIndirect = indirectCache.get(cacheKey) || 0;
         const lineDateKey = `${r.lineId}_${r.date}`;
-        const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-        if (lineDateTotal > 0) {
-          current.indirectCost += lineIndirect * (r.quantityProduced / lineDateTotal);
+        const lineDateTotalHours = lineDateHoursTotals.get(lineDateKey) || 0;
+        const reportHours = Math.max(0, r.workHours || 0);
+        if (lineDateTotalHours > 0 && reportHours > 0) {
+          current.indirectCost += lineIndirect * (reportHours / lineDateTotalHours);
+        } else {
+          const lineDateTotalQty = lineDateQtyTotals.get(lineDateKey) || 0;
+          if (lineDateTotalQty > 0) {
+            current.indirectCost += lineIndirect * (r.quantityProduced / lineDateTotalQty);
+          }
         }
         current.indirectCost += (supervisorHourlyRates.get(r.employeeId) || 0) * (r.workHours || 0);
 
@@ -251,20 +259,39 @@ export const MonthlyProductionCosts: React.FC = () => {
 
   const totalQty = displayRecords.reduce((s, r) => s + r.totalProducedQty, 0);
   const totalCost = displayRecords.reduce((s, r) => s + r.totalProductionCost, 0);
-  const totalDirect = displayRecords.reduce(
-    (s, r) => s + (breakdownMap[r.productId]?.directCost ?? r.totalProductionCost),
-    0
-  );
-  const totalIndirect = displayRecords.reduce(
-    (s, r) => s + (breakdownMap[r.productId]?.indirectCost ?? 0),
-    0
-  );
+  const getNormalizedBreakdown = useCallback((record: MonthlyProductionCost) => {
+    const breakdown = breakdownMap[record.productId];
+    if (!breakdown) {
+      return { directCost: record.totalProductionCost, indirectCost: 0 };
+    }
+    const computedTotal = (breakdown.directCost || 0) + (breakdown.indirectCost || 0);
+    if (computedTotal <= 0) {
+      return { directCost: record.totalProductionCost, indirectCost: 0 };
+    }
+    const scale = record.totalProductionCost / computedTotal;
+    return {
+      directCost: Math.max(0, (breakdown.directCost || 0) * scale),
+      indirectCost: Math.max(0, (breakdown.indirectCost || 0) * scale),
+    };
+  }, [breakdownMap]);
+  const totalDirect = displayRecords.reduce((s, r) => s + getNormalizedBreakdown(r).directCost, 0);
+  const totalIndirect = displayRecords.reduce((s, r) => s + getNormalizedBreakdown(r).indirectCost, 0);
   const overallAvg = totalQty > 0 ? totalCost / totalQty : 0;
+  const staleProductsCount = useMemo(() => {
+    return records.filter((r) => {
+      if (!r.totalProducedQty || r.totalProducedQty <= 0) return false;
+      const breakdown = breakdownMap[r.productId];
+      if (!breakdown) return false;
+      const liveComputedTotal = (breakdown.directCost || 0) + (breakdown.indirectCost || 0);
+      return Math.abs((r.totalProductionCost || 0) - liveComputedTotal) > 0.01;
+    }).length;
+  }, [records, breakdownMap]);
 
   const handleExport = () => {
     const rows = displayRecords.map((r) => {
-      const directCost = breakdownMap[r.productId]?.directCost ?? r.totalProductionCost;
-      const indirectCost = breakdownMap[r.productId]?.indirectCost ?? 0;
+      const normalized = getNormalizedBreakdown(r);
+      const directCost = normalized.directCost;
+      const indirectCost = normalized.indirectCost;
       const qty = r.totalProducedQty;
       const raw = rawProductMap.get(r.productId);
       const chinese = raw?.chineseUnitCost ?? 0;
@@ -374,6 +401,22 @@ export const MonthlyProductionCosts: React.FC = () => {
           </p>
         </div>
       )}
+      {!allClosed && staleProductsCount > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <span className="material-icons-round text-amber-600">warning</span>
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+              تم تعديل مدخلات التكلفة بعد آخر حساب في {staleProductsCount} منتج — برجاء إعادة حساب الكل لتحديث القيم.
+            </p>
+          </div>
+          {canManage && (
+            <Button onClick={handleCalculateAll} disabled={calculating}>
+              <span className="material-icons-round text-[18px] ml-1">refresh</span>
+              {calculating ? 'جاري الحساب...' : 'إعادة حساب الكل'}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       <Card>
@@ -469,8 +512,9 @@ export const MonthlyProductionCosts: React.FC = () => {
                     </td>
                     <td className="py-3 px-4">
                       {(() => {
-                        const direct = breakdownMap[r.productId]?.directCost ?? r.totalProductionCost;
-                        const indirect = breakdownMap[r.productId]?.indirectCost ?? 0;
+                        const normalized = getNormalizedBreakdown(r);
+                        const direct = normalized.directCost;
+                        const indirect = normalized.indirectCost;
                         const directPerPiece = r.totalProducedQty > 0 ? direct / r.totalProducedQty : 0;
                         const indirectPerPiece = r.totalProducedQty > 0 ? indirect / r.totalProducedQty : 0;
                         return (
