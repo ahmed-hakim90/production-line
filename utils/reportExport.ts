@@ -155,9 +155,9 @@ export const shareToWhatsApp = async (
   let copied = false;
 
   if (isMobile()) {
-    // Mobile fallback: open WhatsApp app directly via intent URL
-    // User can then attach the downloaded image from gallery
-    window.location.href = `whatsapp://send?text=${encodeURIComponent(title)}`;
+    // Mobile fallback: open WhatsApp without prefilled text.
+    // The user attaches the downloaded image from gallery/files.
+    window.location.href = 'whatsapp://send';
   } else {
     // Desktop: copy image to clipboard so user can paste (Ctrl+V)
     try {
