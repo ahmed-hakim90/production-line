@@ -32,7 +32,8 @@ import { SelectableTable } from '../components/SelectableTable';
 import type { TableColumn, TableBulkAction } from '../components/SelectableTable';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 const emptyForm = {
   employeeId: '',
@@ -56,6 +57,7 @@ const toDateInputValue = (date: Date): string => {
 };
 
 export const Reports: React.FC = () => {
+  const { openModal } = useGlobalModalManager();
   const location = useLocation();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const todayReports = useAppStore((s) => s.todayReports);
@@ -158,11 +160,8 @@ export const Reports: React.FC = () => {
   const reportCodesBackfilledRef = useRef(false);
 
   const openCreate = useCallback(() => {
-    setEditId(null);
-    setSaveToast(null);
-    setForm({ ...emptyForm, date: getTodayDateString() });
-    setShowModal(true);
-  }, []);
+    openModal(MODAL_KEYS.REPORTS_CREATE, { source: 'reports.page' });
+  }, [openModal]);
 
   const openImport = useCallback(() => {
     setShowImportModal(true);
@@ -170,9 +169,6 @@ export const Reports: React.FC = () => {
     setImportDateUpdateResult(null);
     setImportMode('create');
   }, []);
-
-  useRegisterModalOpener('reports.create', () => openCreate());
-  useRegisterModalOpener('reports.import', () => openImport());
 
   // Employee-only filter: basic employees see only their own reports
   const myEmployeeId = useMemo(() => {

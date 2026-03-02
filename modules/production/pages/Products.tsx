@@ -19,6 +19,7 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { stockService } from '../../inventory/services/stockService';
 import type { StockItemBalance } from '../../inventory/types';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -72,6 +73,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
 };
 
 export const Products: React.FC = () => {
+  const { openModal } = useGlobalModalManager();
   const products = useAppStore((s) => s.products);
   const createProduct = useAppStore((s) => s.createProduct);
   const updateProduct = useAppStore((s) => s.updateProduct);
@@ -189,10 +191,7 @@ export const Products: React.FC = () => {
   }, [canViewCosts, products, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
 
   const openCreate = () => {
-    setEditId(null);
-    setForm(emptyForm);
-    setSaveMsg(null);
-    setShowModal(true);
+    openModal(MODAL_KEYS.PRODUCTS_CREATE, { source: 'products.page' });
   };
 
   const openEdit = (id: string) => {

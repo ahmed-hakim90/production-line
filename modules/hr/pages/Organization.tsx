@@ -15,6 +15,8 @@ import type {
   JobLevel, PenaltyType, ValueType, CalculationType,
 } from '../types';
 import { JOB_LEVEL_LABELS } from '../types';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 type OrgTab = 'departments' | 'positions' | 'shifts' | 'penalties' | 'lateRules' | 'allowances';
 
@@ -130,6 +132,7 @@ export const Organization: React.FC = () => {
     else if (tab === 'allowances') setAllowanceForm({ ...emptyAllowance });
     setShowModal(true);
   };
+  useRegisterModalOpener(MODAL_KEYS.ORGANIZATION_CREATE, () => openCreate());
 
   const openEditDept = (d: FirestoreDepartment) => { setEditId(d.id!); setSaveMsg(null); setDeptForm({ name: d.name, code: d.code, managerId: d.managerId || '', isActive: d.isActive }); setTab('departments'); setShowModal(true); };
   const openEditPos = (p: FirestoreJobPosition) => { setEditId(p.id!); setSaveMsg(null); setPosForm({ title: p.title, departmentId: p.departmentId, level: p.level, hasSystemAccessDefault: p.hasSystemAccessDefault, isActive: p.isActive }); setTab('positions'); setShowModal(true); };
@@ -235,7 +238,7 @@ export const Organization: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">إدارة الأقسام والمناصب والورديات والجزاءات والبدلات</p>
         </div>
         {canEdit && (
-          <Button variant="primary" onClick={openCreate}>
+          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.ORGANIZATION_CREATE}>
             <span className="material-icons-round text-lg">add</span>
             {ADD_LABELS[tab]}
           </Button>

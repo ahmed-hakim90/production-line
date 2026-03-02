@@ -9,6 +9,8 @@ Tracks migration from page-scoped modals to Global Modal Manager architecture.
 - `workOrders.create`
 - `products.create`
 - `lines.create`
+- `inventory.warehouses.create`
+- `inventory.rawMaterials.create`
 
 ## In Progress
 
@@ -16,7 +18,6 @@ Tracks migration from page-scoped modals to Global Modal Manager architecture.
 
 ## Backlog
 
-- Inventory module modals
 - HR module modals
 - Costs module modals
 - System module modals

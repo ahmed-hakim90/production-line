@@ -7,6 +7,8 @@ import {
   ALL_PERMISSIONS,
 } from '../../../utils/permissions';
 import type { FirestoreRole } from '../../../types';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 const COLOR_OPTIONS = [
   { label: 'أحمر', value: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' },
@@ -58,6 +60,7 @@ export const RolesManagement: React.FC = () => {
     setSaveMsg(null);
     setShowCreateModal(true);
   }, []);
+  useRegisterModalOpener(MODAL_KEYS.SYSTEM_ROLES_CREATE, () => openCreate());
 
   const togglePerm = useCallback((key: string) => {
     setEditPerms((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -118,7 +121,7 @@ export const RolesManagement: React.FC = () => {
           <p className="text-sm text-slate-500 font-medium mt-0.5">إدارة الأدوار والتحكم في صلاحيات المستخدمين</p>
         </div>
         {can('roles.manage') && (
-          <Button variant="primary" onClick={openCreate}>
+          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.SYSTEM_ROLES_CREATE}>
             <span className="material-icons-round text-sm">add</span>
             إنشاء دور جديد
           </Button>

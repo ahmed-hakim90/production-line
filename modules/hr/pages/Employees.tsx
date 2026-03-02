@@ -18,6 +18,8 @@ import type { JobLevel } from '../types';
 import { getTodayDateString } from '../../../utils/calculations';
 import { exportAllEmployees } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -185,6 +187,7 @@ export const Employees: React.FC = () => {
     setRecreateAccount(false);
     setShowModal(true);
   };
+  useRegisterModalOpener(MODAL_KEYS.EMPLOYEES_CREATE, () => openCreate());
 
   const openEdit = async (id: string) => {
     const raw = _rawEmployees.find((e) => e.id === id);
@@ -773,7 +776,7 @@ export const Employees: React.FC = () => {
             </Button>
           )}
           {can('employees.create') && (
-            <Button variant="primary" onClick={openCreate} className="shrink-0">
+            <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.EMPLOYEES_CREATE} className="shrink-0">
               <span className="material-icons-round text-sm">add</span>
               إضافة موظف
             </Button>

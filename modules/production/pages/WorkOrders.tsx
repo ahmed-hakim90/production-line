@@ -14,6 +14,7 @@ import { estimateReportCost, formatCost } from '../../../utils/costCalculations'
 import type { WorkOrder, WorkOrderStatus } from '../../../types';
 import { qualitySettingsService } from '../../quality/services/qualitySettingsService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 
 const STATUS_CONFIG: Record<WorkOrderStatus, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' }> = {
   pending: { label: 'قيد الانتظار', variant: 'info' },
@@ -42,6 +43,7 @@ const EMPTY_FORM = {
 };
 
 export const WorkOrders: React.FC = () => {
+  const { openModal } = useGlobalModalManager();
   const navigate = useNavigate();
   const { can } = usePermission();
   const {
@@ -165,12 +167,8 @@ export const WorkOrders: React.FC = () => {
   }, [workOrders, currentEmployee]);
 
   const openCreate = useCallback(() => {
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-    setSaveToast(null);
-    setSaveError(null);
-    setShowModal(true);
-  }, []);
+    openModal(MODAL_KEYS.WORK_ORDERS_CREATE, { source: 'workOrders.page' });
+  }, [openModal]);
 
   const openEdit = useCallback((wo: WorkOrder) => {
     setEditingId(wo.id!);

@@ -13,6 +13,8 @@ import { shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
 import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../../../utils/importInventoryInByCode';
 import { StockTransferPrint, type StockTransferPrintData } from '../components';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
@@ -34,6 +36,7 @@ const createTransferLine = (): TransferLine => ({
 
 export const StockMovementForm: React.FC = () => {
   const location = useLocation();
+  const { openModal } = useGlobalModalManager();
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
@@ -69,14 +72,6 @@ export const StockMovementForm: React.FC = () => {
   const [importFileName, setImportFileName] = useState('');
   const [importResult, setImportResult] = useState<InventoryInImportResult | null>(null);
 
-  const [newWarehouseName, setNewWarehouseName] = useState('');
-  const [newWarehouseCode, setNewWarehouseCode] = useState('');
-  const [newRawMaterialName, setNewRawMaterialName] = useState('');
-  const [newRawMaterialCode, setNewRawMaterialCode] = useState('');
-  const [newRawMaterialUnit, setNewRawMaterialUnit] = useState('kg');
-  const [newRawMaterialMin, setNewRawMaterialMin] = useState(0);
-  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
-  const [showRawMaterialModal, setShowRawMaterialModal] = useState(false);
   const transferPrintRef = useRef<HTMLDivElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
   const handleTransferPrint = useManagedPrint({
@@ -111,15 +106,15 @@ export const StockMovementForm: React.FC = () => {
   useEffect(() => {
     const action = new URLSearchParams(location.search).get('action');
     if (action === 'create-warehouse' && can('inventory.warehouses.manage')) {
-      setShowWarehouseModal(true);
+      openModal(MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE);
     }
     if (action === 'create-raw-material' && can('inventory.items.manage')) {
-      setShowRawMaterialModal(true);
+      openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE);
     }
     if (action === 'import-in-by-code' && can('inventory.transactions.create')) {
       setShowImportModal(true);
     }
-  }, [location.search, can]);
+  }, [location.search, can, openModal]);
 
   const referenceNo = useMemo(() => formatInvReference(nextReferenceSeq), [nextReferenceSeq]);
 
@@ -579,34 +574,6 @@ export const StockMovementForm: React.FC = () => {
     setShowPrintPreview(true);
   };
 
-  const createWarehouse = async () => {
-    if (!newWarehouseName.trim() || !newWarehouseCode.trim()) return;
-    await warehouseService.create({
-      name: newWarehouseName.trim(),
-      code: newWarehouseCode.trim(),
-      isActive: true,
-    });
-    setNewWarehouseName('');
-    setNewWarehouseCode('');
-    await loadData();
-  };
-
-  const createRawMaterial = async () => {
-    if (!newRawMaterialName.trim() || !newRawMaterialCode.trim()) return;
-    await rawMaterialService.create({
-      name: newRawMaterialName.trim(),
-      code: newRawMaterialCode.trim(),
-      unit: newRawMaterialUnit.trim() || 'unit',
-      minStock: Number(newRawMaterialMin || 0),
-      isActive: true,
-    });
-    setNewRawMaterialName('');
-    setNewRawMaterialCode('');
-    setNewRawMaterialUnit('kg');
-    setNewRawMaterialMin(0);
-    await loadData();
-  };
-
   return (
     <div className="space-y-6">
       <input
@@ -1044,114 +1011,6 @@ export const StockMovementForm: React.FC = () => {
         </div>
       )}
 
-      {showWarehouseModal && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setShowWarehouseModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-bold">إضافة مخزن جديد</h3>
-              <button onClick={() => setShowWarehouseModal(false)} className="text-slate-400 hover:text-slate-600">
-                <span className="material-icons-round">close</span>
-              </button>
-            </div>
-            <div className="p-6 space-y-3">
-              <input
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-                placeholder="اسم المخزن"
-                value={newWarehouseName}
-                onChange={(e) => setNewWarehouseName(e.target.value)}
-              />
-              <input
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-                placeholder="كود المخزن"
-                value={newWarehouseCode}
-                onChange={(e) => setNewWarehouseCode(e.target.value)}
-              />
-            </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowWarehouseModal(false)}>إلغاء</Button>
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  await createWarehouse();
-                  setShowWarehouseModal(false);
-                }}
-                disabled={!can('inventory.warehouses.manage') || !newWarehouseName.trim() || !newWarehouseCode.trim()}
-              >
-                <span className="material-icons-round text-sm">warehouse</span>
-                إضافة مخزن
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRawMaterialModal && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setShowRawMaterialModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-bold">إضافة مادة خام</h3>
-              <button onClick={() => setShowRawMaterialModal(false)} className="text-slate-400 hover:text-slate-600">
-                <span className="material-icons-round">close</span>
-              </button>
-            </div>
-            <div className="p-6 space-y-3">
-              <input
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-                placeholder="اسم المادة الخام"
-                value={newRawMaterialName}
-                onChange={(e) => setNewRawMaterialName(e.target.value)}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-                  placeholder="الكود"
-                  value={newRawMaterialCode}
-                  onChange={(e) => setNewRawMaterialCode(e.target.value)}
-                />
-                <input
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-                  placeholder="الوحدة"
-                  value={newRawMaterialUnit}
-                  onChange={(e) => setNewRawMaterialUnit(e.target.value)}
-                />
-              </div>
-              <input
-                type="number"
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-                placeholder="الحد الأدنى"
-                value={newRawMaterialMin}
-                onChange={(e) => setNewRawMaterialMin(Number(e.target.value))}
-              />
-            </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowRawMaterialModal(false)}>إلغاء</Button>
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  await createRawMaterial();
-                  setShowRawMaterialModal(false);
-                }}
-                disabled={!can('inventory.items.manage') || !newRawMaterialName.trim() || !newRawMaterialCode.trim()}
-              >
-                <span className="material-icons-round text-sm">inventory_2</span>
-                إضافة مادة خام
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

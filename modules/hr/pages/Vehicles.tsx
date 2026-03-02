@@ -9,6 +9,8 @@ import { exportHRData } from '@/utils/exportExcel';
 import { formatNumber, formatCurrency } from '@/utils/calculations';
 import type { FirestoreVehicle } from '../types';
 import type { FirestoreEmployee } from '@/types';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 const EMPTY_VEHICLE: Omit<FirestoreVehicle, 'id'> = {
   name: '',
@@ -115,6 +117,7 @@ export const Vehicles: React.FC = () => {
     setForm({ ...EMPTY_VEHICLE });
     setShowForm(true);
   };
+  useRegisterModalOpener(MODAL_KEYS.VEHICLES_CREATE, () => openCreate());
 
   const openEdit = (v: FirestoreVehicle) => {
     const assignedEmployeeIds = getAssignedEmployeeIds(v);
@@ -250,7 +253,7 @@ export const Vehicles: React.FC = () => {
               تصدير Excel
             </Button>
           )}
-          <Button variant="primary" onClick={openCreate}>
+          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.VEHICLES_CREATE}>
             <span className="material-icons-round text-sm">add</span>
             إضافة مركبة
           </Button>

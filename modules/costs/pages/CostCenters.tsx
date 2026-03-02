@@ -8,6 +8,8 @@ import { getCurrentMonth, getWorkingDaysForMonth } from '../../../utils/costCalc
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 export const CostCenters: React.FC = () => {
   const costCenters = useAppStore((s) => s.costCenters);
@@ -42,6 +44,7 @@ export const CostCenters: React.FC = () => {
     setForm({ name: '', type: 'indirect', isActive: true });
     setModal('new');
   };
+  useRegisterModalOpener(MODAL_KEYS.COST_CENTERS_CREATE, () => openCreate());
 
   const openEdit = (cc: CostCenter) => {
     setForm({ name: cc.name, type: cc.type, isActive: cc.isActive });
@@ -169,7 +172,7 @@ export const CostCenters: React.FC = () => {
             </Button>
           )}
           {canManage && (
-            <Button variant="primary" onClick={openCreate}>
+            <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.COST_CENTERS_CREATE}>
               <span className="material-icons-round text-sm">add</span>
               إضافة مركز تكلفة
             </Button>

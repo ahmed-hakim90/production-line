@@ -10,6 +10,7 @@ import type { LineWorkerAssignment } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 
 
 const statusOptions: { value: ProductionLineStatus; label: string }[] = [
@@ -28,6 +29,7 @@ const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
 };
 
 export const Lines: React.FC = () => {
+  const { openModal } = useGlobalModalManager();
   const productionLines = useAppStore((s) => s.productionLines);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -135,10 +137,7 @@ export const Lines: React.FC = () => {
   };
 
   const openCreate = () => {
-    setEditId(null);
-    setForm(emptyForm);
-    setSaveMsg(null);
-    setShowModal(true);
+    openModal(MODAL_KEYS.LINES_CREATE, { source: 'lines.page' });
   };
 
   const openEdit = (id: string) => {
