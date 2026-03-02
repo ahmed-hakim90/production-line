@@ -16,8 +16,14 @@ const capture = (el: HTMLElement) =>
     logging: false,
   });
 
-const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
-  new Promise((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+const canvasToBlob = (
+  canvas: HTMLCanvasElement,
+  type: 'image/png' | 'image/jpeg' = 'image/png',
+  quality?: number,
+): Promise<Blob> =>
+  new Promise((resolve) => {
+    canvas.toBlob((b) => resolve(b!), type, quality);
+  });
 
 const downloadBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
@@ -130,15 +136,16 @@ export const shareToWhatsApp = async (
   title: string,
 ): Promise<ShareResult> => {
   const canvas = await capture(el);
-  const blob = await canvasToBlob(canvas);
-  const file = new File([blob], `${title}.png`, { type: 'image/png' });
+  const pngBlob = await canvasToBlob(canvas, 'image/png');
+  const jpgBlob = await canvasToBlob(canvas, 'image/jpeg', 0.92);
 
-  // ── Step 1: Try Web Share API with file (mobile browsers) ──
-  // This opens the OS share picker → user selects WhatsApp → image is sent
-  if (isMobile() && navigator.share && navigator.canShare) {
+  // ── Step 1 (mobile): Try native file share first ──
+  // This is the only reliable way to send image directly to WhatsApp from browser.
+  if (isMobile() && navigator.share) {
+    const mobileFile = new File([jpgBlob], `${title}.jpg`, { type: 'image/jpeg' });
     try {
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ title, files: [file] });
+      if (!navigator.canShare || navigator.canShare({ files: [mobileFile] })) {
+        await navigator.share({ title, files: [mobileFile] });
         return { method: 'native_share', copied: false };
       }
     } catch (err: unknown) {
@@ -149,12 +156,14 @@ export const shareToWhatsApp = async (
   }
 
   // ── Step 2: Fallback — download image + open WhatsApp ──
-  const fileName = `${title}.png`;
-  downloadBlob(blob, fileName);
+  const isMobileDevice = isMobile();
+  const fileName = `${title}.${isMobileDevice ? 'jpg' : 'png'}`;
+  const downloadTargetBlob = isMobileDevice ? jpgBlob : pngBlob;
+  downloadBlob(downloadTargetBlob, fileName);
 
   let copied = false;
 
-  if (isMobile()) {
+  if (isMobileDevice) {
     // Mobile fallback: open WhatsApp without prefilled text.
     // The user attaches the downloaded image from gallery/files.
     window.location.href = 'whatsapp://send';
@@ -163,7 +172,7 @@ export const shareToWhatsApp = async (
     try {
       if (navigator.clipboard?.write) {
         await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob }),
+          new ClipboardItem({ 'image/png': pngBlob }),
         ]);
         copied = true;
       }
