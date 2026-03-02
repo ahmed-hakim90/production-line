@@ -572,55 +572,65 @@ export const StockTransactions: React.FC = () => {
                       <td className="px-4 py-3 text-sm">{warehouseMap.get(tx.warehouseId) ?? tx.warehouseId}</td>
                       <td className="px-4 py-3 text-sm">{tx.createdBy}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           {can('inventory.transactions.export') && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => exportExcel([tx])}
+                              title="Excel"
+                              aria-label="Excel"
+                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                             >
                               <span className="material-icons-round text-sm">download</span>
-                              Excel
-                            </Button>
+                            </button>
                           )}
                           {can('inventory.transactions.print') && tx.movementType === 'TRANSFER' && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => void printTransferFromRow(tx)}
                               disabled={processing}
+                              title="طباعة"
+                              aria-label="طباعة"
+                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">print</span>
-                              طباعة
-                            </Button>
+                            </button>
                           )}
                           {can('inventory.transactions.print') && tx.movementType === 'TRANSFER' && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => void shareTransferFromRow(tx)}
                               disabled={processing}
+                              title="واتساب"
+                              aria-label="واتساب"
+                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">share</span>
-                              واتساب
-                            </Button>
+                            </button>
                           )}
                           {can('inventory.transactions.edit') && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => void editRow(tx)}
                               disabled={processing}
+                              title="تعديل"
+                              aria-label="تعديل"
+                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">edit</span>
-                              تعديل
-                            </Button>
+                            </button>
                           )}
                           {can('inventory.transactions.delete') && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => void deleteRows([tx])}
                               disabled={processing}
+                              title="حذف"
+                              aria-label="حذف"
+                              className="p-2 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">delete</span>
-                              حذف
-                            </Button>
+                            </button>
                           )}
                         </div>
                       </td>
@@ -662,53 +672,63 @@ export const StockTransactions: React.FC = () => {
                       <td className="px-4 py-3 text-sm">{fromName} ← {toName}</td>
                       <td className="px-4 py-3 text-sm">{group.createdBy}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
                             onClick={() => setSelectedApprovedTransfer(group)}
                             disabled={processing}
+                            title="فتح"
+                            aria-label="فتح"
+                            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <span className="material-icons-round text-sm">visibility</span>
-                            فتح
-                          </Button>
+                          </button>
                           {can('inventory.transactions.print') && group.lines[0] && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => void printTransferFromRow(group.lines[0])}
                               disabled={processing}
+                              title="طباعة"
+                              aria-label="طباعة"
+                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">print</span>
-                              طباعة
-                            </Button>
+                            </button>
                           )}
                           {can('inventory.transactions.print') && group.lines[0] && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => void shareTransferFromRow(group.lines[0])}
                               disabled={processing}
+                              title="واتساب"
+                              aria-label="واتساب"
+                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">share</span>
-                              واتساب
-                            </Button>
+                            </button>
                           )}
                           {can('inventory.transactions.export') && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => exportExcel(group.lines)}
+                              title="Excel"
+                              aria-label="Excel"
+                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                             >
                               <span className="material-icons-round text-sm">download</span>
-                              Excel
-                            </Button>
+                            </button>
                           )}
                           {can('inventory.transactions.delete') && group.lines[0] && (
-                            <Button
-                              variant="outline"
+                            <button
+                              type="button"
                               onClick={() => void deleteRows([group.lines[0]])}
                               disabled={processing}
+                              title="حذف"
+                              aria-label="حذف"
+                              className="p-2 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">delete</span>
-                              حذف
-                            </Button>
+                            </button>
                           )}
                         </div>
                       </td>
@@ -751,26 +771,50 @@ export const StockTransactions: React.FC = () => {
                     <td className="px-4 py-3 text-sm">{fromName} ← {toName}</td>
                     <td className="px-4 py-3 text-sm">{row.createdBy}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={() => setSelectedPending(row)} disabled={processing}>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPending(row)}
+                          disabled={processing}
+                          title="فتح"
+                          aria-label="فتح"
+                          className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                           <span className="material-icons-round text-sm">visibility</span>
-                          فتح
-                        </Button>
-                        <Button variant="outline" onClick={() => void printPendingTransfer(row)} disabled={processing}>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void printPendingTransfer(row)}
+                          disabled={processing}
+                          title="طباعة"
+                          aria-label="طباعة"
+                          className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                           <span className="material-icons-round text-sm">print</span>
-                          طباعة
-                        </Button>
+                        </button>
                         {can('inventory.transactions.print') && (
-                          <Button variant="outline" onClick={() => void sharePendingTransfer(row)} disabled={processing}>
+                          <button
+                            type="button"
+                            onClick={() => void sharePendingTransfer(row)}
+                            disabled={processing}
+                            title="واتساب"
+                            aria-label="واتساب"
+                            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
                             <span className="material-icons-round text-sm">share</span>
-                            واتساب
-                          </Button>
+                          </button>
                         )}
                         {can('inventory.transactions.edit') && (
-                          <Button variant="outline" onClick={() => openPendingForEdit(row)} disabled={processing}>
+                          <button
+                            type="button"
+                            onClick={() => openPendingForEdit(row)}
+                            disabled={processing}
+                            title="تعديل"
+                            aria-label="تعديل"
+                            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
                             <span className="material-icons-round text-sm">edit</span>
-                            تعديل
-                          </Button>
+                          </button>
                         )}
                       </div>
                     </td>
