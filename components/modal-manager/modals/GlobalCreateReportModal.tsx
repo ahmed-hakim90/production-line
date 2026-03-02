@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { getTodayDateString } from '../../../utils/calculations';
@@ -37,6 +37,8 @@ export const GlobalCreateReportModal: React.FC = () => {
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const employees = useAppStore((s) => s.employees);
+  const rawEmployees = useAppStore((s) => s._rawEmployees);
+  const uid = useAppStore((s) => s.uid);
   const lines = useAppStore((s) => s._rawLines);
   const products = useAppStore((s) => s._rawProducts);
   const workOrders = useAppStore((s) => s.workOrders);
@@ -44,10 +46,30 @@ export const GlobalCreateReportModal: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const activeWorkOrders = useMemo(
-    () => workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress'),
-    [workOrders],
+  const currentEmployee = useMemo(
+    () => rawEmployees.find((e) => e.userId === uid) ?? null,
+    [rawEmployees, uid],
   );
+  const isSupervisorReporter = currentEmployee?.level === 2;
+
+  const activeWorkOrders = useMemo(
+    () =>
+      workOrders.filter((w) => {
+        if (w.status !== 'pending' && w.status !== 'in_progress') return false;
+        if (!isSupervisorReporter || !currentEmployee?.id) return true;
+        return w.supervisorId === currentEmployee.id;
+      }),
+    [workOrders, isSupervisorReporter, currentEmployee?.id],
+  );
+
+  useEffect(() => {
+    if (!isOpen || !isSupervisorReporter || !currentEmployee?.id) return;
+    setForm((prev) => (
+      prev.employeeId === currentEmployee.id
+        ? prev
+        : { ...prev, employeeId: currentEmployee.id }
+    ));
+  }, [isOpen, isSupervisorReporter, currentEmployee?.id]);
 
   if (!isOpen) return null;
   if (!can('reports.create') && !can('reports.edit')) return null;
@@ -119,7 +141,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                   workOrderId: wo.id ?? '',
                   lineId: wo.lineId,
                   productId: wo.productId,
-                  employeeId: wo.supervisorId,
+                  employeeId: isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
                 }));
               }}
             >
@@ -144,12 +166,21 @@ export const GlobalCreateReportModal: React.FC = () => {
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المشرف *</label>
-              <SearchableSelect
-                placeholder="اختر المشرف"
-                options={employees.filter((s) => s.level === 2).map((s) => ({ value: s.id, label: s.name }))}
-                value={form.employeeId}
-                onChange={(v) => setForm((prev) => ({ ...prev, employeeId: v }))}
-              />
+              {isSupervisorReporter && currentEmployee ? (
+                <input
+                  type="text"
+                  readOnly
+                  value={currentEmployee.name}
+                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 rounded-xl text-sm p-3.5 outline-none font-bold text-slate-600 dark:text-slate-300"
+                />
+              ) : (
+                <SearchableSelect
+                  placeholder="اختر المشرف"
+                  options={employees.filter((s) => s.level === 2).map((s) => ({ value: s.id, label: s.name }))}
+                  value={form.employeeId}
+                  onChange={(v) => setForm((prev) => ({ ...prev, employeeId: v }))}
+                />
+              )}
             </div>
           </div>
 

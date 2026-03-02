@@ -607,15 +607,12 @@ export const EmployeeDashboard: React.FC = () => {
               <div className="order-1">
                 {/* Employee Work Orders */}
                 {employee && can('workOrders.view') && (() => {
+                  const employeeName = (employee.name || '').trim().toLowerCase();
                   const myWOs = workOrders.filter((w) => {
                     if (w.status !== 'pending' && w.status !== 'in_progress') return false;
                     if (w.supervisorId === employee.id) return true;
-                    const employeeLineIds = [...new Set(
-                      [...todayReports, ...monthlyReports]
-                        .filter((r) => r.employeeId === employee.id)
-                        .map((r) => r.lineId)
-                    )];
-                    return employeeLineIds.includes(w.lineId);
+                    // Fallback for legacy records that stored supervisor name instead of id.
+                    return (w.supervisorId || '').trim().toLowerCase() === employeeName;
                   });
                   if (myWOs.length === 0) return null;
                   return (
