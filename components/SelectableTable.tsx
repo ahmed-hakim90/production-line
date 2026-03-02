@@ -59,6 +59,8 @@ interface SelectableTableProps<T> {
   tableId?: string;
   /** Disable checkbox selection while keeping actions */
   checkboxSelection?: boolean;
+  /** Scope for "select all" checkbox */
+  selectAllScope?: 'page' | 'filtered';
   /** Loading state */
   loading?: boolean;
 }
@@ -94,6 +96,7 @@ export function SelectableTable<T>({
   toolbarContent,
   tableId,
   checkboxSelection = true,
+  selectAllScope = 'page',
   loading = false,
 }: SelectableTableProps<T>) {
   const { can } = usePermission();
@@ -132,6 +135,7 @@ export function SelectableTable<T>({
       getId={getId}
       selectable={true}
       checkboxSelection={checkboxSelection}
+      selectAllScope={selectAllScope}
       bulkActions={allowedBulkActions.map((action) => ({
         label: action.label,
         icon: action.icon,

@@ -1,5 +1,6 @@
 import {
   addDoc,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -196,6 +197,48 @@ export const qualityInspectionService = {
     const q = query(qualityCAPARef(), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as QualityCAPA));
+  },
+
+  async deleteWorkOrderQualityReport(workOrderId: string): Promise<{
+    inspections: number;
+    defects: number;
+    rework: number;
+    capa: number;
+  }> {
+    if (!isConfigured) return { inspections: 0, defects: 0, rework: 0, capa: 0 };
+
+    const [inspectionSnap, defectsSnap, reworkSnap, capaSnap] = await Promise.all([
+      getDocs(query(qualityInspectionsRef(), where('workOrderId', '==', workOrderId))),
+      getDocs(query(qualityDefectsRef(), where('workOrderId', '==', workOrderId))),
+      getDocs(query(qualityReworkOrdersRef(), where('workOrderId', '==', workOrderId))),
+      getDocs(query(qualityCAPARef(), where('workOrderId', '==', workOrderId))),
+    ]);
+
+    for (const row of inspectionSnap.docs) await deleteDoc(row.ref);
+    for (const row of defectsSnap.docs) await deleteDoc(row.ref);
+    for (const row of reworkSnap.docs) await deleteDoc(row.ref);
+    for (const row of capaSnap.docs) await deleteDoc(row.ref);
+
+    await activityLogService.logCurrentUser(
+      'QUALITY_DELETE_REPORT',
+      'حذف تقرير جودة',
+      {
+        workOrderId,
+        deleted: {
+          inspections: inspectionSnap.size,
+          defects: defectsSnap.size,
+          rework: reworkSnap.size,
+          capa: capaSnap.size,
+        },
+      },
+    );
+
+    return {
+      inspections: inspectionSnap.size,
+      defects: defectsSnap.size,
+      rework: reworkSnap.size,
+      capa: capaSnap.size,
+    };
   },
 
   async buildWorkOrderSummary(workOrderId: string): Promise<WorkOrderQualitySummary> {

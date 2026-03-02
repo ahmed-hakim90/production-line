@@ -295,7 +295,6 @@ export const exportAllProducts = (
       'الفئة': d.raw.model || '—',
     };
     if (options.stock) {
-      base['الرصيد الافتتاحي'] = d.product.openingStock;
       base['إجمالي الإنتاج'] = d.product.totalProduction;
       base['إجمالي الهالك'] = d.product.wasteUnits;
       base['الرصيد الحالي'] = d.product.stockLevel;
@@ -378,7 +377,6 @@ export const exportSingleProduct = (data: SingleProductExportData, includeCosts:
     'الكود': data.raw.code,
     'اسم المنتج': data.raw.name,
     'الفئة': data.raw.model || '—',
-    'الرصيد الافتتاحي': data.raw.openingBalance,
     'إجمالي الإنتاج': data.totalProduction,
     'إجمالي الهالك': data.totalWaste,
     'نسبة الهالك': data.wasteRatio,

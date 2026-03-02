@@ -1444,6 +1444,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { systemSettings, laborSettings } = get();
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
 
+      const sameDayReports = await reportService.getByDateRange(data.date, data.date);
+      const hasDuplicate = sameDayReports.some(
+        (r) =>
+          r.lineId === data.lineId &&
+          r.employeeId === data.employeeId &&
+          r.productId === data.productId,
+      );
+      if (hasDuplicate) {
+        set({ error: 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف والمنتج' });
+        return null;
+      }
+
       const activePlans = await productionPlanService.getActiveByLineAndProduct(data.lineId, data.productId);
       const activePlan = activePlans[0] ?? null;
 
@@ -1473,10 +1485,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const reportData = { ...data, workOrderId: activeWO?.id || data.workOrderId || '' };
       const id = await reportService.create(reportData);
-      await syncProductAvgDailyProduction(data.productId);
+      if (!id) {
+        set({ error: 'تعذر حفظ التقرير' });
+        return null;
+      }
 
-      const routing = await resolveInventoryRouting(systemSettings);
-      if (id) {
+      let postSaveWarning: string | null = null;
+      const laborCost = (laborSettings?.hourlyRate ?? 0) * (data.workHours || 0) * (data.workersCount || 0);
+
+      try {
+        await syncProductAvgDailyProduction(data.productId);
+      } catch (error) {
+        postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث متوسط الإنتاج اليومي';
+      }
+
+      try {
+        const routing = await resolveInventoryRouting(systemSettings);
         const product = get()._rawProducts.find((p) => p.id === data.productId);
         const actorName = get().userDisplayName || get().userEmail || 'System';
         const producedQty = Number(data.quantityProduced || 0);
@@ -1540,64 +1564,84 @@ export const useAppStore = create<AppState>((set, get) => ({
             }
           }
         }
-
+      } catch (error) {
+        postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
       }
 
-      const laborCost = (laborSettings?.hourlyRate ?? 0) * (data.workHours || 0) * (data.workersCount || 0);
-
-      if (activeWO?.id) {
-        await workOrderService.incrementProduced(activeWO.id, data.quantityProduced, laborCost);
-        const newProduced = (activeWO.producedQuantity ?? 0) + data.quantityProduced;
-        const remainingBefore = Math.max(activeWO.quantity - (activeWO.producedQuantity ?? 0), 0);
-        const wasteClosesWorkOrder = Math.abs((data.quantityWaste ?? 0) - remainingBefore) < 0.0001;
-        if (newProduced >= activeWO.quantity || wasteClosesWorkOrder) {
-          await workOrderService.update(activeWO.id, { status: 'completed', completedAt: new Date().toISOString() });
-        } else if (activeWO.status === 'pending') {
-          await workOrderService.update(activeWO.id, { status: 'in_progress' });
+      try {
+        if (activeWO?.id) {
+          await workOrderService.incrementProduced(activeWO.id, data.quantityProduced, laborCost);
+          const newProduced = (activeWO.producedQuantity ?? 0) + data.quantityProduced;
+          const remainingBefore = Math.max(activeWO.quantity - (activeWO.producedQuantity ?? 0), 0);
+          const wasteClosesWorkOrder = Math.abs((data.quantityWaste ?? 0) - remainingBefore) < 0.0001;
+          if (newProduced >= activeWO.quantity || wasteClosesWorkOrder) {
+            await workOrderService.update(activeWO.id, { status: 'completed', completedAt: new Date().toISOString() });
+          } else if (activeWO.status === 'pending') {
+            await workOrderService.update(activeWO.id, { status: 'in_progress' });
+          }
         }
-      }
 
-      if (activePlan?.id) {
-        await productionPlanService.incrementProduced(activePlan.id, data.quantityProduced, laborCost);
-        const newProduced = (activePlan.producedQuantity ?? 0) + data.quantityProduced;
-        if (newProduced >= activePlan.plannedQuantity) {
-          await productionPlanService.update(activePlan.id, { status: 'completed' });
+        if (activePlan?.id) {
+          await productionPlanService.incrementProduced(activePlan.id, data.quantityProduced, laborCost);
+          const newProduced = (activePlan.producedQuantity ?? 0) + data.quantityProduced;
+          if (newProduced >= activePlan.plannedQuantity) {
+            await productionPlanService.update(activePlan.id, { status: 'completed' });
+          }
         }
+      } catch (error) {
+        postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث أمر الشغل أو خطة الإنتاج';
       }
 
-      const today = getTodayDateString();
-      const { start: monthStart, end: monthEnd } = getMonthDateRange();
-      const [todayReports, monthlyReports, workOrders] = await Promise.all([
-        reportService.getByDateRange(today, today),
-        reportService.getByDateRange(monthStart, monthEnd),
-        workOrderService.getAll(),
-      ]);
-      set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders });
-      get()._rebuildProducts();
-      get()._rebuildLines();
-      if (activePlan) await get().fetchProductionPlans();
+      try {
+        const today = getTodayDateString();
+        const { start: monthStart, end: monthEnd } = getMonthDateRange();
+        const [todayReports, monthlyReports, workOrders] = await Promise.all([
+          reportService.getByDateRange(today, today),
+          reportService.getByDateRange(monthStart, monthEnd),
+          workOrderService.getAll(),
+        ]);
+        set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders });
+        get()._rebuildProducts();
+        get()._rebuildLines();
+        if (activePlan) await get().fetchProductionPlans();
+      } catch (error) {
+        postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث البيانات المعروضة';
+      }
 
-      const { uid, userDisplayName, userEmail } = get();
-      eventBus.emit(SystemEvents.USER_ACTION, {
-        module: 'production',
-        entityType: 'production_report',
-        entityId: id ?? '',
-        action: 'create',
-        description: 'Production report created',
-        actor: {
-          userId: uid ?? undefined,
-          userName: userDisplayName ?? userEmail ?? undefined,
-        },
-        metadata: {
-          lineId: data.lineId,
-          productId: data.productId,
-          quantityProduced: data.quantityProduced,
-          workOrderId: activeWO?.id ?? '',
-          productionPlanId: activePlan?.id ?? '',
-        },
-      });
+      try {
+        const { uid, userDisplayName, userEmail } = get();
+        eventBus.emit(SystemEvents.USER_ACTION, {
+          module: 'production',
+          entityType: 'production_report',
+          entityId: id,
+          action: 'create',
+          description: 'Production report created',
+          actor: {
+            userId: uid ?? undefined,
+            userName: userDisplayName ?? userEmail ?? undefined,
+          },
+          metadata: {
+            lineId: data.lineId,
+            productId: data.productId,
+            quantityProduced: data.quantityProduced,
+            workOrderId: activeWO?.id ?? '',
+            productionPlanId: activePlan?.id ?? '',
+          },
+        });
+      } catch {
+        // keep save flow resilient even if telemetry fails
+      }
 
-      get()._logActivity('CREATE_REPORT', `إنشاء تقرير إنتاج جديد`, { reportId: id, ...data });
+      try {
+        get()._logActivity('CREATE_REPORT', `إنشاء تقرير إنتاج جديد`, { reportId: id, ...data });
+      } catch {
+        // keep save flow resilient even if activity logging fails
+      }
+
+      if (postSaveWarning) {
+        console.warn('createReport post-save warning:', postSaveWarning);
+      }
+      set({ error: null });
 
       return id;
     } catch (error) {

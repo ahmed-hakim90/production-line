@@ -174,8 +174,11 @@ export const shareToWhatsApp = async (
   let copied = false;
 
   if (isMobileDevice) {
-    // Mobile fallback: keep user on the same page so download finishes reliably.
-    // The caller shows guidance toast to attach the image manually in WhatsApp.
+    // Mobile fallback: download first, then open WhatsApp so user can attach quickly.
+    // Small delay helps the browser start the download before navigation.
+    setTimeout(() => {
+      window.location.href = 'whatsapp://send';
+    }, 250);
   } else {
     // Desktop: copy image to clipboard so user can paste (Ctrl+V)
     try {

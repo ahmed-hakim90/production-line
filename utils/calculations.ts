@@ -493,11 +493,28 @@ export const calculateSmartStatus = (
 };
 
 /**
- * Add business days to a date string and return a new "YYYY-MM-DD".
+ * Add working days to a date string and return a new "YYYY-MM-DD".
+ * Friday is treated as a non-working day.
  */
 export const addDaysToDate = (dateStr: string, days: number): string => {
+  const totalDays = Math.max(0, Math.ceil(days));
   const d = new Date(dateStr);
-  d.setDate(d.getDate() + Math.ceil(days));
+
+  if (totalDays === 0) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  let addedWorkingDays = 0;
+  while (addedWorkingDays < totalDays) {
+    d.setDate(d.getDate() + 1);
+    // JS day index: Friday = 5
+    if (d.getDay() === 5) continue;
+    addedWorkingDays += 1;
+  }
+
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

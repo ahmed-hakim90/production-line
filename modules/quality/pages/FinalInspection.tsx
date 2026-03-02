@@ -82,7 +82,7 @@ export const FinalInspection: React.FC = () => {
     [selectedWorkOrder?.workOrderNumber],
   );
 
-  const onSubmit = async () => {
+  const onSubmit = async (printAfterSave = false) => {
     if (!selectedWorkOrder || !currentEmployee?.id || !canInspect) return;
     const requiresReason = status === 'failed' || status === 'rework';
     if (requiresReason && !reasonCode) {
@@ -200,13 +200,21 @@ export const FinalInspection: React.FC = () => {
         supervisorId: selectedWorkOrder.supervisorId,
       });
 
+      if (printAfterSave && canPrint && selectedWorkOrder) {
+        handlePrint();
+        // Give the print flow a brief tick before clearing form values.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
       setStatus('passed');
       setReasonCode('');
       setNotes('');
       setPhotoFiles([]);
       setPhotoPreviews([]);
       setUploadProgress(0);
-      setMessage({ type: 'success', text: 'تم حفظ تقرير الفحص النهائي بنجاح.' });
+      setMessage({
+        type: 'success',
+        text: printAfterSave ? 'تم حفظ تقرير الفحص النهائي وإرسال أمر الطباعة.' : 'تم حفظ تقرير الفحص النهائي بنجاح.',
+      });
     } catch (error) {
       setMessage({
         type: 'error',
@@ -368,8 +376,15 @@ export const FinalInspection: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="mt-4 flex justify-end">
-          <Button variant="primary" disabled={!canInspect || busy || !workOrderId || !currentEmployee?.id} onClick={onSubmit}>
+        <div className="mt-4 flex justify-end gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            disabled={!canInspect || busy || !workOrderId || !currentEmployee?.id || !canPrint}
+            onClick={() => onSubmit(true)}
+          >
+            حفظ وطباعة
+          </Button>
+          <Button variant="primary" disabled={!canInspect || busy || !workOrderId || !currentEmployee?.id} onClick={() => onSubmit(false)}>
             حفظ تقرير الفحص النهائي
           </Button>
         </div>

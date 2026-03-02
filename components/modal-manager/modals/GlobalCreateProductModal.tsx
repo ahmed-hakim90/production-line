@@ -108,32 +108,21 @@ export const GlobalCreateProductModal: React.FC = () => {
                 <option value="">اختر الفئة</option>
                 <option value="منزلي">منزلي</option>
                 <option value="سريا">سريا</option>
+                <option value="عناية">عناية</option>
               </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الرصيد الافتتاحي</label>
-              <input
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3.5 outline-none font-medium"
-                type="number"
-                min={0}
-                value={form.openingBalance}
-                onChange={(e) => setForm({ ...form, openingBalance: Number(e.target.value) })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">سعر البيع (ج.م)</label>
-              <input
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3.5 outline-none font-medium"
-                type="number"
-                min={0}
-                step="any"
-                value={form.sellingPrice ?? 0}
-                onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
-              />
-            </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">سعر البيع (ج.م)</label>
+            <input
+              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3.5 outline-none font-medium"
+              type="number"
+              min={0}
+              step="any"
+              value={form.sellingPrice ?? 0}
+              onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
+            />
           </div>
 
           {canViewCosts && (

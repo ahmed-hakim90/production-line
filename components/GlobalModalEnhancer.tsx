@@ -498,9 +498,18 @@ export const GlobalModalEnhancer: React.FC = () => {
     }
     if (!uid) return;
     const timer = window.setTimeout(() => {
+      const sanitizedWorkspaceItems = workspaceItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        route: item.route,
+        favorite: Boolean(item.favorite),
+        ...(item.openerText ? { openerText: item.openerText } : {}),
+        ...(item.modalKey ? { modalKey: item.modalKey } : {}),
+        ...(item.openerSelector ? { openerSelector: item.openerSelector } : {}),
+      }));
       userService.update(uid, {
         uiPreferences: {
-          modalWorkspace: { items: workspaceItems },
+          modalWorkspace: { items: sanitizedWorkspaceItems },
         },
       }).catch(() => {});
     }, 500);
@@ -719,15 +728,8 @@ export const GlobalModalEnhancer: React.FC = () => {
       // Drag from the whole modal header, except interactive controls.
       const header = getModalHeaderElement(panel);
       if (header) {
-        const titleNode = header.querySelector('h1, h2, h3, [data-modal-title]');
-        if (titleNode && titleNode.parentElement === header) {
-          header.insertBefore(dragHandle, titleNode);
-          header.style.justifyContent = 'flex-start';
-          header.style.gap = '16px';
-          dragHandle.style.marginInlineStart = '0';
-        } else {
-          header.appendChild(dragHandle);
-        }
+        // Keep drag behavior on the whole header, but don't inject
+        // an extra visual handle that can duplicate page-level icons.
         header.style.cursor = 'move';
         header.style.userSelect = 'none';
         const startFromHeaderMouse = (evt: MouseEvent) => {
@@ -831,7 +833,7 @@ export const GlobalModalEnhancer: React.FC = () => {
   }, [workspaceItems, currentRoute]);
 
   return (
-    <div className="fixed left-2 top-1/2 -translate-y-1/2 z-[70] hidden md:flex items-center gap-2">
+    <div className="fixed left-2 bottom-2 -translate-y-1/2 z-[70] hidden md:flex items-center gap-2">
       <button
         type="button"
         onClick={() => setMenuOpen((prev) => !prev)}

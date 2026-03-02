@@ -138,21 +138,22 @@ export const ProductionPlans: React.FC = () => {
 
   // ── Dynamic calculations ──
   const calculations = useMemo(() => {
-    if (!formProductId || !formLineId || formQuantity <= 0) return null;
+    if (!formProductId || formQuantity <= 0) return null;
 
-    const line = _rawLines.find((l) => l.id === formLineId);
-    if (!line) return null;
+    const line = formLineId ? _rawLines.find((l) => l.id === formLineId) : null;
     const selectedProduct = products.find((p) => p.id === formProductId);
 
-    const lineProductReports = productReports.filter((r) => r.lineId === formLineId);
+    const lineProductReports = formLineId
+      ? productReports.filter((r) => r.lineId === formLineId)
+      : [];
     const reportsForCalc = lineProductReports.length > 0 ? lineProductReports : productReports;
 
-    const config = lineProductConfigs.find(
-      (c) => c.productId === formProductId && c.lineId === formLineId
-    );
+    const config = formLineId
+      ? lineProductConfigs.find((c) => c.productId === formProductId && c.lineId === formLineId)
+      : undefined;
     const avgTime = calculateAvgAssemblyTime(reportsForCalc);
     const effectiveTime = config?.standardAssemblyTime ?? (avgTime > 0 ? avgTime : 0);
-    const dailyCapacity = effectiveTime > 0
+    const dailyCapacity = line && effectiveTime > 0
       ? calculateDailyCapacity(line.maxWorkers, line.dailyWorkingHours, effectiveTime)
       : 0;
 

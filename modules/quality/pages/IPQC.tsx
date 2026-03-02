@@ -93,7 +93,7 @@ export const IPQC: React.FC = () => {
     [selectedWorkOrder?.workOrderNumber],
   );
 
-  const onSubmit = async () => {
+  const onSubmit = async (printAfterSave = false) => {
     if (!selectedWorkOrder || !inspectorId || !canInspect) return;
     const requiresReason = status === 'failed' || status === 'rework';
     if (requiresReason && !reasonCode) {
@@ -248,6 +248,11 @@ export const IPQC: React.FC = () => {
         if (!isIndexError(error)) throw error;
       }
 
+      if (printAfterSave && canPrint && selectedWorkOrder) {
+        handlePrint();
+        // Give the print flow a brief tick before clearing form values.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
       setStatus('passed');
       setReasonCode('');
       setSerialBarcode('');
@@ -255,7 +260,10 @@ export const IPQC: React.FC = () => {
       setPhotoFiles([]);
       setPhotoPreviews([]);
       setUploadProgress(0);
-      setMessage({ type: 'success', text: 'تم حفظ تقرير IPQC بنجاح.' });
+      setMessage({
+        type: 'success',
+        text: printAfterSave ? 'تم حفظ تقرير IPQC وإرسال أمر الطباعة.' : 'تم حفظ تقرير IPQC بنجاح.',
+      });
     } catch (error) {
       setMessage({
         type: 'error',
@@ -430,8 +438,11 @@ export const IPQC: React.FC = () => {
             */}
           </div>
         </div>
-        <div className="mt-4 flex justify-end">
-          <Button variant="primary" disabled={Boolean(saveDisabledReason)} onClick={onSubmit}>
+        <div className="mt-4 flex justify-end gap-2 flex-wrap">
+          <Button variant="outline" disabled={Boolean(saveDisabledReason) || !canPrint} onClick={() => onSubmit(true)}>
+            حفظ وطباعة
+          </Button>
+          <Button variant="primary" disabled={Boolean(saveDisabledReason)} onClick={() => onSubmit(false)}>
             حفظ تقرير IPQC
           </Button>
         </div>

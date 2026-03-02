@@ -41,6 +41,7 @@ export interface DataTableProps<T> {
 
   selectable?: boolean;
   checkboxSelection?: boolean;
+  selectAllScope?: 'page' | 'filtered';
   bulkActions?: DataTableBulkAction<T>[];
 
   renderActions?: (item: T) => React.ReactNode;

@@ -61,7 +61,11 @@ export const StockBalances: React.FC = () => {
               <span className="material-icons-round text-sm">download</span>
               تحميل قالب الاستيراد
             </Button>
-            <Button variant="outline" onClick={() => navigate('/inventory/movements?action=import-in-by-code')}>
+            <Button
+              variant="outline"
+              data-modal-key="inventory.movements.importInByCode"
+              onClick={() => navigate('/inventory/movements?action=import-in-by-code')}
+            >
               <span className="material-icons-round text-sm">upload_file</span>
               استيراد بالكود والكمية
             </Button>

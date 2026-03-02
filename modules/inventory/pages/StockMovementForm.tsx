@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -10,11 +10,9 @@ import type { RawMaterial, Warehouse, StockItemBalance, TransferRequestLine } fr
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
 import { exportToPDF, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
-import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../../../utils/importInventoryInByCode';
 import { StockTransferPrint, type StockTransferPrintData } from '../components';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
-import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
@@ -69,14 +67,8 @@ export const StockMovementForm: React.FC = () => {
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const [previewData, setPreviewData] = useState<StockTransferPrintData | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importParsing, setImportParsing] = useState(false);
-  const [importSaving, setImportSaving] = useState(false);
-  const [importFileName, setImportFileName] = useState('');
-  const [importResult, setImportResult] = useState<InventoryInImportResult | null>(null);
 
   const transferPrintRef = useRef<HTMLDivElement>(null);
-  const importFileRef = useRef<HTMLInputElement>(null);
   const handleTransferPrint = useManagedPrint({
     contentRef: transferPrintRef,
     printSettings: printTemplate,
@@ -106,6 +98,15 @@ export const StockMovementForm: React.FC = () => {
     void loadData();
   }, []);
 
+  const openImportInByCodeModal = useCallback(() => {
+    openModal(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE, {
+      warehouseId: warehouseId || '',
+      onSaved: () => {
+        void loadData();
+      },
+    });
+  }, [openModal, warehouseId]);
+
   useEffect(() => {
     const action = new URLSearchParams(location.search).get('action');
     if (action === 'create-warehouse' && can('inventory.warehouses.manage')) {
@@ -115,10 +116,9 @@ export const StockMovementForm: React.FC = () => {
       openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE);
     }
     if (action === 'import-in-by-code' && can('inventory.transactions.create')) {
-      openModal(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE);
+      openImportInByCodeModal();
     }
-  }, [location.search, can, openModal]);
-  useRegisterModalOpener(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE, () => setShowImportModal(true));
+  }, [location.search, can, openModal, openImportInByCodeModal]);
 
   const referenceNo = useMemo(() => formatInvReference(nextReferenceSeq), [nextReferenceSeq]);
 
@@ -295,71 +295,6 @@ export const StockMovementForm: React.FC = () => {
       return;
     }
     handleTransferPrint();
-  };
-
-  const handleImportFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setImportFileName(file.name);
-    setImportParsing(true);
-    setImportResult(null);
-    setShowImportModal(true);
-    try {
-      const result = await parseInventoryInByCodeExcel(file, _rawProducts);
-      setImportResult(result);
-    } catch (error: any) {
-      setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0 });
-      setMessage({ type: 'error', text: error?.message || 'تعذر قراءة ملف الاستيراد.' });
-    } finally {
-      setImportParsing(false);
-    }
-  };
-
-  const openImportFilePicker = () => {
-    importFileRef.current?.click();
-  };
-
-  const handleImportSave = async () => {
-    if (!importResult) return;
-    if (!effectiveWarehouseId) {
-      setMessage({ type: 'error', text: 'اختر المخزن أولاً قبل حفظ الاستيراد.' });
-      return;
-    }
-    const validRows = importResult.rows.filter((row) => row.errors.length === 0);
-    if (validRows.length === 0) {
-      setMessage({ type: 'error', text: 'لا توجد صفوف صالحة للحفظ.' });
-      return;
-    }
-    setImportSaving(true);
-    try {
-      const actor = userDisplayName || 'Current User';
-      const baseRef = `IM-${Date.now()}`;
-      for (let i = 0; i < validRows.length; i++) {
-        const row = validRows[i];
-        await stockService.createMovement({
-          warehouseId: effectiveWarehouseId,
-          itemType: 'finished_good',
-          itemId: row.productId,
-          itemName: row.productName,
-          itemCode: row.productCode,
-          movementType: 'IN',
-          quantity: Number(row.quantity || 0),
-          referenceNo: `${baseRef}-${i + 1}`,
-          note: `Imported from file: ${importFileName}`,
-          createdBy: actor,
-        });
-      }
-      await loadData();
-      setShowImportModal(false);
-      setImportResult(null);
-      setImportFileName('');
-      setMessage({ type: 'success', text: `تم استيراد ${validRows.length} صف بنجاح.` });
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error?.message || 'تعذر حفظ بيانات الاستيراد.' });
-    } finally {
-      setImportSaving(false);
-    }
   };
 
   const handleSubmit = async (afterSaveAction: 'none' | 'print' | 'preview' | 'share' = 'none') => {
@@ -591,13 +526,6 @@ export const StockMovementForm: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <input
-        ref={importFileRef}
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        className="hidden"
-        onChange={handleImportFileSelected}
-      />
       <div>
         <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدخال حركة مخزون</h2>
         <p className="text-sm text-slate-500 font-medium">وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة.</p>
@@ -606,6 +534,17 @@ export const StockMovementForm: React.FC = () => {
       <Card>
         <div className="mb-4 sm:mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-base sm:text-lg font-black text-slate-800 dark:text-white">تسجيل الحركة</h3>
+          {can('inventory.transactions.create') && (
+            <Button
+              variant="outline"
+              data-modal-key={MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE}
+              onClick={openImportInByCodeModal}
+              className="w-full sm:w-auto"
+            >
+              <span className="material-icons-round text-sm">upload_file</span>
+              استيراد منتج نهائي بالكود
+            </Button>
+          )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2 md:col-span-2">
@@ -925,107 +864,6 @@ export const StockMovementForm: React.FC = () => {
               <Button variant="primary" onClick={() => void handlePrintFromPreview()} className="w-full sm:w-auto">
                 <span className="material-icons-round text-sm">print</span>
                 طباعة الآن
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showImportModal && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => !importSaving && setShowImportModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold">استيراد منتج نهائي بالكود</h3>
-                <p className="text-xs text-slate-500 mt-1">{importFileName || '—'}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
-                  <span className="material-icons-round text-sm">upload_file</span>
-                  اختيار ملف
-                </Button>
-                <button
-                  onClick={() => !importSaving && setShowImportModal(false)}
-                  className="text-slate-400 hover:text-slate-600"
-                  disabled={importSaving}
-                >
-                  <span className="material-icons-round">close</span>
-                </button>
-              </div>
-            </div>
-            <div className="p-6 overflow-auto flex-1">
-              {importParsing ? (
-                <p className="text-sm text-slate-500">جاري تحليل الملف...</p>
-              ) : !importResult ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-slate-500">اختر ملف Excel للبدء في الاستيراد.</p>
-                  <Button variant="primary" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
-                    <span className="material-icons-round text-sm">upload_file</span>
-                    اختيار ملف الاستيراد
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                      <p className="text-xs text-slate-500">إجمالي الصفوف</p>
-                      <p className="text-lg font-black">{importResult.totalRows}</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-900/10 p-3">
-                      <p className="text-xs text-emerald-700">صفوف صالحة</p>
-                      <p className="text-lg font-black text-emerald-700">{importResult.validCount}</p>
-                    </div>
-                    <div className="rounded-xl border border-rose-200 bg-rose-50/60 dark:bg-rose-900/10 p-3">
-                      <p className="text-xs text-rose-700">صفوف بها أخطاء</p>
-                      <p className="text-lg font-black text-rose-700">{importResult.errorCount}</p>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-                    <table className="w-full text-right border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                          <th className="px-3 py-2 text-xs font-black text-slate-500">#</th>
-                          <th className="px-3 py-2 text-xs font-black text-slate-500">كود المنتج</th>
-                          <th className="px-3 py-2 text-xs font-black text-slate-500">اسم المنتج</th>
-                          <th className="px-3 py-2 text-xs font-black text-slate-500">الكمية</th>
-                          <th className="px-3 py-2 text-xs font-black text-slate-500">الحالة</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {importResult.rows.map((row) => (
-                          <tr key={`${row.rowIndex}-${row.productCode}`}>
-                            <td className="px-3 py-2 text-sm">{row.rowIndex}</td>
-                            <td className="px-3 py-2 text-sm font-bold">{row.productCode || '—'}</td>
-                            <td className="px-3 py-2 text-sm">{row.productName || '—'}</td>
-                            <td className="px-3 py-2 text-sm">{row.quantity || 0}</td>
-                            <td className="px-3 py-2 text-sm">
-                              {row.errors.length === 0 ? (
-                                <span className="text-emerald-600 font-bold">صالح</span>
-                              ) : (
-                                <span className="text-rose-600 font-bold">{row.errors.join(' | ')}</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowImportModal(false)} disabled={importSaving}>
-                إغلاق
-              </Button>
-              <Button variant="primary" onClick={() => void handleImportSave()} disabled={importSaving || importParsing || !importResult}>
-                <span className="material-icons-round text-sm">{importSaving ? 'hourglass_top' : 'save'}</span>
-                حفظ الصفوف الصالحة
               </Button>
             </div>
           </div>

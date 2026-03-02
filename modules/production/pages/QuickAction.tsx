@@ -18,6 +18,7 @@ export const QuickAction: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const employees = useAppStore((s) => s.employees);
+  const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
 
@@ -93,6 +94,17 @@ export const QuickAction: React.FC = () => {
       })),
     [assignableEmployees, lineWorkers],
   );
+
+  const currentEmployee = useMemo(
+    () => _rawEmployees.find((e) => e.userId === uid) ?? null,
+    [_rawEmployees, uid],
+  );
+  const isSupervisorReporter = currentEmployee?.level === 2;
+
+  useEffect(() => {
+    if (!isSupervisorReporter || !currentEmployee?.id) return;
+    setEmployeeId((prev) => (prev === currentEmployee.id ? prev : currentEmployee.id));
+  }, [isSupervisorReporter, currentEmployee?.id]);
 
   const handleQuickAddWorker = useCallback(async () => {
     if (!lineId || !workerPickerId) return;
@@ -182,7 +194,7 @@ export const QuickAction: React.FC = () => {
   };
 
   const handleReset = () => {
-    setEmployeeId('');
+    setEmployeeId(isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : '');
     setLineId('');
     setProductId('');
     setQuantity('');
@@ -268,8 +280,8 @@ export const QuickAction: React.FC = () => {
     if (!wo) return;
     setLineId(wo.lineId);
     setProductId(wo.productId);
-    setEmployeeId(wo.supervisorId);
-  }, [activeWOs]);
+    setEmployeeId(isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
+  }, [activeWOs, isSupervisorReporter, currentEmployee?.id]);
 
   return (
     <div className="space-y-6">
@@ -320,12 +332,21 @@ export const QuickAction: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">المشرف *</label>
-              <SearchableSelect
-                placeholder="اختر المشرف"
-                options={activeEmployees.map((s) => ({ value: s.id, label: s.name }))}
-                value={employeeId}
-                onChange={setEmployeeId}
-              />
+              {isSupervisorReporter && currentEmployee ? (
+                <input
+                  type="text"
+                  readOnly
+                  value={currentEmployee.name}
+                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300"
+                />
+              ) : (
+                <SearchableSelect
+                  placeholder="اختر المشرف"
+                  options={activeEmployees.map((s) => ({ value: s.id, label: s.name }))}
+                  value={employeeId}
+                  onChange={setEmployeeId}
+                />
+              )}
             </div>
             <div>
               <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">خط الإنتاج *</label>

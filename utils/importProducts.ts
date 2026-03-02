@@ -19,7 +19,6 @@ export interface ParsedProductRow {
     name: boolean;
     code: boolean;
     model: boolean;
-    openingBalance: boolean;
     chineseUnitCost: boolean;
     innerBoxCost: boolean;
     outerCartonCost: boolean;
@@ -29,7 +28,6 @@ export interface ParsedProductRow {
   name: string;
   code: string;
   model: string;
-  openingBalance: number;
   chineseUnitCost: number;
   innerBoxCost: number;
   outerCartonCost: number;
@@ -76,10 +74,6 @@ const HEADER_MAP: Record<string, string> = {
   'موديل': 'model',
   'الفئة / الموديل': 'model',
   'النوع': 'model',
-  'الرصيد الافتتاحي': 'openingBalance',
-  'رصيد افتتاحي': 'openingBalance',
-  'الرصيد': 'openingBalance',
-  'رصيد': 'openingBalance',
   'تكلفة الوحدة الصينية': 'chineseUnitCost',
   'الوحدة الصينية': 'chineseUnitCost',
   'تكلفة صينية': 'chineseUnitCost',
@@ -139,7 +133,6 @@ function describeChanges(existing: FirestoreProduct, next: Omit<FirestoreProduct
   if (existing.code !== next.code) changes.push(`الكود: ${existing.code} ← ${next.code}`);
   if (existing.name !== next.name) changes.push(`الاسم: ${existing.name} ← ${next.name}`);
   if ((existing.model || '') !== next.model) changes.push(`الفئة`);
-  if ((existing.openingBalance || 0) !== next.openingBalance) changes.push(`الرصيد: ${existing.openingBalance || 0} ← ${next.openingBalance}`);
   if ((existing.chineseUnitCost || 0) !== next.chineseUnitCost) changes.push(`تكلفة صينية`);
   if ((existing.innerBoxCost || 0) !== next.innerBoxCost) changes.push(`علبة داخلية`);
   if ((existing.outerCartonCost || 0) !== next.outerCartonCost) changes.push(`كرتونة خارجية`);
@@ -199,7 +192,6 @@ export function parseProductsExcel(
           name: hasField('name'),
           code: hasField('code') || hasField('newCode'),
           model: hasField('model'),
-          openingBalance: hasField('openingBalance'),
           chineseUnitCost: hasField('chineseUnitCost'),
           innerBoxCost: hasField('innerBoxCost'),
           outerCartonCost: hasField('outerCartonCost'),
@@ -243,7 +235,6 @@ export function parseProductsExcel(
           if (targetCode) seenTargetCodes.add(targetCode.toLowerCase());
 
           const model = String(getValue('model') ?? '').trim();
-          const openingBalance = Number(getValue('openingBalance')) || 0;
           const chineseUnitCost = Number(getValue('chineseUnitCost')) || 0;
           const innerBoxCost = Number(getValue('innerBoxCost')) || 0;
           const outerCartonCost = Number(getValue('outerCartonCost')) || 0;
@@ -274,7 +265,6 @@ export function parseProductsExcel(
             name,
             code: targetCode,
             model,
-            openingBalance,
             chineseUnitCost,
             innerBoxCost,
             outerCartonCost,
@@ -381,7 +371,7 @@ export function toProductData(row: ParsedProductRow): Omit<FirestoreProduct, 'id
     name: row.providedFields.name ? row.name : base.name,
     code: row.providedFields.code ? row.code : base.code,
     model: row.providedFields.model ? row.model : base.model,
-    openingBalance: row.providedFields.openingBalance ? row.openingBalance : base.openingBalance,
+    openingBalance: 0,
     chineseUnitCost: row.providedFields.chineseUnitCost ? row.chineseUnitCost : base.chineseUnitCost,
     innerBoxCost: row.providedFields.innerBoxCost ? row.innerBoxCost : base.innerBoxCost,
     outerCartonCost: row.providedFields.outerCartonCost ? row.outerCartonCost : base.outerCartonCost,
@@ -409,7 +399,7 @@ export function toProductDataWithExisting(
     name: row.providedFields.name ? row.name : base.name,
     code: row.providedFields.code ? row.code : base.code,
     model: row.providedFields.model ? row.model : base.model,
-    openingBalance: row.providedFields.openingBalance ? row.openingBalance : base.openingBalance,
+    openingBalance: base.openingBalance,
     chineseUnitCost: row.providedFields.chineseUnitCost ? row.chineseUnitCost : base.chineseUnitCost,
     innerBoxCost: row.providedFields.innerBoxCost ? row.innerBoxCost : base.innerBoxCost,
     outerCartonCost: row.providedFields.outerCartonCost ? row.outerCartonCost : base.outerCartonCost,

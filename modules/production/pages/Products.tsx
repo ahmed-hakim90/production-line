@@ -475,6 +475,7 @@ export const Products: React.FC = () => {
             <option value="">كل الفئات</option>
             <option value="منزلي">منزلي</option>
             <option value="سريا">سريا</option>
+            <option value="عناية">عناية</option>
           </select>
           <select
             className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm font-bold focus:ring-primary outline-none min-w-[140px]"
@@ -729,31 +730,20 @@ export const Products: React.FC = () => {
                     <option value="">اختر الفئة</option>
                     <option value="منزلي">منزلي</option>
                     <option value="سريا">سريا</option>
+                    <option value="عناية">عناية</option>
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الرصيد الافتتاحي</label>
-                  <input
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    type="number"
-                    min={0}
-                    value={form.openingBalance}
-                    onChange={(e) => setForm({ ...form, openingBalance: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">سعر البيع (ج.م)</label>
-                  <input
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={form.sellingPrice ?? 0}
-                    onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
-                  />
-                </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">سعر البيع (ج.م)</label>
+                <input
+                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={form.sellingPrice ?? 0}
+                  onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
+                />
               </div>
 
               {/* ── Cost Breakdown Fields ── */}
@@ -850,7 +840,10 @@ export const Products: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
-                <h3 className="text-lg font-bold">رفع منتجات من Excel</h3>
+                <div className="flex items-center gap-4">
+                  <span className="material-icons-round text-slate-400 cursor-move select-none" aria-hidden="true">drag_indicator</span>
+                  <h3 className="text-lg font-bold">رفع منتجات من Excel</h3>
+                </div>
                 <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
                   <span className="material-icons-round text-sm">download</span>
                   تحميل نموذج
@@ -915,7 +908,6 @@ export const Products: React.FC = () => {
                           <th className="px-3 py-3 text-xs font-black text-slate-500">اسم المنتج</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">الكود</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">الفئة</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">الرصيد</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">الوحدة الصينية</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">العلبة الداخلية</th>
                           <th className="px-3 py-3 text-xs font-black text-slate-500">الكرتونة</th>
@@ -947,7 +939,6 @@ export const Products: React.FC = () => {
                             <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row.name || '—'}</td>
                             <td className="px-3 py-2.5 font-mono text-slate-500">{row.code || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-500">{row.model || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500">{row.openingBalance}</td>
                             <td className="px-3 py-2.5 text-slate-500 font-mono">{row.chineseUnitCost || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-500 font-mono">{row.innerBoxCost || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-500 font-mono">{row.outerCartonCost || '—'}</td>

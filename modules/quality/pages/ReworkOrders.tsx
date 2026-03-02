@@ -16,6 +16,12 @@ const STATUS_LABELS: Record<QualityReworkOrder['status'], string> = {
   done: 'مكتمل',
   scrap: 'سكراب',
 };
+const STATUS_BADGE_CLASS: Record<QualityReworkOrder['status'], string> = {
+  open: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800',
+  in_progress: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800',
+  done: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
+  scrap: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800',
+};
 
 export const ReworkOrders: React.FC = () => {
   const { can } = usePermission();
@@ -110,15 +116,21 @@ export const ReworkOrders: React.FC = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500">
-                <th className="text-right py-2 px-2">Work Order</th>
-                <th className="text-right py-2 px-2">Defect</th>
-                <th className="text-right py-2 px-2">Serial</th>
-                <th className="text-right py-2 px-2">Status</th>
-                <th className="text-right py-2 px-2">Update</th>
+                <th className="text-right py-2 px-2">أمر الشغل</th>
+                <th className="text-right py-2 px-2">العيب</th>
+                <th className="text-right py-2 px-2">السيريال</th>
+                <th className="text-right py-2 px-2">الحالة</th>
+                <th className="text-right py-2 px-2">تحديث</th>
               </tr>
             </thead>
             <tbody>
-              {displayRows.map((row) => (
+              {displayRows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-6 px-2 text-center text-slate-500">
+                    لا توجد أوامر إعادة تشغيل حالياً.
+                  </td>
+                </tr>
+              ) : displayRows.map((row) => (
                 <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800">
                   <td className="py-2 px-2 font-mono">
                     <div>{row.workOrderNumber}</div>
@@ -126,7 +138,11 @@ export const ReworkOrders: React.FC = () => {
                   </td>
                   <td className="py-2 px-2 font-mono">{row.defectId}</td>
                   <td className="py-2 px-2">{row.serialBarcode ?? '—'}</td>
-                  <td className="py-2 px-2 font-bold">{row.statusLabel}</td>
+                  <td className="py-2 px-2">
+                    <span className={`inline-flex px-2 py-1 rounded-full border text-xs font-bold ${STATUS_BADGE_CLASS[row.status]}`}>
+                      {row.statusLabel}
+                    </span>
+                  </td>
                   <td className="py-2 px-2">
                     <div className="flex flex-wrap gap-1">
                       {STATUS_OPTIONS.map((status) => (
@@ -166,7 +182,7 @@ export const ReworkOrders: React.FC = () => {
                             row.status === status ? 'bg-primary/10 border-primary/30 text-primary' : 'border-slate-200 dark:border-slate-700'
                           }`}
                         >
-                          {status}
+                          {STATUS_LABELS[status]}
                         </button>
                       ))}
                     </div>

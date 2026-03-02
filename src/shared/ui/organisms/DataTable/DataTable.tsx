@@ -21,6 +21,7 @@ export function DataTable<T>({
   getId,
   selectable = true,
   checkboxSelection = true,
+  selectAllScope = 'page',
   bulkActions = [],
   renderActions,
   actionsHeader = 'إجراءات',
@@ -135,15 +136,16 @@ export function DataTable<T>({
     return sortedRows.slice(start, start + effectivePageSize);
   }, [sortedRows, currentPage, effectivePageSize]);
 
-  const visibleRowIds = useMemo(() => new Set(pageRows.map(getId)), [pageRows, getId]);
+  const filteredRowIds = useMemo(() => new Set(sortedRows.map(getId)), [sortedRows, getId]);
   const activeSelectedIds = useMemo(
-    () => new Set([...selectedIds].filter((id) => visibleRowIds.has(id))),
-    [selectedIds, visibleRowIds],
+    () => new Set([...selectedIds].filter((id) => filteredRowIds.has(id))),
+    [selectedIds, filteredRowIds],
   );
-  const allSelected = pageRows.length > 0 && activeSelectedIds.size === pageRows.length;
+  const selectableRows = selectAllScope === 'filtered' ? sortedRows : pageRows;
+  const allSelected = selectableRows.length > 0 && selectableRows.every((row) => activeSelectedIds.has(getId(row)));
   const selectedItems = useMemo(
-    () => pageRows.filter((row) => activeSelectedIds.has(getId(row))),
-    [pageRows, activeSelectedIds, getId],
+    () => sortedRows.filter((row) => activeSelectedIds.has(getId(row))),
+    [sortedRows, activeSelectedIds, getId],
   );
 
   const canSelectRows = selectable && checkboxSelection;
@@ -174,14 +176,14 @@ export function DataTable<T>({
     setSelectedIds((previous) => {
       if (allSelected) {
         const next = new Set(previous);
-        pageRows.forEach((row) => next.delete(getId(row)));
+        selectableRows.forEach((row) => next.delete(getId(row)));
         return next;
       }
       const next = new Set(previous);
-      pageRows.forEach((row) => next.add(getId(row)));
+      selectableRows.forEach((row) => next.add(getId(row)));
       return next;
     });
-  }, [allSelected, pageRows, getId]);
+  }, [allSelected, selectableRows, getId]);
 
   const columnsVisibilityControl = enableColumnVisibility ? (
     <div className="relative">

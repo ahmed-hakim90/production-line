@@ -12,6 +12,7 @@ import {
   limit,
   serverTimestamp,
   increment,
+  deleteField,
   onSnapshot,
   Unsubscribe,
 } from 'firebase/firestore';
@@ -157,6 +158,22 @@ export const workOrderService = {
       });
     } catch (error) {
       console.error('workOrderService.incrementProduced error:', error);
+      throw error;
+    }
+  },
+
+  async clearQualityData(id: string): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await updateDoc(doc(db, COLLECTION, id), {
+        qualitySummary: deleteField(),
+        qualityStatus: deleteField(),
+        qualityReportCode: deleteField(),
+        qualityApprovedBy: deleteField(),
+        qualityApprovedAt: deleteField(),
+      });
+    } catch (error) {
+      console.error('workOrderService.clearQualityData error:', error);
       throw error;
     }
   },

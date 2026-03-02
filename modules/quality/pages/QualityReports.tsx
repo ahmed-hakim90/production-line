@@ -6,12 +6,15 @@ import { usePermission } from '@/utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
 import { qualityInspectionService } from '../services/qualityInspectionService';
 import { qualityPrintService } from '../services/qualityPrintService';
+import { workOrderService } from '@/modules/production/services/workOrderService';
 import type { QualityDefect } from '@/types';
 import { QualityDefectsPrint, QualityReportPrint } from '../components/QualityReportPrint';
 
 export const QualityReports: React.FC = () => {
   const { can } = usePermission();
   const canPrint = can('quality.print');
+  const canDeleteQualityReports =
+    can('quality.finalInspection.inspect') || can('quality.ipqc.inspect') || can('quality.rework.manage');
   const [searchParams] = useSearchParams();
   const workOrders = useAppStore((s) => s.workOrders);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -30,6 +33,7 @@ export const QualityReports: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [defects, setDefects] = useState<QualityDefect[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deletingWorkOrderId, setDeletingWorkOrderId] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const defectsPrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
@@ -120,6 +124,43 @@ export const QualityReports: React.FC = () => {
       })),
     [defects],
   );
+
+  const handleDeleteQualityReport = async (workOrderId: string, workOrderNumber: string) => {
+    if (!canDeleteQualityReports || !workOrderId) return;
+    const confirmed = window.confirm(`هل تريد حذف تقرير الجودة لأمر الشغل #${workOrderNumber}؟`);
+    if (!confirmed) return;
+
+    setDeletingWorkOrderId(workOrderId);
+    setMessage(null);
+    try {
+      const deleted = await qualityInspectionService.deleteWorkOrderQualityReport(workOrderId);
+      await workOrderService.clearQualityData(workOrderId);
+      if (selectedWorkOrderId === workOrderId) {
+        setSelectedWorkOrderId('');
+        setSummary({
+          inspectedUnits: 0,
+          passedUnits: 0,
+          failedUnits: 0,
+          reworkUnits: 0,
+          defectRate: 0,
+          firstPassYield: 0,
+        });
+        setDefects([]);
+      }
+      const totalDeleted = deleted.inspections + deleted.defects + deleted.rework + deleted.capa;
+      setMessage({
+        type: 'success',
+        text: `تم حذف تقرير الجودة بنجاح (#${workOrderNumber}) — عناصر محذوفة: ${totalDeleted}.`,
+      });
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'تعذر حذف تقرير الجودة.',
+      });
+    } finally {
+      setDeletingWorkOrderId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -246,14 +287,26 @@ export const QualityReports: React.FC = () => {
                         <td className="py-2 px-2">{wo.qualitySummary?.inspectedUnits ?? 0}</td>
                         <td className="py-2 px-2">{wo.qualitySummary?.failedUnits ?? 0}</td>
                         <td className="py-2 px-2">
-                          <Button
-                            variant="outline"
-                            className="!px-2 !py-1"
-                            onClick={() => setSelectedWorkOrderId(wo.id ?? '')}
-                            disabled={!wo.id}
-                          >
-                            فتح
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              className="!px-2 !py-1"
+                              onClick={() => setSelectedWorkOrderId(wo.id ?? '')}
+                              disabled={!wo.id}
+                            >
+                              فتح
+                            </Button>
+                            {canDeleteQualityReports && (
+                              <Button
+                                variant="outline"
+                                className="!px-2 !py-1 !border-rose-200 !text-rose-600 hover:!bg-rose-50"
+                                onClick={() => void handleDeleteQualityReport(wo.id ?? '', wo.workOrderNumber)}
+                                disabled={!wo.id || deletingWorkOrderId === wo.id}
+                              >
+                                {deletingWorkOrderId === wo.id ? 'جاري الحذف...' : 'حذف التقرير'}
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

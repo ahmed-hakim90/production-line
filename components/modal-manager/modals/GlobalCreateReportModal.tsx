@@ -19,6 +19,11 @@ type ReportFormState = {
   notes: string;
 };
 
+type FeedbackState = {
+  text: string;
+  type: 'success' | 'error';
+};
+
 const emptyForm = (): ReportFormState => ({
   employeeId: '',
   productId: '',
@@ -44,7 +49,8 @@ export const GlobalCreateReportModal: React.FC = () => {
   const workOrders = useAppStore((s) => s.workOrders);
   const [form, setForm] = useState<ReportFormState>(emptyForm());
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [showErrorOverlay, setShowErrorOverlay] = useState(false);
 
   const currentEmployee = useMemo(
     () => rawEmployees.find((e) => e.userId === uid) ?? null,
@@ -75,27 +81,46 @@ export const GlobalCreateReportModal: React.FC = () => {
   if (!can('reports.create') && !can('reports.edit')) return null;
 
   const closeModal = () => {
-    setMessage(null);
+    setFeedback(null);
+    setShowErrorOverlay(false);
     close();
   };
 
+  const openErrorOverlay = (text: string) => {
+    setFeedback({ text, type: 'error' });
+    setShowErrorOverlay(true);
+  };
+
+  const closeErrorOverlay = () => {
+    setShowErrorOverlay(false);
+  };
+
+  const clearFormAndCloseError = () => {
+    setForm(emptyForm());
+    setShowErrorOverlay(false);
+  };
+
   const handleSave = async () => {
+    if (saving) return;
     if (!form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workersCount || !form.workHours) {
-      setMessage('أكمل الحقول المطلوبة أولاً');
+      openErrorOverlay('أكمل الحقول المطلوبة أولاً');
       return;
     }
     setSaving(true);
-    setMessage(null);
+    setFeedback(null);
+    setShowErrorOverlay(false);
     try {
       const created = await createReport(form);
       if (!created) {
-        setMessage('تعذر حفظ التقرير');
+        const storeError = useAppStore.getState().error;
+        openErrorOverlay(storeError || 'تعذر حفظ التقرير');
         return;
       }
-      setMessage('تم حفظ التقرير بنجاح');
-      setForm((prev) => ({ ...emptyForm(), date: prev.date }));
-    } catch {
-      setMessage('تعذر حفظ التقرير');
+      setFeedback({ text: 'تم حفظ التقرير بنجاح', type: 'success' });
+      setForm(emptyForm());
+    } catch (error) {
+      const errorMessage = error instanceof Error && error.message ? error.message : 'تعذر حفظ التقرير';
+      openErrorOverlay(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -107,9 +132,28 @@ export const GlobalCreateReportModal: React.FC = () => {
       onClick={closeModal}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+        className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
+        {showErrorOverlay && feedback?.type === 'error' && (
+          <div className="absolute inset-0 z-30 bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 rounded-2xl shadow-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="material-icons-round text-rose-500">error</span>
+                <h4 className="text-base font-extrabold text-rose-700 dark:text-rose-300">تعذر الحفظ</h4>
+              </div>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{feedback.text}</p>
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" onClick={closeErrorOverlay}>إغلاق التنبيه</Button>
+                <Button variant="danger" onClick={clearFormAndCloseError}>
+                  <span className="material-icons-round text-sm">delete_sweep</span>
+                  مسح البيانات
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold">إنشاء تقرير إنتاج</h3>
           <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -118,10 +162,26 @@ export const GlobalCreateReportModal: React.FC = () => {
         </div>
 
         <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
-          {message && (
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center gap-2">
-              <span className="material-icons-round text-emerald-500 text-lg">info</span>
-              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex-1">{message}</p>
+          {feedback?.type === 'success' && (
+            <div
+              className={`rounded-xl p-3 flex items-center gap-2 border ${
+                'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+              }`}
+            >
+              <span
+                className={`material-icons-round text-lg ${
+                  'text-emerald-500'
+                }`}
+              >
+                info
+              </span>
+              <p
+                className={`text-sm font-bold flex-1 ${
+                  'text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
+                {feedback.text}
+              </p>
             </div>
           )}
 

@@ -72,7 +72,6 @@ export const Reports: React.FC = () => {
   const deleteReport = useAppStore((s) => s.deleteReport);
   const fetchReports = useAppStore((s) => s.fetchReports);
   const reportsLoading = useAppStore((s) => s.reportsLoading);
-  const error = useAppStore((s) => s.error);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const addJob = useJobsStore((s) => s.addJob);
   const startJob = useJobsStore((s) => s.startJob);
@@ -155,6 +154,7 @@ export const Reports: React.FC = () => {
 
   // Line & supervisor filters
   const [filterLineId, setFilterLineId] = useState('');
+  const [filterProductCategory, setFilterProductCategory] = useState('');
   const [filterEmployeeId, setFilterEmployeeId] = useState('');
   const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
   const reportCodesBackfilledRef = useRef(false);
@@ -216,11 +216,30 @@ export const Reports: React.FC = () => {
   }, [can, fetchReports, startDate, endDate, viewMode]);
 
   const allReports = viewMode === 'today' ? todayReports : productionReports;
+  const productCategoryOptions = useMemo(() => {
+    const unique = new Set<string>();
+    _rawProducts.forEach((p: any) => {
+      const category = String(p?.model ?? '').trim();
+      if (category) unique.add(category);
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
+  }, [_rawProducts]);
+  const productCategoryByProductId = useMemo(() => {
+    const map = new Map<string, string>();
+    _rawProducts.forEach((p: any) => {
+      if (!p?.id) return;
+      map.set(String(p.id), String(p.model ?? '').trim());
+    });
+    return map;
+  }, [_rawProducts]);
   const displayedReports = useMemo(() => {
     let list = myEmployeeId
       ? allReports.filter((r) => r.employeeId === myEmployeeId)
       : allReports;
     if (filterLineId) list = list.filter((r) => r.lineId === filterLineId);
+    if (filterProductCategory) {
+      list = list.filter((r) => (productCategoryByProductId.get(r.productId) || '') === filterProductCategory);
+    }
     if (filterEmployeeId) list = list.filter((r) => r.employeeId === filterEmployeeId);
 
     const getRegisteredAtMs = (report: ProductionReport): number => {
@@ -240,7 +259,7 @@ export const Reports: React.FC = () => {
       if (byCreatedAt !== 0) return byCreatedAt;
       return (b.date || '').localeCompare(a.date || '');
     });
-  }, [allReports, myEmployeeId, filterLineId, filterEmployeeId]);
+  }, [allReports, myEmployeeId, filterLineId, filterProductCategory, filterEmployeeId, productCategoryByProductId]);
 
   const linkedReportId = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -512,7 +531,7 @@ export const Reports: React.FC = () => {
     setViewMode('range');
   };
 
-  const activeFilterCount = (filterLineId ? 1 : 0) + (filterEmployeeId ? 1 : 0);
+  const activeFilterCount = (filterLineId ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
   const tableToolbarFilters = (
     <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 lg:w-auto">
       <Button
@@ -596,6 +615,19 @@ export const Reports: React.FC = () => {
           ))}
         </select>
       </div>
+      <div className="flex items-center gap-2">
+        <label className="text-xs font-bold text-slate-500 whitespace-nowrap">فئة المنتج:</label>
+        <select
+          className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 min-w-[160px]"
+          value={filterProductCategory}
+          onChange={(e) => setFilterProductCategory(e.target.value)}
+        >
+          <option value="">الكل</option>
+          {productCategoryOptions.map((category) => (
+            <option key={category} value={category}>{category}</option>
+          ))}
+        </select>
+      </div>
       {!myEmployeeId && (
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-slate-500 whitespace-nowrap">المشرف:</label>
@@ -613,7 +645,7 @@ export const Reports: React.FC = () => {
       )}
       {activeFilterCount > 0 && (
         <button
-          onClick={() => { setFilterLineId(''); setFilterEmployeeId(''); }}
+          onClick={() => { setFilterLineId(''); setFilterProductCategory(''); setFilterEmployeeId(''); }}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-all"
         >
           <span className="material-icons-round text-sm">close</span>
@@ -643,7 +675,7 @@ export const Reports: React.FC = () => {
 
   const hasDuplicateLineSupervisorReport = useCallback(
     async (
-      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId'>,
+      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId'>,
       excludeReportId?: string | null,
     ) => {
       const sameDayReports = await reportService.getByDateRange(payload.date, payload.date);
@@ -651,6 +683,7 @@ export const Reports: React.FC = () => {
         (r) =>
           r.lineId === payload.lineId &&
           r.employeeId === payload.employeeId &&
+          r.productId === payload.productId &&
           r.id !== excludeReportId,
       );
     },
@@ -660,7 +693,7 @@ export const Reports: React.FC = () => {
   const handleSave = async (printAfterSave = false) => {
     if (!form.lineId || !form.productId || !form.employeeId) return;
     const duplicated = await hasDuplicateLineSupervisorReport(
-      { date: form.date, lineId: form.lineId, employeeId: form.employeeId },
+      { date: form.date, lineId: form.lineId, employeeId: form.employeeId, productId: form.productId },
       editId,
     );
     if (duplicated) {
@@ -1312,14 +1345,6 @@ export const Reports: React.FC = () => {
         </div>
       </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 flex items-center gap-3">
-          <span className="material-icons-round text-rose-500">warning</span>
-          <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
-        </div>
-      )}
-
       {/* WhatsApp Share Feedback Toast */}
       {shareToast && (
         <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
@@ -1335,6 +1360,7 @@ export const Reports: React.FC = () => {
       <SelectableTable<ProductionReport>
         data={displayedReports}
         columns={reportColumns}
+        selectAllScope="filtered"
         enableColumnVisibility
         toolbarContent={tableToolbarFilters}
         highlightRowId={highlightReportId}
