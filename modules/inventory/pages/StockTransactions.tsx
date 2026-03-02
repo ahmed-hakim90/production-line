@@ -11,6 +11,7 @@ import { StockTransferPrint, type StockTransferPrintData } from '../components/S
 import { useManagedPrint } from '../../../utils/printManager';
 import { useAppStore } from '../../../store/useAppStore';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
+import { shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
 
 const movementLabel: Record<string, string> = {
   IN: 'وارد',
@@ -47,6 +48,7 @@ export const StockTransactions: React.FC = () => {
   const [editPending, setEditPending] = useState<InventoryTransferRequest | null>(null);
   const [editLines, setEditLines] = useState<TransferRequestLine[]>([]);
   const [editNote, setEditNote] = useState('');
+  const [shareToast, setShareToast] = useState<string | null>(null);
   const transferPrintRef = useRef<HTMLDivElement>(null);
   const handleTransferPrint = useManagedPrint({
     contentRef: transferPrintRef,
@@ -257,6 +259,67 @@ export const StockTransactions: React.FC = () => {
     }
   };
 
+  const showShareFeedback = (result: ShareResult) => {
+    if (result.method === 'native_share' || result.method === 'cancelled') return;
+    const msg = result.copied
+      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
+      : 'تم تحميل صورة التحويلة — أرفقها في محادثة واتساب';
+    setShareToast(msg);
+    setTimeout(() => setShareToast(null), 6000);
+  };
+
+  const shareTransferFromRow = async (tx: StockTransaction) => {
+    if (tx.movementType !== 'TRANSFER') return;
+    const transferNo = tx.referenceNo?.trim();
+    if (!transferNo) {
+      window.alert('لا يمكن مشاركة التحويلة بدون رقم مرجع.');
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const sameReference = await stockService.getTransactionsByReferenceNo(transferNo);
+      const transferRows = sameReference.filter((row) => row.movementType === 'TRANSFER');
+      const outRows = transferRows.filter((row) => row.transferDirection === 'OUT');
+      const rowsForPrint = outRows.length > 0 ? outRows : transferRows;
+      if (rowsForPrint.length === 0) {
+        window.alert('لا توجد بيانات كافية لمشاركة هذه التحويلة.');
+        return;
+      }
+
+      const first = rowsForPrint[0];
+      const payload: StockTransferPrintData = {
+        transferNo,
+        createdAt: first.createdAt || tx.createdAt,
+        fromWarehouseName: warehouseMap.get(first.warehouseId) ?? first.warehouseId,
+        toWarehouseName: (warehouseMap.get(first.toWarehouseId || '') ?? first.toWarehouseId) || '—',
+        createdBy: first.createdBy || tx.createdBy,
+        items: rowsForPrint.map((row) => {
+          const display = getTransferDisplay(withResolvedUnitsPerCarton(row), transferDisplayUnit);
+          return {
+            itemName: row.itemName,
+            itemCode: row.itemCode,
+            unitLabel: display.unitLabel,
+            quantity: display.quantity,
+            quantityPieces: Math.abs(Number(row.quantity || 0)),
+            unitsPerCarton: Number(row.unitsPerCarton || 0) || undefined,
+          };
+        }),
+      };
+      setPrintData(payload);
+      await new Promise((r) => setTimeout(r, 250));
+      if (transferPrintRef.current) {
+        const result = await shareToWhatsApp(transferPrintRef.current, `تحويلة مخزن ${transferNo}`);
+        showShareFeedback(result);
+      }
+      setTimeout(() => setPrintData(null), 1000);
+    } catch (error: any) {
+      window.alert(error?.message || 'تعذر مشاركة التحويلة.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const buildPendingPrintData = (row: InventoryTransferRequest): StockTransferPrintData => ({
     transferNo: row.referenceNo,
     createdAt: row.createdAt,
@@ -280,6 +343,23 @@ export const StockTransactions: React.FC = () => {
     await new Promise((r) => setTimeout(r, 250));
     handleTransferPrint();
     setTimeout(() => setPrintData(null), 1000);
+  };
+
+  const sharePendingTransfer = async (row: InventoryTransferRequest) => {
+    setProcessing(true);
+    try {
+      setPrintData(buildPendingPrintData(row));
+      await new Promise((r) => setTimeout(r, 250));
+      if (transferPrintRef.current) {
+        const result = await shareToWhatsApp(transferPrintRef.current, `تحويلة مخزن ${row.referenceNo}`);
+        showShareFeedback(result);
+      }
+      setTimeout(() => setPrintData(null), 1000);
+    } catch (error: any) {
+      window.alert(error?.message || 'تعذر مشاركة التحويلة.');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const openPendingForEdit = (row: InventoryTransferRequest) => {
@@ -512,6 +592,16 @@ export const StockTransactions: React.FC = () => {
                               طباعة
                             </Button>
                           )}
+                          {can('inventory.transactions.print') && tx.movementType === 'TRANSFER' && (
+                            <Button
+                              variant="outline"
+                              onClick={() => void shareTransferFromRow(tx)}
+                              disabled={processing}
+                            >
+                              <span className="material-icons-round text-sm">share</span>
+                              واتساب
+                            </Button>
+                          )}
                           {can('inventory.transactions.edit') && (
                             <Button
                               variant="outline"
@@ -591,6 +681,16 @@ export const StockTransactions: React.FC = () => {
                               طباعة
                             </Button>
                           )}
+                          {can('inventory.transactions.print') && group.lines[0] && (
+                            <Button
+                              variant="outline"
+                              onClick={() => void shareTransferFromRow(group.lines[0])}
+                              disabled={processing}
+                            >
+                              <span className="material-icons-round text-sm">share</span>
+                              واتساب
+                            </Button>
+                          )}
                           {can('inventory.transactions.export') && (
                             <Button
                               variant="outline"
@@ -660,6 +760,12 @@ export const StockTransactions: React.FC = () => {
                           <span className="material-icons-round text-sm">print</span>
                           طباعة
                         </Button>
+                        {can('inventory.transactions.print') && (
+                          <Button variant="outline" onClick={() => void sharePendingTransfer(row)} disabled={processing}>
+                            <span className="material-icons-round text-sm">share</span>
+                            واتساب
+                          </Button>
+                        )}
                         {can('inventory.transactions.edit') && (
                           <Button variant="outline" onClick={() => openPendingForEdit(row)} disabled={processing}>
                             <span className="material-icons-round text-sm">edit</span>
@@ -675,9 +781,18 @@ export const StockTransactions: React.FC = () => {
           </table>
         </div>
       </Card>
-      <div className="hidden">
+      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
+      {shareToast && (
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+          <span className="material-icons-round text-emerald-500">image</span>
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex-1">{shareToast}</p>
+          <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
+            <span className="material-icons-round text-sm">close</span>
+          </button>
+        </div>
+      )}
       {selectedPending && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedPending(null)}>
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>

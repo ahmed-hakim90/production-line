@@ -135,7 +135,7 @@ export const shareToWhatsApp = async (
 
   // ── Step 1: Try Web Share API with file (mobile browsers) ──
   // This opens the OS share picker → user selects WhatsApp → image is sent
-  if (navigator.share && navigator.canShare) {
+  if (isMobile() && navigator.share && navigator.canShare) {
     try {
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({ title, files: [file] });
