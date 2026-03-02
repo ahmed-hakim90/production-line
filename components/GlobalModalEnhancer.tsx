@@ -100,6 +100,13 @@ const getModalTitle = (panel: HTMLElement): string => {
 };
 
 const normalizeText = (value: string) => value.replace(/\s+/g, ' ').trim().toLowerCase();
+const normalizeArabicLoose = (value: string) =>
+  normalizeText(value)
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[ؤئ]/g, 'ء')
+    .replace(/[ًٌٍَُِّْـ]/g, '');
 const splitWords = (value: string) =>
   normalizeText(value).split(' ').filter((word) => word.length > 1);
 
