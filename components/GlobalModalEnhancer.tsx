@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { userService } from '../services/userService';
+import { useGlobalModalManager } from './modal-manager/GlobalModalManager';
+import { inferModalKeyFromLegacyContext } from './modal-manager/modalKeys';
 
 type MinimizedModalEntry = {
   id: string;
@@ -15,6 +17,8 @@ type WorkspaceItem = {
   route: string;
   favorite: boolean;
   openerText?: string;
+  modalKey?: string;
+  openerSelector?: string;
 };
 
 const MODAL_ID_ATTR = 'data-global-modal-id';
@@ -99,6 +103,52 @@ const normalizeText = (value: string) => value.replace(/\s+/g, ' ').trim().toLow
 const splitWords = (value: string) =>
   normalizeText(value).split(' ').filter((word) => word.length > 1);
 
+const inferModalKey = (title: string, route: string, openerText?: string): string | undefined =>
+  inferModalKeyFromLegacyContext(title, route, openerText);
+
+const normalizeRouteStatic = (route: string) => {
+  if (!route) return '/';
+  return route.startsWith('/') ? route : `/${route}`;
+};
+
+const cssEscape = (value: string) => {
+  if (typeof (window as any).CSS?.escape === 'function') return (window as any).CSS.escape(value);
+  return value.replace(/["\\.#:[\]()]/g, '\\$&');
+};
+
+const buildSelector = (el: HTMLElement): string => {
+  const modalKey = (el.getAttribute('data-modal-key') || '').trim();
+  if (modalKey) return `[data-modal-key="${cssEscape(modalKey)}"]`;
+
+  const id = (el.id || '').trim();
+  if (id) return `#${cssEscape(id)}`;
+
+  const aria = (el.getAttribute('aria-label') || '').trim();
+  if (aria) return `${el.tagName.toLowerCase()}[aria-label="${cssEscape(aria)}"]`;
+
+  const title = (el.getAttribute('title') || '').trim();
+  if (title) return `${el.tagName.toLowerCase()}[title="${cssEscape(title)}"]`;
+
+  const text = normalizeText(el.textContent || '');
+  if (text) return '';
+
+  // conservative fallback path (max depth 4)
+  const chain: string[] = [];
+  let node: HTMLElement | null = el;
+  let depth = 0;
+  while (node && depth < 4) {
+    const tag = node.tagName.toLowerCase();
+    const parent = node.parentElement;
+    if (!parent) break;
+    const siblings = Array.from(parent.children).filter((c) => (c as HTMLElement).tagName === node!.tagName);
+    const idx = siblings.indexOf(node) + 1;
+    chain.unshift(`${tag}:nth-of-type(${idx})`);
+    node = parent;
+    depth += 1;
+  }
+  return chain.join(' > ');
+};
+
 const makeIconButton = (icon: string, title: string): HTMLButtonElement => {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -131,6 +181,7 @@ const hideLegacyHeaderCloseButton = (panel: HTMLElement) => {
 
 export const GlobalModalEnhancer: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
+  const { openModal, hasModalTarget } = useGlobalModalManager();
   const [minimized, setMinimized] = useState<MinimizedModalEntry[]>([]);
   const [workspaceItems, setWorkspaceItems] = useState<WorkspaceItem[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -146,7 +197,14 @@ export const GlobalModalEnhancer: React.FC = () => {
     baseY: number;
   } | null>(null);
   const offsetsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const lastInteractionRef = useRef<{ route: string; openerText: string; at: number } | null>(null);
+  const zOrderRef = useRef(80);
+  const lastInteractionRef = useRef<{
+    route: string;
+    openerText: string;
+    openerSelector?: string;
+    at: number;
+    modalKey?: string;
+  } | null>(null);
 
   const getCurrentRoute = () => {
     const hash = window.location.hash || '';
@@ -155,17 +213,58 @@ export const GlobalModalEnhancer: React.FC = () => {
     return `${window.location.pathname}${window.location.search}` || '/';
   };
 
-  const normalizeRoute = (route: string) => {
-    if (!route) return '/';
-    return route.startsWith('/') ? route : `/${route}`;
+  const bringOverlayToFront = (id: string) => {
+    const overlay = overlaysRef.current.get(id);
+    if (!overlay) return;
+    zOrderRef.current += 1;
+    overlay.style.zIndex = String(zOrderRef.current);
   };
 
-  const makeWorkspaceId = (title: string, route: string) =>
-    `${normalizeRoute(route)}::${title.trim().toLowerCase()}`;
+  const normalizeRoute = (route: string) => {
+    return normalizeRouteStatic(route);
+  };
+
+  const makeWorkspaceId = (title: string, route: string, modalKey?: string) =>
+    modalKey ? `modal::${modalKey}` : `${normalizeRoute(route)}::${title.trim().toLowerCase()}`;
+
+  const normalizeWorkspaceItems = (items: WorkspaceItem[]): WorkspaceItem[] => {
+    const merged = new Map<string, WorkspaceItem>();
+    const aliases = new Map<string, string>();
+    items.forEach((item) => {
+      if (!item?.title || !item?.route) return;
+      const resolvedModalKey = item.modalKey || inferModalKey(item.title, item.route, item.openerText);
+      const titleAlias = `title::${normalizeArabicLoose(item.title)}`;
+      const canonicalKey = makeWorkspaceId(item.title, item.route, resolvedModalKey);
+      const key = aliases.get(canonicalKey) || aliases.get(titleAlias) || canonicalKey;
+      aliases.set(canonicalKey, key);
+      aliases.set(titleAlias, key);
+      const current: WorkspaceItem = {
+        ...item,
+        id: key,
+        route: normalizeRoute(item.route),
+        modalKey: resolvedModalKey,
+        favorite: Boolean(item.favorite),
+      };
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, current);
+      } else {
+        merged.set(key, {
+          ...existing,
+          ...current,
+          favorite: Boolean(existing.favorite || current.favorite),
+          openerText: current.openerText || existing.openerText,
+          openerSelector: current.openerSelector || existing.openerSelector,
+          modalKey: current.modalKey || existing.modalKey,
+        });
+      }
+    });
+    return Array.from(merged.values());
+  };
 
   const commitWorkspaceItems = (updater: (prev: WorkspaceItem[]) => WorkspaceItem[]) => {
     setWorkspaceItems((prev) => {
-      const next = updater(prev);
+      const next = normalizeWorkspaceItems(updater(prev));
       try {
         window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(next));
       } catch {
@@ -175,12 +274,28 @@ export const GlobalModalEnhancer: React.FC = () => {
     });
   };
 
-  const upsertWorkspaceItem = (title: string, route: string, favorite: boolean, openerText?: string) => {
+  const upsertWorkspaceItem = (
+    title: string,
+    route: string,
+    favorite: boolean,
+    openerText?: string,
+    modalKey?: string,
+    openerSelector?: string,
+  ) => {
     const normalizedRoute = normalizeRoute(route);
-    const id = makeWorkspaceId(title, normalizedRoute);
+    const inferredModalKey = modalKey || inferModalKey(title, normalizedRoute, openerText);
+    const id = makeWorkspaceId(title, normalizedRoute, inferredModalKey);
     commitWorkspaceItems((prev) => {
-      const idx = prev.findIndex((item) => item.id === id);
-      if (idx === -1) return [...prev, { id, title, route: normalizedRoute, favorite, openerText }];
+      const idx = prev.findIndex((item) =>
+        item.id === id ||
+        (Boolean(inferredModalKey) && item.modalKey === inferredModalKey),
+      );
+      if (idx === -1) {
+        return [
+          ...prev,
+          { id, title, route: normalizedRoute, favorite, openerText, modalKey: inferredModalKey, openerSelector },
+        ];
+      }
       const next = [...prev];
       next[idx] = {
         ...next[idx],
@@ -188,17 +303,47 @@ export const GlobalModalEnhancer: React.FC = () => {
         route: normalizedRoute,
         favorite: favorite || next[idx].favorite,
         openerText: openerText || next[idx].openerText,
+        modalKey: inferredModalKey || next[idx].modalKey,
+        openerSelector: openerSelector || next[idx].openerSelector,
       };
       return next;
     });
-    return id;
+    const existing = workspaceRef.current.find((item) =>
+      item.id === id || (Boolean(inferredModalKey) && item.modalKey === inferredModalKey),
+    );
+    return existing?.id || id;
   };
 
   const removeWorkspaceItem = (workspaceId: string) => {
     commitWorkspaceItems((prev) => prev.filter((item) => item.id !== workspaceId));
   };
 
+  const isWorkspaceEntryOpenable = (item: WorkspaceItem) => {
+    const resolvedModalKey = item.modalKey || inferModalKey(item.title, item.route, item.openerText);
+    if (resolvedModalKey && hasModalTarget(resolvedModalKey)) return true;
+    const currentRoute = normalizeRoute(getCurrentRoute());
+    return normalizeRoute(item.route) === currentRoute;
+  };
+
   const tryOpenModalFromHint = (item: WorkspaceItem): boolean => {
+    const resolvedModalKey = item.modalKey || inferModalKey(item.title, item.route, item.openerText);
+    if (resolvedModalKey && hasModalTarget(resolvedModalKey)) {
+      if (resolvedModalKey !== item.modalKey) {
+        commitWorkspaceItems((prev) =>
+          prev.map((it) => (it.id === item.id ? { ...it, modalKey: resolvedModalKey } : it)),
+        );
+      }
+      return openModal(resolvedModalKey, { source: 'workspace' });
+    }
+
+    if (item.openerSelector) {
+      const selectorTarget = document.querySelector(item.openerSelector) as HTMLElement | null;
+      if (selectorTarget) {
+        selectorTarget.click();
+        return true;
+      }
+    }
+
     const hint = normalizeText(item.openerText || item.title || '');
     if (!hint) return false;
     const hintWords = splitWords(hint);
@@ -222,6 +367,22 @@ export const GlobalModalEnhancer: React.FC = () => {
   };
 
   const openWorkspaceItem = (item: WorkspaceItem) => {
+    if (!isWorkspaceEntryOpenable(item)) {
+      setOpenHint('هذا المودال غير متاح في الصفحة الحالية حتى يتم تحويله إلى Global Modal فعلي.');
+      return;
+    }
+    const resolvedModalKey = item.modalKey || inferModalKey(item.title, item.route, item.openerText);
+    if (resolvedModalKey && hasModalTarget(resolvedModalKey)) {
+      const opened = openModal(resolvedModalKey, { source: 'workspace' });
+      if (opened) {
+        if (resolvedModalKey !== item.modalKey) {
+          commitWorkspaceItems((prev) =>
+            prev.map((it) => (it.id === item.id ? { ...it, modalKey: resolvedModalKey } : it)),
+          );
+        }
+        return;
+      }
+    }
     const runtime = minimized.find((entry) => entry.workspaceId === item.id);
     if (runtime) {
       const overlay = overlaysRef.current.get(runtime.id);
@@ -231,6 +392,7 @@ export const GlobalModalEnhancer: React.FC = () => {
         overlay.style.pointerEvents = 'none';
         overlay.style.background = 'transparent';
         panel.style.display = '';
+        bringOverlayToFront(runtime.id);
         setMinimized((prev) => prev.filter((m) => m.id !== runtime.id));
         return;
       }
@@ -259,10 +421,14 @@ export const GlobalModalEnhancer: React.FC = () => {
       if (!clickable) return;
       const text = normalizeText(clickable.textContent || clickable.getAttribute('aria-label') || clickable.getAttribute('title') || '');
       if (!text) return;
+      const modalKeyRaw = clickable.getAttribute('data-modal-key') || '';
+      const openerSelector = buildSelector(clickable);
       lastInteractionRef.current = {
         route: normalizeRoute(getCurrentRoute()),
         openerText: text,
+        openerSelector,
         at: Date.now(),
+        modalKey: modalKeyRaw || undefined,
       };
     };
     window.addEventListener('mousedown', captureInteraction, true);
@@ -287,7 +453,7 @@ export const GlobalModalEnhancer: React.FC = () => {
         localItems = [];
       }
       if (!uid) {
-        setWorkspaceItems(localItems);
+        setWorkspaceItems(normalizeWorkspaceItems(localItems));
         return;
       }
       try {
@@ -302,12 +468,15 @@ export const GlobalModalEnhancer: React.FC = () => {
             title: item.title,
             route: normalizeRoute(item.route),
             favorite: Boolean(item.favorite),
+            openerText: item.openerText,
+            modalKey: item.modalKey || inferModalKey(item.title, item.route, item.openerText),
+            openerSelector: item.openerSelector,
           });
         });
-        const merged = Array.from(mergedMap.values());
+        const merged = normalizeWorkspaceItems(Array.from(mergedMap.values()));
         if (alive) setWorkspaceItems(merged);
       } catch {
-        if (alive) setWorkspaceItems(localItems);
+        if (alive) setWorkspaceItems(normalizeWorkspaceItems(localItems));
       }
     };
     void loadWorkspace();
@@ -355,6 +524,7 @@ export const GlobalModalEnhancer: React.FC = () => {
       overlay.style.backdropFilter = 'none';
       (overlay.style as any).webkitBackdropFilter = 'none';
       panel.style.display = '';
+      bringOverlayToFront(id);
       setMinimized((prev) => prev.filter((m) => m.id !== id));
     };
 
@@ -445,7 +615,15 @@ export const GlobalModalEnhancer: React.FC = () => {
         interaction && interaction.route === normalizeRoute(route) && Date.now() - interaction.at < 5000
           ? interaction.openerText
           : undefined;
-      const workspaceId = upsertWorkspaceItem(title, route, false, openerText);
+      const openerSelector =
+        interaction && interaction.route === normalizeRoute(route) && Date.now() - interaction.at < 5000
+          ? interaction.openerSelector
+          : undefined;
+      const modalKey =
+        interaction && interaction.route === normalizeRoute(route) && Date.now() - interaction.at < 5000
+          ? interaction.modalKey
+          : undefined;
+      const workspaceId = upsertWorkspaceItem(title, route, false, openerText, modalKey, openerSelector);
       hideLegacyHeaderCloseButton(panel);
       overlay.setAttribute(MODAL_ID_ATTR, id);
       panel.setAttribute(MANAGED_ATTR, '1');
@@ -457,6 +635,7 @@ export const GlobalModalEnhancer: React.FC = () => {
       overlay.style.backdropFilter = 'none';
       (overlay.style as any).webkitBackdropFilter = 'none';
       panel.style.pointerEvents = 'auto';
+      bringOverlayToFront(id);
 
       if (!panel.style.position) panel.style.position = 'relative';
 
@@ -481,21 +660,19 @@ export const GlobalModalEnhancer: React.FC = () => {
       panel.appendChild(controls);
 
       const dragHandle = document.createElement('div');
-      dragHandle.style.position = 'absolute';
-      dragHandle.style.top = '8px';
-      dragHandle.style.left = '50%';
-      dragHandle.style.transform = 'translateX(-50%)';
+      dragHandle.style.display = 'inline-flex';
+      dragHandle.style.alignItems = 'center';
+      dragHandle.style.justifyContent = 'center';
       dragHandle.style.zIndex = '2';
       dragHandle.style.cursor = 'move';
       dragHandle.style.userSelect = 'none';
+      dragHandle.style.marginInlineStart = '8px';
       dragHandle.title = 'اسحب لتحريك النافذة';
       const handleIcon = document.createElement('span');
       handleIcon.className = 'material-icons-round text-slate-400';
       handleIcon.style.fontSize = '18px';
       handleIcon.textContent = 'drag_indicator';
       dragHandle.appendChild(handleIcon);
-      panel.appendChild(dragHandle);
-
       minimizeBtn.addEventListener('click', (evt) => {
         evt.stopPropagation();
         minimizeModal(id, title, workspaceId, route);
@@ -512,16 +689,15 @@ export const GlobalModalEnhancer: React.FC = () => {
       closeBtn.addEventListener('click', (evt) => {
         evt.stopPropagation();
         const current = workspaceRef.current.find((item) => item.id === workspaceId);
-        if (current?.favorite) {
-          // Favorite windows use soft-close behavior so they can be reopened from the dock.
-          minimizeModal(id, title, workspaceId, route);
-          return;
+        if (!current?.favorite) {
+          removeWorkspaceItem(workspaceId);
         }
         closeModal(id);
       });
       dragHandle.addEventListener('mousedown', (evt) => {
         evt.preventDefault();
         evt.stopPropagation();
+        bringOverlayToFront(id);
         startDrag(id, panel, evt.clientX, evt.clientY);
       });
       dragHandle.addEventListener('touchstart', (evt) => {
@@ -529,18 +705,29 @@ export const GlobalModalEnhancer: React.FC = () => {
         evt.preventDefault();
         evt.stopPropagation();
         const touch = evt.touches[0];
+        bringOverlayToFront(id);
         startDrag(id, panel, touch.clientX, touch.clientY);
       }, { passive: false });
 
       // Drag from the whole modal header, except interactive controls.
       const header = getModalHeaderElement(panel);
       if (header) {
+        const titleNode = header.querySelector('h1, h2, h3, [data-modal-title]');
+        if (titleNode && titleNode.parentElement === header) {
+          header.insertBefore(dragHandle, titleNode);
+          header.style.justifyContent = 'flex-start';
+          header.style.gap = '16px';
+          dragHandle.style.marginInlineStart = '0';
+        } else {
+          header.appendChild(dragHandle);
+        }
         header.style.cursor = 'move';
         header.style.userSelect = 'none';
         const startFromHeaderMouse = (evt: MouseEvent) => {
           const target = evt.target as HTMLElement;
           if (target.closest('button,input,select,textarea,a,label,[role="button"]')) return;
           evt.preventDefault();
+          bringOverlayToFront(id);
           startDrag(id, panel, evt.clientX, evt.clientY);
         };
         const startFromHeaderTouch = (evt: TouchEvent) => {
@@ -549,11 +736,21 @@ export const GlobalModalEnhancer: React.FC = () => {
           if (target.closest('button,input,select,textarea,a,label,[role="button"]')) return;
           evt.preventDefault();
           const touch = evt.touches[0];
+          bringOverlayToFront(id);
           startDrag(id, panel, touch.clientX, touch.clientY);
         };
         header.addEventListener('mousedown', startFromHeaderMouse);
         header.addEventListener('touchstart', startFromHeaderTouch, { passive: false });
+      } else {
+        // Fallback for uncommon modal layouts without a detectable header.
+        dragHandle.style.position = 'absolute';
+        dragHandle.style.top = '10px';
+        dragHandle.style.right = '12px';
+        panel.appendChild(dragHandle);
       }
+
+      panel.addEventListener('mousedown', () => bringOverlayToFront(id), true);
+      panel.addEventListener('touchstart', () => bringOverlayToFront(id), { passive: true, capture: true });
     };
 
     const scan = () => {
@@ -604,6 +801,7 @@ export const GlobalModalEnhancer: React.FC = () => {
     overlay.style.backdropFilter = 'none';
     (overlay.style as any).webkitBackdropFilter = 'none';
     panel.style.display = '';
+    bringOverlayToFront(entryId);
     setMinimized((prev) => prev.filter((m) => m.id !== entryId));
   };
 
@@ -663,23 +861,37 @@ export const GlobalModalEnhancer: React.FC = () => {
             <p className="text-xs text-slate-400 font-semibold py-2">لا توجد نوافذ مصغرة الآن.</p>
           ) : (
             <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {orderedWorkspaceItems.map((entry) => (
+              {orderedWorkspaceItems.map((entry) => {
+                const isOpenable = isWorkspaceEntryOpenable(entry);
+                return (
                 <div key={entry.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2.5 flex items-center justify-between gap-2">
                   <button
-                    className="text-sm font-bold text-slate-700 dark:text-slate-100 hover:text-primary truncate text-right"
+                    className={`text-sm font-bold truncate text-right ${
+                      isOpenable
+                        ? 'text-slate-700 dark:text-slate-100 hover:text-primary'
+                        : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                    }`}
                     onClick={() => openWorkspaceItem(entry)}
-                    title={`فتح ${entry.title}`}
+                    title={isOpenable ? `فتح ${entry.title}` : 'غير متاح في الصفحة الحالية'}
+                    disabled={!isOpenable}
                   >
                     <span className="block truncate">{entry.favorite ? `⭐ ${entry.title}` : entry.title}</span>
                     <span className="block text-[10px] font-semibold text-slate-400 truncate">
-                      {normalizeRoute(entry.route) === currentRoute ? 'الصفحة الحالية' : `من ${entry.route}`}
+                      {normalizeRoute(entry.route) === currentRoute
+                        ? 'الصفحة الحالية'
+                        : (isOpenable ? `من ${entry.route}` : `غير متاح هنا • من ${entry.route}`)}
                     </span>
                   </button>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => openWorkspaceItem(entry)}
-                      className="text-slate-400 hover:text-primary transition-colors"
-                      title="استرجاع"
+                      className={`transition-colors ${
+                        isOpenable
+                          ? 'text-slate-400 hover:text-primary'
+                          : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                      }`}
+                      title={isOpenable ? 'استرجاع' : 'غير متاح في الصفحة الحالية'}
+                      disabled={!isOpenable}
                     >
                       <span className="material-icons-round text-sm">open_in_full</span>
                     </button>
@@ -696,7 +908,8 @@ export const GlobalModalEnhancer: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {openHint && (

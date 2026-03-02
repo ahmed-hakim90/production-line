@@ -9,6 +9,7 @@ import { ProductionLineStatus, FirestoreProductionLine, WorkOrder, ProductionPla
 import type { LineWorkerAssignment } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 
 const statusOptions: { value: ProductionLineStatus; label: string }[] = [
@@ -291,7 +292,7 @@ export const Lines: React.FC = () => {
           <p className="text-sm text-slate-500 font-medium">إدارة ومراقبة جميع خطوط الإنتاج في المصنع.</p>
         </div>
         {can("lines.create") && (
-          <Button variant="primary" onClick={openCreate} className="self-start sm:self-auto shrink-0">
+          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.LINES_CREATE} className="self-start sm:self-auto shrink-0">
             <span className="material-icons-round text-sm">add</span>
             إضافة خط إنتاج
           </Button>

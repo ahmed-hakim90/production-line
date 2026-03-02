@@ -19,7 +19,8 @@ import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
 import { registerSystemEventListeners } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
-import { GlobalModalEnhancer } from './components/GlobalModalEnhancer';
+import { GlobalModalManagerProvider } from './components/modal-manager/GlobalModalManager';
+import { ModalHost } from './components/modal-manager/ModalHost';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 
@@ -175,26 +176,28 @@ const App: React.FC = () => {
   }
 
   return (
-    <HashRouter>
-      <Routes>
-        {AUTH_PUBLIC_ROUTES.map((r) => (
-          <React.Fragment key={r.path}>
-            <Route
-              path={r.path}
-              element={r.resolveElement({
-                isAuthenticated,
-                isPendingApproval,
-                loginRedirectElement: <LoginRedirect />,
-              })}
-            />
-          </React.Fragment>
-        ))}
+    <GlobalModalManagerProvider>
+      <HashRouter>
+        <Routes>
+          {AUTH_PUBLIC_ROUTES.map((r) => (
+            <React.Fragment key={r.path}>
+              <Route
+                path={r.path}
+                element={r.resolveElement({
+                  isAuthenticated,
+                  isPendingApproval,
+                  loginRedirectElement: <LoginRedirect />,
+                })}
+              />
+            </React.Fragment>
+          ))}
 
-        {/* Protected: All app routes inside Layout */}
-        <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
-      </Routes>
-      {isAuthenticated && !isPendingApproval && !loading && <GlobalModalEnhancer />}
-    </HashRouter>
+          {/* Protected: All app routes inside Layout */}
+          <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
+        </Routes>
+        {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
+      </HashRouter>
+    </GlobalModalManagerProvider>
   );
 };
 

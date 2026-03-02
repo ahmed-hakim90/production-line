@@ -340,6 +340,31 @@ Never bypass layers.
 
 ---
 
+# Global Modal Architecture (Phase A+)
+
+All new modals must follow the global modal system:
+
+components/modal-manager/
+
+Core parts:
+
+* GlobalModalManager.tsx (open/close/register API)
+* ModalHost.tsx (single mount point in App)
+* modalKeys.ts (single source of truth for keys)
+* modals/* (each global modal as standalone component)
+
+Rules:
+
+* New modal features MUST use a `modalKey` from `modalKeys.ts`.
+* Trigger buttons MUST include `data-modal-key`.
+* Do not create page-only modal state for new features unless explicitly temporary.
+* Keep business logic in store/services; modal component handles presentation + interaction only.
+* When migrating legacy modal, keep backward compatibility through enhancer inference until fully migrated.
+
+Migration status should be tracked in `MODAL_MIGRATION_TRACKER.md`.
+
+---
+
 # Development Rules
 
 Always:

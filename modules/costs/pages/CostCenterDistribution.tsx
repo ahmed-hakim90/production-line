@@ -101,12 +101,16 @@ export const CostCenterDistribution: React.FC = () => {
     setSaving(false);
   };
 
-  const handleSaveAllocations = async () => {
+  const handleSaveAll = async () => {
     if (!id || totalPercentage > 100) return;
     setSaving(true);
     const allocs = Object.entries(allocations)
       .filter(([, pct]) => (pct as number) > 0)
       .map(([lineId, percentage]) => ({ lineId, percentage: percentage as number }));
+    await saveCostCenterValue(
+      { costCenterId: id, month: selectedMonth, amount: monthlyAmount, workingDays: Math.min(31, Math.max(1, appliedWorkingDays)) },
+      existingValue?.id
+    );
     await saveCostAllocation(
       { costCenterId: id, month: selectedMonth, allocations: allocs },
       existingAllocation?.id
@@ -150,7 +154,7 @@ export const CostCenterDistribution: React.FC = () => {
       year: 'numeric',
       month: 'long',
     });
-    setCopyNotice(`تم سحب نسب التوزيع وقيمة المركز من ${copiedMonthLabel} — اضغط حفظ القيمة وحفظ التوزيع للتأكيد.`);
+    setCopyNotice(`تم سحب نسب التوزيع وقيمة المركز من ${copiedMonthLabel} — اضغط حفظ الكل للتأكيد.`);
   };
 
   const generateMonths = () => {
@@ -237,12 +241,12 @@ export const CostCenterDistribution: React.FC = () => {
                   <div className="flex items-center gap-2 flex-wrap justify-end">
                     <Button
                       variant="primary"
-                      onClick={handleSaveAllocations}
+                      onClick={handleSaveAll}
                       disabled={saving || totalPercentage > 100}
                     >
                       {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
                       <span className="material-icons-round text-sm">save</span>
-                      حفظ التوزيع
+                      حفظ الكل
                     </Button>
                   </div>
                 )}

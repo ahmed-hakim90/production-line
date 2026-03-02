@@ -32,6 +32,7 @@ import { SelectableTable } from '../components/SelectableTable';
 import type { TableColumn, TableBulkAction } from '../components/SelectableTable';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 
 const emptyForm = {
   employeeId: '',
@@ -104,6 +105,7 @@ export const Reports: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [saveToastType, setSaveToastType] = useState<'success' | 'error'>('success');
   const [expandedNoteRows, setExpandedNoteRows] = useState<Set<string>>(new Set());
 
   // Import from Excel state
@@ -154,6 +156,23 @@ export const Reports: React.FC = () => {
   const [filterEmployeeId, setFilterEmployeeId] = useState('');
   const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
   const reportCodesBackfilledRef = useRef(false);
+
+  const openCreate = useCallback(() => {
+    setEditId(null);
+    setSaveToast(null);
+    setForm({ ...emptyForm, date: getTodayDateString() });
+    setShowModal(true);
+  }, []);
+
+  const openImport = useCallback(() => {
+    setShowImportModal(true);
+    setImportResult(null);
+    setImportDateUpdateResult(null);
+    setImportMode('create');
+  }, []);
+
+  useRegisterModalOpener('reports.create', () => openCreate());
+  useRegisterModalOpener('reports.import', () => openImport());
 
   // Employee-only filter: basic employees see only their own reports
   const myEmployeeId = useMemo(() => {
@@ -597,13 +616,6 @@ export const Reports: React.FC = () => {
     </div>
   );
 
-  const openCreate = () => {
-    setEditId(null);
-    setSaveToast(null);
-    setForm({ ...emptyForm, date: getTodayDateString() });
-    setShowModal(true);
-  };
-
   const openEdit = (report: ProductionReport) => {
     setEditId(report.id!);
     setSaveToast(null);
@@ -645,16 +657,19 @@ export const Reports: React.FC = () => {
       editId,
     );
     if (duplicated) {
+      setSaveToastType('error');
       setSaveToast('هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف');
       setTimeout(() => setSaveToast(null), 3500);
       return;
     }
     setSaving(true);
+    setSaveToastType('success');
     setSaveToast(null);
 
     if (editId) {
       await updateReport(editId, form);
       setSaving(false);
+      setSaveToastType('success');
       setSaveToast('تم حفظ التعديلات بنجاح');
       setTimeout(() => setSaveToast(null), 3000);
       if (printAfterSave && can('print')) {
@@ -664,6 +679,7 @@ export const Reports: React.FC = () => {
       const createdId = await createReport(form);
       setSaving(false);
       setForm({ ...emptyForm, date: form.date, lineId: form.lineId });
+      setSaveToastType('success');
       setSaveToast('تم حفظ التقرير بنجاح');
       setTimeout(() => setSaveToast(null), 3000);
       if (printAfterSave && can('print')) {
@@ -1268,7 +1284,11 @@ export const Reports: React.FC = () => {
                 <span className="material-icons-round text-sm">file_download</span>
                 <span className="hidden sm:inline">تحميل قالب</span>
               </Button>
-              <Button variant={pageControl.importVariant} onClick={() => fileInputRef.current?.click()}>
+              <Button
+                variant={pageControl.importVariant}
+                onClick={() => fileInputRef.current?.click()}
+                data-modal-key="reports.import"
+              >
                 <span className="material-icons-round text-sm">upload_file</span>
                 <span className="hidden sm:inline">رفع Excel</span>
               </Button>
@@ -1276,7 +1296,7 @@ export const Reports: React.FC = () => {
           )}
           {can("reports.create") && (
             <>
-              <Button variant="primary" onClick={openCreate}>
+              <Button variant="primary" onClick={openCreate} data-modal-key="reports.create">
                 <span className="material-icons-round text-sm">note_add</span>
                 إنشاء تقرير
               </Button>
@@ -1337,7 +1357,7 @@ export const Reports: React.FC = () => {
       {showModal && (can("reports.create") || can("reports.edit")) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }}>
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+            className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
@@ -1347,7 +1367,7 @@ export const Reports: React.FC = () => {
               </button>
             </div>
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
-              {saveToast && (
+              {saveToast && saveToastType === 'success' && (
                 <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center gap-2 animate-in fade-in duration-300">
                   <span className="material-icons-round text-emerald-500 text-lg">check_circle</span>
                   <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex-1">{saveToast}</p>
@@ -1596,6 +1616,19 @@ export const Reports: React.FC = () => {
                 {editId ? 'حفظ التعديلات' : 'حفظ التقرير'}
               </Button>
             </div>
+            {saveToast && saveToastType === 'error' && (
+              <div className="absolute inset-0 z-20 bg-black/35 backdrop-blur-[1px] flex items-center justify-center p-6">
+                <div className="w-full max-w-md bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 flex items-start gap-3 shadow-xl">
+                  <span className="material-icons-round text-rose-500 text-xl shrink-0">error</span>
+                  <p className="text-sm font-bold text-rose-700 dark:text-rose-300 flex-1 text-center">
+                    {saveToast}
+                  </p>
+                  <button onClick={() => setSaveToast(null)} className="text-rose-400 hover:text-rose-600 transition-colors shrink-0">
+                    <span className="material-icons-round text-sm">close</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

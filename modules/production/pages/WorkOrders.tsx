@@ -13,6 +13,7 @@ import { scanEventService } from '../../../services/scanEventService';
 import { estimateReportCost, formatCost } from '../../../utils/costCalculations';
 import type { WorkOrder, WorkOrderStatus } from '../../../types';
 import { qualitySettingsService } from '../../quality/services/qualitySettingsService';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 const STATUS_CONFIG: Record<WorkOrderStatus, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' }> = {
   pending: { label: 'قيد الانتظار', variant: 'info' },
@@ -407,7 +408,7 @@ export const WorkOrders: React.FC = () => {
           <p className="text-sm text-slate-500 font-medium">إدارة ومتابعة أوامر التشغيل لخطوط الإنتاج</p>
         </div>
         {can('workOrders.create') && (
-          <Button variant="primary" onClick={openCreate}>
+          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.WORK_ORDERS_CREATE}>
             <span className="material-icons-round text-sm">add</span>
             أمر شغل جديد
           </Button>

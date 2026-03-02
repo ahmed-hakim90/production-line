@@ -18,6 +18,7 @@ import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';
 import type { StockItemBalance } from '../../inventory/types';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -445,7 +446,7 @@ export const Products: React.FC = () => {
           )}
           {can("products.create") && (
             <>
-            <Button variant="primary" onClick={openCreate} className="shrink-0">
+            <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.PRODUCTS_CREATE} className="shrink-0">
               <span className="material-icons-round text-sm">add</span>
               إضافة منتج جديد
             </Button>

@@ -735,6 +735,8 @@ export interface FirestoreUser {
         route: string;
         favorite: boolean;
         openerText?: string;
+        modalKey?: string;
+        openerSelector?: string;
       }>;
     };
   };

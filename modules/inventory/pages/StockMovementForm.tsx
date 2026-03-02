@@ -229,11 +229,11 @@ export const StockMovementForm: React.FC = () => {
     }
   }, [isFinishedTransferFlow, hasAutoTransferSource, warehouseId, autoTransferSourceWarehouseId]);
 
-  const resetForm = () => {
+  const resetForm = (nextMovementType: MovementType = 'IN') => {
     setItemId('');
     setWarehouseId('');
     setToWarehouseId('');
-    setMovementType('IN');
+    setMovementType(nextMovementType);
     setQuantity(0);
     setTransferItems([createTransferLine()]);
   };
@@ -277,7 +277,11 @@ export const StockMovementForm: React.FC = () => {
   };
 
   const showShareFeedback = (result: ShareResult) => {
-    if (result.method === 'native_share' || result.method === 'cancelled') return;
+    if (result.method === 'native_share') return;
+    if (result.method === 'cancelled') {
+      setMessage({ type: 'success', text: 'تم إلغاء مشاركة الصورة.' });
+      return;
+    }
     const msg = result.copied
       ? 'تم تحميل صورة التحويلة ونسخها — افتح واتساب والصق الصورة (Ctrl+V)'
       : 'تم تحميل صورة التحويلة — أرفقها في محادثة واتساب';
@@ -489,7 +493,7 @@ export const StockMovementForm: React.FC = () => {
         const fromUsedRef = match ? Number(match[1] || 0) + 1 : prev + 1;
         return Math.max(prev + 1, fromUsedRef);
       });
-      resetForm();
+      resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : 'IN');
     } catch (error: any) {
       setMessage({ type: 'error', text: error?.message || 'تعذر حفظ الحركة.' });
     } finally {
