@@ -14,6 +14,7 @@ import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../..
 import { StockTransferPrint, type StockTransferPrintData } from '../components';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
@@ -112,9 +113,10 @@ export const StockMovementForm: React.FC = () => {
       openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE);
     }
     if (action === 'import-in-by-code' && can('inventory.transactions.create')) {
-      setShowImportModal(true);
+      openModal(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE);
     }
   }, [location.search, can, openModal]);
+  useRegisterModalOpener(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE, () => setShowImportModal(true));
 
   const referenceNo = useMemo(() => formatInvReference(nextReferenceSeq), [nextReferenceSeq]);
 

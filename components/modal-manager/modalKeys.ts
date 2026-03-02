@@ -8,6 +8,10 @@ export const MODAL_KEYS = {
   ORGANIZATION_CREATE: 'organization.create',
   VEHICLES_CREATE: 'vehicles.create',
   COST_CENTERS_CREATE: 'costCenters.create',
+  PRODUCT_MATERIALS_CREATE: 'products.materials.create',
+  EMPLOYEE_ALLOWANCE_CREATE: 'employees.allowance.create',
+  EMPLOYEE_DEDUCTION_CREATE: 'employees.deduction.create',
+  INVENTORY_IMPORT_IN_BY_CODE: 'inventory.movements.importInByCode',
   INVENTORY_WAREHOUSES_CREATE: 'inventory.warehouses.create',
   INVENTORY_RAW_MATERIALS_CREATE: 'inventory.rawMaterials.create',
   SYSTEM_ROLES_CREATE: 'system.roles.create',
@@ -60,6 +64,18 @@ export const inferModalKeyFromLegacyContext = (
   }
   if (r.includes('/cost-centers') && (hay.includes('اضافه مركز تكلفه') || hay.includes('اضافة مركز تكلفة') || hay.includes('مركز تكلفه') || hay.includes('مركز تكلفة'))) {
     return MODAL_KEYS.COST_CENTERS_CREATE;
+  }
+  if (r.includes('/products/') && (hay.includes('اضافه ماده') || hay.includes('اضافة مادة') || hay.includes('ماده خام') || hay.includes('مادة خام'))) {
+    return MODAL_KEYS.PRODUCT_MATERIALS_CREATE;
+  }
+  if (r.includes('/employees/') && (hay.includes('اضافه بدل') || hay.includes('اضافة بدل') || hay.includes('بدل'))) {
+    return MODAL_KEYS.EMPLOYEE_ALLOWANCE_CREATE;
+  }
+  if (r.includes('/employees/') && (hay.includes('اضافه خصم') || hay.includes('اضافة خصم') || hay.includes('خصم'))) {
+    return MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE;
+  }
+  if (r.includes('/inventory') && r.includes('/movements') && (hay.includes('استيراد') || hay.includes('excel') || hay.includes('بالكود'))) {
+    return MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE;
   }
   if (r.includes('/inventory') && r.includes('/movements') && (hay.includes('اضافه مخزن جديد') || hay.includes('اضافة مخزن جديد') || hay.includes('مخزن جديد') || hay.includes('اضافه مخزن'))) {
     return MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE;

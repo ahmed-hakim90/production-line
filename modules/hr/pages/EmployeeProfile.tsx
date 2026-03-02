@@ -35,6 +35,8 @@ import type {
 import { vehicleService } from '../vehicleService';
 import { LEAVE_TYPE_LABELS } from '../types';
 import { formatNumber } from '../../../utils/calculations';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 type ProfileTab = 'overview' | 'hierarchy' | 'attendance' | 'payroll' | 'financials' | 'leaves' | 'loans';
 
@@ -259,7 +261,11 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
               <span>البدلات المخصصة</span>
             </div>
             {canEdit && (
-              <Button onClick={() => { setAlError(''); setAlSuccess(''); setShowAllowanceModal(true); }} disabled={financialSaving}>
+              <Button
+                onClick={() => { setAlError(''); setAlSuccess(''); setShowAllowanceModal(true); }}
+                data-modal-key={MODAL_KEYS.EMPLOYEE_ALLOWANCE_CREATE}
+                disabled={financialSaving}
+              >
                 <span className="material-icons-round text-lg">add</span>
                 إضافة بدل
               </Button>
@@ -353,12 +359,17 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                     setDedRecurring(false);
                     setShowDeductionModal(true);
                   }}
+                  data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
                   disabled={financialSaving}
                 >
                   <span className="material-icons-round text-lg text-amber-500">gavel</span>
                   جزاء تأديبي
                 </Button>
-                <Button onClick={() => { setDedError(''); setDedSuccess(''); setShowDeductionModal(true); }} disabled={financialSaving}>
+                <Button
+                  onClick={() => { setDedError(''); setDedSuccess(''); setShowDeductionModal(true); }}
+                  data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
+                  disabled={financialSaving}
+                >
                   <span className="material-icons-round text-lg">add</span>
                   إضافة خصم
                 </Button>
@@ -602,6 +613,16 @@ export const EmployeeProfile: React.FC = () => {
 
   const [tabLoading, setTabLoading] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const openAllowanceModal = useCallback(() => {
+    setActiveTab('financials');
+    setShowAllowanceModal(true);
+  }, []);
+  const openDeductionModal = useCallback(() => {
+    setActiveTab('financials');
+    setShowDeductionModal(true);
+  }, []);
+  useRegisterModalOpener(MODAL_KEYS.EMPLOYEE_ALLOWANCE_CREATE, () => openAllowanceModal());
+  useRegisterModalOpener(MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE, () => openDeductionModal());
 
   const getDepartmentName = useCallback(
     (departmentId: string) => departments.find((d) => d.id === departmentId)?.name ?? '—',

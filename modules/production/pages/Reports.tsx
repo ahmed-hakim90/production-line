@@ -164,11 +164,8 @@ export const Reports: React.FC = () => {
   }, [openModal]);
 
   const openImport = useCallback(() => {
-    setShowImportModal(true);
-    setImportResult(null);
-    setImportDateUpdateResult(null);
-    setImportMode('create');
-  }, []);
+    openModal(MODAL_KEYS.REPORTS_IMPORT, { source: 'reports.page' });
+  }, [openModal]);
 
   // Employee-only filter: basic employees see only their own reports
   const myEmployeeId = useMemo(() => {

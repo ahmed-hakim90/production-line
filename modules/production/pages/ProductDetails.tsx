@@ -46,6 +46,8 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -198,6 +200,7 @@ export const ProductDetails: React.FC = () => {
     setMaterialSaveMsg(null);
     setShowMaterialModal(true);
   };
+  useRegisterModalOpener(MODAL_KEYS.PRODUCT_MATERIALS_CREATE, () => openAddMaterial());
 
   const currentMonth = useMemo(() => getCurrentMonth(), []);
   const previousMonth = useMemo(() => {
@@ -990,6 +993,7 @@ export const ProductDetails: React.FC = () => {
               {can('costs.manage') && (
                 <button
                   onClick={openAddMaterial}
+                  data-modal-key={MODAL_KEYS.PRODUCT_MATERIALS_CREATE}
                   className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
                 >
                   <span className="material-icons-round text-sm">add_circle</span>
