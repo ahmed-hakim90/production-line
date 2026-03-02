@@ -30,7 +30,7 @@ import type { StockItemBalance } from '../../inventory/types';
 import { calculateProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import { exportProductReports, exportSingleProduct } from '../../../utils/exportExcel';
 import type { SingleProductExportData } from '../../../utils/exportExcel';
-import { exportToPDF, shareToWhatsApp } from '../../../utils/reportExport';
+import { exportToPDF, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
 import {
   ProductionReportPrint,
   mapReportsToPrintRows,
@@ -73,6 +73,7 @@ export const ProductDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
   const [currentMonthCost, setCurrentMonthCost] = useState<MonthlyProductionCost | null>(null);
   const [previousMonthCost, setPreviousMonthCost] = useState<MonthlyProductionCost | null>(null);
@@ -384,9 +385,22 @@ export const ProductDetails: React.FC = () => {
   const handleWhatsApp = async () => {
     if (!printComponentRef.current) return;
     setExporting(true);
-    try { await shareToWhatsApp(printComponentRef.current, `تقرير ${productDisplayName}`); }
+    setShareToast(null);
+    try {
+      const result = await shareToWhatsApp(printComponentRef.current, `تقرير ${productDisplayName}`);
+      showShareFeedback(result);
+    }
     finally { setExporting(false); }
   };
+
+  const showShareFeedback = useCallback((result: ShareResult) => {
+    if (result.method === 'native_share' || result.method === 'cancelled') return;
+    const msg = result.copied
+      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
+      : 'تم تحميل صورة التقرير — أرفقها في محادثة واتساب';
+    setShareToast(msg);
+    setTimeout(() => setShareToast(null), 6000);
+  }, []);
 
   const handleExportProduct = () => {
     if (!rawProduct) return;
@@ -591,6 +605,12 @@ export const ProductDetails: React.FC = () => {
         <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 flex items-center gap-3">
           <span className="material-icons-round text-rose-500">warning</span>
           <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{fetchError}</p>
+        </div>
+      )}
+
+      {shareToast && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 shadow-lg">
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{shareToast}</p>
         </div>
       )}
 
