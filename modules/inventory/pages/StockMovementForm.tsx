@@ -473,7 +473,7 @@ export const StockMovementForm: React.FC = () => {
           setPrintData(payload);
           await new Promise((r) => setTimeout(r, 250));
           if (transferPrintRef.current) {
-            const result = await shareToWhatsApp(transferPrintRef.current, `تحويلة مخزن ${payload.transferNo}`);
+            const result = await shareToWhatsApp(transferPrintRef.current, `stock-transfer-${payload.transferNo}`);
             showShareFeedback(result);
           }
           setTimeout(() => setPrintData(null), 1200);
@@ -875,7 +875,7 @@ export const StockMovementForm: React.FC = () => {
         </div>
       </Card>
 
-      <div className="hidden">
+      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
 

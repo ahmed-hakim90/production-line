@@ -309,7 +309,7 @@ export const StockTransactions: React.FC = () => {
       setPrintData(payload);
       await new Promise((r) => setTimeout(r, 250));
       if (transferPrintRef.current) {
-        const result = await shareToWhatsApp(transferPrintRef.current, `تحويلة مخزن ${transferNo}`);
+        const result = await shareToWhatsApp(transferPrintRef.current, `stock-transfer-${transferNo}`);
         showShareFeedback(result);
       }
       setTimeout(() => setPrintData(null), 1000);
@@ -351,7 +351,7 @@ export const StockTransactions: React.FC = () => {
       setPrintData(buildPendingPrintData(row));
       await new Promise((r) => setTimeout(r, 250));
       if (transferPrintRef.current) {
-        const result = await shareToWhatsApp(transferPrintRef.current, `تحويلة مخزن ${row.referenceNo}`);
+        const result = await shareToWhatsApp(transferPrintRef.current, `stock-transfer-${row.referenceNo}`);
         showShareFeedback(result);
       }
       setTimeout(() => setPrintData(null), 1000);

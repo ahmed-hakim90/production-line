@@ -37,6 +37,15 @@ const downloadBlob = (blob: Blob, fileName: string) => {
 };
 
 const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const toSafeFileBaseName = (raw: string) => {
+  const cleaned = raw
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return cleaned || `report-image-${Date.now()}`;
+};
 
 const PAPER_PT: Record<string, [number, number]> = {
   a4: [595.28, 841.89],
@@ -138,14 +147,15 @@ export const shareToWhatsApp = async (
   const canvas = await capture(el);
   const pngBlob = await canvasToBlob(canvas, 'image/png');
   const jpgBlob = await canvasToBlob(canvas, 'image/jpeg', 0.92);
+  const fileBaseName = toSafeFileBaseName(title);
 
   // ── Step 1 (mobile): Try native file share first ──
   // This is the only reliable way to send image directly to WhatsApp from browser.
   if (isMobile() && navigator.share) {
-    const mobileFile = new File([jpgBlob], `${title}.jpg`, { type: 'image/jpeg' });
+    const mobileFile = new File([jpgBlob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
     try {
       if (!navigator.canShare || navigator.canShare({ files: [mobileFile] })) {
-        await navigator.share({ title, files: [mobileFile] });
+        await navigator.share({ files: [mobileFile] });
         return { method: 'native_share', copied: false };
       }
     } catch (err: unknown) {
@@ -157,7 +167,7 @@ export const shareToWhatsApp = async (
 
   // ── Step 2: Fallback — download image + open WhatsApp ──
   const isMobileDevice = isMobile();
-  const fileName = `${title}.${isMobileDevice ? 'jpg' : 'png'}`;
+  const fileName = `${fileBaseName}.${isMobileDevice ? 'jpg' : 'png'}`;
   const downloadTargetBlob = isMobileDevice ? jpgBlob : pngBlob;
   downloadBlob(downloadTargetBlob, fileName);
 

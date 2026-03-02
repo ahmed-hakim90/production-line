@@ -23,6 +23,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
+  phone: '',
   departmentId: '',
   jobPositionId: '',
   level: 1,
@@ -76,6 +77,7 @@ export const Employees: React.FC = () => {
   const [formRoleId, setFormRoleId] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [shareCredentials, setShareCredentials] = useState<{ name: string; email: string; password: string; phone: string } | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [toggleConfirmId, setToggleConfirmId] = useState<string | null>(null);
   const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
@@ -183,6 +185,7 @@ export const Employees: React.FC = () => {
     setFormPassword('');
     setFormRoleId(roles[0]?.id ?? '');
     setSaveMsg(null);
+    setShareCredentials(null);
     setFormTab('job');
     setRecreateAccount(false);
     setShowModal(true);
@@ -195,6 +198,7 @@ export const Employees: React.FC = () => {
     setEditId(id);
     setForm({
       name: raw.name ?? '',
+      phone: raw.phone ?? '',
       departmentId: raw.departmentId ?? '',
       jobPositionId: raw.jobPositionId ?? '',
       level: raw.level ?? 1,
@@ -213,6 +217,7 @@ export const Employees: React.FC = () => {
     const cachedRoleId = raw.userId ? usersMap[raw.userId]?.roleId : undefined;
     setFormRoleId(roles.find((r) => r.id === cachedRoleId)?.id ?? roles[0]?.id ?? '');
     setSaveMsg(null);
+    setShareCredentials(null);
     setFormTab('job');
     setRecreateAccount(false);
     setShowModal(true);
@@ -237,13 +242,39 @@ export const Employees: React.FC = () => {
     return err?.message || 'خطأ غير معروف';
   };
 
+  const shareCredentialsToWhatsApp = () => {
+    if (!shareCredentials) return;
+    const loginUrl = `${window.location.origin}/login`;
+    const msg = [
+      `أهلاً ${shareCredentials.name}`,
+      'تم إنشاء حسابك على نظام الشركة.',
+      '',
+      `البريد الإلكتروني: ${shareCredentials.email}`,
+      `كلمة المرور: ${shareCredentials.password}`,
+      `رابط الدخول: ${loginUrl}`,
+      '',
+      'يرجى تغيير كلمة المرور بعد أول تسجيل دخول.',
+    ].join('\n');
+    const encoded = encodeURIComponent(msg);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const phoneDigits = (shareCredentials.phone || '').replace(/[^\d]/g, '');
+    const url = phoneDigits
+      ? (isMobile
+        ? `whatsapp://send?phone=${phoneDigits}&text=${encoded}`
+        : `https://wa.me/${phoneDigits}?text=${encoded}`)
+      : (isMobile ? `whatsapp://send?text=${encoded}` : `https://wa.me/?text=${encoded}`);
+    window.open(url, '_blank');
+  };
+
   const handleSave = async () => {
     if (!isFormValid) return;
     setSaving(true);
     setSaveMsg(null);
+    setShareCredentials(null);
     try {
       const payload: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
         name: form.name.trim(),
+        phone: (form.phone || '').trim(),
         departmentId: form.departmentId || '',
         jobPositionId: form.jobPositionId || '',
         level: form.level,
@@ -295,6 +326,12 @@ export const Employees: React.FC = () => {
             if (newUid) {
               await updateEmployee(editId, { userId: newUid, email: formEmail.trim() });
               setSaveMsg({ type: 'success', text: recreateAccount ? `تم إعادة إنشاء حساب الدخول بنجاح (${formEmail.trim()})` : `تم حفظ البيانات وإنشاء حساب دخول بنجاح (${formEmail.trim()})` });
+              setShareCredentials({
+                name: form.name.trim(),
+                email: formEmail.trim(),
+                password: formPassword,
+                phone: (form.phone || '').trim(),
+              });
               setRecreateAccount(false);
               await loadUsers();
             }
@@ -343,6 +380,12 @@ export const Employees: React.FC = () => {
             if (newUid) {
               await updateEmployee(id, { userId: newUid, email: formEmail.trim() });
               setSaveMsg({ type: 'success', text: `تم إضافة الموظف وإنشاء حساب دخول بنجاح (${formEmail.trim()})` });
+              setShareCredentials({
+                name: form.name.trim(),
+                email: formEmail.trim(),
+                password: formPassword,
+                phone: (form.phone || '').trim(),
+              });
             }
           } catch (authErr: any) {
             console.error('Create user error:', authErr);
@@ -1000,6 +1043,16 @@ export const Employees: React.FC = () => {
                         placeholder="اسم الموظف"
                       />
                     </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">رقم الهاتف</label>
+                      <input
+                        type="tel"
+                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                        value={form.phone || ''}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        placeholder="مثال: 2010xxxxxxx"
+                      />
+                    </div>
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">رمز الموظف</label>
                       <input
@@ -1382,6 +1435,14 @@ export const Employees: React.FC = () => {
               <div className={`mx-6 mb-2 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400'}`}>
                 <span className="material-icons-round text-lg">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
                 {saveMsg.text}
+              </div>
+            )}
+            {shareCredentials && (
+              <div className="mx-6 mb-2">
+                <Button variant="outline" onClick={shareCredentialsToWhatsApp}>
+                  <span className="material-icons-round text-sm">share</span>
+                  مشاركة بيانات الدخول واتساب
+                </Button>
               </div>
             )}
             <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">

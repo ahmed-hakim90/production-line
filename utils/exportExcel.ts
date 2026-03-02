@@ -467,6 +467,7 @@ export const exportAllEmployees = (
   const rows = employees.map((e) => ({
     'الكود': e.code || '—',
     'الاسم': e.name,
+    'رقم الهاتف': e.phone || '—',
     'القسم': getDeptName(e.departmentId),
     'الوظيفة': getJobTitle(e.jobPositionId),
     'نوع التوظيف': EMPLOYMENT_TYPE_AR[e.employmentType] || e.employmentType,

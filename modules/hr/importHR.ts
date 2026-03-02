@@ -36,6 +36,7 @@ export interface ParsedEmployeeRow {
   rowIndex: number;
   name: string;
   code: string;
+  phone: string;
   departmentName: string;
   departmentId: string;
   positionTitle: string;
@@ -88,6 +89,7 @@ const POS_HEADERS: Record<string, string> = {
 const EMP_HEADERS: Record<string, string> = {
   'الاسم': 'name', 'اسم الموظف': 'name',
   'الرمز': 'code', 'رمز الموظف': 'code', 'الكود': 'code',
+  'رقم الهاتف': 'phone', 'الهاتف': 'phone', 'موبايل': 'phone', 'الموبايل': 'phone',
   'القسم': 'departmentName', 'اسم القسم': 'departmentName',
   'المنصب': 'positionTitle', 'المسمى الوظيفي': 'positionTitle', 'الوظيفة': 'positionTitle',
   'المستوى': 'level',
@@ -256,6 +258,7 @@ function parseEmployeeSheet(
     const errors: string[] = [];
     const name = String(getValue(row, rawHeaders, hMap, 'name') ?? '').trim();
     const code = String(getValue(row, rawHeaders, hMap, 'code') ?? '').trim();
+    const phone = String(getValue(row, rawHeaders, hMap, 'phone') ?? '').trim();
     const departmentName = String(getValue(row, rawHeaders, hMap, 'departmentName') ?? '').trim();
     const positionTitle = String(getValue(row, rawHeaders, hMap, 'positionTitle') ?? '').trim();
     const levelRaw = String(getValue(row, rawHeaders, hMap, 'level') ?? '').trim();
@@ -291,6 +294,7 @@ function parseEmployeeSheet(
     const providedFields: string[] = [];
     if (name) providedFields.push('name');
     if (code) providedFields.push('code');
+    if (phone) providedFields.push('phone');
     if (departmentName) providedFields.push('departmentName');
     if (positionTitle) providedFields.push('positionTitle');
     if (levelRaw) providedFields.push('level');
@@ -334,6 +338,7 @@ function parseEmployeeSheet(
       rowIndex: idx + 2,
       name,
       code,
+      phone,
       departmentName,
       departmentId: (dept as FirestoreDepartment)?.id ?? '',
       positionTitle,

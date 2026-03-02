@@ -50,6 +50,7 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
 export interface Employee {
   id: string;
   name: string;
+  phone?: string;
   departmentId: string;
   jobPositionId: string;
   level: number;
@@ -103,6 +104,7 @@ export interface FirestoreProductionLine {
 export interface FirestoreEmployee {
   id?: string;
   name: string;
+  phone?: string;
   departmentId: string;
   jobPositionId: string;
   level: number;

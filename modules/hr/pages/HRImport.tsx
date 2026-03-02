@@ -205,6 +205,7 @@ export const HRImport: React.FC = () => {
           const updateData: Record<string, any> = {};
           if (emp.providedFields.includes('name')) updateData.name = emp.name;
           if (emp.providedFields.includes('code')) updateData.code = emp.code;
+          if (emp.providedFields.includes('phone')) updateData.phone = emp.phone;
           if (emp.providedFields.includes('departmentName')) updateData.departmentId = resolveDeptId(emp.departmentName);
           if (emp.providedFields.includes('positionTitle')) updateData.jobPositionId = resolvePosId(emp.positionTitle);
           if (emp.providedFields.includes('level')) updateData.level = emp.level;
@@ -226,6 +227,7 @@ export const HRImport: React.FC = () => {
           await addDoc(employeesRef(), {
             name: emp.name,
             code: emp.code || '',
+            phone: emp.phone || '',
             departmentId: resolveDeptId(emp.departmentName),
             jobPositionId: resolvePosId(emp.positionTitle),
             level: emp.level,
@@ -579,6 +581,7 @@ export const HRImport: React.FC = () => {
                           <th className="text-right py-3 px-3">العملية</th>
                           <th className="text-right py-3 px-3">الاسم</th>
                           <th className="text-right py-3 px-3">الرمز</th>
+                          <th className="text-right py-3 px-3">رقم الهاتف</th>
                           <th className="text-right py-3 px-3">القسم</th>
                           <th className="text-right py-3 px-3">المنصب</th>
                           <th className="text-right py-3 px-3">المستوى</th>
@@ -609,6 +612,7 @@ export const HRImport: React.FC = () => {
                             </td>
                             <td className="py-2.5 px-3 font-bold">{row.name || '—'}</td>
                             <td className="py-2.5 px-3 font-mono text-xs">{row.code || '—'}</td>
+                            <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('phone') ? row.phone : '—'}</td>
                             <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-xs">{row.departmentName || '—'}</td>
                             <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-xs">{row.positionTitle || '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('level') ? (JOB_LEVEL_LABELS[row.level] ?? row.level) : '—'}</td>
