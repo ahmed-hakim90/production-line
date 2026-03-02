@@ -831,7 +831,7 @@ export const GlobalModalEnhancer: React.FC = () => {
   }, [workspaceItems, currentRoute]);
 
   return (
-    <div className="fixed left-2 top-1/2 -translate-y-1/2 z-[70] flex items-center gap-2">
+    <div className="fixed left-2 top-1/2 -translate-y-1/2 z-[70] hidden md:flex items-center gap-2">
       <button
         type="button"
         onClick={() => setMenuOpen((prev) => !prev)}

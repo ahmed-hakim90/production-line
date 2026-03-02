@@ -9,7 +9,7 @@ import { warehouseService } from '../services/warehouseService';
 import type { RawMaterial, Warehouse, StockItemBalance, TransferRequestLine } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
-import { shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
+import { exportToPDF, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
 import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../../../utils/importInventoryInByCode';
 import { StockTransferPrint, type StockTransferPrintData } from '../components';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
@@ -37,6 +37,7 @@ const createTransferLine = (): TransferLine => ({
 
 export const StockMovementForm: React.FC = () => {
   const location = useLocation();
+  const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { openModal } = useGlobalModalManager();
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -63,6 +64,7 @@ export const StockMovementForm: React.FC = () => {
   const [transferItems, setTransferItems] = useState<TransferLine[]>([createTransferLine()]);
   const [nextReferenceSeq, setNextReferenceSeq] = useState(1);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [shareToast, setShareToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const [previewData, setPreviewData] = useState<StockTransferPrintData | null>(null);
@@ -274,15 +276,25 @@ export const StockMovementForm: React.FC = () => {
   };
 
   const showShareFeedback = (result: ShareResult) => {
-    if (result.method === 'native_share') return;
-    if (result.method === 'cancelled') {
-      setMessage({ type: 'success', text: 'تم إلغاء مشاركة الصورة.' });
-      return;
-    }
+    if (result.method === 'native_share' || result.method === 'cancelled') return;
     const msg = result.copied
       ? 'تم تحميل صورة التحويلة ونسخها — افتح واتساب والصق الصورة (Ctrl+V)'
       : 'تم تحميل صورة التحويلة — أرفقها في محادثة واتساب';
-    setMessage({ type: 'success', text: msg });
+    setShareToast(msg);
+    setTimeout(() => setShareToast(null), 6000);
+  };
+
+  const printTransfer = async (fileName: string) => {
+    if (!transferPrintRef.current) return;
+    if (isMobilePrint) {
+      await exportToPDF(transferPrintRef.current, fileName, {
+        paperSize: printTemplate?.paperSize,
+        orientation: printTemplate?.orientation,
+        copies: 1,
+      });
+      return;
+    }
+    handleTransferPrint();
   };
 
   const handleImportFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -362,6 +374,7 @@ export const StockMovementForm: React.FC = () => {
 
     setSaving(true);
     setMessage(null);
+    setShareToast(null);
     try {
       const resolvedReferenceNo = referenceNo;
       let txId: string | null = null;
@@ -480,7 +493,7 @@ export const StockMovementForm: React.FC = () => {
         } else {
           setPrintData(payload);
           await new Promise((r) => setTimeout(r, 250));
-          handleTransferPrint();
+          await printTransfer(`اذن-تحويل-${payload.transferNo}`);
           setTimeout(() => setPrintData(null), 1200);
         }
       }
@@ -502,7 +515,7 @@ export const StockMovementForm: React.FC = () => {
     if (!previewData) return;
     setPrintData(previewData);
     await new Promise((r) => setTimeout(r, 250));
-    handleTransferPrint();
+    await printTransfer(`اذن-تحويل-${previewData.transferNo}`);
     setTimeout(() => setPrintData(null), 1200);
   };
 
@@ -878,6 +891,12 @@ export const StockMovementForm: React.FC = () => {
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
+
+      {shareToast && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 shadow-lg">
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{shareToast}</p>
+        </div>
+      )}
 
       {showPrintPreview && previewData && (
         <div
