@@ -175,18 +175,32 @@ export const GlobalTableEnhancer: React.FC = () => {
     };
 
     const runEnhancer = () => {
-      const tables = Array.from(document.querySelectorAll('main table')) as HTMLTableElement[];
+      const root = document.querySelector('main') || document.getElementById('root') || document.body;
+      const tables = Array.from(root.querySelectorAll('table')) as HTMLTableElement[];
       tables.forEach(enhanceTable);
     };
 
     runEnhancer();
 
+    let rafId: number | null = null;
+    const scheduleEnhancer = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        runEnhancer();
+      });
+    };
+
     const observer = new MutationObserver(() => {
-      runEnhancer();
+      scheduleEnhancer();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    const targetContainer = document.querySelector('main') || document.getElementById('root') || document.body;
+    observer.observe(targetContainer, { childList: true, subtree: true });
 
     return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       observer.disconnect();
     };
   }, []);

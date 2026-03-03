@@ -1,11 +1,12 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAppStore } from '../../../store/useAppStore';
+import { useDashboardSlice } from '../../../store/selectors';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
 import { reportService } from '../../../services/reportService';
+import { dashboardStatsService } from '../../../services/dashboardStatsService';
 import { adminService, type SystemUsers } from '../../../services/adminService';
 import { formatNumber, calculateWasteRatio } from '../../../utils/calculations';
 import { exportProductSummary } from '../../../utils/exportExcel';
@@ -222,19 +223,21 @@ export const AdminDashboard: React.FC = () => {
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
 
-  const _rawProducts = useAppStore((s) => s._rawProducts);
-  const _rawLines = useAppStore((s) => s._rawLines);
-  const _rawEmployees = useAppStore((s) => s._rawEmployees);
-  const workOrders = useAppStore((s) => s.workOrders);
-  const liveProduction = useAppStore((s) => s.liveProduction);
-  const productionPlans = useAppStore((s) => s.productionPlans);
-  const planReports = useAppStore((s) => s.planReports);
-  const costCenters = useAppStore((s) => s.costCenters);
-  const costCenterValues = useAppStore((s) => s.costCenterValues);
-  const costAllocations = useAppStore((s) => s.costAllocations);
-  const laborSettings = useAppStore((s) => s.laborSettings);
-  const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
-  const systemSettings = useAppStore((s) => s.systemSettings);
+  const {
+    _rawProducts,
+    _rawLines,
+    _rawEmployees,
+    workOrders,
+    liveProduction,
+    productionPlans,
+    planReports,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    laborSettings,
+    lineProductConfigs,
+    systemSettings,
+  } = useDashboardSlice();
   const pageControl = useMemo(
     () => getExportImportPageControl(systemSettings.exportImport, 'adminDashboard'),
     [systemSettings.exportImport]
@@ -254,6 +257,7 @@ export const AdminDashboard: React.FC = () => {
   const [reports, setReports] = useState<ProductionReport[]>([]);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rangeAggregate, setRangeAggregate] = useState<{ totalProduction: number; totalWaste: number; totalCost: number; reportsCount: number } | null>(null);
 
   // ── System metrics state ─────────────────────────────────────────────────
   const [productSearch, setProductSearch] = useState('');
@@ -275,19 +279,22 @@ export const AdminDashboard: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     setReportsError(null);
-    reportService.getByDateRange(dateRange.start, dateRange.end)
-      .then((data) => {
-        if (cancelled) return;
-        setReports(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'تعذر تحميل تقارير الإنتاج.';
-        setReportsError(message);
-        setReports([]);
-        setLoading(false);
-      });
+    Promise.all([
+      reportService.getByDateRange(dateRange.start, dateRange.end),
+      dashboardStatsService.getRangeTotals(dateRange.start, dateRange.end).catch(() => null),
+    ]).then(([data, aggregate]) => {
+      if (cancelled) return;
+      setReports(Array.isArray(data) ? data : []);
+      setRangeAggregate(aggregate);
+      setLoading(false);
+    }).catch((error) => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : 'تعذر تحميل تقارير الإنتاج.';
+      setReportsError(message);
+      setReports([]);
+      setRangeAggregate(null);
+      setLoading(false);
+    });
     return () => { cancelled = true; };
   }, [dateRange.start, dateRange.end]);
 
@@ -317,8 +324,8 @@ export const AdminDashboard: React.FC = () => {
   // ── KPI Calculations ──────────────────────────────────────────────────────
 
   const kpis = useMemo(() => {
-    const totalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-    const totalWaste = reports.reduce((s, r) => s + (r.quantityWaste || 0), 0);
+    const totalProduction = rangeAggregate?.totalProduction ?? reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+    const totalWaste = rangeAggregate?.totalWaste ?? reports.reduce((s, r) => s + (r.quantityWaste || 0), 0);
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
@@ -354,7 +361,8 @@ export const AdminDashboard: React.FC = () => {
       }
     });
 
-    const totalCost = totalLaborCost + totalIndirectCost;
+    const computedTotalCost = totalLaborCost + totalIndirectCost;
+    const totalCost = rangeAggregate?.totalCost ?? computedTotalCost;
     const avgCostPerUnit = totalProduction > 0 ? totalCost / totalProduction : 0;
 
     const standardConfigs = lineProductConfigs;
@@ -398,7 +406,7 @@ export const AdminDashboard: React.FC = () => {
       totalIndirectCost,
       totalCost,
     };
-  }, [reports, hourlyRate, costCenters, costCenterValues, costAllocations, lineProductConfigs, productionPlans, planReports]);
+  }, [reports, rangeAggregate, hourlyRate, costCenters, costCenterValues, costAllocations, lineProductConfigs, productionPlans, planReports]);
 
   // ── Cost Allocation Completion % ──────────────────────────────────────────
 

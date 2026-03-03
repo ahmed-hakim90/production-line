@@ -5,7 +5,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
 import { buildProductCosts, buildProductAvgCost, formatCost, type ProductCostData } from '../../../utils/costCalculations';
-import { FirestoreProduct } from '../../../types';
+import { FirestoreProduct, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
 import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
@@ -18,6 +18,7 @@ import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';
 import type { StockItemBalance } from '../../inventory/types';
+import { reportService } from '../../../services/reportService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
@@ -87,8 +88,8 @@ export const Products: React.FC = () => {
   const completeJob = useJobsStore((s) => s.completeJob);
   const failJob = useJobsStore((s) => s.failJob);
 
-  const todayReports = useAppStore((s) => s.todayReports);
-  const monthlyReports = useAppStore((s) => s.monthlyReports);
+  const storeTodayReports = useAppStore((s) => s.todayReports);
+  const storeMonthlyReports = useAppStore((s) => s.monthlyReports);
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
@@ -143,6 +144,9 @@ export const Products: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState('');
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
+  const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
+  const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
+  const [scopedReportsLoaded, setScopedReportsLoaded] = useState(false);
 
   // Sort & Pagination & Selection
   const PAGE_SIZE = 20;
@@ -209,13 +213,51 @@ export const Products: React.FC = () => {
   useEffect(() => {
     void (async () => {
       try {
-        const rows = await stockService.getBalances();
+        const rows: StockItemBalance[] = [];
+        let cursor: any = null;
+        for (let page = 0; page < 5; page += 1) {
+          const res = await stockService.getBalancesPaged({ limit: 100, cursor });
+          rows.push(...res.items);
+          if (!res.hasMore || !res.nextCursor) break;
+          cursor = res.nextCursor;
+        }
         setInventoryBalances(rows);
       } catch {
         setInventoryBalances([]);
       }
     })();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadScopedReports = async () => {
+      const now = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const monthStart = `${month}-01`;
+      const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+      const today = new Date().toISOString().slice(0, 10);
+      try {
+        const [todayPage, monthPage] = await Promise.all([
+          reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
+          reportService.listByDateRangePaged({ startDate: monthStart, endDate: monthEnd, limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setTodayReportsScoped(todayPage.items);
+        setMonthlyReportsScoped(monthPage.items);
+        setScopedReportsLoaded(true);
+      } catch {
+        if (cancelled) return;
+        setTodayReportsScoped([]);
+        setMonthlyReportsScoped([]);
+        setScopedReportsLoaded(true);
+      }
+    };
+    void loadScopedReports();
+    return () => { cancelled = true; };
+  }, []);
+
+  const todayReports = scopedReportsLoaded ? todayReportsScoped : storeTodayReports;
+  const monthlyReports = scopedReportsLoaded ? monthlyReportsScoped : storeMonthlyReports;
 
   const productWarehouseBalances = useMemo(() => {
     const keyOf = (warehouseId: string, productId: string) => `${warehouseId}__${productId}`;

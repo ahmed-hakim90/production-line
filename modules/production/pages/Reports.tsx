@@ -19,7 +19,7 @@ import {
 } from '../../../utils/importExcel';
 import { downloadReportsTemplate, ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
-import { reportService } from '../../../services/reportService';
+import { reportService, type FirestoreCursor } from '../../../services/reportService';
 import { useLocation } from 'react-router-dom';
 import {
   ProductionReportPrint,
@@ -71,7 +71,7 @@ export const Reports: React.FC = () => {
   const createReport = useAppStore((s) => s.createReport);
   const updateReport = useAppStore((s) => s.updateReport);
   const deleteReport = useAppStore((s) => s.deleteReport);
-  const fetchReports = useAppStore((s) => s.fetchReports);
+  const fetchReportsFromStore = useAppStore((s) => s.fetchReports);
   const reportsLoading = useAppStore((s) => s.reportsLoading);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const addJob = useJobsStore((s) => s.addJob);
@@ -153,6 +153,10 @@ export const Reports: React.FC = () => {
   const [startDate, setStartDate] = useState(getOperationalDateString(8));
   const [endDate, setEndDate] = useState(getOperationalDateString(8));
   const [viewMode, setViewMode] = useState<'today' | 'range'>('today');
+  const [rangeCursor, setRangeCursor] = useState<FirestoreCursor>(null);
+  const [rangeHasMore, setRangeHasMore] = useState(false);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeError, setRangeError] = useState<string | null>(null);
 
   // Line & supervisor filters
   const [filterLineId, setFilterLineId] = useState('');
@@ -209,13 +213,45 @@ export const Reports: React.FC = () => {
       .then(async (updated) => {
         if (updated <= 0) return;
         if (viewMode === 'range') {
-          await fetchReports(startDate, endDate);
+          await fetchReportsFromStore(startDate, endDate);
         }
       })
       .catch(() => {
         // Silent fallback to keep page usable.
       });
-  }, [can, fetchReports, startDate, endDate, viewMode]);
+  }, [can, fetchReportsFromStore, startDate, endDate, viewMode]);
+
+  const loadRangeReports = useCallback(
+    async (from: string, to: string, append = false) => {
+      setRangeLoading(true);
+      if (!append) setRangeError(null);
+      try {
+        const page = await reportService.listByDateRangePaged({
+          startDate: from,
+          endDate: to,
+          limit: 50,
+          cursor: append ? rangeCursor : null,
+        });
+        const current = append ? useAppStore.getState().productionReports : [];
+        useAppStore.setState({ productionReports: [...current, ...page.items] });
+        setRangeCursor(page.nextCursor);
+        setRangeHasMore(page.hasMore && !!page.nextCursor);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
+        setRangeError(message);
+      } finally {
+        setRangeLoading(false);
+      }
+    },
+    [rangeCursor],
+  );
+
+  const fetchReports = useCallback(
+    async (from: string, to: string) => {
+      await loadRangeReports(from, to, false);
+    },
+    [loadRangeReports],
+  );
 
   const allReports = viewMode === 'today' ? todayReports : productionReports;
   const productCategoryOptions = useMemo(() => {
@@ -498,6 +534,9 @@ export const Reports: React.FC = () => {
     setEndDate(getOperationalDateString(8));
     setFilterLineId('');
     setFilterEmployeeId('');
+    setRangeError(null);
+    setRangeHasMore(false);
+    setRangeCursor(null);
   };
 
   const handleShowYesterday = async () => {
@@ -534,6 +573,11 @@ export const Reports: React.FC = () => {
   };
 
   const activeFilterCount = (filterLineId ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
+  const handleLoadMoreRange = async () => {
+    if (viewMode !== 'range' || rangeLoading || !rangeHasMore) return;
+    await loadRangeReports(startDate, endDate, true);
+  };
+
   const tableToolbarFilters = (
     <>
       {/* ── Date quick-select (segmented control) ── */}
@@ -574,7 +618,7 @@ export const Reports: React.FC = () => {
         <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
       </div>
       <button className="erp-filter-apply" onClick={handleFetchRange}>
-        {reportsLoading
+        {(reportsLoading || rangeLoading)
           ? <span className="material-icons-round" style={{ fontSize: 14, animation: 'spin 1s linear infinite' }}>refresh</span>
           : <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
         }
@@ -1373,6 +1417,12 @@ export const Reports: React.FC = () => {
       )}
 
       {/* Reports Table */}
+      {rangeError && viewMode === 'range' && (
+        <div className="erp-alert erp-alert-warning">
+          <span className="material-icons-round text-[18px] shrink-0">warning</span>
+          <span>{rangeError}</span>
+        </div>
+      )}
       <SelectableTable<ProductionReport>
         data={displayedReports}
         columns={reportColumns}
@@ -1388,6 +1438,17 @@ export const Reports: React.FC = () => {
         emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
         footer={reportTableFooter}
       />
+      {viewMode === 'range' && (
+        <div className="flex items-center justify-center">
+          <Button
+            variant="secondary"
+            onClick={() => void handleLoadMoreRange()}
+            disabled={!rangeHasMore || rangeLoading}
+          >
+            {rangeLoading ? 'جاري التحميل...' : (rangeHasMore ? 'تحميل المزيد' : 'تم تحميل كل النتائج')}
+          </Button>
+        </div>
+      )}
 
       {/* ══ Hidden print components (off-screen, only rendered for print) ══ */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>

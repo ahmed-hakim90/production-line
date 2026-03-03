@@ -15,18 +15,65 @@ import {
   deleteField,
   onSnapshot,
   Unsubscribe,
+  startAfter,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { WorkOrder } from '../../../types';
 
 const COLLECTION = 'work_orders';
+const MAX_PAGE_SIZE = 100;
+
+export type WorkOrderCursor = QueryDocumentSnapshot | null;
+export interface WorkOrderPagedParams {
+  limit?: number;
+  cursor?: WorkOrderCursor;
+  status?: WorkOrder['status'];
+  lineId?: string;
+  productId?: string;
+  supervisorId?: string;
+}
+export interface WorkOrderPageResult {
+  items: WorkOrder[];
+  nextCursor: WorkOrderCursor;
+  hasMore: boolean;
+}
 
 export const workOrderService = {
+  async listPaged(params: WorkOrderPagedParams = {}): Promise<WorkOrderPageResult> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));
+    const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
+    if (params.status) constraints.unshift(where('status', '==', params.status));
+    if (params.lineId) constraints.unshift(where('lineId', '==', params.lineId));
+    if (params.productId) constraints.unshift(where('productId', '==', params.productId));
+    if (params.supervisorId) constraints.unshift(where('supervisorId', '==', params.supervisorId));
+    if (params.cursor) constraints.push(startAfter(params.cursor));
+    const q = query(collection(db, COLLECTION), ...constraints);
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
   async getAll(): Promise<WorkOrder[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
+      const rows: WorkOrder[] = [];
+      let cursor: WorkOrderCursor = null;
+      const maxPages = 10;
+      let truncated = false;
+      for (let page = 0; page < maxPages; page += 1) {
+        const res = await this.listPaged({ limit: MAX_PAGE_SIZE, cursor });
+        rows.push(...res.items);
+        if (!res.hasMore || !res.nextCursor) break;
+        if (page === maxPages - 1 && res.hasMore) truncated = true;
+        cursor = res.nextCursor;
+      }
+      if (truncated) {
+        console.warn('workOrderService.getAll truncated at safety cap. Use listPaged in consuming screens.');
+      }
+      return rows;
     } catch (error) {
       console.error('workOrderService.getAll error:', error);
       throw error;

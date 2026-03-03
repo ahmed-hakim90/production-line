@@ -48,7 +48,6 @@ export const WorkOrders: React.FC = () => {
   const navigate = useNavigate();
   const { can } = usePermission();
   const {
-    workOrders,
     currentEmployee,
     _rawProducts,
     _rawLines,
@@ -58,12 +57,10 @@ export const WorkOrders: React.FC = () => {
     costCenters,
     costCenterValues,
     costAllocations,
-    fetchWorkOrders,
     createWorkOrder,
     updateWorkOrder,
     deleteWorkOrder,
   } = useShallowStore((s) => ({
-    workOrders: s.workOrders,
     currentEmployee: s.currentEmployee,
     _rawProducts: s._rawProducts,
     _rawLines: s._rawLines,
@@ -73,7 +70,6 @@ export const WorkOrders: React.FC = () => {
     costCenters: s.costCenters,
     costCenterValues: s.costCenterValues,
     costAllocations: s.costAllocations,
-    fetchWorkOrders: s.fetchWorkOrders,
     createWorkOrder: s.createWorkOrder,
     updateWorkOrder: s.updateWorkOrder,
     deleteWorkOrder: s.deleteWorkOrder,
@@ -107,8 +103,31 @@ export const WorkOrders: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
   const highlightRef = useRef<HTMLTableRowElement>(null);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [workOrdersCursor, setWorkOrdersCursor] = useState<any>(null);
+  const [workOrdersHasMore, setWorkOrdersHasMore] = useState(false);
+  const [workOrdersLoading, setWorkOrdersLoading] = useState(false);
+  const workOrdersCursorRef = useRef<any>(null);
 
-  useEffect(() => { fetchWorkOrders(); }, []);
+  const loadWorkOrders = useCallback(async (append = false) => {
+    setWorkOrdersLoading(true);
+    try {
+      const res = await workOrderService.listPaged({
+        limit: 50,
+        cursor: append ? workOrdersCursorRef.current : null,
+      });
+      setWorkOrders((prev) => append ? [...prev, ...res.items] : res.items);
+      workOrdersCursorRef.current = res.nextCursor;
+      setWorkOrdersCursor(res.nextCursor);
+      setWorkOrdersHasMore(Boolean(res.hasMore && res.nextCursor));
+    } finally {
+      setWorkOrdersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWorkOrders(false);
+  }, []);
 
   const supervisors = useMemo(
     () => _rawEmployees.filter((e) => e.level === 2 && e.isActive),
@@ -212,6 +231,7 @@ export const WorkOrders: React.FC = () => {
           workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
           ...(form.planId ? { planId: form.planId } : {}),
         });
+        await loadWorkOrders(false);
         setSaveToast('تم حفظ تعديلات أمر الشغل بنجاح');
       } else {
         const woNumber = await workOrderService.generateNextNumber();
@@ -245,6 +265,7 @@ export const WorkOrders: React.FC = () => {
         if (!createdId) {
           throw new Error('تعذر إنشاء أمر الشغل');
         }
+        await loadWorkOrders(false);
         setSaveToast('تم إنشاء أمر الشغل بنجاح');
         setForm(EMPTY_FORM);
       }
@@ -266,16 +287,19 @@ export const WorkOrders: React.FC = () => {
     costAllocations,
     createWorkOrder,
     updateWorkOrder,
+    loadWorkOrders,
   ]);
 
   const handleDelete = useCallback(async (id: string) => {
     await deleteWorkOrder(id);
+    await loadWorkOrders(false);
     setDeleteConfirm(null);
-  }, [deleteWorkOrder]);
+  }, [deleteWorkOrder, loadWorkOrders]);
 
   const handleStatusChange = useCallback(async (wo: WorkOrder, newStatus: WorkOrderStatus) => {
     if (newStatus !== 'completed') {
       await updateWorkOrder(wo.id!, { status: newStatus });
+      await loadWorkOrders(false);
       return;
     }
 
@@ -301,7 +325,8 @@ export const WorkOrders: React.FC = () => {
       scanSummary: scanSummary.summary,
       scanSessionClosedAt: new Date().toISOString(),
     });
-  }, [updateWorkOrder]);
+    await loadWorkOrders(false);
+  }, [updateWorkOrder, loadWorkOrders]);
 
   const openCompleteModal = useCallback(async (wo: WorkOrder) => {
     const scanSummary = await scanEventService.buildWorkOrderSummary(wo.id!);
@@ -359,6 +384,7 @@ export const WorkOrders: React.FC = () => {
         actualWorkHours: Number(closingWorkHours) || 0,
         notes: closingNote,
       });
+      await loadWorkOrders(false);
       setClosingWorkOrder(null);
       setClosingNote('');
       setClosingOpenSessions(0);
@@ -367,7 +393,7 @@ export const WorkOrders: React.FC = () => {
     } finally {
       setClosingBusy(false);
     }
-  }, [closingProduced, closingWorkers, closingWorkHours, closingWorkOrder, closingNote, updateWorkOrder]);
+  }, [closingProduced, closingWorkers, closingWorkHours, closingWorkOrder, closingNote, updateWorkOrder, loadWorkOrders]);
 
   const triggerWOPrint = useCallback(async (wo: WorkOrder) => {
     setPrintData({
@@ -600,6 +626,15 @@ export const WorkOrders: React.FC = () => {
           </div>
         )}
       </Card>
+      <div className="flex items-center justify-center">
+        <Button
+          variant="secondary"
+          onClick={() => void loadWorkOrders(true)}
+          disabled={!workOrdersHasMore || workOrdersLoading}
+        >
+          {workOrdersLoading ? 'جاري التحميل...' : (workOrdersHasMore ? 'تحميل المزيد' : 'تم تحميل كل أوامر الشغل')}
+        </Button>
+      </div>
 
       {/* Create / Edit Modal */}
       {showModal && (

@@ -14,6 +14,9 @@ import {
   where,
   orderBy,
   serverTimestamp,
+  limit,
+  startAfter,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
 import {
@@ -27,8 +30,41 @@ import type {
   LoanInstallment,
   LoanType,
 } from './types';
+const MAX_PAGE_SIZE = 100;
+
+type FirestoreCursor = QueryDocumentSnapshot | null;
+type LoanPageResult = {
+  items: FirestoreEmployeeLoan[];
+  nextCursor: FirestoreCursor;
+  hasMore: boolean;
+};
 
 export const loanService = {
+  async listPaged(params?: {
+    employeeId?: string;
+    loanType?: LoanType;
+    finalStatus?: ApprovalStatus;
+    status?: FirestoreEmployeeLoan['status'];
+    month?: string;
+    limit?: number;
+    cursor?: FirestoreCursor;
+  }): Promise<LoanPageResult> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const pageSize = Math.max(1, Math.min(Number(params?.limit || 30), MAX_PAGE_SIZE));
+    const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
+    if (params?.employeeId) constraints.unshift(where('employeeId', '==', params.employeeId));
+    if (params?.loanType) constraints.unshift(where('loanType', '==', params.loanType));
+    if (params?.finalStatus) constraints.unshift(where('finalStatus', '==', params.finalStatus));
+    if (params?.status) constraints.unshift(where('status', '==', params.status));
+    if (params?.month) constraints.unshift(where('month', '==', params.month));
+    if (params?.cursor) constraints.push(startAfter(params.cursor));
+    const q = query(employeeLoansRef(), ...constraints);
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployeeLoan));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
   async create(data: Omit<FirestoreEmployeeLoan, 'id' | 'createdAt'>): Promise<string> {
     if (!isConfigured) return '';
     const docRef = await addDoc(employeeLoansRef(), {
@@ -42,14 +78,18 @@ export const loanService = {
   async getAll(): Promise<FirestoreEmployeeLoan[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(employeeLoansRef(), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployeeLoan));
+      const rows: FirestoreEmployeeLoan[] = [];
+      let cursor: FirestoreCursor = null;
+      const maxPages = 10;
+      for (let page = 0; page < maxPages; page += 1) {
+        const res = await this.listPaged({ limit: MAX_PAGE_SIZE, cursor });
+        rows.push(...res.items);
+        if (!res.hasMore || !res.nextCursor) break;
+        cursor = res.nextCursor;
+      }
+      return rows;
     } catch {
-      const snap = await getDocs(employeeLoansRef());
-      const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployeeLoan));
-      results.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-      return results;
+      return [];
     }
   },
 

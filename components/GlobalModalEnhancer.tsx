@@ -762,8 +762,9 @@ export const GlobalModalEnhancer: React.FC = () => {
       panel.addEventListener('touchstart', () => bringOverlayToFront(id), { passive: true, capture: true });
     };
 
+    const targetContainer = document.querySelector('main') || document.getElementById('root') || document.body;
     const scan = () => {
-      const overlays = Array.from(document.querySelectorAll('div')).filter(isLikelyOverlay);
+      const overlays = Array.from(targetContainer.querySelectorAll('div.fixed.inset-0')).filter(isLikelyOverlay);
       overlays.forEach(attachToOverlay);
 
       const openIds = new Set<string>();
@@ -773,7 +774,7 @@ export const GlobalModalEnhancer: React.FC = () => {
       });
 
       // cleanup refs for closed overlays
-      Array.from(overlaysRef.current.keys()).forEach((id) => {
+      Array.from(overlaysRef.current.keys() as Iterable<string>).forEach((id: string) => {
         if (!openIds.has(id)) {
           overlaysRef.current.delete(id);
           panelsRef.current.delete(id);
@@ -782,11 +783,23 @@ export const GlobalModalEnhancer: React.FC = () => {
       });
     };
 
-    const observer = new MutationObserver(scan);
-    observer.observe(document.body, { subtree: true, childList: true });
+    let rafId: number | null = null;
+    const scheduleScan = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        scan();
+      });
+    };
+
+    const observer = new MutationObserver(() => scheduleScan());
+    observer.observe(targetContainer, { subtree: true, childList: true });
     scan();
 
     return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       observer.disconnect();
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', stopDrag);

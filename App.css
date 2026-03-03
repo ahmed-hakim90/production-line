@@ -777,6 +777,51 @@ button {
   line-height: 1.45;
 }
 
+/* ══════════════════════════════════════════════════════════
+   APP LOADING SCREEN
+   ══════════════════════════════════════════════════════════ */
+
+.erp-app-loading-ring {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255,255,255,0.25);
+  border-top-color: rgba(255,255,255,0.9);
+  border-radius: 50%;
+  animation: erp-spin 0.75s linear infinite;
+}
+
+.erp-loading-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.erp-loading-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(var(--color-primary));
+  animation: erp-dot-bounce 1.2s ease-in-out infinite;
+}
+
+.erp-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.erp-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes erp-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes erp-dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40%           { transform: scale(1);   opacity: 1;   }
+}
+
+@keyframes erp-loading-bar {
+  0%   { width: 0%;    margin-left: 0;    }
+  50%  { width: 70%;   margin-left: 0;    }
+  100% { width: 0%;    margin-left: 100%; }
+}
+
 .erp-auth-meta {
   text-align: center;
   font-size: 10.5px;

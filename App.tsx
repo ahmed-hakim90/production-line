@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -15,6 +15,7 @@ import { SYSTEM_ROUTES } from './modules/system/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import type { AppRouteDef } from './modules/shared/routes';
 import { useAppStore } from './store/useAppStore';
+import { useAuthUiSlice } from './store/selectors';
 import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
 import { registerSystemEventListeners } from './shared/events';
@@ -120,8 +121,7 @@ const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApprov
 };
 
 const AuthUiStateGuard: React.FC = () => {
-  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
-  const isPendingApproval = useAppStore((s) => s.isPendingApproval);
+  const { isAuthenticated, isPendingApproval } = useAuthUiSlice();
   const { resetAllModals } = useGlobalModalManager();
   const resetJobsUiState = useJobsStore((s) => s.resetUiState);
 
@@ -144,54 +144,170 @@ const App: React.FC = () => {
   const subscribeToLineStatuses = useAppStore((s) => s.subscribeToLineStatuses);
   const subscribeToWorkOrders = useAppStore((s) => s.subscribeToWorkOrders);
   const subscribeToScanEventsToday = useAppStore((s) => s.subscribeToScanEventsToday);
-  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
-  const isPendingApproval = useAppStore((s) => s.isPendingApproval);
-  const loading = useAppStore((s) => s.loading);
-  const initialized = useRef(false);
+  const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
+  const activeSessionUidRef = useRef<string | null>(null);
+  const cleanupSubsRef = useRef<(() => void) | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    const clearSubscriptions = () => {
+      cleanupSubsRef.current?.();
+      cleanupSubsRef.current = null;
+    };
+    // Safety net: never block forever if auth callback is delayed.
+    const resolveTimer = window.setTimeout(() => {
+      setAuthResolved(true);
+      useAppStore.setState({ loading: false });
+    }, 6000);
 
-    const unsub = onAuthChange((user) => {
-      if (user) {
-        initializeApp().then(() => {
-          const state = useAppStore.getState();
-          if (state.isAuthenticated) {
-            const cleanupEvents = registerSystemEventListeners();
-            const unsubReports = subscribeToDashboard();
-            const unsubStatuses = subscribeToLineStatuses();
-            const unsubWorkOrders = subscribeToWorkOrders();
-            const unsubScans = subscribeToScanEventsToday();
-            (window as any).__cleanupSubs = () => {
-              cleanupEvents();
-              unsubReports();
-              unsubStatuses();
-              unsubWorkOrders();
-              unsubScans();
-            };
-          }
+    const unsub = onAuthChange(async (user) => {
+      window.clearTimeout(resolveTimer);
+      setAuthResolved(true);
+      if (!user) {
+        activeSessionUidRef.current = null;
+        clearSubscriptions();
+        useAppStore.setState({
+          loading: false,
+          isAuthenticated: false,
+          isPendingApproval: false,
         });
+        return;
       }
+
+      // Skip duplicate bootstraps for same authenticated session.
+      if (activeSessionUidRef.current === user.uid && useAppStore.getState().isAuthenticated) return;
+
+      clearSubscriptions();
+      try {
+        await Promise.race([
+          initializeApp(),
+          new Promise((_, reject) => {
+            window.setTimeout(() => reject(new Error('initializeApp timeout')), 15000);
+          }),
+        ]);
+      } catch {
+        useAppStore.setState({ loading: false });
+        return;
+      }
+      const state = useAppStore.getState();
+      if (!state.isAuthenticated || state.isPendingApproval) {
+        activeSessionUidRef.current = user.uid;
+        return;
+      }
+
+      activeSessionUidRef.current = user.uid;
+
+      const cleanupEvents = registerSystemEventListeners();
+      const unsubReports = subscribeToDashboard();
+      const unsubStatuses = subscribeToLineStatuses();
+      const unsubWorkOrders = subscribeToWorkOrders();
+      const unsubScans = subscribeToScanEventsToday();
+      cleanupSubsRef.current = () => {
+        cleanupEvents();
+        unsubReports();
+        unsubStatuses();
+        unsubWorkOrders();
+        unsubScans();
+      };
     });
 
     return () => {
+      window.clearTimeout(resolveTimer);
       unsub();
-      (window as any).__cleanupSubs?.();
+      cleanupSubsRef.current?.();
+      cleanupSubsRef.current = null;
     };
-  }, []);
+  }, [initializeApp, subscribeToDashboard, subscribeToLineStatuses, subscribeToWorkOrders, subscribeToScanEventsToday]);
 
-  if (loading && !isAuthenticated) {
+  // Block only until the first auth-state resolution.
+  if (!authResolved) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg, #f0f2f5)' }}>
-        <div className="text-center">
-          <div
-            className="w-16 h-16 rounded-[var(--border-radius-xl)] flex items-center justify-center text-white mx-auto mb-4 animate-pulse"
-            style={{ background: 'rgb(var(--color-primary))', boxShadow: '0 8px 24px rgb(var(--color-primary)/0.3)' }}
-          >
-            <span className="material-icons-round text-4xl">factory</span>
+      <div className="erp-auth-page has-panel" dir="rtl">
+        {/* Brand Panel — desktop left side */}
+        <div className="erp-auth-panel">
+          {/* decorative circles handled by ::before / ::after */}
+          <div className="erp-auth-panel-logo">
+            <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
           </div>
-          <p className="text-sm text-[var(--color-text-muted)] font-semibold">جاري التحميل...</p>
+          <h1 className="erp-auth-panel-name">Pro Tech ERP</h1>
+          <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
+          <div className="erp-auth-panel-features">
+            {[
+              { icon: 'precision_manufacturing', text: 'إدارة خطوط وخطط الإنتاج' },
+              { icon: 'inventory_2',             text: 'متابعة المخزون والمواد الخام' },
+              { icon: 'groups',                  text: 'إدارة الموارد البشرية والحضور' },
+              { icon: 'bar_chart',               text: 'تقارير وتحليلات متقدمة' },
+            ].map(({ icon, text }) => (
+              <div key={icon} className="erp-auth-panel-feature">
+                <span className="material-icons-round">{icon}</span>
+                <span>{text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Loading Content */}
+        <div className="erp-auth-container" style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center', maxWidth: 320 }}>
+            {/* App icon with spinning ring */}
+            <div style={{ position: 'relative', display: 'inline-flex', marginBottom: 28 }}>
+              <div
+                style={{
+                  width: 80, height: 80,
+                  borderRadius: 20,
+                  background: 'rgb(79 70 229)',
+                  boxShadow: '0 12px 32px rgba(79,70,229,0.35)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <span className="material-icons-round" style={{ fontSize: 40, color: '#fff' }}>factory</span>
+              </div>
+              {/* spinning ring around icon */}
+              <div style={{
+                position: 'absolute', inset: -6,
+                border: '2.5px solid rgba(79,70,229,0.15)',
+                borderTopColor: 'rgb(79 70 229)',
+                borderRadius: '50%',
+                animation: 'erp-spin 1s linear infinite',
+              }} />
+            </div>
+
+            <h2 style={{
+              fontSize: 22, fontWeight: 800,
+              color: '#1e1b4b', marginBottom: 6,
+              fontFamily: 'Cairo, sans-serif',
+            }}>
+              Pro Tech ERP
+            </h2>
+            <p style={{
+              fontSize: 13, color: '#6b7280',
+              marginBottom: 32, fontFamily: 'Cairo, sans-serif',
+            }}>
+              جاري تهيئة النظام...
+            </p>
+
+            {/* Animated dots */}
+            <div className="erp-loading-dots" style={{ justifyContent: 'center', marginBottom: 24 }}>
+              <span />
+              <span />
+              <span />
+            </div>
+
+            {/* Thin progress bar */}
+            <div style={{
+              width: 200, height: 3,
+              background: 'rgba(79,70,229,0.12)',
+              borderRadius: 99, overflow: 'hidden',
+              margin: '0 auto',
+            }}>
+              <div style={{
+                height: '100%',
+                background: 'linear-gradient(90deg, rgb(79 70 229), rgb(129 140 248))',
+                borderRadius: 99,
+                animation: 'erp-loading-bar 1.6s ease-in-out infinite',
+              }} />
+            </div>
+          </div>
         </div>
       </div>
     );

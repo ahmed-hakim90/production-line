@@ -540,58 +540,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, authError: null, error: null });
     try {
       const cred = await signInWithEmail(email, password);
-      const uid = cred.user.uid;
-
-      const roles = await roleService.seedIfEmpty();
-      set({ roles });
-
-      const userDoc = await userService.get(uid);
-      if (!userDoc) {
-        await signOut();
-        set({
-          loading: false,
-          authError: 'لم يتم العثور على حساب المستخدم. تواصل مع المدير.',
-          isAuthenticated: false,
-        });
-        return;
-      }
-
-      if (!userDoc.isActive) {
-        set({
-          isAuthenticated: true,
-          isPendingApproval: true,
-          uid,
-          userEmail: userDoc.email,
-          userDisplayName: userDoc.displayName,
-          userProfile: userDoc,
-          loading: false,
-        });
-        return;
-      }
-
-      const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
-
-      set({
-        isAuthenticated: true,
-        isPendingApproval: false,
-        uid,
-        userEmail: userDoc.email,
-        userDisplayName: userDoc.displayName,
-        userProfile: userDoc,
-      });
-
-      console.log('[Auth] Login success:', {
-        uid,
-        email: userDoc.email,
-        displayName: userDoc.displayName,
-      });
-
-      get()._applyRole(role);
-      await get()._loadAppData();
-
-      activityLogService.log(uid, userDoc.email, 'LOGIN', `تسجيل دخول: ${userDoc.displayName}`);
-
-      set({ loading: false });
+    
+      // Single bootstrap source of truth: onAuthChange -> initializeApp
+      // Keep loading=true until initializeApp completes.
     } catch (error: any) {
       let msg = 'فشل تسجيل الدخول';
       if (error?.code === 'auth/user-not-found' || error?.code === 'auth/wrong-password' || error?.code === 'auth/invalid-credential') {
@@ -681,9 +632,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   initializeApp: async () => {
     // Skip during admin user creation to avoid race condition
-    if (_creatingUser) return;
+    if (_creatingUser) {
+      set({ loading: false });
+      return;
+    }
 
-    if (!auth) return;
+    if (!auth) {
+      set({ loading: false, isAuthenticated: false });
+      return;
+    }
     const currentUser = auth.currentUser;
     if (!currentUser) {
       set({ loading: false, isAuthenticated: false });
@@ -734,10 +691,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       get()._applyRole(role);
       await get()._loadAppData();
-      set({ loading: false });
     } catch (error) {
       console.error('initializeApp error:', error);
-      set({ error: (error as Error).message, loading: false });
+      set({ error: (error as Error).message });
+    } finally {
+      // Never leave app in perpetual loading state.
+      if (get().loading) set({ loading: false });
     }
   },
 
@@ -773,41 +732,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: Load all app data (after auth) ────────────────────────────
 
   _loadAppData: async () => {
-    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, systemSettingsRaw] =
+    const [rawProducts, rawLines, rawEmployees, configs, laborSettings, systemSettingsRaw] =
       await Promise.all([
         productService.getAll(),
         lineService.getAll(),
         employeeService.getAll(),
         lineProductConfigService.getAll(),
-        productionPlanService.getAll(),
-        workOrderService.getAll(),
-        costCenterService.getAll(),
-        costCenterValueService.getAll(),
-        costAllocationService.getAll(),
         laborSettingsService.get(),
         systemSettingsService.get(),
       ]);
 
     const today = getOperationalDateString(8);
-    const { start: monthStart, end: monthEnd } = getMonthDateRange();
-    const [todayReports, monthlyReports, lineStatuses] = await Promise.all([
-      reportService.getByDateRange(today, today),
-      reportService.getByDateRange(monthStart, monthEnd),
+    const [todayPage, lineStatuses] = await Promise.all([
+      reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
       lineStatusService.getAll(),
     ]);
-
-    const activePlans = productionPlans.filter(
-      (p) => p.status === 'in_progress' || p.status === 'planned'
-    );
-    const planReports: Record<string, ProductionReport[]> = {};
-    await Promise.all(
-      activePlans.map(async (plan) => {
-        const key = `${plan.lineId}_${plan.productId}`;
-        planReports[key] = await reportService.getByLineAndProduct(
-          plan.lineId, plan.productId, plan.startDate
-        );
-      })
-    );
+    const todayReports = todayPage.items;
+    const monthlyReports: ProductionReport[] = [];
 
     const mergedSettings = systemSettingsRaw
       ? { ...DEFAULT_SYSTEM_SETTINGS, ...systemSettingsRaw }
@@ -831,14 +772,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       lineProductConfigs: configs,
       todayReports,
       monthlyReports,
-      productionReports: monthlyReports,
+      productionReports: [],
       lineStatuses,
-      productionPlans,
-      planReports,
-      workOrders,
-      costCenters,
-      costCenterValues,
-      costAllocations,
+      productionPlans: [],
+      planReports: {},
+      workOrders: [],
+      costCenters: [],
+      costCenterValues: [],
+      costAllocations: [],
       laborSettings,
       systemSettings: mergedSettings,
     });
@@ -846,11 +787,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     applyTheme(mergedSettings.theme);
     setupAutoThemeListener(mergedSettings.theme);
 
-    const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
+    const allReports = todayReports;
     const products = buildProducts(rawProducts, allReports, configs);
     const productionLines = buildProductionLines(
       rawLines, rawProducts, rawEmployees, todayReports, lineStatuses, configs,
-      productionPlans, planReports, workOrders
+      [], {}, []
     );
     const employees: Employee[] = rawEmployees.map((e) => ({
       id: e.id!,
@@ -870,6 +811,43 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     set({ products, productionLines, employees });
+
+    // Load heavy module data in background to avoid blocking post-login UI.
+    void (async () => {
+      try {
+        const [productionPlans, workOrders, costCenters, costCenterValues, costAllocations] = await Promise.all([
+          productionPlanService.getAll(),
+          workOrderService.getAll(),
+          costCenterService.getAll(),
+          costCenterValueService.getAll(),
+          costAllocationService.getAll(),
+        ]);
+        const activePlans = productionPlans.filter(
+          (p) => p.status === 'in_progress' || p.status === 'planned'
+        );
+        const planReports: Record<string, ProductionReport[]> = {};
+        await Promise.all(
+          activePlans.map(async (plan) => {
+            const key = `${plan.lineId}_${plan.productId}`;
+            planReports[key] = await reportService.getByLineAndProduct(
+              plan.lineId, plan.productId, plan.startDate
+            );
+          })
+        );
+        set({
+          productionPlans,
+          planReports,
+          workOrders,
+          costCenters,
+          costCenterValues,
+          costAllocations,
+        });
+        get()._rebuildLines();
+        get()._rebuildProducts();
+      } catch (error) {
+        console.error('_loadAppData background phase error:', error);
+      }
+    })();
   },
 
   // ── Role Switching ─────────────────────────────────────────────────────────
@@ -993,11 +971,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchReports: async (startDate?: string, endDate?: string) => {
     set({ reportsLoading: true, error: null });
     try {
-      let reports: ProductionReport[];
-      if (startDate && endDate) {
-        reports = await reportService.getByDateRange(startDate, endDate);
-      } else {
-        reports = await reportService.getAll();
+      const today = getOperationalDateString(8);
+      const from = startDate || today;
+      const to = endDate || today;
+      const reports: ProductionReport[] = [];
+      let cursor: any = null;
+      const maxPages = 5;
+      for (let pageIdx = 0; pageIdx < maxPages; pageIdx += 1) {
+        const page = await reportService.listByDateRangePaged({
+          startDate: from,
+          endDate: to,
+          limit: 100,
+          cursor,
+        });
+        reports.push(...page.items);
+        if (!page.hasMore || !page.nextCursor) break;
+        cursor = page.nextCursor;
       }
       set({ productionReports: reports, reportsLoading: false });
     } catch (error) {
@@ -1613,7 +1602,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 itemName: product.name,
                 itemCode: product.code,
                 quantity: producedQty,
-                minStock: product.minStock,
+                minStock: (product as any).minStock ?? 0,
               }],
               createdBy: actorName,
               createdByUserId: actorUserId,

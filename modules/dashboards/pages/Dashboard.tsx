@@ -65,8 +65,8 @@ const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
 
 export const Dashboard: React.FC = () => {
   const productionLines = useAppStore((s) => s.productionLines);
-  const todayReports = useAppStore((s) => s.todayReports);
-  const monthlyReports = useAppStore((s) => s.monthlyReports);
+  const storeTodayReports = useAppStore((s) => s.todayReports);
+  const storeMonthlyReports = useAppStore((s) => s.monthlyReports);
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawLines = useAppStore((s) => s._rawLines);
@@ -112,6 +112,40 @@ export const Dashboard: React.FC = () => {
   const [chartMonth, setChartMonth] = useState(getCurrentMonth);
   const [chartReports, setChartReports] = useState<ProductionReport[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
+  const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
+  const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
+  const [scopedReportsLoaded, setScopedReportsLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadScopedReports = async () => {
+      const now = new Date();
+      const month = getCurrentMonth();
+      const monthStart = `${month}-01`;
+      const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+      const today = new Date().toISOString().slice(0, 10);
+      try {
+        const [todayPage, monthPage] = await Promise.all([
+          reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
+          reportService.listByDateRangePaged({ startDate: monthStart, endDate: monthEnd, limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setTodayReportsScoped(todayPage.items);
+        setMonthlyReportsScoped(monthPage.items);
+        setScopedReportsLoaded(true);
+      } catch {
+        if (cancelled) return;
+        setTodayReportsScoped([]);
+        setMonthlyReportsScoped([]);
+        setScopedReportsLoaded(true);
+      }
+    };
+    void loadScopedReports();
+    return () => { cancelled = true; };
+  }, []);
+
+  const todayReports = scopedReportsLoaded ? todayReportsScoped : storeTodayReports;
+  const monthlyReports = scopedReportsLoaded ? monthlyReportsScoped : storeMonthlyReports;
 
   // ── Set Target Modal ──
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);

@@ -101,16 +101,18 @@ export default defineConfig(({ mode }) => {
                 if (id.includes('/firebase/')) return 'vendor-firebase';
                 if (id.includes('/recharts/')) return 'vendor-recharts';
                 if (id.includes('/xlsx/')) return 'vendor-xlsx';
+                if (id.includes('/zustand/')) return 'vendor-state';
                 if (id.includes('/jspdf/') || id.includes('/html2canvas/') || id.includes('/react-to-print/')) {
                   return 'vendor-print';
                 }
+                if (id.includes('/qrcode.react/') || id.includes('/html5-qrcode/')) return 'vendor-scan';
                 if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/react-router-dom/')) {
                   return 'vendor-react';
                 }
                 return;
               }
 
-              // Leave app code to Rollup's default graph-based chunking.
+              // Leave app code to Rollup's graph-based chunking to avoid circular chunk groups.
               return;
             },
           },

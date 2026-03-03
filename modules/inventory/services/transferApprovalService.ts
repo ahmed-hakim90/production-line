@@ -8,6 +8,9 @@ import {
   query,
   updateDoc,
   where,
+  limit,
+  startAfter,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type {
@@ -20,6 +23,14 @@ import { stockService } from './stockService';
 
 const COLLECTION = 'inventory_transfer_requests';
 const toIsoNow = () => new Date().toISOString();
+const MAX_PAGE_SIZE = 100;
+
+type FirestoreCursor = QueryDocumentSnapshot | null;
+type TransferRequestPageResult = {
+  items: InventoryTransferRequest[];
+  nextCursor: FirestoreCursor;
+  hasMore: boolean;
+};
 
 type CreateTransferRequestInput = {
   requestType?: TransferRequestType;
@@ -48,22 +59,51 @@ type ApproveRequestOptions = {
 const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
 
 export const transferApprovalService = {
+  async listPaged(params?: {
+    status?: TransferRequestStatus;
+    requestType?: TransferRequestType;
+    limit?: number;
+    cursor?: FirestoreCursor;
+  }): Promise<TransferRequestPageResult> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const pageSize = Math.max(1, Math.min(Number(params?.limit || 30), MAX_PAGE_SIZE));
+    const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
+    if (params?.status) constraints.unshift(where('status', '==', params.status));
+    if (params?.requestType) constraints.unshift(where('requestType', '==', params.requestType));
+    if (params?.cursor) constraints.push(startAfter(params.cursor));
+    const q = query(collection(db, COLLECTION), ...constraints);
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
   async getAll(): Promise<InventoryTransferRequest[]> {
     if (!isConfigured) return [];
-    const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+    const rows: InventoryTransferRequest[] = [];
+    let cursor: FirestoreCursor = null;
+    const maxPages = 10;
+    for (let page = 0; page < maxPages; page += 1) {
+      const res = await this.listPaged({ limit: MAX_PAGE_SIZE, cursor });
+      rows.push(...res.items);
+      if (!res.hasMore || !res.nextCursor) break;
+      cursor = res.nextCursor;
+    }
+    return rows;
   },
 
   async getByStatus(status: TransferRequestStatus): Promise<InventoryTransferRequest[]> {
     if (!isConfigured) return [];
-    const q = query(
-      collection(db, COLLECTION),
-      where('status', '==', status),
-      orderBy('createdAt', 'desc'),
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+    const rows: InventoryTransferRequest[] = [];
+    let cursor: FirestoreCursor = null;
+    const maxPages = 10;
+    for (let page = 0; page < maxPages; page += 1) {
+      const res = await this.listPaged({ status, limit: MAX_PAGE_SIZE, cursor });
+      rows.push(...res.items);
+      if (!res.hasMore || !res.nextCursor) break;
+      cursor = res.nextCursor;
+    }
+    return rows;
   },
 
   async getById(id: string): Promise<InventoryTransferRequest | null> {

@@ -9,6 +9,7 @@ import { ProductionLineStatus, FirestoreProductionLine, WorkOrder, ProductionPla
 import type { LineWorkerAssignment } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import { reportService } from '../../../services/reportService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
@@ -43,8 +44,8 @@ export const Lines: React.FC = () => {
   const workOrders = useAppStore((s) => s.workOrders);
   const productionPlans = useAppStore((s) => s.productionPlans);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
-  const todayReports = useAppStore((s) => s.todayReports);
-  const productionReports = useAppStore((s) => s.productionReports);
+  const storeTodayReports = useAppStore((s) => s.todayReports);
+  const storeProductionReports = useAppStore((s) => s.productionReports);
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
@@ -53,16 +54,52 @@ export const Lines: React.FC = () => {
   const navigate = useNavigate();
 
   const [todayAssignments, setTodayAssignments] = useState<LineWorkerAssignment[]>([]);
+  const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
+  const [recentReportsScoped, setRecentReportsScoped] = useState<ProductionReport[]>([]);
+  const [scopedReportsLoaded, setScopedReportsLoaded] = useState(false);
 
   useEffect(() => {
     lineAssignmentService.getByDate(getTodayDateString()).then(setTodayAssignments).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadScopedReports = async () => {
+      const today = getTodayDateString();
+      const now = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const monthStart = `${month}-01`;
+      const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+      try {
+        const [todayPage, monthPage] = await Promise.all([
+          reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
+          reportService.listByDateRangePaged({ startDate: monthStart, endDate: monthEnd, limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setTodayReportsScoped(todayPage.items);
+        setRecentReportsScoped(monthPage.items);
+        setScopedReportsLoaded(true);
+      } catch {
+        if (cancelled) return;
+        setTodayReportsScoped([]);
+        setRecentReportsScoped([]);
+        setScopedReportsLoaded(true);
+      }
+    };
+    void loadScopedReports();
+    return () => { cancelled = true; };
+  }, []);
+
+  const todayReports = scopedReportsLoaded ? todayReportsScoped : storeTodayReports;
+  const productionReports = scopedReportsLoaded ? recentReportsScoped : storeProductionReports;
 
   const getTodayWorkersCount = (lineId: string) =>
     todayAssignments.filter((a) => a.lineId === lineId).length;
 
   const [showAllLines, setShowAllLines] = useState(false);
   const LINES_PAGE_SIZE = 4;
+  const [showAllPlans, setShowAllPlans] = useState(false);
+  const PLANS_PAGE_SIZE = 6;
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -332,21 +369,31 @@ export const Lines: React.FC = () => {
           }
         };
 
+        const visiblePlans = showAllPlans ? activePlans : activePlans.slice(0, PLANS_PAGE_SIZE);
         return (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-blue-500">event_note</span>
                 <h3 className="text-base font-bold text-[var(--color-text)]">خطط الإنتاج النشطة</h3>
                 <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{activePlans.length}</span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalPlanned)}</span>
-                <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalPlanned)}</span>
+                  <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
+                </div>
+                <button
+                  onClick={() => navigate('/production-plans')}
+                  className="btn btn-secondary gap-1 text-xs"
+                >
+                  <span className="material-icons-round text-[14px]">open_in_new</span>
+                  عرض كل الخطط
+                </button>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {activePlans.map((plan) => {
+              {visiblePlans.map((plan) => {
                 const product = _rawProducts.find((p) => p.id === plan.productId);
                 const lineName = productionLines.find((l) => l.id === plan.lineId)?.name ?? '—';
                 const progress = calculatePlanProgress(plan.producedQuantity, plan.plannedQuantity);
@@ -437,6 +484,22 @@ export const Lines: React.FC = () => {
                 );
               })}
             </div>
+
+            {activePlans.length > PLANS_PAGE_SIZE && (
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setShowAllPlans((v) => !v)}
+                  className="btn btn-secondary gap-2"
+                >
+                  <span className="material-icons-round text-[16px]">
+                    {showAllPlans ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
+                  </span>
+                  {showAllPlans
+                    ? 'عرض أقل'
+                    : `عرض المزيد (${activePlans.length - PLANS_PAGE_SIZE} خطط متبقية)`}
+                </button>
+              </div>
+            )}
           </div>
         );
       })()}

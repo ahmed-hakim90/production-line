@@ -10,6 +10,8 @@ import {
   setDoc,
   updateDoc,
   writeBatch,
+  startAfter,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type {
@@ -26,6 +28,14 @@ const TRANSACTIONS_COLLECTION = 'stock_transactions';
 const COUNTS_COLLECTION = 'stock_counts';
 const INV_REF_REGEX = /^INV-(\d+)$/i;
 const formatInvReference = (seq: number) => `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
+const MAX_PAGE_SIZE = 100;
+
+type FirestoreCursor = QueryDocumentSnapshot | null;
+interface StockPageResult<T> {
+  items: T[];
+  nextCursor: FirestoreCursor;
+  hasMore: boolean;
+}
 
 const balanceDocId = (warehouseId: string, itemType: InventoryItemType, itemId: string) =>
   `${warehouseId}__${itemType}__${itemId}`;
@@ -42,6 +52,46 @@ const chunkArray = <T>(items: T[], size: number): T[][] => {
 };
 
 export const stockService = {
+  async getBalancesPaged(params?: {
+    warehouseId?: string;
+    limit?: number;
+    cursor?: FirestoreCursor;
+  }): Promise<StockPageResult<StockItemBalance>> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), MAX_PAGE_SIZE));
+    const constraints: any[] = [orderBy('updatedAt', 'desc'), limit(pageSize)];
+    if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
+    if (params?.cursor) constraints.push(startAfter(params.cursor));
+    const q = query(collection(db, BALANCES_COLLECTION), ...constraints);
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockItemBalance));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
+  async getTransactionsPaged(params?: {
+    warehouseId?: string;
+    limit?: number;
+    cursor?: FirestoreCursor;
+    movementType?: StockTransaction['movementType'];
+    startDate?: string;
+    endDate?: string;
+  }): Promise<StockPageResult<StockTransaction>> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), MAX_PAGE_SIZE));
+    const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
+    if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
+    if (params?.movementType) constraints.unshift(where('movementType', '==', params.movementType));
+    if (params?.startDate) constraints.unshift(where('createdAt', '>=', params.startDate));
+    if (params?.endDate) constraints.unshift(where('createdAt', '<=', params.endDate));
+    if (params?.cursor) constraints.push(startAfter(params.cursor));
+    const q = query(collection(db, TRANSACTIONS_COLLECTION), ...constraints);
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
   async getNextInvReferenceNo(): Promise<string> {
     if (!isConfigured) return formatInvReference(1);
     const q = query(collection(db, TRANSACTIONS_COLLECTION), orderBy('createdAt', 'desc'), limit(500));
@@ -57,12 +107,16 @@ export const stockService = {
 
   async getBalances(warehouseId?: string): Promise<StockItemBalance[]> {
     if (!isConfigured) return [];
-    const base = collection(db, BALANCES_COLLECTION);
-    const q = warehouseId
-      ? query(base, where('warehouseId', '==', warehouseId))
-      : query(base);
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockItemBalance));
+    const rows: StockItemBalance[] = [];
+    let cursor: FirestoreCursor = null;
+    const maxPages = 10;
+    for (let page = 0; page < maxPages; page += 1) {
+      const res = await this.getBalancesPaged({ warehouseId, limit: MAX_PAGE_SIZE, cursor });
+      rows.push(...res.items);
+      if (!res.hasMore || !res.nextCursor) break;
+      cursor = res.nextCursor;
+    }
+    return rows;
   },
 
   async getTransactions(warehouseId?: string): Promise<StockTransaction[]> {

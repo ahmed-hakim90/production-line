@@ -14,11 +14,31 @@ import {
   onSnapshot,
   writeBatch,
   Unsubscribe,
+  startAfter,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { ProductionReport } from '../../../types';
 
 const COLLECTION = 'production_reports';
+const MAX_PAGE_SIZE = 100;
+
+export type FirestoreCursor = QueryDocumentSnapshot | null;
+export interface FirestorePageResult<T> {
+  items: T[];
+  nextCursor: FirestoreCursor;
+  hasMore: boolean;
+}
+
+export interface ReportPagedParams {
+  startDate: string;
+  endDate: string;
+  limit?: number;
+  cursor?: FirestoreCursor;
+  lineId?: string;
+  productId?: string;
+  employeeId?: string;
+}
 
 async function generateNextReportCode(): Promise<string> {
   const year = new Date().getFullYear();
@@ -43,11 +63,49 @@ async function generateNextReportCode(): Promise<string> {
 }
 
 export const reportService = {
+  async listByDateRangePaged(params: ReportPagedParams): Promise<FirestorePageResult<ProductionReport>> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));
+    const constraints: any[] = [
+      where('date', '>=', params.startDate),
+      where('date', '<=', params.endDate),
+      orderBy('date', 'desc'),
+      limit(pageSize),
+    ];
+    if (params.lineId) constraints.unshift(where('lineId', '==', params.lineId));
+    if (params.productId) constraints.unshift(where('productId', '==', params.productId));
+    if (params.employeeId) constraints.unshift(where('employeeId', '==', params.employeeId));
+    if (params.cursor) constraints.push(startAfter(params.cursor));
+    const q = query(collection(db, COLLECTION), ...constraints);
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
   async getAll(): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+      const reports: ProductionReport[] = [];
+      let cursor: FirestoreCursor = null;
+      const maxPages = 10;
+      let truncated = false;
+      for (let page = 0; page < maxPages; page += 1) {
+        const res = await this.listByDateRangePaged({
+          startDate: '1900-01-01',
+          endDate: '2999-12-31',
+          limit: MAX_PAGE_SIZE,
+          cursor,
+        });
+        reports.push(...res.items);
+        if (!res.hasMore || !res.nextCursor) break;
+        if (page === maxPages - 1 && res.hasMore) truncated = true;
+        cursor = res.nextCursor;
+      }
+      if (truncated) {
+        console.warn('reportService.getAll truncated at safety cap. Use listByDateRangePaged in consuming screens.');
+      }
+      return reports;
     } catch (error) {
       console.error('reportService.getAll error:', error);
       throw error;
@@ -69,14 +127,20 @@ export const reportService = {
   async getByDateRange(startDate: string, endDate: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
-        where('date', '>=', startDate),
-        where('date', '<=', endDate),
-        orderBy('date', 'desc'),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+      const all: ProductionReport[] = [];
+      let cursor: FirestoreCursor = null;
+      do {
+        const page = await this.listByDateRangePaged({
+          startDate,
+          endDate,
+          limit: MAX_PAGE_SIZE,
+          cursor,
+        });
+        all.push(...page.items);
+        cursor = page.nextCursor;
+        if (!page.hasMore) break;
+      } while (cursor);
+      return all;
     } catch (error) {
       console.error('reportService.getByDateRange error:', error);
       throw error;
@@ -172,12 +236,16 @@ export const reportService = {
   async getByLineAndProduct(lineId: string, productId: string, fromDate?: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('lineId', '==', lineId));
+      const constraints: any[] = [
+        where('lineId', '==', lineId),
+        where('productId', '==', productId),
+        orderBy('date', 'desc'),
+        limit(MAX_PAGE_SIZE),
+      ];
+      if (fromDate) constraints.unshift(where('date', '>=', fromDate));
+      const q = query(collection(db, COLLECTION), ...constraints);
       const snap = await getDocs(q);
-      let reports = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-      reports = reports.filter((r) => r.productId === productId);
-      if (fromDate) reports = reports.filter((r) => r.date >= fromDate);
-      return reports.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
       console.error('reportService.getByLineAndProduct error:', error);
       throw error;
@@ -187,10 +255,9 @@ export const reportService = {
   async getByProduct(productId: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('productId', '==', productId));
+      const q = query(collection(db, COLLECTION), where('productId', '==', productId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
-      const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-      return reports.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
       console.error('reportService.getByProduct error:', error);
       throw error;
@@ -200,10 +267,9 @@ export const reportService = {
   async getByLine(lineId: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('lineId', '==', lineId));
+      const q = query(collection(db, COLLECTION), where('lineId', '==', lineId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
-      const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-      return reports.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
       console.error('reportService.getByLine error:', error);
       throw error;
@@ -213,10 +279,9 @@ export const reportService = {
   async getByEmployee(employeeId: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('employeeId', '==', employeeId));
+      const q = query(collection(db, COLLECTION), where('employeeId', '==', employeeId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
-      const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-      return reports.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
       console.error('reportService.getByEmployee error:', error);
       throw error;
@@ -226,10 +291,9 @@ export const reportService = {
   async getByWorkOrderId(workOrderId: string): Promise<ProductionReport[]> {
     if (!isConfigured || !workOrderId) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('workOrderId', '==', workOrderId));
+      const q = query(collection(db, COLLECTION), where('workOrderId', '==', workOrderId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
-      const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-      return reports.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
       console.error('reportService.getByWorkOrderId error:', error);
       throw error;

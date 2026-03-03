@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/UI';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { RawMaterial } from '../../inventory/types';
@@ -11,6 +11,55 @@ import type { FirestoreProduct } from '../../../types';
 import { SelectableTable } from '../../../components/SelectableTable';
 import type { TableColumn } from '../../../components/SelectableTable';
 import { PageHeader } from '../../../components/PageHeader';
+
+// ── Usage Popover ────────────────────────────────────────────────────────────
+function UsagePopover({ count, productNames }: { count: number; productNames: string[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-blue-50 text-blue-600 font-black text-sm hover:bg-blue-100 transition-colors cursor-pointer"
+        title="اضغط لعرض المنتجات"
+      >
+        {count}
+        <span className="material-icons-round text-[13px]">{open ? 'expand_less' : 'expand_more'}</span>
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-50 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] shadow-lg py-1"
+          style={{ minWidth: 220, top: '110%', insetInlineStart: 0 }}
+        >
+          <div className="px-3 py-2 border-b border-[var(--color-border)]">
+            <p className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide">
+              مستخدمة في {count} منتج
+            </p>
+          </div>
+          <ul className="max-h-48 overflow-y-auto py-1">
+            {productNames.map((name, i) => (
+              <li key={i} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg)] transition-colors">
+                <span className="material-icons-round text-[14px] text-blue-400 shrink-0">inventory_2</span>
+                <span className="text-xs font-medium text-[var(--color-text)] leading-snug">{name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type RawMaterialModalPayload = {
   mode?: 'create' | 'edit';
@@ -220,16 +269,8 @@ export const RawMaterials: React.FC = () => {
       render: (r) => {
         const usage = r.id ? usageByMaterialId[r.id] : undefined;
         const count = usage?.count || 0;
-        if (count === 0) return <span className="text-xs font-bold text-[var(--color-text-muted)]">غير مستخدمة</span>;
-        return (
-          <div className="text-xs">
-            <p className="font-black text-blue-600">{count}</p>
-            <p className="text-[var(--color-text-muted)] truncate max-w-[200px]" title={(usage?.productNames || []).join('، ')}>
-              {(usage?.productNames || []).slice(0, 2).join('، ')}
-              {(usage?.productNames || []).length > 2 ? ` +${(usage?.productNames || []).length - 2}` : ''}
-            </p>
-          </div>
-        );
+        if (count === 0) return <span className="text-xs font-bold text-[var(--color-text-muted)]">—</span>;
+        return <UsagePopover count={count} productNames={usage?.productNames || []} />;
       },
     },
     {
