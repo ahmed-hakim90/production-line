@@ -693,9 +693,9 @@ export const StockMovementForm: React.FC = () => {
                 className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden"
                 style={{ background: 'var(--color-card)' }}
               >
-                {/* Table header */}
+                {/* Table header — desktop only */}
                 <div
-                  className="grid gap-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] px-3 py-2"
+                  className="hidden sm:grid gap-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] px-3 py-2"
                   style={{
                     gridTemplateColumns: '1fr 160px 140px 40px',
                     borderBottom: '1px solid var(--color-border)',
@@ -719,99 +719,126 @@ export const StockMovementForm: React.FC = () => {
                   return (
                     <div
                       key={line.id}
-                      className="grid gap-0 px-3 py-2.5 items-start"
-                      style={{
-                        gridTemplateColumns: '1fr 160px 140px 40px',
-                        borderBottom: idx < transferItems.length - 1 ? '1px solid var(--color-border)' : 'none',
-                      }}
+                      className="px-3 py-2.5"
+                      style={{ borderBottom: idx < transferItems.length - 1 ? '1px solid var(--color-border)' : 'none' }}
                     >
-                      {/* Item search */}
-                      <div className="pl-3">
-                        <div className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1">الصنف #{idx + 1}</div>
-                        <SearchableSelect
-                          options={itemSelectOptions}
-                          value={line.itemId}
-                          onChange={(value) =>
-                            setTransferItems((prev) =>
-                              prev.map((x) => (x.id === line.id ? { ...x, itemId: value } : x)),
-                            )
-                          }
-                          placeholder="ابحث واختر الصنف"
-                        />
-                        {line.itemId && (
-                          <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
-                            متاح: {available} · متبقي: {remaining}
-                          </p>
-                        )}
+                      {/* ── Desktop: 4-column grid ── */}
+                      <div
+                        className="hidden sm:grid gap-0 items-start"
+                        style={{ gridTemplateColumns: '1fr 160px 140px 40px' }}
+                      >
+                        {/* Item search */}
+                        <div className="pl-3">
+                          <SearchableSelect
+                            options={itemSelectOptions}
+                            value={line.itemId}
+                            onChange={(value) =>
+                              setTransferItems((prev) =>
+                                prev.map((x) => (x.id === line.id ? { ...x, itemId: value } : x)),
+                              )
+                            }
+                            placeholder="ابحث واختر الصنف"
+                          />
+                          {line.itemId && (
+                            <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
+                              متاح: {available} · متبقي: {remaining}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Unit toggle */}
+                        <div className="px-2">
+                          {itemType === 'finished_good' ? (
+                            <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
+                              <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
+                                onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)))}>قطعة</button>
+                              <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'carton' ? ' active' : ''}`}
+                                onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'carton' } : x)))}>كرتونة</button>
+                            </div>
+                          ) : (
+                            <div className={fieldDisabledClass} style={{ textAlign: 'center' }}>وحدة</div>
+                          )}
+                          {itemType === 'finished_good' && line.unit === 'carton' && (
+                            <p className="text-[10.5px] text-[var(--color-text-muted)] mt-1 text-center">
+                              {Number(lineItem?.unitsPerCarton || 0) > 0 ? `${lineItem?.unitsPerCarton} وحدة/كرتونة` : 'لا توجد قيمة'}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="px-2">
+                          <input type="number" step="any" className={fieldClass} placeholder="0" value={line.quantity || ''}
+                            onChange={(e) => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x)))} />
+                        </div>
+
+                        {/* Delete */}
+                        <div className="flex items-center justify-center pt-0.5">
+                          <button type="button" onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
+                            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
+                            disabled={transferItems.length <= 1} title="حذف الصف">
+                            <span className="material-icons-round" style={{ fontSize: 16 }}>delete_outline</span>
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Unit toggle */}
-                      <div className="px-2">
-                        {itemType === 'finished_good' ? (
-                          <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
-                            <button
-                              type="button"
-                              className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
-                              onClick={() =>
-                                setTransferItems((prev) =>
-                                  prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)),
-                                )
-                              }
-                            >
-                              قطعة
-                            </button>
-                            <button
-                              type="button"
-                              className={`erp-date-seg-btn flex-1${line.unit === 'carton' ? ' active' : ''}`}
-                              onClick={() =>
-                                setTransferItems((prev) =>
-                                  prev.map((x) => (x.id === line.id ? { ...x, unit: 'carton' } : x)),
-                                )
-                              }
-                            >
-                              كرتونة
-                            </button>
+                      {/* ── Mobile: stacked layout ── */}
+                      <div className="sm:hidden space-y-2">
+                        {/* Row 1: item label + delete */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الصنف #{idx + 1}</span>
+                          <button type="button"
+                            onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
+                            className="w-7 h-7 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
+                            disabled={transferItems.length <= 1} title="حذف الصف">
+                            <span className="material-icons-round" style={{ fontSize: 15 }}>delete_outline</span>
+                          </button>
+                        </div>
+
+                        {/* Row 2: item searchable select */}
+                        <div>
+                          <SearchableSelect
+                            options={itemSelectOptions}
+                            value={line.itemId}
+                            onChange={(value) =>
+                              setTransferItems((prev) =>
+                                prev.map((x) => (x.id === line.id ? { ...x, itemId: value } : x)),
+                              )
+                            }
+                            placeholder="ابحث واختر الصنف"
+                          />
+                          {line.itemId && (
+                            <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
+                              متاح: {available} · متبقي: {remaining}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Row 3: unit + quantity side by side */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الوحدة</span>
+                            {itemType === 'finished_good' ? (
+                              <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
+                                <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
+                                  onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)))}>قطعة</button>
+                                <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'carton' ? ' active' : ''}`}
+                                  onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'carton' } : x)))}>كرتونة</button>
+                              </div>
+                            ) : (
+                              <div className={fieldDisabledClass} style={{ textAlign: 'center' }}>وحدة</div>
+                            )}
+                            {itemType === 'finished_good' && line.unit === 'carton' && (
+                              <p className="text-[10.5px] text-[var(--color-text-muted)] mt-1">
+                                {Number(lineItem?.unitsPerCarton || 0) > 0 ? `${lineItem?.unitsPerCarton} وحدة/كرتونة` : 'لا توجد قيمة'}
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <div className={fieldDisabledClass} style={{ textAlign: 'center' }}>وحدة</div>
-                        )}
-                        {itemType === 'finished_good' && line.unit === 'carton' && (
-                          <p className="text-[10.5px] text-[var(--color-text-muted)] mt-1 text-center">
-                            {Number(lineItem?.unitsPerCarton || 0) > 0
-                              ? `${lineItem?.unitsPerCarton} وحدة/كرتونة`
-                              : 'لا توجد قيمة'}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Quantity input */}
-                      <div className="px-2">
-                        <input
-                          type="number"
-                          step="any"
-                          className={fieldClass}
-                          value={line.quantity}
-                          onChange={(e) =>
-                            setTransferItems((prev) =>
-                              prev.map((x) => (x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x)),
-                            )
-                          }
-                        />
-                      </div>
-
-                      {/* Delete */}
-                      <div className="flex items-center justify-center pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))
-                          }
-                          className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
-                          disabled={transferItems.length <= 1}
-                          title="حذف الصف"
-                        >
-                          <span className="material-icons-round" style={{ fontSize: 16 }}>delete_outline</span>
-                        </button>
+                          <div>
+                            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الكمية</span>
+                            <input type="number" step="any" className={fieldClass} placeholder="0" value={line.quantity || ''}
+                              onChange={(e) => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x)))} />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );

@@ -1,4 +1,4 @@
-﻿
+
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Button, Badge, LoadingSkeleton } from '../components/UI';
@@ -1402,7 +1402,8 @@ export const ProductDetails: React.FC = () => {
                     type="number"
                     min={0}
                     step="any"
-                    value={materialForm.quantityUsed}
+                    value={materialForm.quantityUsed || ''}
+                    placeholder="0"
                     onChange={(e) => setMaterialForm({ ...materialForm, quantityUsed: Number(e.target.value) })}
                   />
                 </div>

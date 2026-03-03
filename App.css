@@ -1440,6 +1440,13 @@ table tbody tr[data-selected="true"] {
   padding: 8px 14px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-card);
+  min-width: 0;
+}
+
+/* Date-seg wraps to full row if too wide for the filter bar */
+.erp-filter-bar > .erp-date-seg {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* Standalone filter bar (not inside a DataTable) — add card border + radius */
@@ -1489,8 +1496,12 @@ table tbody tr[data-selected="true"] {
   background: #f8f9fa;
   flex-shrink: 0;
   align-items: stretch;
-  /* No overflow:hidden — avoids Arabic text clipping */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge */
 }
+.erp-date-seg::-webkit-scrollbar { display: none; }
 .erp-date-seg-btn {
   display: inline-flex;
   align-items: center;
@@ -1834,8 +1845,9 @@ label[class*="text-[12"] {
 .erp-page-title-block {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
+  flex: 1;
 }
 
 .erp-page-title-block h1,
@@ -1864,14 +1876,21 @@ label[class*="text-[12"] {
   flex-shrink: 0;
 }
 
-/* Mobile: stack title above actions */
+/* Mobile: title above actions */
 @media (max-width: 640px) {
   .erp-page-head {
     align-items: flex-start;
+    gap: 8px;
   }
   .erp-page-actions {
     width: 100%;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .erp-page-actions .btn {
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 }
 

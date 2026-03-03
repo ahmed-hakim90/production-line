@@ -986,7 +986,8 @@ export const StockTransactions: React.FC = () => {
                         step="any"
                         min={0}
                         className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
-                        value={Number(line.requestQuantity ?? line.quantity ?? 0)}
+                        placeholder="0"
+                        value={line.requestQuantity ?? line.quantity ?? ''}
                         onChange={(e) =>
                           setEditLines((prev) =>
                             prev.map((x, i) => (i === idx ? { ...x, requestQuantity: Number(e.target.value) } : x)),

@@ -144,6 +144,19 @@ export const Products: React.FC = () => {
   const [stockFilter, setStockFilter] = useState('');
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
 
+  // Sort & Pagination & Selection
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+    setCurrentPage(1);
+  };
+
   const filtered = useMemo(() => {
     return products.filter((p) => {
       const matchSearch =
@@ -155,6 +168,43 @@ export const Products: React.FC = () => {
       return matchSearch && matchCategory && matchStock;
     });
   }, [products, search, categoryFilter, stockFilter]);
+
+  useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [search, categoryFilter, stockFilter]);
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => {
+      let va: string | number = 0, vb: string | number = 0;
+      if (sortKey === 'name') {
+        return sortDir === 'asc' ? a.name.localeCompare(b.name, 'ar') : b.name.localeCompare(a.name, 'ar');
+      }
+      if (sortKey === 'code') {
+        return sortDir === 'asc' ? a.code.localeCompare(b.code) : b.code.localeCompare(a.code);
+      }
+      va = (a as any)[sortKey] ?? 0;
+      vb = (b as any)[sortKey] ?? 0;
+      return sortDir === 'asc' ? (va > vb ? 1 : -1) : (vb > va ? 1 : -1);
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paginated = useMemo(
+    () => sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [sorted, currentPage],
+  );
+
+  const allPageSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
+  const somePageSelected = !allPageSelected && paginated.some((p) => selectedIds.has(p.id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) paginated.forEach((p) => next.delete(p.id));
+      else paginated.forEach((p) => next.add(p.id));
+      return next;
+    });
+  };
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   useEffect(() => {
     void (async () => {
@@ -399,6 +449,12 @@ export const Products: React.FC = () => {
     }
   };
 
+  const SortIcon = ({ col }: { col: string }) => (
+    <span className="material-icons-round" style={{ fontSize: 13, verticalAlign: 'middle', marginInlineStart: 2, opacity: sortKey === col ? 1 : 0.35 }}>
+      {sortKey !== col ? 'unfold_more' : sortDir === 'asc' ? 'expand_less' : 'expand_more'}
+    </span>
+  );
+
   return (
     <div className="space-y-6">
       {/* Hidden file input */}
@@ -497,33 +553,59 @@ export const Products: React.FC = () => {
 
       {/* Table */}
       <Card className="!p-0 border-none overflow-hidden ">
+        {/* Bulk bar */}
+        {selectedIds.size > 0 && (
+          <div className="px-5 py-3 bg-primary/5 border-b border-primary/20 flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-bold text-primary">{selectedIds.size} منتج محدد</span>
+            {can('products.delete') && (
+              <button
+                className="btn btn-danger btn-sm gap-1"
+                onClick={() => {
+                  if (!window.confirm(`هل تريد حذف ${selectedIds.size} منتج؟`)) return;
+                  Promise.all([...selectedIds].map((id) => deleteProduct(id))).then(() => setSelectedIds(new Set()));
+                }}
+              >
+                <span className="material-icons-round text-[15px]">delete</span>
+                حذف المحدد
+              </button>
+            )}
+            <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(new Set())}>
+              <span className="material-icons-round text-[15px]">close</span>
+              إلغاء التحديد
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>
-                <th className="erp-th">المنتج</th>
-                {visibleColumns.openingStock && <th className="erp-th text-center">رصيد مفكك</th>}
-                {visibleColumns.totalProduction && <th className="erp-th text-center">تم الصنع</th>}
-                {visibleColumns.wasteUnits && <th className="erp-th text-center">الهالك</th>}
-                {visibleColumns.stockLevel && <th className="erp-th text-center">منتج تام</th>}
-                {canViewSellingPrice && visibleColumns.sellingPrice && <th className="erp-th text-center">سعر البيع</th>}
+                <th className="erp-th w-10 text-center">
+                  <input type="checkbox" checked={allPageSelected} ref={(el) => { if (el) el.indeterminate = somePageSelected; }} onChange={toggleSelectAll} className="cursor-pointer" />
+                </th>
+                <th className="erp-th cursor-pointer select-none" onClick={() => handleSort('name')}>المنتج <SortIcon col="name" /></th>
+                {visibleColumns.openingStock && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('openingStock')}>رصيد مفكك <SortIcon col="openingStock" /></th>}
+                {visibleColumns.totalProduction && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('totalProduction')}>تم الصنع <SortIcon col="totalProduction" /></th>}
+                {visibleColumns.wasteUnits && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('wasteUnits')}>الهالك <SortIcon col="wasteUnits" /></th>}
+                {visibleColumns.stockLevel && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('stockLevel')}>منتج تام <SortIcon col="stockLevel" /></th>}
+                {canViewSellingPrice && visibleColumns.sellingPrice && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('sellingPrice')}>سعر البيع <SortIcon col="sellingPrice" /></th>}
                 {canViewCosts && (
                   <>
                     {visibleColumns.totalCost && <th className="erp-th text-center">إجمالي التكلفة</th>}
                     {visibleColumns.directIndirect && <th className="erp-th text-center">مباشر / غير مباشر</th>}
                     {visibleColumns.costPerUnit && <th className="erp-th text-center">تكلفة الوحدة</th>}
-                    {visibleColumns.chineseUnitCost && <th className="erp-th text-center">تكلفة الوحدة الصينية</th>}
+                    {visibleColumns.chineseUnitCost && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('chineseUnitCost')}>تكلفة الوحدة الصينية <SortIcon col="chineseUnitCost" /></th>}
                     {visibleColumns.chinesePriceCny && <th className="erp-th text-center">السعر باليوان</th>}
-                    {visibleColumns.innerBoxCost && <th className="erp-th text-center">تكلفة العلبة الداخلية</th>}
-                    {visibleColumns.outerCartonCost && <th className="erp-th text-center">تكلفة الكرتونة الخارجية</th>}
-                    {visibleColumns.unitsPerCarton && <th className="erp-th text-center">عدد الوحدات/كرتونة</th>}
+                    {visibleColumns.innerBoxCost && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('innerBoxCost')}>تكلفة العلبة الداخلية <SortIcon col="innerBoxCost" /></th>}
+                    {visibleColumns.outerCartonCost && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('outerCartonCost')}>تكلفة الكرتونة الخارجية <SortIcon col="outerCartonCost" /></th>}
+                    {visibleColumns.unitsPerCarton && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('unitsPerCarton')}>عدد الوحدات/كرتونة <SortIcon col="unitsPerCarton" /></th>}
                   </>
                 )}
                 <th className="erp-th text-center w-28">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
-              {filtered.length === 0 && (
+              {sorted.length === 0 && (
                 <tr>
                   <td colSpan={99} className="px-6 py-16 text-center text-slate-400">
                     <span className="material-icons-round text-5xl mb-3 block opacity-30">inventory_2</span>
@@ -536,13 +618,16 @@ export const Products: React.FC = () => {
                   </td>
                 </tr>
               )}
-              {filtered.map((product) => {
+              {paginated.map((product) => {
                 const decomposedBalance = productWarehouseBalances.getValue(planSettings?.decomposedSourceWarehouseId, product.id);
                 const finishedBalance = productWarehouseBalances.getValue(planSettings?.finishedReceiveWarehouseId, product.id);
                 const wasteBalance = productWarehouseBalances.getValue(planSettings?.wasteReceiveWarehouseId, product.id);
                 const finalBalance = productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, product.id);
                 return (
-                <tr key={product.id} className="hover:bg-[#f8f9fa]/50 transition-colors group">
+                <tr key={product.id} className={`hover:bg-[#f8f9fa]/50 transition-colors group${selectedIds.has(product.id) ? ' bg-primary/5' : ''}`}>
+                  <td className="px-4 py-4 text-center">
+                    <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => toggleRow(product.id)} className="cursor-pointer" />
+                  </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-gradient-to-br from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 flex items-center justify-center shrink-0 border border-primary/10">
@@ -672,10 +757,28 @@ export const Products: React.FC = () => {
             </tbody>
           </table>
         </div>
-        <div className="px-5 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between">
+        {/* Footer: count + pagination */}
+        <div className="px-5 py-3 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between flex-wrap gap-2">
           <div className="text-sm text-[var(--color-text-muted)] font-bold">
-            إجمالي <span className="text-primary">{filtered.length}</span> منتج
+            {sorted.length > 0
+              ? `صفحة ${currentPage} من ${totalPages} — إجمالي ${sorted.length} منتج`
+              : 'لا توجد منتجات'}
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>«</button>
+              <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>‹</button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+                const page = start + i;
+                return page <= totalPages ? (
+                  <button key={page} className={`btn btn-sm ${currentPage === page ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCurrentPage(page)}>{page}</button>
+                ) : null;
+              })}
+              <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>›</button>
+              <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>»</button>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -740,7 +843,8 @@ export const Products: React.FC = () => {
                   type="number"
                   min={0}
                   step="any"
-                  value={form.sellingPrice ?? 0}
+                  value={form.sellingPrice ?? ''}
+                  placeholder="0"
                   onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
                 />
               </div>
@@ -760,7 +864,8 @@ export const Products: React.FC = () => {
                       <input
                         className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="any"
-                        value={form.chineseUnitCost ?? 0}
+                        value={form.chineseUnitCost ?? ''}
+                        placeholder="0"
                         onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })}
                       />
                     </div>
@@ -769,7 +874,8 @@ export const Products: React.FC = () => {
                       <input
                         className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="any"
-                        value={form.innerBoxCost ?? 0}
+                        value={form.innerBoxCost ?? ''}
+                        placeholder="0"
                         onChange={(e) => setForm({ ...form, innerBoxCost: Number(e.target.value) })}
                       />
                     </div>
@@ -778,7 +884,8 @@ export const Products: React.FC = () => {
                       <input
                         className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="any"
-                        value={form.outerCartonCost ?? 0}
+                        value={form.outerCartonCost ?? ''}
+                        placeholder="0"
                         onChange={(e) => setForm({ ...form, outerCartonCost: Number(e.target.value) })}
                       />
                     </div>
@@ -787,7 +894,8 @@ export const Products: React.FC = () => {
                       <input
                         className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="1"
-                        value={form.unitsPerCarton ?? 0}
+                        value={form.unitsPerCarton ?? ''}
+                        placeholder="0"
                         onChange={(e) => setForm({ ...form, unitsPerCarton: Number(e.target.value) })}
                       />
                     </div>

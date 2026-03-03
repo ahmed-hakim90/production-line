@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { RawMaterial } from '../../inventory/types';
 import { usePermission } from '../../../utils/permissions';
@@ -8,6 +8,9 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { productMaterialService } from '../services/productMaterialService';
 import { productService } from '../services/productService';
 import type { FirestoreProduct } from '../../../types';
+import { SelectableTable } from '../../../components/SelectableTable';
+import type { TableColumn } from '../../../components/SelectableTable';
+import { PageHeader } from '../../../components/PageHeader';
 
 type RawMaterialModalPayload = {
   mode?: 'create' | 'edit';
@@ -182,176 +185,164 @@ export const RawMaterials: React.FC = () => {
     }
   };
 
+  const columns = useMemo<TableColumn<RawMaterial>[]>(() => [
+    {
+      header: 'المادة',
+      sortKey: (r) => r.name,
+      render: (r) => (
+        <div>
+          <p className="font-bold text-sm text-[var(--color-text)]">{r.name}</p>
+        </div>
+      ),
+    },
+    {
+      header: 'الكود',
+      sortKey: (r) => r.code,
+      render: (r) => <span className="font-mono text-xs text-[var(--color-text-muted)]">{r.code}</span>,
+    },
+    {
+      header: 'الوحدة',
+      sortKey: (r) => r.unit || '',
+      render: (r) => <span className="text-sm">{r.unit || '—'}</span>,
+    },
+    {
+      header: 'الحد الأدنى',
+      sortKey: (r) => r.minStock || 0,
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (r) => <span className="font-bold text-sm">{r.minStock || 0}</span>,
+    },
+    {
+      header: 'مستخدم في منتجات',
+      sortKey: (r) => (r.id ? (usageByMaterialId[r.id]?.count || 0) : 0),
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (r) => {
+        const usage = r.id ? usageByMaterialId[r.id] : undefined;
+        const count = usage?.count || 0;
+        if (count === 0) return <span className="text-xs font-bold text-[var(--color-text-muted)]">غير مستخدمة</span>;
+        return (
+          <div className="text-xs">
+            <p className="font-black text-blue-600">{count}</p>
+            <p className="text-[var(--color-text-muted)] truncate max-w-[200px]" title={(usage?.productNames || []).join('، ')}>
+              {(usage?.productNames || []).slice(0, 2).join('، ')}
+              {(usage?.productNames || []).length > 2 ? ` +${(usage?.productNames || []).length - 2}` : ''}
+            </p>
+          </div>
+        );
+      },
+    },
+    {
+      header: 'الحالة',
+      sortKey: (r) => (r.isActive === false ? 0 : 1),
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (r) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-bold ${r.isActive === false ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+          {r.isActive === false ? 'غير نشط' : 'نشط'}
+        </span>
+      ),
+    },
+  ], [usageByMaterialId]);
+
+  const toolbarContent = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <select
+        className="erp-filter-select"
+        value={usageFilter}
+        onChange={(e) => setUsageFilter(e.target.value as 'all' | 'used' | 'unused')}
+      >
+        <option value="all">كل المواد</option>
+        <option value="used">مستخدمة في منتجات</option>
+        <option value="unused">غير مستخدمة</option>
+      </select>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
-              <span className="material-icons-round text-indigo-600">science</span>
-            </div>
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">المواد الخام</h2>
-              <p className="text-sm text-slate-500 font-medium">تعريف وإدارة المواد الخام المستخدمة في ربط المنتجات.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => void loadRawMaterials()} disabled={loading}>
-              <span className={`material-icons-round text-sm ${loading ? 'animate-spin' : ''}`}>refresh</span>
-              تحديث
-            </Button>
-            {can('inventory.items.manage') && (
-              <Button
-                variant="primary"
-                data-modal-key={MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE}
-                onClick={openCreateModal}
-              >
-                <span className="material-icons-round text-sm">add</span>
-                إضافة مادة خام
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="المواد الخام"
+        subtitle="تعريف وإدارة المواد الخام المستخدمة في ربط المنتجات"
+        icon="science"
+        primaryAction={can('inventory.items.manage') ? {
+          label: 'إضافة مادة خام',
+          icon: 'add',
+          onClick: openCreateModal,
+          dataModalKey: MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE,
+        } : undefined}
+        secondaryAction={{
+          label: 'تحديث',
+          icon: 'refresh',
+          onClick: () => void loadRawMaterials(),
+          disabled: loading,
+        }}
+      />
 
       {feedback && (
-        <div className={`rounded-xl px-4 py-3 text-sm font-bold border ${
+        <div className={`rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold border flex items-center gap-2 ${
           feedback.type === 'success'
             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
             : 'bg-rose-50 text-rose-700 border-rose-200'
         }`}>
+          <span className="material-icons-round text-[18px]">{feedback.type === 'success' ? 'check_circle' : 'error'}</span>
           {feedback.text}
         </div>
       )}
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="!p-4">
-          <p className="text-xs font-bold text-slate-400">إجمالي المواد</p>
-          <p className="text-2xl font-black text-slate-800 dark:text-white">{rows.length}</p>
-        </Card>
-        <Card className="!p-4">
-          <p className="text-xs font-bold text-slate-400">مواد مستخدمة بمنتجات</p>
-          <p className="text-2xl font-black text-blue-600">{linkedCount}</p>
-        </Card>
-        <Card className="!p-4">
-          <p className="text-xs font-bold text-slate-400">مواد غير مستخدمة</p>
-          <p className="text-2xl font-black text-amber-600">{unlinkedCount}</p>
-        </Card>
+        <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
+          <p className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي المواد</p>
+          <p className="text-2xl font-black text-[var(--color-text)] mt-1">{rows.length}</p>
+        </div>
+        <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
+          <p className="text-xs font-bold text-[var(--color-text-muted)]">مواد مستخدمة بمنتجات</p>
+          <p className="text-2xl font-black text-blue-600 mt-1">{linkedCount}</p>
+        </div>
+        <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
+          <p className="text-xs font-bold text-[var(--color-text-muted)]">مواد غير مستخدمة</p>
+          <p className="text-2xl font-black text-amber-600 mt-1">{unlinkedCount}</p>
+        </div>
       </div>
 
-      <Card>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <input
-            className="md:col-span-3 w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-            placeholder="بحث بالاسم أو الكود"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
-            value={usageFilter}
-            onChange={(e) => setUsageFilter(e.target.value as 'all' | 'used' | 'unused')}
-          >
-            <option value="all">كل المواد</option>
-            <option value="used">مستخدمة في منتجات</option>
-            <option value="unused">غير مستخدمة</option>
-          </select>
-          <div className="text-sm text-slate-400 font-bold flex items-center">
-            النتائج: {filteredRows.length} / النشطة: {activeCount}
+      {/* Table */}
+      <SelectableTable<RawMaterial>
+        tableId="raw-materials-table"
+        data={filteredRows}
+        columns={columns}
+        getId={(r) => r.id ?? r.code}
+        pageSize={20}
+        loading={loading}
+        enableSearch
+        searchPlaceholder="بحث بالاسم أو الكود..."
+        toolbarContent={toolbarContent}
+        emptyIcon="science"
+        emptyTitle="لا توجد مواد خام"
+        emptySubtitle={can('inventory.items.manage') ? 'اضغط "إضافة مادة خام" لإضافة أول مادة' : 'لا توجد مواد خام لعرضها حالياً'}
+        renderActions={can('inventory.items.manage') ? (row) => (
+          <div className="flex items-center gap-0.5 justify-center">
+            <button
+              className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all"
+              data-modal-key={MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE}
+              onClick={() => openEditModal(row)}
+              title="تعديل"
+            >
+              <span className="material-icons-round text-[17px]">edit</span>
+            </button>
+            <button
+              className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 rounded-[var(--border-radius-base)] transition-all disabled:opacity-40"
+              onClick={() => void handleDelete(row)}
+              disabled={savingDeleteId === row.id}
+              title="حذف"
+            >
+              <span className="material-icons-round text-[17px]">{savingDeleteId === row.id ? 'hourglass_top' : 'delete'}</span>
+            </button>
           </div>
-        </div>
-      </Card>
-
-      <Card className="!p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                <th className="px-4 py-3 text-xs font-black text-slate-500">المادة</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">الكود</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">الوحدة</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">الحد الأدنى</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">مستخدم في منتجات</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">الحالة</th>
-                {can('inventory.items.manage') && (
-                  <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">إجراء</th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading && (
-                <tr>
-                  <td colSpan={can('inventory.items.manage') ? 7 : 6} className="px-4 py-10 text-center text-slate-400">
-                    جاري تحميل المواد الخام...
-                  </td>
-                </tr>
-              )}
-              {!loading && filteredRows.length === 0 && (
-                <tr>
-                  <td colSpan={can('inventory.items.manage') ? 7 : 6} className="px-4 py-10 text-center text-slate-400">
-                    لا توجد مواد خام مطابقة.
-                  </td>
-                </tr>
-              )}
-              {filteredRows.map((row) => (
-                <tr key={row.id}>
-                  <td className="px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300">{row.name}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-slate-600 dark:text-slate-400">{row.code}</td>
-                  <td className="px-4 py-3 text-sm">{row.unit || 'unit'}</td>
-                  <td className="px-4 py-3 text-sm text-center font-bold">{row.minStock || 0}</td>
-                  <td className="px-4 py-3 text-center">
-                    {(() => {
-                      const usage = row.id ? usageByMaterialId[row.id] : undefined;
-                      const count = usage?.count || 0;
-                      if (count === 0) {
-                        return <span className="text-xs font-bold text-slate-400">غير مستخدمة</span>;
-                      }
-                      return (
-                        <div className="text-xs">
-                          <p className="font-black text-blue-600">{count}</p>
-                          <p className="text-slate-400 truncate max-w-[220px]" title={(usage?.productNames || []).join('، ')}>
-                            {(usage?.productNames || []).slice(0, 3).join('، ')}
-                            {(usage?.productNames || []).length > 3 ? ` +${(usage?.productNames || []).length - 3}` : ''}
-                          </p>
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${row.isActive === false ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {row.isActive === false ? 'غير نشط' : 'نشط'}
-                    </span>
-                  </td>
-                  {can('inventory.items.manage') && (
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          className="p-1.5 text-slate-400 hover:text-primary transition-colors rounded"
-                          data-modal-key={MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE}
-                          onClick={() => openEditModal(row)}
-                          title="تعديل المادة الخام"
-                        >
-                          <span className="material-icons-round text-sm">edit</span>
-                        </button>
-                        <button
-                          className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors rounded disabled:opacity-40 disabled:hover:text-slate-400"
-                          onClick={() => void handleDelete(row)}
-                          disabled={savingDeleteId === row.id}
-                          title="حذف المادة الخام"
-                        >
-                          <span className="material-icons-round text-sm">
-                            {savingDeleteId === row.id ? 'hourglass_top' : 'delete'}
-                          </span>
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+        ) : undefined}
+        actionsHeader="إجراءات"
+      />
     </div>
   );
 };

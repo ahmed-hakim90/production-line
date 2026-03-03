@@ -92,19 +92,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   return (
     <div className="erp-page-head">
       {/* Left: title + optional icon */}
-      <div className="erp-page-title-block flex items-start gap-3">
-        {icon && (
-          <div
-            className={`w-9 h-9 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0 mt-0.5`}
-            style={{ background: iconBg ?? 'rgb(var(--color-primary)/0.1)' }}
-          >
-            <span className={`material-icons-round text-[18px] ${iconColor}`}>{icon}</span>
-          </div>
-        )}
-        <div>
-          <h2 className="page-title">{title}</h2>
-          {subtitle && <p className="page-subtitle">{subtitle}</p>}
-        </div>
+      <div className="erp-page-title-block">
+        <h2 className="page-title">
+          {icon && (
+            <span className={`material-icons-round ${iconColor}`} style={{ fontSize: 20, verticalAlign: 'middle', marginInlineEnd: 6 }}>{icon}</span>
+          )}
+          {title}
+        </h2>
+        {subtitle && <p className="page-subtitle">{subtitle}</p>}
       </div>
 
       {/* Right: actions */}

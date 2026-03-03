@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -910,14 +910,14 @@ export const AdminDashboard: React.FC = () => {
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="erp-page-head">
         <div className="erp-page-title-block flex items-center gap-3">
-          <div
+          {/* <div
             className="w-10 h-10 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0"
             style={{ background: '#fee2e2' }}
           >
             <span className="material-icons-round text-rose-600" style={{ fontSize: 20 }}>shield</span>
-          </div>
+          </div> */}
           <div>
-            <h2 className="page-title">لوحة مدير النظام</h2>
+            {/* <h2 className="page-title">لوحة مدير النظام</h2> */}
             <p className="page-subtitle">نظرة شاملة على الإنتاج والنظام والصحة العامة</p>
           </div>
         </div>

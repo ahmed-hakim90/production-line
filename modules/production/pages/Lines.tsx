@@ -61,6 +61,9 @@ export const Lines: React.FC = () => {
   const getTodayWorkersCount = (lineId: string) =>
     todayAssignments.filter((a) => a.lineId === lineId).length;
 
+  const [showAllLines, setShowAllLines] = useState(false);
+  const LINES_PAGE_SIZE = 4;
+
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -565,8 +568,9 @@ export const Lines: React.FC = () => {
           </div>
         </Card>
       ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {sortedLines.map((line) => {
+          {(showAllLines ? sortedLines : sortedLines.slice(0, LINES_PAGE_SIZE)).map((line) => {
             const raw = _rawLines.find((l) => l.id === line.id);
             const activeWOs = workOrders.filter((w) => w.lineId === line.id && (w.status === 'pending' || w.status === 'in_progress'));
             const activeWO: WorkOrder | undefined = activeWOs.find((w) => w.status === 'in_progress') ?? activeWOs[0];
@@ -762,6 +766,24 @@ export const Lines: React.FC = () => {
             );
           })}
         </div>
+
+        {/* Show More / Less */}
+        {sortedLines.length > LINES_PAGE_SIZE && (
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => setShowAllLines((v) => !v)}
+              className="btn btn-secondary gap-2"
+            >
+              <span className="material-icons-round text-[16px]">
+                {showAllLines ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
+              </span>
+              {showAllLines
+                ? 'عرض أقل'
+                : `عرض المزيد (${sortedLines.length - LINES_PAGE_SIZE} خطوط متبقية)`}
+            </button>
+          </div>
+        )}
+        </>
       )}
 
       {/* ── Add / Edit Modal ── */}

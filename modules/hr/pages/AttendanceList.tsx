@@ -314,7 +314,8 @@ export const AttendanceList: React.FC = () => {
                             type="number"
                             min={0}
                             className="w-16 border rounded-[var(--border-radius-base)] p-1 text-xs text-center"
-                            value={editValues.lateMinutes ?? 0}
+                            value={editValues.lateMinutes ?? ''}
+                            placeholder="0"
                             onChange={(e) => setEditValues((v) => ({ ...v, lateMinutes: Number(e.target.value) }))}
                           />
                         ) : log.lateMinutes > 0 ? (
@@ -329,7 +330,8 @@ export const AttendanceList: React.FC = () => {
                             type="number"
                             min={0}
                             className="w-16 border rounded-[var(--border-radius-base)] p-1 text-xs text-center"
-                            value={editValues.earlyLeaveMinutes ?? 0}
+                            value={editValues.earlyLeaveMinutes ?? ''}
+                            placeholder="0"
                             onChange={(e) => setEditValues((v) => ({ ...v, earlyLeaveMinutes: Number(e.target.value) }))}
                           />
                         ) : log.earlyLeaveMinutes > 0 ? (

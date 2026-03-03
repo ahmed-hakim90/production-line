@@ -246,3 +246,7 @@
 ## [4.0.38] - 2026-03-02
 
 - All Edit for Reports & Plan Pro
+
+## [4.0.39] - 2026-03-03
+
+- ERPNEXT THEME
