@@ -10,13 +10,17 @@ interface CardProps {
 }
 
 export const Card: React.FC<CardProps> = ({ children, className = '', title, onClick }) => (
-  <div onClick={onClick} className={`bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden ${className}`}>
+  <div
+    onClick={onClick}
+    className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg,8px)] border border-[var(--color-border)] overflow-hidden ${onClick ? 'cursor-pointer hover:border-primary/30 hover:shadow-md transition-shadow' : ''} ${className}`}
+    style={{ boxShadow: 'var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08))' }}
+  >
     {title && (
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-        <h3 className="text-lg font-bold">{title}</h3>
+      <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-2">
+        <h3 className="text-[13.5px] font-semibold text-[var(--color-text)]">{title}</h3>
       </div>
     )}
-    <div className="p-6">{children}</div>
+    <div className="p-4">{children}</div>
   </div>
 );
 
@@ -31,18 +35,22 @@ interface KPIBoxProps {
 }
 
 export const KPIBox: React.FC<KPIBoxProps> = ({ label, value, icon, trend, trendUp, colorClass = 'bg-primary/10 text-primary', unit }) => (
-  <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3 sm:gap-5 shadow-sm">
-    <div className={`w-12 h-12 sm:w-14 sm:h-14 ${colorClass} rounded-lg flex items-center justify-center shrink-0`}>
-      <span className="material-icons-round text-2xl sm:text-3xl">{icon}</span>
+  <div
+    className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg,8px)] border border-[var(--color-border)] flex items-center gap-3.5"
+    style={{ boxShadow: 'var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08))' }}
+  >
+    <div className={`w-10 h-10 ${colorClass} rounded-[var(--border-radius-base,6px)] flex items-center justify-center shrink-0`}>
+      <span className="material-icons-round text-[20px]">{icon}</span>
     </div>
-    <div className="min-w-0">
-      <p className="text-slate-500 text-xs sm:text-sm mb-1 font-medium">{label}</p>
-      <h3 className="text-xl sm:text-2xl font-bold flex items-baseline gap-1">
-        {value} {unit && <span className="text-xs font-normal text-slate-400">{unit}</span>}
+    <div className="min-w-0 flex-1">
+      <p className="text-[11.5px] text-[var(--color-text-muted)] mb-0.5 font-medium leading-tight">{label}</p>
+      <h3 className="text-[18px] font-bold flex items-baseline gap-1 leading-tight text-[var(--color-text)]">
+        {value}
+        {unit && <span className="text-[11px] font-normal text-[var(--color-text-muted)]">{unit}</span>}
       </h3>
       {trend && (
-        <div className={`flex items-center gap-1 text-xs mt-1 font-bold ${trendUp ? 'text-emerald-500' : 'text-rose-500'}`}>
-          <span className="material-icons-round text-xs">{trendUp ? 'trending_up' : 'trending_down'}</span>
+        <div className={`flex items-center gap-0.5 text-[11px] mt-0.5 font-semibold ${trendUp ? 'text-emerald-600' : 'text-rose-500'}`}>
+          <span className="material-icons-round text-[12px]">{trendUp ? 'trending_up' : 'trending_down'}</span>
           <span>{trend}</span>
         </div>
       )}
@@ -58,92 +66,91 @@ interface BadgeProps {
 
 export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', pulse }) => {
   const styles = {
-    success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    danger: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
-    info: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    neutral: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+    success: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    warning: 'bg-amber-50 text-amber-700 border border-amber-200',
+    danger:  'bg-rose-50 text-rose-700 border border-rose-200',
+    info:    'bg-blue-50 text-blue-700 border border-blue-200',
+    neutral: 'bg-[#f0f2f5] text-[var(--color-text-muted)] border border-[var(--color-border)]',
   };
-
   const dotStyles = {
     success: 'bg-emerald-500',
     warning: 'bg-amber-500',
-    danger: 'bg-rose-500',
-    info: 'bg-blue-500',
-    neutral: 'bg-slate-400',
+    danger:  'bg-rose-500',
+    info:    'bg-blue-500',
+    neutral: 'bg-[var(--color-text-muted)]',
   };
-
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${styles[variant]}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dotStyles[variant]} ${pulse ? 'animate-pulse' : ''}`}></span>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${styles[variant]}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotStyles[variant]} ${pulse ? 'animate-pulse' : ''}`} />
       {children}
     </span>
   );
 };
 
 export const LoadingSkeleton: React.FC<{ rows?: number; type?: 'card' | 'table' | 'detail' }> = ({ rows = 4, type = 'card' }) => {
+  const skeletonBase = 'bg-[#e8eaed] rounded animate-pulse';
   if (type === 'detail') {
     return (
-      <div className="space-y-6 animate-pulse">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-slate-200 dark:bg-slate-700 rounded-xl"></div>
+      <div className="space-y-4 animate-pulse">
+        <div className="flex items-center gap-3">
+          <div className={`w-12 h-12 ${skeletonBase} rounded-[var(--border-radius-lg)]`} />
           <div className="flex-1 space-y-2">
-            <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded-lg w-1/3"></div>
-            <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded-lg w-1/4"></div>
+            <div className={`h-4 ${skeletonBase} w-1/3`} />
+            <div className={`h-3 ${skeletonBase} w-1/4`} />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800">
-              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3 mb-3"></div>
-              <div className="h-8 bg-slate-100 dark:bg-slate-800 rounded w-1/2"></div>
+            <div key={i} className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <div className={`h-3 ${skeletonBase} w-2/3 mb-2`} />
+              <div className={`h-6 ${skeletonBase} w-1/2`} />
             </div>
           ))}
         </div>
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 h-64">
-          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/4 mb-4"></div>
-          <div className="h-full bg-slate-50 dark:bg-slate-800 rounded-lg"></div>
+        <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] h-48">
+          <div className={`h-3 ${skeletonBase} w-1/4 mb-3`} />
+          <div className={`h-full ${skeletonBase} opacity-50`} />
         </div>
       </div>
     );
   }
   if (type === 'table') {
     return (
-      <div className="animate-pulse space-y-3 p-6">
+      <div className="animate-pulse space-y-2 p-4">
         {[...Array(rows)].map((_, i) => (
-          <div key={i} className="flex gap-4">
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded flex-1"></div>
-            <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-20"></div>
-            <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-16"></div>
+          <div key={i} className="flex gap-3">
+            <div className={`h-4 ${skeletonBase} flex-1`} />
+            <div className={`h-4 ${skeletonBase} w-16`} />
+            <div className={`h-4 ${skeletonBase} w-12`} />
           </div>
         ))}
       </div>
     );
   }
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-pulse">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
       {[...Array(rows)].map((_, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800">
-          <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded w-2/3 mb-4"></div>
-          <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-1/2 mb-3"></div>
-          <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-full mb-2"></div>
-          <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-4/5"></div>
+        <div key={i} className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className={`h-4 ${skeletonBase} w-2/3 mb-3`} />
+          <div className={`h-3 ${skeletonBase} w-1/2 mb-2`} />
+          <div className={`h-3 ${skeletonBase} w-full mb-1.5`} />
+          <div className={`h-3 ${skeletonBase} w-4/5`} />
         </div>
       ))}
     </div>
   );
 };
 
-export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' }> = ({ children, variant = 'primary', className = '', ...props }) => {
-  const baseClasses = "px-4 py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 text-sm";
+export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' | 'ghost' }> = ({ children, variant = 'primary', className = '', ...props }) => {
+  const base = 'inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[var(--border-radius-base,6px)] text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
   const variants = {
-    primary: "bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/20",
-    secondary: "bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/20",
-    outline: "border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+    primary:   'bg-primary text-white hover:bg-primary/90',
+    secondary: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    outline:   'border border-[var(--color-border)] text-[var(--color-text)] bg-[var(--color-card)] hover:bg-[#f0f2f5]',
+    ghost:     'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)]',
   };
-
   return (
-    <button className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
+    <button className={`${base} ${variants[variant]} ${className}`} {...props}>
       {children}
     </button>
   );
@@ -267,20 +274,19 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <div
-        className={`
-          w-full border rounded-xl text-sm font-medium transition-all flex items-center gap-2 cursor-text
-          ${open
-            ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-slate-800'
-            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
-          }
-        `}
+        className={[
+          'w-full border rounded-[var(--border-radius-base)] text-[13px] font-medium transition-all flex items-center gap-2 cursor-text',
+          open
+            ? 'border-primary ring-2 ring-primary/15 bg-[var(--color-card)]'
+            : 'border-[var(--color-border)] bg-[#f8f9fa] hover:border-primary/30',
+        ].join(' ')}
         onClick={() => { setOpen(true); }}
       >
-        <span className="material-icons-round text-slate-400 text-lg pr-3 pl-1 shrink-0">search</span>
+        <span className="material-icons-round text-[var(--color-text-muted)] text-[18px] pr-3 pl-1 shrink-0">search</span>
         <input
           ref={inputRef}
           type="text"
-          className="flex-1 bg-transparent border-none outline-none py-3 pl-3 text-sm font-medium text-slate-700 dark:text-slate-200 placeholder-slate-400 min-w-0"
+          className="flex-1 bg-transparent border-none outline-none py-2 pl-3 text-[13px] text-[var(--color-text)] placeholder-[var(--color-text-muted)] min-w-0"
           placeholder={placeholder}
           value={open ? query : selectedLabel}
           readOnly={!open}
@@ -291,12 +297,12 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           <button
             type="button"
             onClick={handleClear}
-            className="p-1 ml-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors shrink-0"
+            className="p-1 ml-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors shrink-0"
           >
-            <span className="material-icons-round text-sm">close</span>
+            <span className="material-icons-round text-[15px]">close</span>
           </button>
         )}
-        <span className={`material-icons-round text-slate-400 text-lg ml-2 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}>
+        <span className={`material-icons-round text-[var(--color-text-muted)] text-[18px] ml-2 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}>
           expand_more
         </span>
       </div>
@@ -304,27 +310,21 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       {open && createPortal(
         <div
           ref={menuRef}
-          style={menuStyle}
-          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-black/30 overflow-y-auto"
+          style={{ ...menuStyle, boxShadow: 'var(--shadow-dropdown)' }}
+          className="erp-dropdown"
         >
           {filtered.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-slate-400 text-center">لا توجد نتائج</div>
+            <div className="px-4 py-4 text-[12.5px] text-[var(--color-text-muted)] text-center">لا توجد نتائج</div>
           ) : (
             filtered.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                className={`
-                  w-full text-right px-4 py-2.5 text-sm font-medium transition-colors flex items-center gap-2
-                  ${opt.value === value
-                    ? 'bg-primary/10 text-primary font-bold'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }
-                `}
+                className={`erp-dropdown-item${opt.value === value ? ' selected' : ''}`}
                 onClick={() => handleSelect(opt.value)}
               >
                 {opt.value === value && (
-                  <span className="material-icons-round text-primary text-sm shrink-0">check</span>
+                  <span className="material-icons-round text-[rgb(var(--color-primary))] text-[14px] shrink-0">check</span>
                 )}
                 <span className="truncate">{opt.label}</span>
               </button>

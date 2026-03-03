@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
-import { getTodayDateString } from '../../../utils/calculations';
+import { getOperationalDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -29,7 +29,7 @@ const emptyForm = (): ReportFormState => ({
   productId: '',
   lineId: '',
   workOrderId: '',
-  date: getTodayDateString(),
+  date: getOperationalDateString(8),
   quantityProduced: 0,
   quantityWaste: 0,
   workersCount: 0,
@@ -132,17 +132,17 @@ export const GlobalCreateReportModal: React.FC = () => {
       onClick={closeModal}
     >
       <div
-        className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+        className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {showErrorOverlay && feedback?.type === 'error' && (
           <div className="absolute inset-0 z-30 bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="w-full max-w-md bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-xl)] shadow-2xl p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-rose-500">error</span>
-                <h4 className="text-base font-extrabold text-rose-700 dark:text-rose-300">تعذر الحفظ</h4>
+                <h4 className="text-base font-extrabold text-rose-700">تعذر الحفظ</h4>
               </div>
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{feedback.text}</p>
+              <p className="text-sm font-bold text-[var(--color-text)]">{feedback.text}</p>
               <div className="flex items-center justify-end gap-2">
                 <Button variant="outline" onClick={closeErrorOverlay}>إغلاق التنبيه</Button>
                 <Button variant="danger" onClick={clearFormAndCloseError}>
@@ -154,9 +154,9 @@ export const GlobalCreateReportModal: React.FC = () => {
           </div>
         )}
 
-        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold">إنشاء تقرير إنتاج</h3>
-          <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button onClick={closeModal} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <span className="material-icons-round">close</span>
           </button>
         </div>
@@ -164,8 +164,8 @@ export const GlobalCreateReportModal: React.FC = () => {
         <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
           {feedback?.type === 'success' && (
             <div
-              className={`rounded-xl p-3 flex items-center gap-2 border ${
-                'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+              className={`rounded-[var(--border-radius-lg)] p-3 flex items-center gap-2 border ${
+                'bg-emerald-50 border-emerald-200'
               }`}
             >
               <span
@@ -177,7 +177,7 @@ export const GlobalCreateReportModal: React.FC = () => {
               </span>
               <p
                 className={`text-sm font-bold flex-1 ${
-                  'text-emerald-700 dark:text-emerald-300'
+                  'text-emerald-700'
                 }`}
               >
                 {feedback.text}
@@ -186,9 +186,9 @@ export const GlobalCreateReportModal: React.FC = () => {
           )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">أمر شغل (اختياري)</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">أمر شغل (اختياري)</label>
             <select
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
               value={form.workOrderId}
               onChange={(e) => {
                 const wo = activeWorkOrders.find((w) => w.id === e.target.value);
@@ -216,22 +216,22 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">التاريخ *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">التاريخ *</label>
               <input
                 type="date"
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={form.date}
                 onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المشرف *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">المشرف *</label>
               {isSupervisorReporter && currentEmployee ? (
                 <input
                   type="text"
                   readOnly
                   value={currentEmployee.name}
-                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 rounded-xl text-sm p-3.5 outline-none font-bold text-slate-600 dark:text-slate-300"
+                  className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
                 <SearchableSelect
@@ -246,7 +246,7 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">خط الإنتاج *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج *</label>
               <SearchableSelect
                 placeholder="اختر الخط"
                 options={lines.map((l) => ({ value: l.id!, label: l.name }))}
@@ -255,7 +255,7 @@ export const GlobalCreateReportModal: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المنتج *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج *</label>
               <SearchableSelect
                 placeholder="اختر المنتج"
                 options={products.map((p) => ({ value: p.id!, label: p.name }))}
@@ -267,22 +267,22 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الكمية المنتجة *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المنتجة *</label>
               <input
                 type="number"
                 min={0}
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={form.quantityProduced || ''}
                 onChange={(e) => setForm((prev) => ({ ...prev, quantityProduced: Number(e.target.value) }))}
                 placeholder="0"
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الهالك</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهالك</label>
               <input
                 type="number"
                 min={0}
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={form.quantityWaste || ''}
                 onChange={(e) => setForm((prev) => ({ ...prev, quantityWaste: Number(e.target.value) }))}
                 placeholder="0"
@@ -292,23 +292,23 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">عدد عمال التشغيل *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">عدد عمال التشغيل *</label>
               <input
                 type="number"
                 min={1}
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={form.workersCount || ''}
                 onChange={(e) => setForm((prev) => ({ ...prev, workersCount: Number(e.target.value) }))}
                 placeholder="0"
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">ساعات العمل *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
               <input
                 type="number"
                 min={0}
                 step={0.5}
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={form.workHours || ''}
                 onChange={(e) => setForm((prev) => ({ ...prev, workHours: Number(e.target.value) }))}
                 placeholder="0"
@@ -317,10 +317,10 @@ export const GlobalCreateReportModal: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">ملحوظة</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">ملحوظة</label>
             <textarea
               rows={3}
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all resize-y"
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all resize-y"
               value={form.notes}
               onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
               placeholder="اكتب أي ملاحظة إضافية للتقرير..."
@@ -328,7 +328,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
+        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={closeModal}>إلغاء</Button>
           <Button
             variant="primary"

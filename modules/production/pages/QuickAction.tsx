@@ -5,7 +5,7 @@ import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import { exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
-import { formatNumber, getTodayDateString } from '../../../utils/calculations';
+import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
 import type { LineWorkerAssignment } from '../../../types';
 import {
   SingleReportPrint,
@@ -44,7 +44,7 @@ export const QuickAction: React.FC = () => {
 
   const printRef = useRef<HTMLDivElement>(null);
 
-  const today = useMemo(() => getTodayDateString(), []);
+  const today = useMemo(() => getOperationalDateString(8), []);
 
   const fetchWorkersFromLineAssignments = useCallback(async () => {
     if (!lineId) {
@@ -286,15 +286,15 @@ export const QuickAction: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدخال سريع</h2>
-        <p className="text-sm text-slate-500 font-medium">إدخال بيانات الإنتاج بسرعة — حفظ، طباعة، ومشاركة.</p>
+        <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">إدخال سريع</h2>
+        <p className="text-sm text-[var(--color-text-muted)] font-medium">إدخال بيانات الإنتاج بسرعة — حفظ، طباعة، ومشاركة.</p>
       </div>
 
       {/* WhatsApp Share Feedback Toast */}
       {shareToast && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3 animate-in fade-in duration-300">
           <span className="material-icons-round text-emerald-500">image</span>
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex-1">{shareToast}</p>
+          <p className="text-sm font-medium text-emerald-700 flex-1">{shareToast}</p>
           <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
             <span className="material-icons-round text-sm">close</span>
           </button>
@@ -306,12 +306,12 @@ export const QuickAction: React.FC = () => {
           {/* Work Order Selector */}
           {can('workOrders.view') && activeWOs.length > 0 && (
             <div className="mb-5">
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-1">
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 flex items-center gap-1">
                 <span className="material-icons-round text-sm text-primary">assignment</span>
                 أمر شغل (اختياري)
               </label>
               <select
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold focus:border-primary focus:ring-2 focus:ring-primary/12"
                 value=""
                 onChange={(e) => handleSelectWO(e.target.value)}
               >
@@ -331,13 +331,13 @@ export const QuickAction: React.FC = () => {
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">المشرف *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">المشرف *</label>
               {isSupervisorReporter && currentEmployee ? (
                 <input
                   type="text"
                   readOnly
                   value={currentEmployee.name}
-                  className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300"
+                  className="w-full px-4 py-2.5 bg-[#f0f2f5]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
                 <SearchableSelect
@@ -349,7 +349,7 @@ export const QuickAction: React.FC = () => {
               )}
             </div>
             <div>
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">خط الإنتاج *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">خط الإنتاج *</label>
               <SearchableSelect
                 placeholder="اختر الخط"
                 options={_rawLines.map((l) => ({ value: l.id!, label: l.name }))}
@@ -358,7 +358,7 @@ export const QuickAction: React.FC = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">المنتج *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">المنتج *</label>
               <SearchableSelect
                 placeholder="اختر المنتج"
                 options={_rawProducts.map((p) => ({ value: p.id!, label: p.name }))}
@@ -367,30 +367,30 @@ export const QuickAction: React.FC = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">الكمية المنتجة *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الكمية المنتجة *</label>
               <input
                 type="number"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
                 min="0"
               />
             </div>
             <div>
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">الهالك</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الهالك</label>
               <input
                 type="number"
                 value={waste}
                 onChange={(e) => setWaste(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
                 min="0"
               />
             </div>
             <div>
               <div className="flex items-center justify-between gap-2 mb-2">
-                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 block">عدد العمال *</label>
+                <label className="text-sm font-bold text-[var(--color-text-muted)] block">عدد العمال *</label>
                 <button
                   type="button"
                   onClick={fetchWorkersFromLineAssignments}
@@ -407,7 +407,7 @@ export const QuickAction: React.FC = () => {
                 type="number"
                 value={workers}
                 onChange={(e) => setWorkers(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
                 min="1"
               />
@@ -426,30 +426,30 @@ export const QuickAction: React.FC = () => {
               )}
             </div>
             <div>
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">ساعات العمل *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ساعات العمل *</label>
               <input
                 type="number"
                 value={hours}
                 onChange={(e) => setHours(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
                 min="0"
                 step="0.5"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2 block">ملحوظة</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ملحوظة</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12 resize-y"
                 placeholder="اكتب أي ملحوظة إضافية للتقرير..."
               />
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-[var(--color-border)]">
             <Button
               onClick={handleSave}
               disabled={saving || !lineId || !productId || !employeeId || !quantity || !workers || !hours || !canCreateReport}
@@ -478,10 +478,10 @@ export const QuickAction: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {/* Success Banner */}
-          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-5 py-4 flex items-center gap-3">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] px-5 py-4 flex items-center gap-3">
             <span className="material-icons-round text-emerald-500 text-2xl">check_circle</span>
             <div>
-              <p className="font-bold text-emerald-700 dark:text-emerald-400">تم حفظ التقرير بنجاح!</p>
+              <p className="font-bold text-emerald-700">تم حفظ التقرير بنجاح!</p>
               <p className="text-sm text-emerald-600 dark:text-emerald-500">يمكنك الآن الطباعة أو التصدير أو المشاركة.</p>
             </div>
           </div>
@@ -517,47 +517,47 @@ export const QuickAction: React.FC = () => {
           {/* Preview (visible on screen) */}
           {printReport && (
             <Card className="!p-0 overflow-hidden">
-              <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
+              <div className="px-5 py-3 bg-[#f8f9fa]/50 border-b border-[var(--color-border)] flex items-center gap-2">
                 <span className="material-icons-round text-sm text-slate-400">visibility</span>
                 <span className="text-xs font-bold text-slate-500">معاينة التقرير</span>
               </div>
               <div className="p-5 space-y-3">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-blue-50 dark:bg-blue-900/10 rounded-xl p-3 text-center border border-blue-100 dark:border-blue-900/20">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">خط الإنتاج</p>
-                    <p className="text-sm font-black text-blue-600 dark:text-blue-400">{printReport.lineName}</p>
+                  <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-blue-100 dark:border-blue-900/20">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
+                    <p className="text-sm font-bold text-blue-600">{printReport.lineName}</p>
                   </div>
-                  <div className="bg-violet-50 dark:bg-violet-900/10 rounded-xl p-3 text-center border border-violet-100 dark:border-violet-900/20">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">المنتج</p>
-                    <p className="text-sm font-black text-violet-600 dark:text-violet-400">{printReport.productName}</p>
+                  <div className="bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-violet-100 dark:border-violet-900/20">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
+                    <p className="text-sm font-bold text-violet-600 dark:text-violet-400">{printReport.productName}</p>
                   </div>
-                  <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-3 text-center border border-emerald-100 dark:border-emerald-900/20">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">الكمية المنتجة</p>
-                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{printReport.quantityProduced}</p>
+                  <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-emerald-100 dark:border-emerald-900/20">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الكمية المنتجة</p>
+                    <p className="text-sm font-bold text-emerald-600">{printReport.quantityProduced}</p>
                   </div>
-                  <div className="bg-rose-50 dark:bg-rose-900/10 rounded-xl p-3 text-center border border-rose-100 dark:border-rose-900/20">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">الهالك</p>
-                    <p className="text-sm font-black text-rose-500">{printReport.quantityWaste}</p>
+                  <div className="bg-rose-50 dark:bg-rose-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-rose-100 dark:border-rose-900/20">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الهالك</p>
+                    <p className="text-sm font-bold text-rose-500">{printReport.quantityWaste}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">الموظف</p>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{printReport.employeeName}</p>
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الموظف</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.employeeName}</p>
                   </div>
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">عدد العمال</p>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{printReport.workersCount}</p>
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">عدد العمال</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersCount}</p>
                   </div>
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">ساعات العمل</p>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{printReport.workHours}</p>
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ساعات العمل</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workHours}</p>
                   </div>
                 </div>
                 {printReport.notes?.trim() && (
-                  <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl p-3 border border-amber-100 dark:border-amber-900/20">
-                    <p className="text-[10px] font-bold text-slate-400 mb-1">ملحوظة</p>
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{printReport.notes}</p>
+                  <div className="bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-lg)] p-3 border border-amber-100 dark:border-amber-900/20">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملحوظة</p>
+                    <p className="text-sm font-medium text-[var(--color-text)]">{printReport.notes}</p>
                   </div>
                 )}
               </div>
@@ -569,18 +569,18 @@ export const QuickAction: React.FC = () => {
       {/* Line Workers Modal */}
       {showLineWorkers && lineId && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowLineWorkers(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] border border-slate-200 dark:border-slate-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md max-h-[80vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">groups</span>
                 <h3 className="font-bold">عمالة {getLineName(lineId)} اليوم</h3>
-                <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded-lg">{lineWorkers.length}</span>
+                <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded-[var(--border-radius-base)]">{lineWorkers.length}</span>
               </div>
-              <button onClick={() => setShowLineWorkers(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowLineWorkers(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-2">
+            <div className="p-4 border-b border-[var(--color-border)] space-y-2">
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <SearchableSelect
@@ -607,11 +607,11 @@ export const QuickAction: React.FC = () => {
                 <p className="text-xs font-bold text-rose-500">{workerActionError}</p>
               )}
             </div>
-            <div className="p-4 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800">
+            <div className="p-4 overflow-y-auto divide-y divide-slate-50">
               {lineWorkers.length === 0 ? (
                 <div className="text-center py-8">
-                  <span className="material-icons-round text-4xl text-slate-300 dark:text-slate-700 mb-2 block">person_add</span>
-                  <p className="text-sm text-slate-500 font-medium">لا يوجد عمالة مسجلة على هذا الخط اليوم</p>
+                  <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">person_add</span>
+                  <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمالة مسجلة على هذا الخط اليوم</p>
                 </div>
               ) : (
                 lineWorkers.map((w, i) => (
@@ -620,14 +620,14 @@ export const QuickAction: React.FC = () => {
                       <span className="material-icons-round text-primary text-sm">person</span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{w.employeeName}</p>
-                      <p className="text-xs text-slate-400 font-mono">{w.employeeCode}</p>
+                      <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
+                      <p className="text-xs text-[var(--color-text-muted)] font-mono">{w.employeeCode}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleQuickRemoveWorker(w.id)}
                       disabled={workerActionBusy}
-                      className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all disabled:opacity-50"
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50"
                       title="حذف العامل من الخط"
                     >
                       <span className="material-icons-round text-base">delete</span>

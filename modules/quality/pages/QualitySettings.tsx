@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -287,8 +287,8 @@ export const QualitySettings: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">إعدادات الجودة</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">مركز ضبط سياسات الجودة وكتالوج أسباب العيوب.</p>
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">إعدادات الجودة</h1>
+          <p className="text-sm text-[var(--color-text-muted)] mt-1">مركز ضبط سياسات الجودة وكتالوج أسباب العيوب.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={policies.closeRequiresQualityApproval ? 'warning' : 'neutral'}>
@@ -300,7 +300,7 @@ export const QualitySettings: React.FC = () => {
 
       {message && (
         <Card>
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{message}</p>
+          <p className="text-sm font-semibold text-[var(--color-text)]">{message}</p>
         </Card>
       )}
 
@@ -313,10 +313,10 @@ export const QualitySettings: React.FC = () => {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
                   isActive
                     ? 'bg-primary text-white shadow-md shadow-primary/30'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                    : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
                 }`}
               >
                 <span className="material-icons-round text-base">{tab.icon}</span>
@@ -330,10 +330,10 @@ export const QualitySettings: React.FC = () => {
       {activeTab === 'policies' && (
         <Card title="سياسات الاعتماد والإغلاق">
           <div className="space-y-6">
-            <div className="flex items-start justify-between gap-4 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="flex items-start justify-between gap-4 p-4 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">إغلاق أمر الشغل يتطلب اعتماد الجودة</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <h3 className="text-sm font-extrabold text-[var(--color-text)]">إغلاق أمر الشغل يتطلب اعتماد الجودة</h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
                   عند التفعيل، لن يمكن تحويل أمر الشغل إلى مكتمل إلا إذا كانت حالة الجودة معتمدة.
                 </p>
               </div>
@@ -346,7 +346,7 @@ export const QualitySettings: React.FC = () => {
                 } ${!canManageSettings || savingPolicies ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition ${
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-[var(--color-card)] shadow-lg transition ${
                     policies.closeRequiresQualityApproval ? '-translate-x-5' : 'translate-x-0'
                   }`}
                 />
@@ -368,34 +368,34 @@ export const QualitySettings: React.FC = () => {
           <Card className="xl:col-span-1" title={reasonForm.id ? 'تعديل سبب عيب' : 'إضافة سبب عيب'}>
             <form onSubmit={onSubmitReason} className="space-y-3">
               <div className="space-y-1">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">الكود</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">الكود</label>
                 <input
                   value={reasonForm.code}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, code: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                   placeholder="DEF-001"
                   disabled={!canManageCatalog || savingReason}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">اسم السبب</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">اسم السبب</label>
                 <input
                   value={reasonForm.labelAr}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, labelAr: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                   placeholder="عيب تشطيب"
                   disabled={!canManageCatalog || savingReason}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">التصنيف</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">التصنيف</label>
                 <input
                   list="quality-reason-categories"
                   value={reasonForm.category}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                   disabled={!canManageCatalog || savingReason}
                 />
                 <datalist id="quality-reason-categories">
@@ -406,11 +406,11 @@ export const QualitySettings: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">الشدة الافتراضية</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">الشدة الافتراضية</label>
                 <select
                   value={reasonForm.severityDefault}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, severityDefault: e.target.value as QualityDefectSeverity }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                   disabled={!canManageCatalog || savingReason}
                 >
                   {SEVERITY_OPTIONS.map((severity) => (
@@ -421,7 +421,7 @@ export const QualitySettings: React.FC = () => {
                 </select>
               </div>
 
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
                 <input
                   type="checkbox"
                   checked={reasonForm.isActive}
@@ -448,19 +448,19 @@ export const QualitySettings: React.FC = () => {
           <Card className="xl:col-span-2" title="قائمة أسباب العيوب">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-right py-2 px-2">الكود</th>
-                    <th className="text-right py-2 px-2">السبب</th>
-                    <th className="text-right py-2 px-2">التصنيف</th>
-                    <th className="text-right py-2 px-2">الشدة</th>
-                    <th className="text-right py-2 px-2">الحالة</th>
-                    <th className="text-right py-2 px-2">إجراءات</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الكود</th>
+                    <th className="erp-th">السبب</th>
+                    <th className="erp-th">التصنيف</th>
+                    <th className="erp-th">الشدة</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reasons.map((reason) => (
-                    <tr key={reason.id} className="border-b border-slate-100 dark:border-slate-800">
+                    <tr key={reason.id} className="border-b border-[var(--color-border)]">
                       <td className="py-2 px-2 font-mono text-xs">{reason.code}</td>
                       <td className="py-2 px-2">{reason.labelAr}</td>
                       <td className="py-2 px-2">{reason.category}</td>
@@ -489,7 +489,7 @@ export const QualitySettings: React.FC = () => {
                   ))}
                   {reasons.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-slate-500 dark:text-slate-400">
+                      <td colSpan={6} className="py-6 text-center text-[var(--color-text-muted)]">
                         لا توجد أسباب عيوب حتى الآن.
                       </td>
                     </tr>
@@ -509,13 +509,13 @@ export const QualitySettings: React.FC = () => {
                 value={templateForm.name}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, name: e.target.value }))}
                 placeholder="اسم القالب"
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               />
               <select
                 value={templateForm.productId}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, productId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل المنتجات</option>
@@ -526,7 +526,7 @@ export const QualitySettings: React.FC = () => {
               <select
                 value={templateForm.lineId}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, lineId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل الخطوط</option>
@@ -538,14 +538,14 @@ export const QualitySettings: React.FC = () => {
                 value={templateForm.checklistCsv}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, checklistCsv: e.target.value }))}
                 placeholder="Checklist CSV"
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               />
               <input
                 value={templateForm.criticalChecksCsv}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, criticalChecksCsv: e.target.value }))}
                 placeholder="Critical Checks CSV"
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               />
               <Button type="submit" disabled={!canManageSettings}>حفظ القالب</Button>
@@ -554,7 +554,7 @@ export const QualitySettings: React.FC = () => {
           <Card className="xl:col-span-2" title="قوالب الفحص">
             <div className="space-y-2">
               {inspectionTemplates.map((tpl) => (
-                <div key={tpl.id} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3">
+                <div key={tpl.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-start justify-between gap-3">
                   <div>
                     <p className="font-bold text-sm">{tpl.name}</p>
                     <p className="text-xs text-slate-500">Checklist: {tpl.checklist.join(', ') || '-'}</p>
@@ -603,7 +603,7 @@ export const QualitySettings: React.FC = () => {
               <select
                 value={samplingForm.productId}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, productId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل المنتجات</option>
@@ -614,7 +614,7 @@ export const QualitySettings: React.FC = () => {
               <select
                 value={samplingForm.lineId}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, lineId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل الخطوط</option>
@@ -626,7 +626,7 @@ export const QualitySettings: React.FC = () => {
                 type="number"
                 value={samplingForm.frequencyMinutes}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, frequencyMinutes: Number(e.target.value) }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
                 placeholder="تكرار المعاينة بالدقائق"
               />
@@ -634,7 +634,7 @@ export const QualitySettings: React.FC = () => {
                 type="number"
                 value={samplingForm.sampleSize}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, sampleSize: Number(e.target.value) }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
                 placeholder="حجم العينة"
               />
@@ -644,7 +644,7 @@ export const QualitySettings: React.FC = () => {
           <Card className="xl:col-span-2" title="خطط المعاينة">
             <div className="space-y-2">
               {samplingPlans.map((plan) => (
-                <div key={plan.id} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                <div key={plan.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-center justify-between gap-3">
                   <div className="text-sm">
                     <p className="font-bold">كل {plan.frequencyMinutes} دقيقة - عينة {plan.sampleSize}</p>
                     <p className="text-xs text-slate-500">
@@ -729,14 +729,14 @@ export const QualitySettings: React.FC = () => {
             <input
               value={printTemplates.headerText}
               onChange={(e) => setPrintTemplates((p) => ({ ...p, headerText: e.target.value }))}
-              className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
               placeholder="Header"
               disabled={!canManageSettings}
             />
             <input
               value={printTemplates.footerText}
               onChange={(e) => setPrintTemplates((p) => ({ ...p, footerText: e.target.value }))}
-              className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
               placeholder="Footer"
               disabled={!canManageSettings}
             />

@@ -81,7 +81,7 @@ const getPresetRange = (preset: PeriodPreset): { start: string; end: string } =>
   }
 };
 
-const PIE_COLORS = ['#1392ec', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
+const PIE_COLORS = ['#1392ec', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 const PRESET_LABELS: Record<PeriodPreset, string> = {
   today: 'اليوم',
@@ -94,11 +94,11 @@ const PRESET_LABELS: Record<PeriodPreset, string> = {
 
 const QUICK_ACTION_COLOR_CLASSES: Record<QuickActionColor, string> = {
   primary: 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15',
-  emerald: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/20',
-  amber: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/20',
-  rose: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/20',
+  emerald: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/20',
+  amber: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/20',
+  rose: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/20',
   violet: 'bg-violet-50 dark:bg-violet-900/10 text-violet-600 border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/20',
-  slate: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700',
+  slate: 'bg-[#f0f2f5] text-[var(--color-text-muted)] border-[var(--color-border)] hover:bg-[#e8eaed]',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -168,10 +168,9 @@ const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }
         <path
           d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
           fill="none"
-          stroke="#e2e8f0"
-          strokeWidth="16"
+          stroke="#e8eaed"
+          strokeWidth="14"
           strokeLinecap="round"
-          className="dark:stroke-slate-700"
         />
         {/* Value arc */}
         {clampedValue > 0 && (
@@ -211,7 +210,7 @@ const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }
         <text x={cx - r - 5} y={cy + 18} textAnchor="middle" fill="#94a3b8" style={{ fontSize: '10px', fontWeight: 600 }}>0</text>
         <text x={cx + r + 5} y={cy + 18} textAnchor="middle" fill="#94a3b8" style={{ fontSize: '10px', fontWeight: 600 }}>100</text>
       </svg>
-      <p className="text-sm font-bold text-slate-600 dark:text-slate-300 -mt-2">{label}</p>
+      <p className="text-sm font-bold text-[var(--color-text-muted)] -mt-2">{label}</p>
     </div>
   );
 };
@@ -253,6 +252,7 @@ export const AdminDashboard: React.FC = () => {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [reports, setReports] = useState<ProductionReport[]>([]);
+  const [reportsError, setReportsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // ── System metrics state ─────────────────────────────────────────────────
@@ -274,14 +274,20 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    reportService.getByDateRange(dateRange.start, dateRange.end).then((data) => {
-      if (!cancelled) {
-        setReports(data);
+    setReportsError(null);
+    reportService.getByDateRange(dateRange.start, dateRange.end)
+      .then((data) => {
+        if (cancelled) return;
+        setReports(Array.isArray(data) ? data : []);
         setLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelled) setLoading(false);
-    });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : 'تعذر تحميل تقارير الإنتاج.';
+        setReportsError(message);
+        setReports([]);
+        setLoading(false);
+      });
     return () => { cancelled = true; };
   }, [dateRange.start, dateRange.end]);
 
@@ -807,13 +813,23 @@ export const AdminDashboard: React.FC = () => {
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-3 text-sm" dir="rtl">
-        <p className="font-bold text-slate-600 dark:text-slate-300 mb-1">{label}</p>
+      <div
+        dir="rtl"
+        style={{
+          background: 'var(--color-card)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--border-radius-base)',
+          boxShadow: 'var(--shadow-dropdown)',
+          padding: '10px 14px',
+          fontSize: 12.5,
+        }}
+      >
+        <p style={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: 6 }}>{label}</p>
         {payload.map((entry: any, i: number) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
-            <span className="text-slate-500">{entry.name}:</span>
-            <span className="font-bold">{formatNumber(entry.value)}</span>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, flexShrink: 0 }} />
+            <span style={{ color: 'var(--color-text-muted)' }}>{entry.name}:</span>
+            <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{formatNumber(entry.value)}</span>
           </div>
         ))}
       </div>
@@ -824,9 +840,21 @@ export const AdminDashboard: React.FC = () => {
     if (!active || !payload?.length) return null;
     const d = payload[0];
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-3 text-sm" dir="rtl">
-        <p className="font-bold">{d.name}</p>
-        <p className="text-slate-500">{typeof d.value === 'number' && d.value > 1000 ? formatCost(d.value) + ' ج.م' : d.value}</p>
+      <div
+        dir="rtl"
+        style={{
+          background: 'var(--color-card)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--border-radius-base)',
+          boxShadow: 'var(--shadow-dropdown)',
+          padding: '10px 14px',
+          fontSize: 12.5,
+        }}
+      >
+        <p style={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>{d.name}</p>
+        <p style={{ color: 'var(--color-text-muted)' }}>
+          {typeof d.value === 'number' && d.value > 1000 ? formatCost(d.value) + ' ج.م' : d.value}
+        </p>
       </div>
     );
   }, []);
@@ -847,10 +875,9 @@ export const AdminDashboard: React.FC = () => {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-rose-100 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
-            <span className="material-icons-round text-rose-600 dark:text-rose-400 text-2xl">shield</span>
+          <div className="w-12 h-12 bg-rose-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
+            <span className="material-icons-round text-rose-600 text-2xl">shield</span>
           </div>
-          
         </div>
         <LoadingSkeleton rows={6} type="card" />
       </div>
@@ -861,19 +888,17 @@ export const AdminDashboard: React.FC = () => {
     <div className="space-y-6">
       {/* ── Alerts ──────────────────────────────────────────────────────────── */}
       {isVisible('alerts') && alerts.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {alerts.map((alert, i) => (
             <div
               key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
-                alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400'
-                  : alert.type === 'warning'
-                  ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
-                  : 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400'
-              }`}
+              className={`erp-alert${
+                alert.type === 'danger'  ? ' erp-alert-error' :
+                alert.type === 'warning' ? ' erp-alert-warning' :
+                                           ' erp-alert-info'
+              } erp-animate-in`}
             >
-              <span className="material-icons-round text-lg">{alert.icon}</span>
+              <span className="material-icons-round text-[18px] shrink-0">{alert.icon}</span>
               <span>{alert.message}</span>
             </div>
           ))}
@@ -883,88 +908,86 @@ export const AdminDashboard: React.FC = () => {
      
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-rose-100 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
-            <span className="material-icons-round text-rose-600 dark:text-rose-400 text-2xl">shield</span>
+      <div className="erp-page-head">
+        <div className="erp-page-title-block flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0"
+            style={{ background: '#fee2e2' }}
+          >
+            <span className="material-icons-round text-rose-600" style={{ fontSize: 20 }}>shield</span>
           </div>
           <div>
-            <h2 className="text-2xl font-bold">لوحة مدير النظام</h2>
-            <p className="text-sm text-slate-400">نظرة شاملة على الإنتاج والنظام والصحة العامة</p>
+            <h2 className="page-title">لوحة مدير النظام</h2>
+            <p className="page-subtitle">نظرة شاملة على الإنتاج والنظام والصحة العامة</p>
           </div>
         </div>
         {(loading || systemLoading) && (
-          <span className="text-xs text-slate-400 flex items-center gap-1">
-            <span className="material-icons-round text-sm animate-spin">sync</span>
+          <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
+            <span className="material-icons-round text-[14px] animate-spin">sync</span>
             جاري التحديث...
           </span>
         )}
       </div>
 
       {/* ── Period Filter ───────────────────────────────────────────────────── */}
-      <Card>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="material-icons-round text-primary">date_range</span>
-            <span className="text-sm font-bold text-slate-600 dark:text-slate-300">الفترة:</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => (
-              <button
-                key={key}
-                onClick={() => setPreset(key)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                  preset === key
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                {PRESET_LABELS[key]}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={customStart || dateRange.start}
-              onChange={(e) => { setCustomStart(e.target.value); setPreset('custom'); }}
-              className={`border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 transition-all ${
-                preset === 'custom'
-                  ? 'border-primary ring-1 ring-primary/20'
-                  : 'border-slate-200 dark:border-slate-700'
-              }`}
-            />
-            <span className="text-slate-400">—</span>
-            <input
-              type="date"
-              value={customEnd || dateRange.end}
-              onChange={(e) => { setCustomEnd(e.target.value); setPreset('custom'); }}
-              className={`border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 transition-all ${
-                preset === 'custom'
-                  ? 'border-primary ring-1 ring-primary/20'
-                  : 'border-slate-200 dark:border-slate-700'
-              }`}
-            />
-          </div>
-          <div className="mr-auto text-xs text-slate-400 font-medium">
-            {dateRange.start} → {dateRange.end}
-          </div>
+      <div className="erp-filter-bar">
+        <div className="erp-date-seg">
+          {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => (
+            <button
+              key={key}
+              onClick={() => setPreset(key)}
+              className={`erp-date-seg-btn${preset === key ? ' active' : ''}`}
+            >
+              {PRESET_LABELS[key]}
+            </button>
+          ))}
         </div>
-      </Card>
+        <div className="erp-filter-sep hidden sm:block" />
+        <div className="erp-filter-date">
+          <span className="erp-filter-label">من</span>
+          <input
+            type="date"
+            value={customStart || dateRange.start}
+            onChange={(e) => { setCustomStart(e.target.value); setPreset('custom'); }}
+          />
+        </div>
+        <div className="erp-filter-date">
+          <span className="erp-filter-label">إلى</span>
+          <input
+            type="date"
+            value={customEnd || dateRange.end}
+            onChange={(e) => { setCustomEnd(e.target.value); setPreset('custom'); }}
+          />
+        </div>
+        <span className="text-xs text-[var(--color-text-muted)] font-medium me-auto">{dateRange.start} ← {dateRange.end}</span>
+      </div>
+
+      {reportsError && (
+        <div className="erp-alert erp-alert-warning">
+          <span className="material-icons-round text-[18px] shrink-0">warning</span>
+          <span>تعذر تحميل بيانات التقارير: {reportsError}</span>
+        </div>
+      )}
+      {!loading && !reportsError && reports.length === 0 && (
+        <div className="erp-alert erp-alert-info">
+          <span className="material-icons-round text-[18px] shrink-0">info</span>
+          <span>لا توجد تقارير إنتاج في الفترة المحددة.</span>
+        </div>
+      )}
 
       {quickActions.length > 0 && (
         <Card>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-primary">bolt</span>
-              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">إجراءات سريعة</h3>
+              <h3 className="text-sm font-bold text-[var(--color-text)]">إجراءات سريعة</h3>
             </div>
             <div className="flex flex-wrap gap-2 sm:mr-auto">
               {quickActions.map((action) => (
                 <button
                   key={action.id}
                   onClick={() => runQuickAction(action)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-bold transition-all ${QUICK_ACTION_COLOR_CLASSES[action.color]}`}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border text-sm font-bold transition-all ${QUICK_ACTION_COLOR_CLASSES[action.color]}`}
                 >
                   <span className="material-icons-round text-sm">{action.icon}</span>
                   <span>{action.label}</span>
@@ -981,7 +1004,7 @@ export const AdminDashboard: React.FC = () => {
       {/* ── Operational KPIs ────────────────────────────────────────────────── */}
       {isVisible('operational_kpis') && (
       <div>
-        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
           <span className="material-icons-round text-base">precision_manufacturing</span>
           مؤشرات تشغيلية
         </h3>
@@ -1008,7 +1031,7 @@ export const AdminDashboard: React.FC = () => {
               value={formatCost(kpis.avgCostPerUnit)}
               icon="payments"
               unit="ج.م"
-              colorClass="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+              colorClass="bg-amber-100 text-amber-600"
             />
           )}
           {canViewCosts && (() => {
@@ -1058,13 +1081,13 @@ export const AdminDashboard: React.FC = () => {
           <h3 className="text-lg font-bold">الإنتاج اللحظي (الباركود)</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KPIBox label="وحدات مكتملة الآن" value={liveScanKpis.completedUnits} icon="check_circle" colorClass="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" />
-          <KPIBox label="وحدات قيد التشغيل" value={liveScanKpis.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" />
-          <KPIBox label="عمالة فعالة" value={liveScanKpis.activeWorkers} icon="groups" colorClass="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" />
+          <KPIBox label="وحدات مكتملة الآن" value={liveScanKpis.completedUnits} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600" />
+          <KPIBox label="وحدات قيد التشغيل" value={liveScanKpis.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 text-amber-600" />
+          <KPIBox label="عمالة فعالة" value={liveScanKpis.activeWorkers} icon="groups" colorClass="bg-blue-100 text-blue-600" />
           <KPIBox label="متوسط سيكل تايم" value={liveScanKpis.avgCycleSeconds} unit="ث" icon="timer" colorClass="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400" />
         </div>
-        <p className="text-xs text-slate-500 mt-4">
-          أعلى نشاط حالي: <span className="font-bold text-slate-700 dark:text-slate-300">{liveScanKpis.hotLineProduct}</span>
+        <p className="text-xs text-[var(--color-text-muted)] mt-4">
+          أعلى نشاط حالي: <span className="font-bold text-[var(--color-text)]">{liveScanKpis.hotLineProduct}</span>
         </p>
       </Card> */}
 
@@ -1085,8 +1108,8 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-amber-500">assignment</span>
-                <h3 className="text-base font-black text-slate-800 dark:text-white">أوامر الشغل النشطة</h3>
-                <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-black px-2 py-0.5 rounded-full">{activeWOs.length}</span>
+                <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
+                <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalQty)}</span>
@@ -1109,16 +1132,16 @@ export const AdminDashboard: React.FC = () => {
                   <div
                     key={wo.id}
                     onClick={() => navigate('/work-orders')}
-                    className={`rounded-2xl border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${
+                    className={`rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${
                       wo.status === 'in_progress'
-                        ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/40'
-                        : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+                        ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40'
+                        : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="material-icons-round text-amber-500 text-lg">assignment</span>
-                        <span className="text-sm font-black text-amber-700 dark:text-amber-400">أمر شغل #{wo.workOrderNumber}</span>
+                        <span className="text-sm font-bold text-amber-700">أمر شغل #{wo.workOrderNumber}</span>
                       </div>
                       <Badge variant={wo.status === 'in_progress' ? 'warning' : 'neutral'}>
                         {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
@@ -1126,46 +1149,46 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-slate-400 text-base">inventory_2</span>
-                      <p className="text-base font-bold text-slate-700 dark:text-slate-200 truncate">{product?.name ?? '—'}</p>
+                      <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
+                      <p className="text-base font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <span className="material-icons-round text-indigo-400 text-base">person</span>
-                        <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{supervisor?.name ?? '—'}</span>
+                        <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
                       </div>
                       {canViewCosts && estCostPerUnit > 0 && (
-                        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 rounded-lg px-3 py-1">
+                        <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
                           <span className="material-icons-round text-emerald-500 text-sm">payments</span>
                           <span className="text-[10px] text-slate-400">التكلفة المتوقعة</span>
-                          <span className="text-sm font-black text-emerald-600">{formatCost(estCostPerUnit)}</span>
+                          <span className="text-sm font-bold text-emerald-600">{formatCost(estCostPerUnit)}</span>
                           <span className="text-[10px] text-slate-400">/قطعة</span>
                         </div>
                       )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">المطلوب</p>
-                        <p className="text-lg font-black text-slate-700 dark:text-white">{formatNumber(wo.quantity)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المطلوب</p>
+                        <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">تم إنتاجه</p>
-                        <p className="text-lg font-black text-emerald-600">{formatNumber(producedNow)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">تم إنتاجه</p>
+                        <p className="text-lg font-bold text-emerald-600">{formatNumber(producedNow)}</p>
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">المتبقي</p>
-                        <p className="text-lg font-black text-rose-500">{formatNumber(remaining)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
+                        <p className="text-lg font-bold text-rose-500">{formatNumber(remaining)}</p>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-500">التقدم</span>
+                        <span className="text-[var(--color-text-muted)]">التقدم</span>
                         <span className={progress >= 80 ? 'text-emerald-600' : progress >= 50 ? 'text-amber-600' : 'text-slate-500'}>{progress}%</span>
                       </div>
-                      <div className="w-full h-2.5 bg-white dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 bg-[var(--color-card)] rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-1000 ${progress >= 80 ? 'bg-emerald-500' : progress >= 50 ? 'bg-amber-500' : 'bg-primary'}`}
                           style={{ width: `${Math.min(progress, 100)}%` }}
@@ -1173,7 +1196,7 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-5 text-xs text-slate-500 pt-1">
+                    <div className="flex items-center gap-5 text-xs text-[var(--color-text-muted)] pt-1">
                       <div className="flex items-center gap-1">
                         <span className="material-icons-round text-sm">precision_manufacturing</span>
                         <span className="font-bold">{lineName}</span>
@@ -1206,22 +1229,22 @@ export const AdminDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 sm:mr-auto">
               <div className="relative">
-                  <span className="material-icons-round text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
+                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
                   <input
                     type="text"
                     placeholder="بحث بالكود أو الاسم..."
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    className="pr-9 pl-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold w-full sm:w-56 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-56 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
                   />
                 </div>
                
                 <div className="relative">
-                  <span className="material-icons-round text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
+                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
                   <select
                     value={productCategoryFilter}
                     onChange={(e) => setProductCategoryFilter(e.target.value)}
-                    className="pr-9 pl-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold w-full sm:w-44 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all appearance-none"
+                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-44 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all appearance-none"
                   >
                     <option value="all">كل الفئات</option>
                     {productSummaryCategories.map((category) => (
@@ -1232,7 +1255,7 @@ export const AdminDashboard: React.FC = () => {
                 {canExportFromPage && (
                 <button
                   onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold text-[var(--color-text-muted)] hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all"
                   title="تصدير Excel"
                 >
                   <span className="material-icons-round text-sm">download</span>
@@ -1243,28 +1266,28 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-right py-3 px-4 font-bold text-slate-500 text-xs">#</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-500 text-xs">المنتج</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-500 text-xs">الكود</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-500 text-xs">الكمية المنتجة</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">#</th>
+                    <th className="erp-th">المنتج</th>
+                    <th className="erp-th">الكود</th>
+                    <th className="erp-th">الكمية المنتجة</th>
                     {canViewCosts && (
-                      <th className="text-right py-3 px-4 font-bold text-slate-500 text-xs">متوسط تكلفة الوحدة</th>
+                      <th className="erp-th">متوسط تكلفة الوحدة</th>
                     )}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProductSummary.length === 0 ? (
                     <tr>
-                      <td colSpan={canViewCosts ? 5 : 4} className="py-8 text-center text-slate-400 text-sm">
+                      <td colSpan={canViewCosts ? 5 : 4} className="py-8 text-center text-[var(--color-text-muted)] text-sm">
                         لا توجد نتائج مطابقة للفلاتر الحالية
                       </td>
                     </tr>
                   ) : (
                     filteredProductSummary.map((p, i) => (
-                      <tr key={i} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="py-3 px-4 text-slate-400 font-mono text-xs">{i + 1}</td>
+                      <tr key={i} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                        <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs">{i + 1}</td>
                         <td className="py-3 px-4 font-bold">
                           <button
                             onClick={() => navigate(`/products/${p.id}`)}
@@ -1274,7 +1297,7 @@ export const AdminDashboard: React.FC = () => {
                         <td className="py-3 px-4 font-mono text-xs text-slate-500">{p.code}</td>
                         <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(p.qty)}</td>
                         {canViewCosts && (
-                          <td className="py-3 px-4 font-mono font-bold text-amber-600 dark:text-amber-400">{formatCost(p.avgCost)} ج.م</td>
+                          <td className="py-3 px-4 font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</td>
                         )}
                       </tr>
                     ))
@@ -1282,11 +1305,11 @@ export const AdminDashboard: React.FC = () => {
                 </tbody>
                 {filteredProductSummary.length > 0 && (
                   <tfoot>
-                    <tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                      <td colSpan={3} className="py-3 px-4 font-black text-slate-600 dark:text-slate-300">الإجمالي</td>
-                      <td className="py-3 px-4 font-mono font-black text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</td>
+                    <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50">
+                      <td colSpan={3} className="py-3 px-4 font-bold text-[var(--color-text-muted)]">الإجمالي</td>
+                      <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</td>
                       {canViewCosts && (
-                        <td className="py-3 px-4 font-mono font-bold text-amber-600 dark:text-amber-400">
+                        <td className="py-3 px-4 font-mono font-bold text-amber-600">
                           {formatCost(filteredProductSummary.reduce((s, p) => s + p.qty, 0) > 0
                             ? filteredProductSummary.reduce((s, p) => s + p.avgCost * p.qty, 0) / filteredProductSummary.reduce((s, p) => s + p.qty, 0)
                             : 0
@@ -1307,18 +1330,18 @@ export const AdminDashboard: React.FC = () => {
           <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
-          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" />
-          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
+          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600" />
+          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600" />
+          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600" />
           <KPIBox label="Defect Rate" value={qualityKpis.defectRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
-          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" />
-          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
+          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600" />
+          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
         </div>
       </Card>
 
       {/* ── System KPIs ─────────────────────────────────────────────────────── */}
       {isVisible('system_kpis') && <div>
-        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
           <span className="material-icons-round text-base">computer</span>
           مؤشرات النظام
         </h3>
@@ -1333,13 +1356,13 @@ export const AdminDashboard: React.FC = () => {
             label="مستخدمون نشطون"
             value={systemUsers.active}
             icon="person"
-            colorClass="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+            colorClass="bg-emerald-100 text-emerald-600"
           />
           <KPIBox
             label="حسابات معطلة"
             value={systemUsers.disabled}
             icon="person_off"
-            colorClass={systemUsers.disabled > 0 ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}
+            colorClass={systemUsers.disabled > 0 ? 'bg-rose-100 text-rose-600' : 'bg-[#f0f2f5] text-slate-500'}
           />
           <KPIBox
             label="أوامر الشغل النشطة"
@@ -1375,7 +1398,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="flex justify-center py-4">
             <GaugeChart value={healthScore} label="مؤشر صحة الإنتاج" />
           </div>
-          <div className="mt-4 space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+          <div className="mt-4 space-y-3 border-t border-[var(--color-border)] pt-4">
             {[
               { label: 'الكفاءة', value: kpis.efficiency, weight: '30%', icon: 'speed' },
               { label: 'انحراف التكلفة', value: Math.abs(kpis.costVariance) <= 5 ? 100 : Math.abs(kpis.costVariance) <= 15 ? 70 : 40, weight: '20%', icon: 'compare_arrows' },
@@ -1383,18 +1406,19 @@ export const AdminDashboard: React.FC = () => {
               { label: 'تحقيق الخطط', value: kpis.planAchievementRate, weight: '25%', icon: 'fact_check' },
             ].map((metric) => (
               <div key={metric.label} className="flex items-center gap-3">
-                <span className="material-icons-round text-sm text-slate-400">{metric.icon}</span>
-                <span className="text-xs font-bold text-slate-500 flex-1">{metric.label}</span>
-                <span className="text-[10px] text-slate-400 font-medium">({metric.weight})</span>
-                <div className="w-20 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <span className="material-icons-round text-[14px] text-[var(--color-text-muted)]">{metric.icon}</span>
+                <span className="text-[12px] font-medium text-[var(--color-text-muted)] flex-1">{metric.label}</span>
+                <span className="text-[10px] text-[var(--color-text-muted)]">({metric.weight})</span>
+                <div className="erp-progress-wrap" style={{ width: 80 }}>
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      metric.value >= 75 ? 'bg-emerald-500' : metric.value >= 50 ? 'bg-amber-500' : 'bg-rose-500'
-                    }`}
-                    style={{ width: `${Math.min(metric.value, 100)}%` }}
-                  ></div>
+                    className={`erp-progress-bar${metric.value >= 75 ? ' success' : metric.value < 50 ? ' error' : ''}`}
+                    style={{
+                      width: `${Math.min(metric.value, 100)}%`,
+                      background: metric.value >= 75 ? '#16a34a' : metric.value >= 50 ? '#d97706' : '#dc2626',
+                    }}
+                  />
                 </div>
-                <span className="text-xs font-black text-slate-600 dark:text-slate-300 w-8 text-left">{Math.round(metric.value)}</span>
+                <span className="text-[11px] font-bold text-[var(--color-text)] w-7 text-left">{Math.round(metric.value)}</span>
               </div>
             ))}
           </div>
@@ -1430,7 +1454,7 @@ export const AdminDashboard: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-56 flex items-center justify-center text-slate-400 text-sm">
+              <div className="h-56 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
                 لا توجد بيانات تكاليف
               </div>
             )}
@@ -1439,7 +1463,7 @@ export const AdminDashboard: React.FC = () => {
                 {costPieData.map((d, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }}></span>
-                    <span className="text-slate-600 dark:text-slate-300 text-xs">{d.name}: <strong>{formatCost(d.value)}</strong> ج.م</span>
+                    <span className="text-slate-600 text-xs">{d.name}: <strong>{formatCost(d.value)}</strong> ج.م</span>
                   </div>
                 ))}
               </div>
@@ -1476,7 +1500,7 @@ export const AdminDashboard: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-56 flex items-center justify-center text-slate-400 text-sm">
+            <div className="h-56 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
               {systemLoading ? 'جاري التحميل...' : 'لا توجد بيانات'}
             </div>
           )}
@@ -1485,7 +1509,7 @@ export const AdminDashboard: React.FC = () => {
               {rolesChartData.map((d, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}></span>
-                  <span className="text-slate-600 dark:text-slate-300 font-bold">{d.name}: {d.value}</span>
+                  <span className="text-slate-600 font-bold">{d.name}: {d.value}</span>
                 </div>
               ))}
             </div>
@@ -1504,23 +1528,22 @@ export const AdminDashboard: React.FC = () => {
             <div style={{ direction: 'ltr' }} className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={dailyChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" strokeOpacity={0.7} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)', fontFamily: 'Cairo' }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'var(--color-text-muted)', fontFamily: 'Cairo' }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'var(--color-text-muted)', fontFamily: 'Cairo' }} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend
-                    formatter={(val: string) =>
-                      val === 'production' ? 'الإنتاج' : 'تكلفة الوحدة'
-                    }
+                    formatter={(val: string) => val === 'production' ? 'الإنتاج' : 'تكلفة الوحدة'}
+                    wrapperStyle={{ fontSize: 12, fontFamily: 'Cairo' }}
                   />
-                  <Bar yAxisId="left" dataKey="production" name="production" fill="#1392ec" radius={[4, 4, 0, 0]} barSize={20} />
-                  <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
+                  <Bar yAxisId="left" dataKey="production" name="production" fill="var(--chart-1,#1392ec)" radius={[3, 3, 0, 0]} barSize={18} />
+                  <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="var(--chart-3,#f59e0b)" strokeWidth={2} dot={{ r: 3, fill: 'var(--chart-3,#f59e0b)' }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-72 flex items-center justify-center text-slate-400 text-sm">
+            <div className="h-72 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
               <span className="material-icons-round ml-2">bar_chart</span>
               لا توجد بيانات للفترة المحددة
             </div>
@@ -1535,7 +1558,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="flex items-center gap-2 mb-4">
             <span className="material-icons-round text-blue-500">history</span>
             <h3 className="text-lg font-bold">آخر النشاطات</h3>
-            <span className="text-xs text-slate-400 font-medium mr-auto">آخر 10 إجراءات</span>
+            <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">آخر 10 إجراءات</span>
           </div>
           {recentActivity.length > 0 ? (
             <div className="space-y-0.5 max-h-[400px] overflow-y-auto">
@@ -1543,32 +1566,32 @@ export const AdminDashboard: React.FC = () => {
                 <div
                   key={log.id || i}
                   onClick={() => navigate('/activity-log')}
-                  className="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
+                  className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--border-radius-base)] hover:bg-[#f8f9fa] transition-colors group cursor-pointer"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="w-8 h-8 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
                     <span className="material-icons-round text-sm text-slate-500">
                       {ACTION_ICONS[log.action] || 'info'}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-black text-slate-700 dark:text-slate-300 truncate">
+                      <span className="text-xs font-bold text-[var(--color-text)] truncate">
                         {log.userEmail}
                       </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0f2f5] text-[var(--color-text-muted)] font-bold shrink-0">
                         {ACTION_LABELS[log.action] || log.action}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 truncate">{log.description}</p>
+                    <p className="text-xs text-[var(--color-text-muted)] truncate">{log.description}</p>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap shrink-0 mt-1">
+                  <span className="text-[10px] text-[var(--color-text-muted)] font-medium whitespace-nowrap shrink-0 mt-1">
                     {formatTimestamp(log.timestamp)}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="py-8 text-center text-slate-400 text-sm">
+            <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
               <span className="material-icons-round text-3xl mb-2 block opacity-30">history</span>
               {systemLoading ? 'جاري التحميل...' : 'لا توجد نشاطات مسجلة'}
             </div>
@@ -1581,40 +1604,40 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex items-center gap-2 mb-4">
               <span className="material-icons-round text-emerald-500">account_balance</span>
               <h3 className="text-lg font-bold">ملخص مراكز التكلفة</h3>
-              <span className="text-xs text-slate-400 font-medium mr-auto">الشهر الحالي</span>
+              <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">الشهر الحالي</span>
             </div>
             {costCentersSummary.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700">
-                      <th className="text-right py-3 px-3 font-bold text-slate-500 text-xs">المركز</th>
-                      <th className="text-right py-3 px-3 font-bold text-slate-500 text-xs">النوع</th>
-                      <th className="text-right py-3 px-3 font-bold text-slate-500 text-xs">المبلغ</th>
-                      <th className="text-center py-3 px-3 font-bold text-slate-500 text-xs">التخصيص</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">المركز</th>
+                      <th className="erp-th">النوع</th>
+                      <th className="erp-th">المبلغ</th>
+                      <th className="erp-th text-center">التخصيص</th>
                     </tr>
                   </thead>
                   <tbody>
                     {costCentersSummary.map((cc, i) => (
-                      <tr key={i} onClick={() => navigate('/cost-centers')} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
+                      <tr key={i} onClick={() => navigate('/cost-centers')} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
                         <td className="py-2.5 px-3 font-bold text-sm">{cc.name}</td>
                         <td className="py-2.5 px-3">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                             cc.type === 'indirect'
-                              ? 'bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'
-                              : 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-blue-100 dark:bg-blue-900/20 text-blue-700'
                           }`}>
                             {cc.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-sm font-bold text-slate-600 dark:text-slate-300">
+                        <td className="py-2.5 px-3 text-sm font-bold text-[var(--color-text-muted)]">
                           {cc.amount > 0 ? `${formatCost(cc.amount)} ج.م` : '—'}
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           {cc.allocated ? (
                             <span className="material-icons-round text-emerald-500 text-sm">check_circle</span>
                           ) : (
-                            <span className="material-icons-round text-slate-300 dark:text-slate-600 text-sm">radio_button_unchecked</span>
+                            <span className="material-icons-round text-[var(--color-text-muted)] dark:text-slate-600 text-sm">radio_button_unchecked</span>
                           )}
                         </td>
                       </tr>
@@ -1623,7 +1646,7 @@ export const AdminDashboard: React.FC = () => {
                 </table>
               </div>
             ) : (
-              <div className="py-8 text-center text-slate-400 text-sm">
+              <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
                 <span className="material-icons-round text-3xl mb-2 block opacity-30">account_balance</span>
                 لا توجد مراكز تكلفة
               </div>
@@ -1653,7 +1676,7 @@ export const AdminDashboard: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
               لا توجد بيانات
             </div>
           )}
@@ -1678,7 +1701,7 @@ export const AdminDashboard: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
               لا توجد بيانات
             </div>
           )}
@@ -1694,27 +1717,27 @@ export const AdminDashboard: React.FC = () => {
         {topProducts.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th className="text-right py-3 px-4 font-bold text-slate-500">المنتج</th>
-                  <th className="text-right py-3 px-4 font-bold text-slate-500">الإنتاج</th>
-                  <th className="text-right py-3 px-4 font-bold text-slate-500">الحصة %</th>
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">المنتج</th>
+                  <th className="erp-th">الإنتاج</th>
+                  <th className="erp-th">الحصة %</th>
                 </tr>
               </thead>
               <tbody>
                 {topProducts.map((p, i) => (
-                  <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
+                  <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
                     <td className="py-3 px-4 font-bold text-primary">{p.name}</td>
                     <td className="py-3 px-4">{formatNumber(p.production)}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 max-w-[120px] h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className="flex-1 max-w-[120px] h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
                           <div
                             className="h-full bg-violet-500 rounded-full transition-all"
                             style={{ width: `${kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0}%` }}
                           ></div>
                         </div>
-                        <span className="text-slate-500 text-xs font-bold">
+                        <span className="text-[var(--color-text-muted)] text-xs font-bold">
                           {kpis.totalProduction > 0 ? ((p.production / kpis.totalProduction) * 100).toFixed(1) : 0}%
                         </span>
                       </div>
@@ -1725,7 +1748,7 @@ export const AdminDashboard: React.FC = () => {
             </table>
           </div>
         ) : (
-          <div className="py-8 text-center text-slate-400 text-sm">لا توجد بيانات</div>
+          <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
         )}
       </Card>}
     </div>

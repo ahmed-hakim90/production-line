@@ -50,6 +50,7 @@ interface JobsStore {
   togglePanelMinimized: () => void;
   setPanelHidden: (value: boolean) => void;
   setHistoryOpen: (value: boolean) => void;
+  resetUiState: () => void;
 }
 
 const STORAGE_KEY = 'global-background-import-jobs-v1';
@@ -245,6 +246,13 @@ export const useJobsStore = create<JobsStore>()(
         set((state) => ({ panelMinimized: !state.panelMinimized, panelHidden: false })),
       setPanelHidden: (value) => set({ panelHidden: value }),
       setHistoryOpen: (value) => set({ historyOpen: value }),
+      resetUiState: () =>
+        set({
+          historyOpen: false,
+          selectedJobId: null,
+          panelMinimized: false,
+          panelHidden: false,
+        }),
     }),
     {
       name: STORAGE_KEY,

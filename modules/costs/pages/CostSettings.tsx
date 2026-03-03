@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { formatCost } from '../../../utils/costCalculations';
@@ -37,20 +37,20 @@ export const CostSettings: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إعدادات التكلفة</h2>
-        <p className="text-sm text-slate-500 font-medium">إدارة معدل الأجور وإعدادات حساب التكاليف.</p>
+        <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">إعدادات التكلفة</h2>
+        <p className="text-sm text-[var(--color-text-muted)] font-medium">إدارة معدل الأجور وإعدادات حساب التكاليف.</p>
       </div>
 
       <Card title="معدل الأجور بالساعة">
         <div className="space-y-6">
           <div className="flex items-end gap-4 flex-wrap">
             <div className="flex-1 min-w-[200px] space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">السعر لكل ساعة عمل (ج.م)</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">السعر لكل ساعة عمل (ج.م)</label>
               <input
                 type="number"
                 min={0}
                 step={0.5}
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={hourlyRate || ''}
                 onChange={(e) => setHourlyRate(Number(e.target.value))}
                 placeholder="مثال: 25"
@@ -72,10 +72,10 @@ export const CostSettings: React.FC = () => {
             </Button>
           </div>
 
-          <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
             <span className="material-icons-round text-primary text-lg">info</span>
-            <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              يُستخدم هذا المعدل لحساب تكلفة العمالة المباشرة: <span className="font-black text-primary">عدد العمال × ساعات العمل × {hourlyRate || '—'} ج.م</span>
+            <p className="text-xs font-medium text-[var(--color-text-muted)]">
+              يُستخدم هذا المعدل لحساب تكلفة العمالة المباشرة: <span className="font-bold text-primary">عدد العمال × ساعات العمل × {hourlyRate || '—'} ج.م</span>
             </p>
           </div>
         </div>
@@ -85,12 +85,12 @@ export const CostSettings: React.FC = () => {
         <div className="space-y-6">
           <div className="flex items-end gap-4 flex-wrap">
             <div className="flex-1 min-w-[200px] space-y-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">1 يوان صيني = كام جنيه مصري؟</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">1 يوان صيني = كام جنيه مصري؟</label>
               <input
                 type="number"
                 min={0}
                 step={0.01}
-                className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={cnyToEgpRate || ''}
                 onChange={(e) => setCnyToEgpRate(Number(e.target.value))}
                 placeholder="مثال: 6.85"
@@ -113,26 +113,26 @@ export const CostSettings: React.FC = () => {
           </div>
 
           {cnyToEgpRate > 0 && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 space-y-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="material-icons-round text-amber-500 text-lg">currency_yuan</span>
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">أمثلة تحويل</span>
+                <span className="text-sm font-bold text-[var(--color-text)]">أمثلة تحويل</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[1, 10, 100, 1000].map((yuan) => (
-                  <div key={yuan} className="bg-white dark:bg-slate-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-slate-400 font-medium mb-1">¥ {yuan.toLocaleString('en-US')}</p>
-                    <p className="text-sm font-black text-slate-800 dark:text-white">{formatCost(yuan * cnyToEgpRate)}</p>
+                  <div key={yuan} className="bg-[var(--color-card)] rounded-[var(--border-radius-base)] p-3 text-center">
+                    <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">¥ {yuan.toLocaleString('en-US')}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{formatCost(yuan * cnyToEgpRate)}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
             <span className="material-icons-round text-primary text-lg">info</span>
-            <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              يُستخدم هذا المعامل لتحويل أسعار المنتجات المُدخلة باليوان الصيني إلى الجنيه المصري: <span className="font-black text-primary">السعر باليوان × {cnyToEgpRate || '—'} = السعر بالجنيه</span>
+            <p className="text-xs font-medium text-[var(--color-text-muted)]">
+              يُستخدم هذا المعامل لتحويل أسعار المنتجات المُدخلة باليوان الصيني إلى الجنيه المصري: <span className="font-bold text-primary">السعر باليوان × {cnyToEgpRate || '—'} = السعر بالجنيه</span>
             </p>
           </div>
         </div>

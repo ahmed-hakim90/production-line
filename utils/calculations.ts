@@ -43,6 +43,45 @@ export const formatNumber = (num: number): string => {
   return new Intl.NumberFormat('en-US').format(num);
 };
 
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATE_TIME_REGEX = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+
+function toDateCandidate(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'object' && typeof (value as { toDate?: () => Date }).toDate === 'function') {
+    const converted = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(converted.getTime()) ? null : converted;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || DATE_ONLY_REGEX.test(trimmed)) return null;
+    if (!ISO_DATE_TIME_REGEX.test(trimmed)) return null;
+    const converted = new Date(trimmed);
+    return Number.isNaN(converted.getTime()) ? null : converted;
+  }
+  return null;
+}
+
+/**
+ * Formats operation date-time for UI/export.
+ * Keeps date-only values (YYYY-MM-DD) untouched for business-entered dates.
+ */
+export const formatOperationDateTime = (
+  value: unknown,
+  locale: string = 'ar-EG',
+): string | null => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (DATE_ONLY_REGEX.test(trimmed)) return trimmed;
+  }
+  const date = toDateCandidate(value);
+  return date ? date.toLocaleString(locale) : null;
+};
+
 export const getStatusColor = (status: string) => {
   switch (status) {
     case 'active': return 'bg-emerald-500';
@@ -62,6 +101,23 @@ export const getTodayDateString = (): string => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+/**
+ * Returns operational day as "YYYY-MM-DD".
+ * Operational day starts at the configured hour (default: 8 AM).
+ * Example: at 02:00, it returns the previous calendar date.
+ */
+export const getOperationalDateString = (startHour = 8): string => {
+  const now = new Date();
+  const date = new Date(now);
+  if (now.getHours() < startHour) {
+    date.setDate(date.getDate() - 1);
+  }
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
 

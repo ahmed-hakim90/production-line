@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Badge, LoadingSkeleton } from '../components/UI';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
@@ -16,6 +16,8 @@ import {
 import { reportService } from '../../../services/reportService';
 import { usePermission } from '../../../utils/permissions';
 import type { ProductionReport, WorkOrder } from '../../../types';
+import type { InventoryTransferRequest } from '../../inventory/types';
+import { transferApprovalService } from '../../inventory/services/transferApprovalService';
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
@@ -64,16 +66,14 @@ const DashboardPeriodFilter: React.FC<{
   period: Period;
   onChange: (p: Period) => void;
 }> = ({ period, onChange }) => (
-  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+  <div className="erp-date-seg">
     {PERIOD_OPTIONS.map((opt) => (
       <button
         key={opt.value}
         onClick={() => onChange(opt.value)}
-        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+        className={`erp-date-seg-btn${
           period === opt.value
-            ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
-            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-        }`}
+            ? ' active' : ''}`}
       >
         {opt.label}
       </button>
@@ -113,10 +113,14 @@ export const EmployeeDashboard: React.FC = () => {
 
   const { can } = usePermission();
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const transferApprovalPermission = useAppStore(
+    (s) => s.systemSettings.planSettings?.transferApprovalPermission || 'inventory.transfers.approve',
+  );
 
   const [period, setPeriod] = useState<Period>('daily');
   const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
   const [periodLoading, setPeriodLoading] = useState(false);
+  const [pendingProductionEntries, setPendingProductionEntries] = useState<InventoryTransferRequest[]>([]);
 
   const [woPrintData, setWoPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
@@ -180,6 +184,22 @@ export const EmployeeDashboard: React.FC = () => {
     });
     return () => { cancelled = true; };
   }, [period, employee?.id, todayReports, monthlyReports]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!can(transferApprovalPermission as any)) {
+      setPendingProductionEntries([]);
+      return;
+    }
+    transferApprovalService.getByStatus('pending').then((rows) => {
+      if (cancelled) return;
+      const pending = rows.filter((row) => (row.requestType || 'transfer') === 'production_entry');
+      setPendingProductionEntries(pending);
+    }).catch(() => {
+      if (!cancelled) setPendingProductionEntries([]);
+    });
+    return () => { cancelled = true; };
+  }, [can, transferApprovalPermission, todayReports, monthlyReports]);
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
 
@@ -346,7 +366,7 @@ export const EmployeeDashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="space-y-8">
-        {/* <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">لوحة الموظف</h2> */}
+        {/* <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">لوحة الموظف</h2> */}
         <LoadingSkeleton type="card" rows={6} />
       </div>
     );
@@ -362,63 +382,63 @@ export const EmployeeDashboard: React.FC = () => {
           : 'هذا الشهر';
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Header + Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5">
+
+      {/* ── ROW 1: Header — greeting + period filter ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          {/* <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">
-            لوحة الموظف
-          </h2> */}
-          <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm">
-            {employee?.name ? `مرحباً ${employee.name}` : 'متابعة الأداء التشغيلي'}
-          </p>
-             <DashboardPeriodFilter period={period} onChange={setPeriod} />
+          <h2 className="text-lg font-bold text-[var(--color-text)]">
+            {employee?.name ? `مرحباً، ${employee.name} 👋` : 'لوحة الموظف'}
+          </h2>
+          <p className="text-xs text-[var(--color-text-muted)] font-medium mt-0.5">متابعة الأداء التشغيلي — {periodLabel}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {can('inventory.transactions.create') && (
-            <button
-              type="button"
-              onClick={() => navigate('/inventory/movements')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all"
-            >
-              <span className="material-icons-round text-base">warehouse</span>
-              حركة المخزون
-            </button>
-          )}
-          {can('quickAction.view') && (
-            <button
-              type="button"
-              onClick={() => navigate('/quick-action')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
-            >
-              <span className="material-icons-round text-base">bolt</span>
-              الإدخال السريع
-            </button>
-          )}
-          {can('lineWorkers.view') && (
-            <button
-              type="button"
-              onClick={() => navigate('/line-workers')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all"
-            >
-              <span className="material-icons-round text-base">group_work</span>
-              ربط العمالة بالخط
-            </button>
-          )}
-          {/* <DashboardPeriodFilter period={period} onChange={setPeriod} /> */}
-        </div>
+        <DashboardPeriodFilter period={period} onChange={setPeriod} />
       </div>
 
-      {/* ── Alerts ─────────────────────────────────────────────────── */}
+      {/* ── ROW 2: Quick Actions ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {can('quickAction.view') && (
+          <button
+            type="button"
+            onClick={() => navigate('/quick-action')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-primary text-white hover:bg-primary/90 shadow-primary/20 transition-all"
+          >
+            <span className="material-icons-round text-base">bolt</span>
+            الإدخال السريع
+          </button>
+        )}
+        {can('inventory.transactions.create') && (
+          <button
+            type="button"
+            onClick={() => navigate('/inventory/movements')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20 transition-all"
+          >
+            <span className="material-icons-round text-base">warehouse</span>
+            حركة المخزون
+          </button>
+        )}
+        {can('lineWorkers.view') && (
+          <button
+            type="button"
+            onClick={() => navigate('/line-workers')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20 transition-all"
+          >
+            <span className="material-icons-round text-base">group_work</span>
+            ربط العمالة بالخط
+          </button>
+        )}
+      </div>
+
+      {/* ── Alerts ── */}
       {alerts.length > 0 && (
         <div className="space-y-2">
           {alerts.map((alert, i) => (
             <div
               key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400'
-                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
+                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
+                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
               }`}
             >
               <span className="material-icons-round text-lg">{alert.icon}</span>
@@ -428,201 +448,218 @@ export const EmployeeDashboard: React.FC = () => {
         </div>
       )}
 
+      {can(transferApprovalPermission as any) && pendingProductionEntries.length > 0 && (
+        <Card>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="material-icons-round text-amber-500">approval</span>
+              <h3 className="text-sm font-bold text-[var(--color-text)]">طلبات اعتماد دخول تم الصنع</h3>
+              <Badge variant="warning">{pendingProductionEntries.length}</Badge>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/inventory/transfer-approvals')}
+              className="sm:mr-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              <span className="material-icons-round text-sm">inventory</span>
+              فتح شاشة الاعتماد
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {pendingProductionEntries.slice(0, 4).map((req) => {
+              const totalQty = req.lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+              const topItem = req.lines[0]?.itemName || '—';
+              return (
+                <div key={req.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]/50">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold text-[var(--color-text)]">{req.referenceNo}</p>
+                    <span className="text-xs font-black text-emerald-600">{formatNumber(totalQty)} وحدة</span>
+                  </div>
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                    {topItem}
+                    {req.lines.length > 1 ? ` + ${req.lines.length - 1} أصناف` : ''}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {periodLoading ? (
         <LoadingSkeleton type="card" rows={4} />
       ) : (
         <>
-         {/* Personal Performance */}
-         <Card>
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
-                    <span className="material-icons-round text-emerald-600 dark:text-emerald-400">person</span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-white">الأداء الشخصي</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">{periodLabel}</p>
-                  </div>
-                </div>
+          {/* ── ROW 3: KPI Strip — all KPIs in one unified row ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[11px] font-bold text-slate-400 mb-2">عدد التقارير</p>
-                    <h3 className="text-2xl font-black text-primary">{performance.reportsCount}</h3>
-                    <span className="text-[10px] font-medium text-slate-400">تقرير</span>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[11px] font-bold text-slate-400 mb-2">متوسط الإنتاج/ساعة</p>
-                    <h3 className="text-2xl font-black text-blue-600">{formatNumber(performance.avgPerHour)}</h3>
-                    <span className="text-[10px] font-medium text-slate-400">وحدة/ساعة</span>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center border border-slate-100 dark:border-slate-700">
-                    <p className="text-[11px] font-bold text-slate-400 mb-2">ساعات الإنتاج (اليوم)</p>
-                    <h3 className="text-2xl font-black text-emerald-600">{todayProductionHours}</h3>
-                    <span className="text-[10px] font-medium text-slate-400">ساعة</span>
-                  </div>
-                </div>
-              </Card>
-          {/* ── KPI Cards ────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {/* Total Production */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg flex items-center justify-center shrink-0">
-                  <span className="material-icons-round text-2xl">inventory</span>
-                </div>
-                <p className="text-slate-500 text-sm font-bold">إجمالي الإنتاج ({periodLabel})</p>
+            {/* ساعات الإنتاج */}
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-emerald-50 flex items-center justify-center">
+                  <span className="material-icons-round text-emerald-600 text-[15px]">schedule</span>
+                </span>
+                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">ساعات الإنتاج</p>
               </div>
-              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatNumber(kpis.totalProduction)}</h3>
-              <span className="text-xs font-medium text-slate-400">وحدة</span>
+              <h3 className="text-2xl font-bold text-emerald-600 leading-none">{todayProductionHours}</h3>
+              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">ساعة</span>
             </div>
 
-            {/* Plan Achievement */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <div className="flex items-center gap-4 mb-4">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${
-                  kpis.planAchievement >= 80
-                    ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
-                    : kpis.planAchievement >= 50
-                      ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-                      : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'
-                }`}>
-                  <span className="material-icons-round text-2xl">flag</span>
-                </div>
-                <p className="text-slate-500 text-sm font-bold">تحقيق الخطة</p>
+            {/* متوسط/ساعة */}
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                  <span className="material-icons-round text-blue-600 text-[15px]">speed</span>
+                </span>
+                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">متوسط/ساعة</p>
               </div>
-              <h3 className={`text-2xl font-black ${
+              <h3 className="text-2xl font-bold text-blue-600 leading-none">{formatNumber(performance.avgPerHour)}</h3>
+              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">وحدة/ساعة</span>
+            </div>
+
+            {/* عدد التقارير */}
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center">
+                  <span className="material-icons-round text-primary text-[15px]">assignment</span>
+                </span>
+                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">عدد التقارير</p>
+              </div>
+              <h3 className="text-2xl font-bold text-primary leading-none">{performance.reportsCount}</h3>
+              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">تقرير</span>
+            </div>
+
+            {/* إجمالي الإنتاج */}
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
+                  <span className="material-icons-round text-indigo-600 dark:text-indigo-400 text-[15px]">inventory</span>
+                </span>
+                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">إجمالي الإنتاج</p>
+              </div>
+              <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 leading-none">{formatNumber(kpis.totalProduction)}</h3>
+              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">وحدة</span>
+            </div>
+
+            {/* تحقيق الخطة */}
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1 col-span-2 sm:col-span-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`w-7 h-7 rounded-[var(--border-radius-base)] flex items-center justify-center ${
+                  kpis.planAchievement >= 80 ? 'bg-emerald-50'
+                    : kpis.planAchievement >= 50 ? 'bg-amber-50'
+                    : 'bg-rose-50'
+                }`}>
+                  <span className={`material-icons-round text-[15px] ${
+                    kpis.planAchievement >= 80 ? 'text-emerald-600'
+                      : kpis.planAchievement >= 50 ? 'text-amber-600'
+                      : 'text-rose-600'
+                  }`}>flag</span>
+                </span>
+                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">تحقيق الخطة</p>
+              </div>
+              <h3 className={`text-2xl font-bold leading-none ${
                 kpis.planAchievement >= 80 ? 'text-emerald-600' : kpis.planAchievement >= 50 ? 'text-amber-600' : 'text-rose-600'
               }`}>
                 {kpis.planAchievement > 0 ? `${kpis.planAchievement}%` : '—'}
               </h3>
-              <span className="text-xs font-medium text-slate-400">المتبقي: {formatNumber(kpis.remaining)} وحدة</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">متبقي: {formatNumber(kpis.remaining)} وحدة</span>
             </div>
-
-            {/* Waste % */}
-            {/* <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <div className="flex items-center gap-4 mb-4">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${
-                  kpis.wasteRatio <= 3
-                    ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
-                    : kpis.wasteRatio <= 5
-                      ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-                      : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'
-                }`}>
-                  <span className="material-icons-round text-2xl">delete_sweep</span>
-                </div>
-                <p className="text-slate-500 text-sm font-bold">نسبة الهالك</p>
-              </div>
-              <h3 className={`text-2xl font-black ${
-                kpis.wasteRatio <= 3 ? 'text-emerald-600' : kpis.wasteRatio <= 5 ? 'text-amber-600' : 'text-rose-600'
-              }`}>
-                {kpis.wasteRatio}%
-              </h3>
-              <span className="text-xs font-medium text-slate-400">{formatNumber(kpis.totalWaste)} وحدة هالك</span>
-            </div> */}
-
-            {/* Average per day — weekly/monthly only */}
-            {period !== 'daily' && (
-              <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400 rounded-lg flex items-center justify-center shrink-0">
-                    <span className="material-icons-round text-2xl">speed</span>
-                  </div>
-                  <p className="text-slate-500 text-sm font-bold">متوسط الإنتاج اليومي</p>
-                </div>
-                <h3 className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{formatNumber(kpis.avgPerDay)}</h3>
-                <span className="text-xs font-medium text-slate-400">وحدة/يوم ({kpis.uniqueDays} يوم عمل)</span>
-              </div>
-            )}
           </div>
 
-          {/* ── Main Content ─────────────────────────────────────── */}
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-              <div className="order-2">
-                {/* Active Plan Card */}
-                {activePlan ? (
-                  <Card>
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <span className="material-icons-round text-primary">event_note</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-bold text-slate-800 dark:text-white">الخطة النشطة الحالية</h3>
-                      <Badge variant={activePlan.status === 'in_progress' ? 'warning' : 'info'}>
-                        {activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-400 mb-1">المنتج</p>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{activePlan.productName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-400 mb-1">الكمية المخططة</p>
-                      <p className="text-sm font-black text-slate-700 dark:text-slate-200">{formatNumber(activePlan.plannedQuantity)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-400 mb-1">المُنتَج ({periodLabel})</p>
-                      <p className="text-sm font-black text-blue-600">{formatNumber(activePlan.periodProduced)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-400 mb-1">المتبقي (إجمالي)</p>
-                      <p className="text-sm font-black text-amber-600">{formatNumber(activePlan.globalRemaining)}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span className="text-slate-500">التقدم الإجمالي</span>
-                      <span className={
-                        activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'
-                      }>{activePlan.progress}%</span>
-                    </div>
-                    <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
-                      <div
-                        className={`h-full rounded-full transition-all duration-1000 ${
-                          activePlan.progress >= 80 ? 'bg-emerald-500' : activePlan.progress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
-                        }`}
-                        style={{ width: `${Math.min(activePlan.progress, 100)}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-medium text-center">
-                      {formatNumber(activePlan.globalProduced)} من {formatNumber(activePlan.plannedQuantity)} وحدة
-                    </p>
-                  </div>
-                  </Card>
-                ) : (
-                  <Card>
-                    <div className="text-center py-6 text-slate-400">
-                      <span className="material-icons-round text-4xl mb-2 block opacity-30">event_note</span>
-                      <p className="font-bold">لا توجد خطة إنتاج نشطة حالياً</p>
-                      <p className="text-sm mt-1">تواصل مع موظف الصالة لإنشاء خطة جديدة</p>
-                    </div>
-                  </Card>
-                )}
+          {/* متوسط يومي - أسبوع/شهر فقط */}
+          {period !== 'daily' && (
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex items-center gap-4">
+              <span className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-violet-600 dark:text-violet-400">bar_chart</span>
+              </span>
+              <div>
+                <p className="text-xs font-bold text-slate-400">متوسط الإنتاج اليومي ({kpis.uniqueDays} يوم عمل)</p>
+                <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{formatNumber(kpis.avgPerDay)} <span className="text-xs font-medium text-slate-400">وحدة/يوم</span></p>
               </div>
+            </div>
+          )}
 
-              <div className="order-1">
-                {/* Employee Work Orders */}
-                {employee && can('workOrders.view') && (() => {
-                  const employeeName = (employee.name || '').trim().toLowerCase();
-                  const myWOs = workOrders.filter((w) => {
-                    if (w.status !== 'pending' && w.status !== 'in_progress') return false;
-                    if (w.supervisorId === employee.id) return true;
-                    // Fallback for legacy records that stored supervisor name instead of id.
-                    return (w.supervisorId || '').trim().toLowerCase() === employeeName;
-                  });
-                  if (myWOs.length === 0) return null;
-                  return (
-                    <Card className="!p-0 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                      <span className="material-icons-round text-amber-500">assignment</span>
-                      <h3 className="text-base font-bold text-slate-800 dark:text-white">أوامر الشغل الخاصة بك</h3>
-                      <Badge variant="warning">{myWOs.length}</Badge>
+          {/* ── ROW 4: Main Content — Active Plan + Work Orders ── */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+
+            {/* الخطة النشطة — RIGHT column (col 1 in RTL) */}
+            {activePlan ? (
+              <Card>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
+                    <span className="material-icons-round text-primary">event_note</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-bold text-[var(--color-text)]">الخطة النشطة الحالية</h3>
+                    <p className="text-[11px] text-slate-400">{activePlan.productName} — {activePlan.lineName ?? ''}</p>
+                  </div>
+                  <Badge variant={activePlan.status === 'in_progress' ? 'warning' : 'info'}>
+                    {activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'}
+                  </Badge>
+                </div>
+
+                {/* Progress bar — prominent */}
+                <div className="mb-5">
+                  <div className="flex justify-between text-sm font-bold mb-2">
+                    <span className="text-[var(--color-text-muted)]">التقدم الإجمالي</span>
+                    <span className={activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}>
+                      {activePlan.progress}%
+                    </span>
+                  </div>
+                  <div className="w-full h-4 bg-[#f0f2f5] rounded-full overflow-hidden shadow-inner">
+                    <div
+                      className={`h-full rounded-full transition-all duration-1000 ${
+                        activePlan.progress >= 80 ? 'bg-emerald-500' : activePlan.progress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(activePlan.progress, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-[var(--color-text-muted)] font-medium text-center mt-1">
+                    {formatNumber(activePlan.globalProduced)} من {formatNumber(activePlan.plannedQuantity)} وحدة
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'المخطط', value: formatNumber(activePlan.plannedQuantity), color: 'text-[var(--color-text)]' },
+                    { label: `منتَج (${periodLabel})`, value: formatNumber(activePlan.periodProduced), color: 'text-blue-600' },
+                    { label: 'إجمالي منتَج', value: formatNumber(activePlan.globalProduced), color: 'text-emerald-600' },
+                    { label: 'المتبقي', value: formatNumber(activePlan.globalRemaining), color: 'text-amber-600' },
+                  ].map((stat) => (
+                    <div key={stat.label} className="bg-[#f8f9fa]/60 rounded-[var(--border-radius-lg)] p-3 text-center">
+                      <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{stat.label}</p>
+                      <p className={`text-base font-bold ${stat.color}`}>{stat.value}</p>
                     </div>
-                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  ))}
+                </div>
+              </Card>
+            ) : (
+              <Card>
+                <div className="text-center py-8 text-slate-400">
+                  <span className="material-icons-round text-5xl mb-3 block opacity-20">event_note</span>
+                  <p className="font-bold text-sm">لا توجد خطة إنتاج نشطة حالياً</p>
+                  <p className="text-xs mt-1 opacity-70">تواصل مع موظف الصالة لإنشاء خطة جديدة</p>
+                </div>
+              </Card>
+            )}
+
+            {/* أوامر الشغل — LEFT column */}
+            {employee && can('workOrders.view') && (() => {
+              const employeeName = (employee.name || '').trim().toLowerCase();
+              const myWOs = workOrders.filter((w) => {
+                if (w.status !== 'pending' && w.status !== 'in_progress') return false;
+                if (w.supervisorId === employee.id) return true;
+                return (w.supervisorId || '').trim().toLowerCase() === employeeName;
+              });
+              if (myWOs.length === 0) return null;
+              return (
+                <Card className="!p-0 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
+                    <span className="material-icons-round text-amber-500">assignment</span>
+                    <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل الخاصة بك</h3>
+                    <Badge variant="warning">{myWOs.length}</Badge>
+                  </div>
+                    <div className="divide-y divide-[var(--color-border)]">
                       {myWOs.map((wo) => {
                         const product = _rawProducts.find((p) => p.id === wo.productId);
                         const line = _rawLines.find((l) => l.id === wo.lineId);
@@ -644,7 +681,7 @@ export const EmployeeDashboard: React.FC = () => {
                                 {can('print') && (
                                   <button
                                     onClick={() => triggerWOPrint(wo)}
-                                    className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                    className="p-2 rounded-[var(--border-radius-base)] bg-[#f8f9fa] text-[var(--color-text-muted)] hover:text-primary hover:bg-[#f0f2f5] transition-colors"
                                     title="طباعة"
                                   >
                                     <span className="material-icons-round text-base">print</span>
@@ -653,7 +690,7 @@ export const EmployeeDashboard: React.FC = () => {
                                 {isSupervisor && can('workOrders.edit') && wo.status === 'pending' && (
                                   <button
                                     onClick={() => updateWorkOrder(wo.id!, { status: 'in_progress' })}
-                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 hover:bg-emerald-100 text-xs font-bold transition-colors"
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs font-bold transition-colors"
                                   >
                                     <span className="material-icons-round text-sm">play_arrow</span>
                                     بدء
@@ -662,7 +699,7 @@ export const EmployeeDashboard: React.FC = () => {
                                 {isSupervisor && can('workOrders.edit') && wo.status === 'in_progress' && (
                                   <button
                                     onClick={() => updateWorkOrder(wo.id!, { status: 'completed', completedAt: new Date().toISOString() })}
-                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs font-bold transition-colors"
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs font-bold transition-colors"
                                   >
                                     <span className="material-icons-round text-sm">check_circle</span>
                                     اكتمل
@@ -672,34 +709,34 @@ export const EmployeeDashboard: React.FC = () => {
                             </div>
 
                             <div className="flex items-center gap-2">
-                              <span className="material-icons-round text-slate-400 text-base">inventory_2</span>
-                              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{product?.name ?? '—'}</p>
-                              <span className="text-slate-300 dark:text-slate-600">·</span>
-                              <span className="material-icons-round text-slate-400 text-sm">precision_manufacturing</span>
+                              <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
+                              <p className="text-sm font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
+                              <span className="text-[var(--color-text-muted)] dark:text-slate-600">·</span>
+                              <span className="material-icons-round text-[var(--color-text-muted)] text-sm">precision_manufacturing</span>
                               <span className="text-xs font-bold text-slate-500">{line?.name ?? '—'}</span>
                             </div>
 
                             <div className="grid grid-cols-3 gap-3 text-center">
-                              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
-                                <p className="text-[10px] text-slate-400 font-medium mb-0.5">المطلوب</p>
-                                <p className="text-sm font-black text-slate-700 dark:text-white">{formatNumber(wo.quantity)}</p>
+                              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
+                                <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">المطلوب</p>
+                                <p className="text-sm font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
                               </div>
-                              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
-                                <p className="text-[10px] text-slate-400 font-medium mb-0.5">تم إنتاجه</p>
-                                <p className="text-sm font-black text-emerald-600">{formatNumber(wo.producedQuantity)}</p>
+                              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
+                                <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">تم إنتاجه</p>
+                                <p className="text-sm font-bold text-emerald-600">{formatNumber(wo.producedQuantity)}</p>
                               </div>
-                              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
-                                <p className="text-[10px] text-slate-400 font-medium mb-0.5">المتبقي</p>
-                                <p className="text-sm font-black text-rose-500">{formatNumber(wo.quantity - wo.producedQuantity)}</p>
+                              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
+                                <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">المتبقي</p>
+                                <p className="text-sm font-bold text-rose-500">{formatNumber(wo.quantity - wo.producedQuantity)}</p>
                               </div>
                             </div>
 
                             <div className="space-y-1.5">
                               <div className="flex justify-between text-xs font-bold">
-                                <span className="text-slate-500">التقدم</span>
+                                <span className="text-[var(--color-text-muted)]">التقدم</span>
                                 <span className={prog >= 80 ? 'text-emerald-600' : prog >= 50 ? 'text-amber-600' : 'text-slate-500'}>{prog.toFixed(0)}%</span>
                               </div>
-                              <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
                                 <div className={`h-full rounded-full transition-all duration-1000 ${prog >= 80 ? 'bg-emerald-500' : prog >= 50 ? 'bg-amber-500' : 'bg-primary'}`} style={{ width: `${Math.min(prog, 100)}%` }} />
                               </div>
                             </div>
@@ -724,11 +761,9 @@ export const EmployeeDashboard: React.FC = () => {
                         );
                       })}
                     </div>
-                    </Card>
-                  );
-                })()}
-              </div>
-            </div>
+                </Card>
+              );
+            })()}
           </div>
         </>
       )}

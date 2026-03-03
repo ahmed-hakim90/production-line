@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -182,7 +182,7 @@ export const CostCenterDistribution: React.FC = () => {
       <div className="flex items-center gap-4">
         <button
           onClick={() => navigate('/cost-centers')}
-          className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all"
         >
           <span className="material-icons-round">arrow_forward</span>
         </button>
@@ -190,7 +190,7 @@ export const CostCenterDistribution: React.FC = () => {
           {editMode ? (
             <div className="flex items-center gap-2">
               <input
-                className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg text-lg font-bold p-2 outline-none"
+                className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-lg font-bold p-2 outline-none"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 autoFocus
@@ -200,19 +200,19 @@ export const CostCenterDistribution: React.FC = () => {
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">{center.name}</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-800">{center.name}</h2>
               <Badge variant={center.type === 'indirect' ? 'warning' : 'success'}>
                 {center.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
               </Badge>
               {canManage && (
-                <button onClick={() => setEditMode(true)} className="text-slate-400 hover:text-primary transition-colors">
+                <button onClick={() => setEditMode(true)} className="text-[var(--color-text-muted)] hover:text-primary transition-colors">
                   <span className="material-icons-round text-lg">edit</span>
                 </button>
               )}
               {canManage && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <select
-                    className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg text-sm p-2 outline-none focus:border-primary min-w-[170px]"
+                    className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm p-2 outline-none focus:border-primary min-w-[170px]"
                     value={sourceMonth}
                     onChange={(e) => setSourceMonth(e.target.value)}
                     disabled={availableSourceMonths.length === 0}
@@ -253,21 +253,17 @@ export const CostCenterDistribution: React.FC = () => {
              
             </div>
           )}
-          <p className="text-sm text-slate-500 font-medium mt-1">إدارة القيمة الشهرية وتوزيع التكلفة على خطوط الإنتاج</p>
+          <p className="text-sm text-[var(--color-text-muted)] font-medium mt-1">إدارة القيمة الشهرية وتوزيع التكلفة على خطوط الإنتاج</p>
         </div>
       </div>
 
       {/* Month Selector */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="erp-date-seg" style={{ flexWrap: 'wrap' }}>
         {generateMonths().map((m) => (
           <button
             key={m}
             onClick={() => setSelectedMonth(m)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-              m === selectedMonth
-                ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
+            className={`erp-date-seg-btn${m === selectedMonth ? ' active' : ''}`}
           >
             {new Date(m + '-01').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
           </button>
@@ -278,11 +274,11 @@ export const CostCenterDistribution: React.FC = () => {
       <Card title="القيمة الشهرية">
         <div className="flex items-end gap-4 flex-wrap">
           <div className="flex-1 space-y-2">
-            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المبلغ (ج.م)</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">المبلغ (ج.م)</label>
             <input
               type="number"
               min={0}
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
               value={monthlyAmount || ''}
               onChange={(e) => setMonthlyAmount(Number(e.target.value))}
               disabled={!canManage}
@@ -290,21 +286,21 @@ export const CostCenterDistribution: React.FC = () => {
             />
           </div>
           <div className="w-full sm:w-48 space-y-2">
-            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">أيام الشغل / الشهر</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">أيام الشغل / الشهر</label>
             <input
               type="number"
               min={1}
               max={31}
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
               value={workingDays || ''}
               onChange={(e) => setWorkingDays(Number(e.target.value))}
               disabled={!canManage}
               placeholder={`${monthDays}`}
             />
           </div>
-          <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 text-center min-w-[120px]">
-            <p className="text-[11px] font-bold text-slate-400 mb-1">يومي ({appliedWorkingDays} يوم)</p>
-            <p className="text-lg font-black text-primary">
+          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center min-w-[120px]">
+            <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">يومي ({appliedWorkingDays} يوم)</p>
+            <p className="text-lg font-bold text-primary">
               {monthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(monthlyAmount / appliedWorkingDays) : '—'}
             </p>
           </div>
@@ -317,23 +313,23 @@ export const CostCenterDistribution: React.FC = () => {
         </div>
       </Card>
   {/* Summary */}
-  <div className="mt-4 flex items-center justify-between flex-wrap gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
+  <div className="mt-4 flex items-center justify-between flex-wrap gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)]">
                 <div className="flex items-center gap-6">
                   <div>
                     <p className="text-[11px] font-bold text-slate-400">إجمالي التوزيع</p>
-                    <p className={`text-lg font-black ${totalPercentage > 100 ? 'text-rose-500' : 'text-slate-800 dark:text-white'}`}>
+                    <p className={`text-lg font-bold ${totalPercentage > 100 ? 'text-rose-500' : 'text-slate-800'}`}>
                       {totalPercentage.toFixed(1)}%
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] font-bold text-slate-400">المتبقي</p>
-                    <p className={`text-lg font-black ${remainingPercentage < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+                    <p className={`text-lg font-bold ${remainingPercentage < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
                       {remainingPercentage.toFixed(1)}%
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] font-bold text-slate-400">المبلغ الموزع</p>
-                    <p className="text-lg font-black text-primary">
+                    <p className="text-lg font-bold text-primary">
                       {formatCost(monthlyAmount * (totalPercentage / 100))} ج.م
                     </p>
                   </div>
@@ -350,40 +346,40 @@ export const CostCenterDistribution: React.FC = () => {
       {center.type === 'indirect' && (
         <Card title="توزيع التكلفة على الخطوط">
           {_rawLines.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-6">لا توجد خطوط إنتاج</p>
+            <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد خطوط إنتاج</p>
           ) : (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full text-right border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-4 py-3 text-xs font-black text-slate-500">الخط</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">النسبة %</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">المبلغ المخصص (شهري)</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">المبلغ اليومي</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">الخط</th>
+                      <th className="erp-th text-center">النسبة %</th>
+                      <th className="erp-th text-center">المبلغ المخصص (شهري)</th>
+                      <th className="erp-th text-center">المبلغ اليومي</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[var(--color-border)]">
                     {_rawLines.map((line) => {
                       const pct = allocations[line.id!] || 0;
                       const allocated = monthlyAmount * (pct / 100);
                       const daily = appliedWorkingDays > 0 ? allocated / appliedWorkingDays : 0;
                       return (
-                        <tr key={line.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                          <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-300">{line.name}</td>
+                        <tr key={line.id} className="hover:bg-[#f8f9fa]/50/50">
+                          <td className="px-4 py-3 font-bold text-[var(--color-text)]">{line.name}</td>
                           <td className="px-4 py-3 text-center">
                             <input
                               type="number"
                               min={0}
                               max={100}
                               step={0.1}
-                              className="w-20 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg text-sm text-center p-2 outline-none focus:border-primary"
+                              className="w-20 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm text-center p-2 outline-none focus:border-primary"
                               value={pct || ''}
                               onChange={(e) => setAllocations({ ...allocations, [line.id!]: Number(e.target.value) })}
                               disabled={!canManage}
                             />
                           </td>
-                          <td className="px-4 py-3 text-center font-bold text-slate-600 dark:text-slate-400">
+                          <td className="px-4 py-3 text-center font-bold text-[var(--color-text-muted)]">
                             {formatCost(allocated)}
                           </td>
                           <td className="px-4 py-3 text-center font-bold text-primary">

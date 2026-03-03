@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
@@ -171,9 +171,9 @@ export const EmployeeSelfService: React.FC = () => {
   if (!currentEmployee || !currentEmployee.hasSystemAccess) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 p-6">
-        <span className="material-icons-round text-6xl text-slate-400 dark:text-slate-500">lock</span>
-        <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200">غير مصرح بالوصول</h2>
-        <p className="text-slate-500 dark:text-slate-400 text-center max-w-md">
+        <span className="material-icons-round text-6xl text-[var(--color-text-muted)]">lock</span>
+        <h2 className="text-xl font-bold text-[var(--color-text)]">غير مصرح بالوصول</h2>
+        <p className="text-[var(--color-text-muted)] text-center max-w-md">
           ليس لديك صلاحية الوصول للخدمة الذاتية
         </p>
       </div>
@@ -299,8 +299,8 @@ export const EmployeeSelfService: React.FC = () => {
   return (
     <div className="space-y-6" dir="rtl">
       <header>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">الخدمة الذاتية</h1>
-        <p className="text-slate-600 dark:text-slate-400 mt-1">مرحباً، {currentEmployee.name}</p>
+        <h1 className="text-2xl font-bold text-[var(--color-text)]">الخدمة الذاتية</h1>
+        <p className="text-[var(--color-text-muted)] mt-1">مرحباً، {currentEmployee.name}</p>
       </header>
 
       <div className="flex flex-wrap gap-1">
@@ -309,10 +309,10 @@ export const EmployeeSelfService: React.FC = () => {
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm transition-all ${
               activeTab === tab.id
-                ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-primary text-white shadow-primary/20'
+                : 'bg-[#f0f2f5] text-[var(--color-text)] hover:bg-[#e8eaed]'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
@@ -322,10 +322,10 @@ export const EmployeeSelfService: React.FC = () => {
       </div>
 
       {loading && (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8 animate-pulse">
-          <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-1/3 mb-4" />
-          <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-full mb-2" />
-          <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-4/5" />
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-8 animate-pulse">
+          <div className="h-6 bg-slate-200 rounded w-1/3 mb-4" />
+          <div className="h-4 bg-[#f0f2f5] rounded w-full mb-2" />
+          <div className="h-4 bg-[#f0f2f5] rounded w-4/5" />
         </div>
       )}
 
@@ -333,45 +333,45 @@ export const EmployeeSelfService: React.FC = () => {
         <div className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card className="p-4">
-              <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">إجمالي الأيام</p>
+              <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">إجمالي الأيام</p>
               <p className="text-xl font-bold">{formatNumber(attendanceStats.total)}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">حاضر</p>
-              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatNumber(attendanceStats.present)}</p>
+              <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">حاضر</p>
+              <p className="text-xl font-bold text-emerald-600">{formatNumber(attendanceStats.present)}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">غائب</p>
-              <p className="text-xl font-bold text-rose-600 dark:text-rose-400">{formatNumber(attendanceStats.absent)}</p>
+              <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">غائب</p>
+              <p className="text-xl font-bold text-rose-600">{formatNumber(attendanceStats.absent)}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">متأخر</p>
-              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{formatNumber(attendanceStats.late)}</p>
+              <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">متأخر</p>
+              <p className="text-xl font-bold text-amber-600">{formatNumber(attendanceStats.late)}</p>
             </Card>
           </div>
           <Card title="سجل الحضور الأخير">
             <div className="overflow-x-auto">
               <table className="w-full text-right">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">التاريخ</th>
-                    <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">دخول</th>
-                    <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">خروج</th>
-                    <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">الساعات</th>
-                    <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">دقائق تأخر</th>
-                    <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">الحالة</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">التاريخ</th>
+                    <th className="erp-th">دخول</th>
+                    <th className="erp-th">خروج</th>
+                    <th className="erp-th">الساعات</th>
+                    <th className="erp-th">دقائق تأخر</th>
+                    <th className="erp-th">الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentAttendance.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500 dark:text-slate-400">
+                      <td colSpan={6} className="py-8 text-center text-[var(--color-text-muted)]">
                         لا توجد سجلات حضور
                       </td>
                     </tr>
                   )}
                   {recentAttendance.map((log) => (
-                    <tr key={log.id} className="border-b border-slate-100 dark:border-slate-800">
+                    <tr key={log.id} className="border-b border-[var(--color-border)]">
                       <td className="py-2 px-2">{formatDateAr(log.date)}</td>
                       <td className="py-2 px-2">{formatTime(log.checkIn)}</td>
                       <td className="py-2 px-2">{formatTime(log.checkOut)}</td>
@@ -401,19 +401,19 @@ export const EmployeeSelfService: React.FC = () => {
             <Card title="رصيد الإجازات الحالي">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">سنوية</p>
+                  <p className="text-[var(--color-text-muted)] text-xs font-medium">سنوية</p>
                   <p className="text-lg font-bold">{formatNumber(leaveBalance.annualBalance)} يوم</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">مرضية</p>
+                  <p className="text-[var(--color-text-muted)] text-xs font-medium">مرضية</p>
                   <p className="text-lg font-bold">{formatNumber(leaveBalance.sickBalance)} يوم</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">طارئة</p>
+                  <p className="text-[var(--color-text-muted)] text-xs font-medium">طارئة</p>
                   <p className="text-lg font-bold">{formatNumber(leaveBalance.emergencyBalance)} يوم</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">بدون راتب (مستخدم)</p>
+                  <p className="text-[var(--color-text-muted)] text-xs font-medium">بدون راتب (مستخدم)</p>
                   <p className="text-lg font-bold">{formatNumber(leaveBalance.unpaidTaken)} يوم</p>
                 </div>
               </div>
@@ -422,11 +422,11 @@ export const EmployeeSelfService: React.FC = () => {
           <Card title="طلب إجازة جديد">
             <div className="space-y-4 max-w-xl">
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">نوع الإجازة</label>
+                <label className="block text-sm font-bold text-[var(--color-text)] mb-1">نوع الإجازة</label>
                 <select
                   value={leaveType}
                   onChange={(e) => setLeaveType(e.target.value as LeaveType)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)]"
                 >
                   {(Object.entries(LEAVE_TYPE_LABELS) as [LeaveType, string][]).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -435,42 +435,42 @@ export const EmployeeSelfService: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">تاريخ البداية</label>
+                  <label className="block text-sm font-bold text-[var(--color-text)] mb-1">تاريخ البداية</label>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                    className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">تاريخ النهاية</label>
+                  <label className="block text-sm font-bold text-[var(--color-text)] mb-1">تاريخ النهاية</label>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                    className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)]"
                   />
                 </div>
               </div>
               {totalDays > 0 && (
-                <p className="text-sm text-slate-600 dark:text-slate-400">عدد الأيام: <strong>{formatNumber(totalDays)}</strong></p>
+                <p className="text-sm text-[var(--color-text-muted)]">عدد الأيام: <strong>{formatNumber(totalDays)}</strong></p>
               )}
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">السبب (اختياري)</label>
+                <label className="block text-sm font-bold text-[var(--color-text)] mb-1">السبب (اختياري)</label>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   rows={3}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 resize-none"
+                  className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)] resize-none"
                   placeholder="سبب طلب الإجازة"
                 />
               </div>
               {leaveSubmitError && (
-                <p className="text-sm text-rose-600 dark:text-rose-400">{leaveSubmitError}</p>
+                <p className="text-sm text-rose-600">{leaveSubmitError}</p>
               )}
               {leaveSubmitSuccess && (
-                <p className="text-sm text-emerald-600 dark:text-emerald-400">تم إرسال طلب الإجازة بنجاح.</p>
+                <p className="text-sm text-emerald-600">تم إرسال طلب الإجازة بنجاح.</p>
               )}
               <Button
                 onClick={handleLeaveSubmit}
@@ -489,24 +489,24 @@ export const EmployeeSelfService: React.FC = () => {
             <Card title="السُلف">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-right">
-                  <thead className="bg-slate-50 dark:bg-slate-800">
+                  <thead className="erp-thead">
                     <tr>
-                      <th className="p-3 font-bold text-xs text-slate-400">النوع</th>
-                      <th className="p-3 font-bold text-xs text-slate-400">المبلغ</th>
-                      <th className="p-3 font-bold text-xs text-slate-400">القسط</th>
-                      <th className="p-3 font-bold text-xs text-slate-400">الأقساط</th>
-                      <th className="p-3 font-bold text-xs text-slate-400">الشهر</th>
-                      <th className="p-3 font-bold text-xs text-slate-400">الحالة</th>
-                      <th className="p-3 font-bold text-xs text-slate-400">الصرف</th>
+                      <th className="erp-th">النوع</th>
+                      <th className="erp-th">المبلغ</th>
+                      <th className="erp-th">القسط</th>
+                      <th className="erp-th">الأقساط</th>
+                      <th className="erp-th">الشهر</th>
+                      <th className="erp-th">الحالة</th>
+                      <th className="erp-th">الصرف</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loans.map((loan) => (
-                      <tr key={loan.id} className={`border-t border-slate-100 dark:border-slate-800 ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
+                      <tr key={loan.id} className={`border-t border-[var(--color-border)] ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
                         <td className="p-3 text-xs font-bold">
                           {(loan.loanType || 'installment') === 'monthly_advance' ? 'شهرية' : 'مقسطة'}
                         </td>
-                        <td className="p-3 font-bold">{formatNumber(loan.loanAmount)} ج.م</td>
+                        <td className="erp-th">{formatNumber(loan.loanAmount)} ج.م</td>
                         <td className="p-3">{formatNumber(loan.installmentAmount)} ج.م</td>
                         <td className="p-3">{loan.remainingInstallments} / {loan.totalInstallments}</td>
                         <td className="p-3 font-mono text-xs" dir="ltr">{loan.month || loan.startMonth}</td>
@@ -532,7 +532,7 @@ export const EmployeeSelfService: React.FC = () => {
           <Card title="طلب سلفة جديدة">
             <div className="space-y-4 max-w-xl">
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">مبلغ السلفة (ج.م)</label>
+                <label className="block text-sm font-bold text-[var(--color-text)] mb-1">مبلغ السلفة (ج.م)</label>
                 <input
                   type="number"
                   min={1}
@@ -542,11 +542,11 @@ export const EmployeeSelfService: React.FC = () => {
                     setLoanAmount(isNaN(v) ? 0 : v);
                     if (installmentAmount > 0 && !isNaN(v) && v > 0) setTotalInstallments(Math.max(1, Math.round(v / installmentAmount)));
                   }}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)]"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">قيمة القسط (ج.م)</label>
+                <label className="block text-sm font-bold text-[var(--color-text)] mb-1">قيمة القسط (ج.م)</label>
                 <input
                   type="number"
                   min={1}
@@ -556,29 +556,29 @@ export const EmployeeSelfService: React.FC = () => {
                     setInstallmentAmount(isNaN(v) ? 0 : v);
                     if (loanAmount > 0 && !isNaN(v) && v > 0) setTotalInstallments(Math.max(1, Math.round(loanAmount / v)));
                   }}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)]"
                 />
               </div>
               {loanAmount > 0 && installmentAmount > 0 && (
-                <p className="text-sm text-slate-600 dark:text-slate-400">
+                <p className="text-sm text-[var(--color-text-muted)]">
                   عدد الأقساط: <strong>{formatNumber(totalInstallments > 0 ? totalInstallments : Math.max(1, Math.round(loanAmount / installmentAmount)))}</strong>
                 </p>
               )}
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">السبب (اختياري)</label>
+                <label className="block text-sm font-bold text-[var(--color-text)] mb-1">السبب (اختياري)</label>
                 <textarea
                   value={loanReason}
                   onChange={(e) => setLoanReason(e.target.value)}
                   rows={3}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 resize-none"
+                  className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)] resize-none"
                   placeholder="سبب طلب السلفة"
                 />
               </div>
               {loanSubmitError && (
-                <p className="text-sm text-rose-600 dark:text-rose-400">{loanSubmitError}</p>
+                <p className="text-sm text-rose-600">{loanSubmitError}</p>
               )}
               {loanSubmitSuccess && (
-                <p className="text-sm text-emerald-600 dark:text-emerald-400">تم إرسال طلب السلفة بنجاح.</p>
+                <p className="text-sm text-emerald-600">تم إرسال طلب السلفة بنجاح.</p>
               )}
               <Button
                 onClick={handleLoanSubmit}
@@ -596,20 +596,20 @@ export const EmployeeSelfService: React.FC = () => {
           <div className="space-y-4 max-w-xl">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">الراتب الأساسي</p>
+                <p className="text-[var(--color-text-muted)] text-sm font-medium">الراتب الأساسي</p>
                 <p className="text-lg font-bold">{formatNumber(currentEmployee.baseSalary)} ج.م</p>
               </div>
               <div>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">أجر الساعة</p>
+                <p className="text-[var(--color-text-muted)] text-sm font-medium">أجر الساعة</p>
                 <p className="text-lg font-bold">{formatNumber(currentEmployee.hourlyRate)} ج.م</p>
               </div>
               <div>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">نوع التوظيف</p>
+                <p className="text-[var(--color-text-muted)] text-sm font-medium">نوع التوظيف</p>
                 <p className="text-lg font-bold">{EMPLOYMENT_TYPE_LABELS[currentEmployee.employmentType]}</p>
               </div>
             </div>
             {canAccessPayroll && (
-              <p className="text-slate-600 dark:text-slate-400">
+              <p className="text-[var(--color-text-muted)]">
                 لعرض كشف الراتب والتفاصيل الكاملة،{' '}
                 <button
                   type="button"
@@ -621,7 +621,7 @@ export const EmployeeSelfService: React.FC = () => {
               </p>
             )}
             {!canAccessPayroll && (
-              <p className="text-slate-500 dark:text-slate-400 text-sm">
+              <p className="text-[var(--color-text-muted)] text-sm">
                 للاطلاع على تفاصيل الرواتب يرجى التنسيق مع الإدارة أو الموارد البشرية.
               </p>
             )}
@@ -633,19 +633,19 @@ export const EmployeeSelfService: React.FC = () => {
         <Card title="طلباتي (إجازات وسُلف)">
           <div className="overflow-x-auto">
             <table className="w-full text-right">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">النوع</th>
-                  <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">التفاصيل</th>
-                  <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">الحالة</th>
-                  <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">التاريخ</th>
-                  <th className="py-3 px-2 font-bold text-slate-600 dark:text-slate-300">سلسلة الموافقة</th>
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">النوع</th>
+                  <th className="erp-th">التفاصيل</th>
+                  <th className="erp-th">الحالة</th>
+                  <th className="erp-th">التاريخ</th>
+                  <th className="erp-th">سلسلة الموافقة</th>
                 </tr>
               </thead>
               <tbody>
                 {allRequests.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={5} className="py-8 text-center text-[var(--color-text-muted)]">
                       لا توجد طلبات
                     </td>
                   </tr>
@@ -655,7 +655,7 @@ export const EmployeeSelfService: React.FC = () => {
                     ? (req.date.toDate ? req.date.toDate() : new Date((req.date as any)?.seconds ? (req.date as any).seconds * 1000 : req.date))
                     : null;
                   return (
-                    <tr key={`${req.type}-${req.id}`} className="border-b border-slate-100 dark:border-slate-800">
+                    <tr key={`${req.type}-${req.id}`} className="border-b border-[var(--color-border)]">
                       <td className="py-2 px-2">{req.type === 'leave' ? 'إجازة' : 'سلفة'}</td>
                       <td className="py-2 px-2">{req.details}</td>
                       <td className="py-2 px-2">
@@ -669,13 +669,13 @@ export const EmployeeSelfService: React.FC = () => {
                           {(req.approvalChain as ApprovalChainItem[]).map((item, idx) => (
                             <span
                               key={idx}
-                              className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                              className="text-xs px-2 py-0.5 rounded bg-[#f0f2f5] text-[var(--color-text-muted)]"
                               title={item.notes || undefined}
                             >
                               مستوى {item.level}: {APPROVAL_STATUS_LABELS[item.status] ?? item.status}
                             </span>
                           ))}
-                          {(!req.approvalChain || req.approvalChain.length === 0) && <span className="text-slate-400">—</span>}
+                          {(!req.approvalChain || req.approvalChain.length === 0) && <span className="text-[var(--color-text-muted)]">—</span>}
                         </div>
                       </td>
                     </tr>

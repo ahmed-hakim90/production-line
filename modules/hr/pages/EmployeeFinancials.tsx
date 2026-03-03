@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { getDocs } from 'firebase/firestore';
@@ -46,8 +46,8 @@ function getMonthKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-const inputCls = 'w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm font-medium bg-slate-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
-const labelCls = 'block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1';
+const inputCls = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2.5 text-sm font-medium bg-[#f8f9fa] outline-none focus:border-primary focus:ring-2 focus:ring-primary/12';
+const labelCls = 'block text-xs font-bold text-[var(--color-text-muted)] mb-1';
 
 // ─── Multi-Employee Selector ────────────────────────────────────────────────
 
@@ -79,9 +79,9 @@ const EmployeePicker: React.FC<EmployeePickerProps> = ({ employees, selected, on
   };
 
   return (
-    <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-      <div className="p-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
-        <span className="material-icons-round text-slate-400 text-lg">search</span>
+    <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
+      <div className="p-3 bg-[#f8f9fa] border-b border-[var(--color-border)] flex items-center gap-3">
+        <span className="material-icons-round text-[var(--color-text-muted)] text-lg">search</span>
         <input
           type="text"
           className="flex-1 bg-transparent text-sm outline-none placeholder-slate-400"
@@ -98,11 +98,11 @@ const EmployeePicker: React.FC<EmployeePickerProps> = ({ employees, selected, on
         </button>
         <Badge variant="info">{selected.length} محدد</Badge>
       </div>
-      <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+      <div className="max-h-52 overflow-y-auto divide-y divide-[var(--color-border)]">
         {filtered.map((e) => (
           <label
             key={e.id}
-            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
+            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-[#f8f9fa] ${
               selected.includes(e.id!) ? 'bg-primary/5' : ''
             }`}
           >
@@ -110,7 +110,7 @@ const EmployeePicker: React.FC<EmployeePickerProps> = ({ employees, selected, on
               type="checkbox"
               checked={selected.includes(e.id!)}
               onChange={() => toggle(e.id!)}
-              className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary shrink-0"
+              className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary shrink-0"
             />
             <span className="text-sm font-bold flex-1">{e.name}</span>
             {e.code && <span className="text-xs font-mono text-slate-400">{e.code}</span>}
@@ -483,9 +483,9 @@ export const EmployeeFinancials: React.FC = () => {
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
+        <div className="h-8 bg-slate-200 rounded w-1/3" />
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-slate-200 dark:bg-slate-700 rounded-xl" />)}
+          {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-slate-200 rounded-[var(--border-radius-lg)]" />)}
         </div>
       </div>
     );
@@ -501,11 +501,11 @@ export const EmployeeFinancials: React.FC = () => {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] flex items-center gap-2">
             <span className="material-icons-round text-primary">account_balance_wallet</span>
             بدلات واستقطاعات الموظفين
           </h2>
-          <p className="text-sm text-slate-500 font-medium">
+          <p className="page-subtitle">
             إدارة البدلات والاستقطاعات والسلف والإجازات والجزاءات — شهر {filterMonth}
           </p>
         </div>
@@ -520,16 +520,16 @@ export const EmployeeFinancials: React.FC = () => {
       </div>
 
       {/* Tabs + Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl overflow-x-auto">
+      <div className="erp-page-head">
+        <div className="flex gap-1 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] overflow-x-auto">
           {TAB_CONFIG.map((tab) => (
             <button
               key={tab.key}
               onClick={() => { setActiveTab(tab.key); setShowBulkForm(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all whitespace-nowrap ${
                 activeTab === tab.key
-                  ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  ? 'bg-[var(--color-card)] text-primary'
+                  : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
               }`}
             >
               <span className="material-icons-round text-sm">{tab.icon}</span>
@@ -561,15 +561,15 @@ export const EmployeeFinancials: React.FC = () => {
               <span className="material-icons-round text-primary">group_add</span>
               إضافة جماعية — {TAB_CONFIG.find((t) => t.key === activeTab)?.label}
             </span>
-            <button onClick={() => setShowBulkForm(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+            <button onClick={() => setShowBulkForm(false)} className="p-1 text-[var(--color-text-muted)] hover:text-slate-600 rounded-[var(--border-radius-base)]">
               <span className="material-icons-round">close</span>
             </button>
           </div>
         }>
           {/* Step 1: Common fields */}
           <div className="mb-6">
-            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-              <span className="w-6 h-6 bg-primary text-white rounded-full text-xs font-black flex items-center justify-center">1</span>
+            <h4 className="text-sm font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
+              <span className="w-6 h-6 bg-primary text-white rounded-full text-xs font-bold flex items-center justify-center">1</span>
               البيانات المشتركة
             </h4>
 
@@ -594,8 +594,8 @@ export const EmployeeFinancials: React.FC = () => {
                 </div>
                 <div className="flex items-end">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={bAlRecurring} onChange={(e) => setBAlRecurring(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
-                    <span className="text-sm font-bold text-slate-600 dark:text-slate-300">متكرر شهرياً</span>
+                    <input type="checkbox" checked={bAlRecurring} onChange={(e) => setBAlRecurring(e.target.checked)} className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary" />
+                    <span className="text-sm font-bold text-[var(--color-text-muted)]">متكرر شهرياً</span>
                   </label>
                 </div>
               </div>
@@ -619,8 +619,8 @@ export const EmployeeFinancials: React.FC = () => {
                 </div>
                 <div className="flex items-end">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={bDedRecurring} onChange={(e) => setBDedRecurring(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
-                    <span className="text-sm font-bold text-slate-600 dark:text-slate-300">متكرر شهرياً</span>
+                    <input type="checkbox" checked={bDedRecurring} onChange={(e) => setBDedRecurring(e.target.checked)} className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary" />
+                    <span className="text-sm font-bold text-[var(--color-text-muted)]">متكرر شهرياً</span>
                   </label>
                 </div>
               </div>
@@ -638,7 +638,7 @@ export const EmployeeFinancials: React.FC = () => {
                 </div>
                 <div>
                   <label className={labelCls}>عدد الأقساط</label>
-                  <input type="text" readOnly className={inputCls + ' !bg-slate-100 dark:!bg-slate-900'} value={bLoanAmount > 0 && bLoanInstallment > 0 ? Math.max(1, Math.round(bLoanAmount / bLoanInstallment)) : '—'} />
+                  <input type="text" readOnly className={inputCls + ' !bg-[#f0f2f5] dark:!bg-slate-900'} value={bLoanAmount > 0 && bLoanInstallment > 0 ? Math.max(1, Math.round(bLoanAmount / bLoanInstallment)) : '—'} />
                 </div>
               </div>
             )}
@@ -688,8 +688,8 @@ export const EmployeeFinancials: React.FC = () => {
 
           {/* Step 2: Employee selection */}
           <div className="mb-6">
-            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-              <span className="w-6 h-6 bg-primary text-white rounded-full text-xs font-black flex items-center justify-center">2</span>
+            <h4 className="text-sm font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
+              <span className="w-6 h-6 bg-primary text-white rounded-full text-xs font-bold flex items-center justify-center">2</span>
               اختيار الموظفين
             </h4>
             <EmployeePicker employees={employees} selected={selectedEmps} onChange={setSelectedEmps} />
@@ -698,21 +698,21 @@ export const EmployeeFinancials: React.FC = () => {
           {/* Step 3: Preview table */}
           {selectedEmps.length > 0 && (
             <div className="mb-6">
-              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 bg-primary text-white rounded-full text-xs font-black flex items-center justify-center">3</span>
+              <h4 className="text-sm font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
+                <span className="w-6 h-6 bg-primary text-white rounded-full text-xs font-bold flex items-center justify-center">3</span>
                 معاينة وتخصيص ({selectedEmps.length} موظف)
               </h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800">
+                  <thead className="erp-thead">
                     <tr>
-                      <th className="text-right py-3 px-3 font-bold text-xs text-slate-500">الموظف</th>
-                      <th className="text-right py-3 px-3 font-bold text-xs text-slate-500">الكود</th>
-                      <th className="text-right py-3 px-3 font-bold text-xs text-slate-500">الراتب</th>
+                      <th className="erp-th">الموظف</th>
+                      <th className="erp-th">الكود</th>
+                      <th className="erp-th">الراتب</th>
                       {activeTab !== 'leaves' && (
-                        <th className="text-right py-3 px-3 font-bold text-xs text-slate-500">المبلغ (تخصيص)</th>
+                        <th className="erp-th">المبلغ (تخصيص)</th>
                       )}
-                      <th className="text-center py-3 px-3 font-bold text-xs text-slate-500">إزالة</th>
+                      <th className="erp-th text-center">إزالة</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -720,7 +720,7 @@ export const EmployeeFinancials: React.FC = () => {
                       const emp = employees.find((e) => e.id === empId);
                       if (!emp) return null;
                       return (
-                        <tr key={empId} className="border-t border-slate-100 dark:border-slate-800">
+                        <tr key={empId} className="border-t border-[var(--color-border)]">
                           <td className="py-2.5 px-3 font-bold">{emp.name}</td>
                           <td className="py-2.5 px-3 font-mono text-xs text-slate-400">{emp.code || '—'}</td>
                           <td className="py-2.5 px-3 text-slate-600">{formatCurrency(emp.baseSalary)}</td>
@@ -729,7 +729,7 @@ export const EmployeeFinancials: React.FC = () => {
                               <input
                                 type="number"
                                 min={0}
-                                className="w-28 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-slate-800 outline-none focus:ring-1 focus:ring-primary/30"
+                                className="w-28 border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-2 py-1.5 text-sm bg-[var(--color-card)] outline-none focus:ring-1 focus:ring-primary/30"
                                 placeholder={String(getResolvedAmount(empId))}
                                 value={perEmpAmounts[empId] ?? ''}
                                 onChange={(e) => setPerEmpAmounts((prev) => ({ ...prev, [empId]: Number(e.target.value) }))}
@@ -739,7 +739,7 @@ export const EmployeeFinancials: React.FC = () => {
                           <td className="py-2.5 px-3 text-center">
                             <button
                               onClick={() => setSelectedEmps((prev) => prev.filter((x) => x !== empId))}
-                              className="p-1 text-slate-400 hover:text-rose-500 rounded"
+                              className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded"
                             >
                               <span className="material-icons-round text-lg">close</span>
                             </button>
@@ -755,13 +755,13 @@ export const EmployeeFinancials: React.FC = () => {
 
           {/* Messages */}
           {bulkError && (
-            <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl text-sm text-rose-700 dark:text-rose-400 font-medium flex items-center gap-2">
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] text-sm text-rose-700 font-medium flex items-center gap-2">
               <span className="material-icons-round text-sm">error</span>
               {bulkError}
             </div>
           )}
           {bulkSuccess && (
-            <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-sm text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-2">
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] text-sm text-emerald-700 font-medium flex items-center gap-2">
               <span className="material-icons-round text-sm">check_circle</span>
               {bulkSuccess}
             </div>
@@ -785,25 +785,25 @@ export const EmployeeFinancials: React.FC = () => {
         <Card>
           {filteredAllowances.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">card_giftcard</span>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">card_giftcard</span>
               <p className="text-sm font-bold text-slate-500">لا توجد بدلات</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                    <th className="text-right py-3 px-3">الموظف</th>
-                    <th className="text-right py-3 px-3">نوع البدل</th>
-                    <th className="text-right py-3 px-3">المبلغ</th>
-                    <th className="text-right py-3 px-3">النوع</th>
-                    <th className="text-right py-3 px-3">8&8 </th>
-                    <th className="text-right py-3 px-3">إجراء</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الموظف</th>
+                    <th className="erp-th">نوع البدل</th>
+                    <th className="erp-th">المبلغ</th>
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">8&8 </th>
+                    <th className="erp-th">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredAllowances.map((a) => (
-                    <tr key={a.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    <tr key={a.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(a.employeeId)}</td>
                       <td className="py-3 px-3">{a.allowanceTypeName}</td>
                       <td className="py-3 px-3 font-mono font-bold text-emerald-600">+{formatCurrency(a.amount)}</td>
@@ -812,7 +812,7 @@ export const EmployeeFinancials: React.FC = () => {
                       <td className="py-3 px-3">
                         <div className="flex gap-1">
                           {a.isRecurring && <button onClick={() => handleStopAllowance(a.id!)} className="p-1 text-amber-500 hover:text-amber-700 rounded" title="إيقاف"><span className="material-icons-round text-lg">pause_circle</span></button>}
-                          <button onClick={() => handleDeleteAllowance(a.id!)} className="p-1 text-slate-400 hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
+                          <button onClick={() => handleDeleteAllowance(a.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
                         </div>
                       </td>
                     </tr>
@@ -829,36 +829,36 @@ export const EmployeeFinancials: React.FC = () => {
         <Card>
           {filteredDeductions.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">money_off</span>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">money_off</span>
               <p className="text-sm font-bold text-slate-500">لا توجد استقطاعات</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                    <th className="text-right py-3 px-3">الموظف</th>
-                    <th className="text-right py-3 px-3">الاستقطاع</th>
-                    <th className="text-right py-3 px-3">المبلغ</th>
-                    <th className="text-right py-3 px-3">الفئة</th>
-                    <th className="text-right py-3 px-3">النوع</th>
-                    <th className="text-right py-3 px-3">السبب</th>
-                    <th className="text-right py-3 px-3">إجراء</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الموظف</th>
+                    <th className="erp-th">الاستقطاع</th>
+                    <th className="erp-th">المبلغ</th>
+                    <th className="erp-th">الفئة</th>
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">السبب</th>
+                    <th className="erp-th">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDeductions.map((d) => (
-                    <tr key={d.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(d.employeeId)}</td>
                       <td className="py-3 px-3">{d.deductionTypeName}</td>
                       <td className="py-3 px-3 font-mono font-bold text-rose-600">-{formatCurrency(d.amount)}</td>
                       <td className="py-3 px-3"><Badge variant="neutral">{DEDUCTION_CATEGORIES[d.category] || d.category}</Badge></td>
                       <td className="py-3 px-3"><Badge variant={d.isRecurring ? 'info' : 'neutral'}>{d.isRecurring ? 'متكرر' : 'مرة واحدة'}</Badge></td>
-                      <td className="py-3 px-3 text-xs text-slate-500 max-w-[200px] truncate">{d.reason || '—'}</td>
+                      <td className="py-3 px-3 text-xs text-[var(--color-text-muted)] max-w-[200px] truncate">{d.reason || '—'}</td>
                       <td className="py-3 px-3">
                         <div className="flex gap-1">
                           {d.isRecurring && <button onClick={() => handleStopDeduction(d.id!)} className="p-1 text-amber-500 hover:text-amber-700 rounded" title="إيقاف"><span className="material-icons-round text-lg">pause_circle</span></button>}
-                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-slate-400 hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
+                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
                         </div>
                       </td>
                     </tr>
@@ -875,27 +875,27 @@ export const EmployeeFinancials: React.FC = () => {
         <Card>
           {filteredLoans.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">payments</span>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">payments</span>
               <p className="text-sm font-bold text-slate-500">لا توجد سُلف</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                    <th className="text-right py-3 px-3">الموظف</th>
-                    <th className="text-right py-3 px-3">النوع</th>
-                    <th className="text-right py-3 px-3">المبلغ</th>
-                    <th className="text-right py-3 px-3">القسط</th>
-                    <th className="text-right py-3 px-3">الأقساط</th>
-                    <th className="text-right py-3 px-3">الشهر</th>
-                    <th className="text-right py-3 px-3">الحالة</th>
-                    <th className="text-right py-3 px-3">الصرف</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الموظف</th>
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">المبلغ</th>
+                    <th className="erp-th">القسط</th>
+                    <th className="erp-th">الأقساط</th>
+                    <th className="erp-th">الشهر</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">الصرف</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLoans.map((l) => (
-                    <tr key={l.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(l.employeeId)}</td>
                       <td className="py-3 px-3 text-xs">{l.loanType === 'monthly_advance' ? 'شهرية' : 'مقسطة'}</td>
                       <td className="py-3 px-3 font-mono font-bold text-amber-600">{formatCurrency(l.loanAmount)}</td>
@@ -924,26 +924,26 @@ export const EmployeeFinancials: React.FC = () => {
         <Card>
           {filteredLeaves.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">beach_access</span>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">beach_access</span>
               <p className="text-sm font-bold text-slate-500">لا توجد إجازات</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                    <th className="text-right py-3 px-3">الموظف</th>
-                    <th className="text-right py-3 px-3">النوع</th>
-                    <th className="text-right py-3 px-3">8&8 </th>
-                    <th className="text-right py-3 px-3">إلى</th>
-                    <th className="text-right py-3 px-3">الأيام</th>
-                    <th className="text-right py-3 px-3">الحالة</th>
-                    <th className="text-right py-3 px-3">السبب</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الموظف</th>
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">8&8 </th>
+                    <th className="erp-th">إلى</th>
+                    <th className="erp-th">الأيام</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">السبب</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLeaves.map((l) => (
-                    <tr key={l.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(l.employeeId)}</td>
                       <td className="py-3 px-3">{LEAVE_TYPE_LABELS[l.leaveType]}</td>
                       <td className="py-3 px-3 font-mono text-xs">{l.startDate}</td>
@@ -954,7 +954,7 @@ export const EmployeeFinancials: React.FC = () => {
                           {l.finalStatus === 'approved' ? 'موافق' : l.finalStatus === 'rejected' ? 'مرفوض' : 'قيد المراجعة'}
                         </Badge>
                       </td>
-                      <td className="py-3 px-3 text-xs text-slate-500 max-w-[200px] truncate">{l.reason || '—'}</td>
+                      <td className="py-3 px-3 text-xs text-[var(--color-text-muted)] max-w-[200px] truncate">{l.reason || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -969,35 +969,35 @@ export const EmployeeFinancials: React.FC = () => {
         <Card>
           {filteredDeductions.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">gavel</span>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">gavel</span>
               <p className="text-sm font-bold text-slate-500">لا توجد جزاءات تأديبية</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                    <th className="text-right py-3 px-3">الموظف</th>
-                    <th className="text-right py-3 px-3">الجزاء</th>
-                    <th className="text-right py-3 px-3">المبلغ</th>
-                    <th className="text-right py-3 px-3">الشهر</th>
-                    <th className="text-right py-3 px-3">السبب</th>
-                    <th className="text-right py-3 px-3">الحالة</th>
-                    <th className="text-right py-3 px-3">إجراء</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الموظف</th>
+                    <th className="erp-th">الجزاء</th>
+                    <th className="erp-th">المبلغ</th>
+                    <th className="erp-th">الشهر</th>
+                    <th className="erp-th">السبب</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDeductions.map((d) => (
-                    <tr key={d.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(d.employeeId)}</td>
                       <td className="py-3 px-3">{d.deductionTypeName}</td>
                       <td className="py-3 px-3 font-mono font-bold text-rose-600">-{formatCurrency(d.amount)}</td>
                       <td className="py-3 px-3 font-mono text-xs">{d.startMonth}</td>
-                      <td className="py-3 px-3 text-xs text-slate-500 max-w-[200px] truncate">{d.reason || '—'}</td>
+                      <td className="py-3 px-3 text-xs text-[var(--color-text-muted)] max-w-[200px] truncate">{d.reason || '—'}</td>
                       <td className="py-3 px-3"><Badge variant={d.status === 'active' ? 'success' : 'neutral'}>{d.status === 'active' ? 'نشط' : 'متوقف'}</Badge></td>
                       <td className="py-3 px-3">
                         <div className="flex gap-1">
-                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-slate-400 hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
+                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
                         </div>
                       </td>
                     </tr>

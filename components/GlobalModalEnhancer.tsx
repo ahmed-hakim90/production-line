@@ -161,7 +161,7 @@ const makeIconButton = (icon: string, title: string): HTMLButtonElement => {
   btn.type = 'button';
   btn.title = title;
   btn.className =
-    'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-white transition-colors';
+    'text-slate-500 hover:text-[var(--color-text)] dark:text-[var(--color-text-muted)] dark:hover:text-white transition-colors';
   const span = document.createElement('span');
   span.className = 'material-icons-round text-base';
   span.textContent = icon;
@@ -833,96 +833,101 @@ export const GlobalModalEnhancer: React.FC = () => {
   }, [workspaceItems, currentRoute]);
 
   return (
-    <div className="fixed left-2 bottom-2 -translate-y-1/2 z-[70] hidden md:flex items-center gap-2">
+    <div className="fixed left-2 bottom-3 z-[70] hidden md:flex flex-col items-start gap-2">
+      {/* Trigger button */}
       <button
         type="button"
         onClick={() => setMenuOpen((prev) => !prev)}
-        className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-xl px-2 py-3 text-slate-700 dark:text-slate-200 hover:text-primary transition-colors relative"
-        title="نوافذ مصغرة"
+        className="erp-minimized-btn relative flex items-center gap-1.5"
+        title="النوافذ المصغرة"
       >
-        <span
-          className="text-xs font-black tracking-wide"
-          style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' as any }}
-        >
+        <span className="material-icons-round text-[16px]">tab_unselected</span>
+        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' as any }} className="text-[10.5px] tracking-wide">
           نوافذ مصغرة
         </span>
         {workspaceItems.length > 0 && (
-          <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center">
+          <span className="absolute -top-2 -right-2 min-w-[16px] h-[16px] px-0.5 rounded-full bg-[rgb(var(--color-primary))] text-white text-[9px] font-bold flex items-center justify-center">
             {workspaceItems.length}
           </span>
         )}
       </button>
 
+      {/* Panel */}
       {menuOpen && (
-        <div className="w-64 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-xl p-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-black text-slate-500">النوافذ المصغرة</p>
+        <div className="erp-minimized-panel">
+          {/* Head */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <span className="material-icons-round text-[var(--color-text-muted)] text-[16px]">tab_unselected</span>
+              <span className="text-[11.5px] font-bold text-[var(--color-text)]">النوافذ المصغرة</span>
+            </div>
             <button
               type="button"
               onClick={() => setMenuOpen(false)}
-              className="text-slate-400 hover:text-slate-600 transition-colors"
-              title="إغلاق القائمة"
+              className="p-1 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] transition-colors"
             >
-              <span className="material-icons-round text-sm">close</span>
+              <span className="material-icons-round text-[15px]">close</span>
             </button>
           </div>
+
           {orderedWorkspaceItems.length === 0 ? (
-            <p className="text-xs text-slate-400 font-semibold py-2">لا توجد نوافذ مصغرة الآن.</p>
+            <p className="text-[12px] text-[var(--color-text-muted)] py-2 text-center">لا توجد نوافذ مصغرة</p>
           ) : (
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-1.5 max-h-[60vh] overflow-y-auto">
               {orderedWorkspaceItems.map((entry) => {
                 const isOpenable = isWorkspaceEntryOpenable(entry);
                 return (
-                <div key={entry.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2.5 flex items-center justify-between gap-2">
-                  <button
-                    className={`text-sm font-bold truncate text-right ${
-                      isOpenable
-                        ? 'text-slate-700 dark:text-slate-100 hover:text-primary'
-                        : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                    }`}
-                    onClick={() => openWorkspaceItem(entry)}
-                    title={isOpenable ? `فتح ${entry.title}` : 'غير متاح في الصفحة الحالية'}
-                    disabled={!isOpenable}
-                  >
-                    <span className="block truncate">{entry.favorite ? `⭐ ${entry.title}` : entry.title}</span>
-                    <span className="block text-[10px] font-semibold text-slate-400 truncate">
-                      {normalizeRoute(entry.route) === currentRoute
-                        ? 'الصفحة الحالية'
-                        : (isOpenable ? `من ${entry.route}` : `غير متاح هنا • من ${entry.route}`)}
-                    </span>
-                  </button>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div key={entry.id} className="erp-minimized-item">
                     <button
-                      onClick={() => openWorkspaceItem(entry)}
-                      className={`transition-colors ${
-                        isOpenable
-                          ? 'text-slate-400 hover:text-primary'
-                          : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                      className={`flex-1 text-right min-w-0 ${
+                        isOpenable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
                       }`}
-                      title={isOpenable ? 'استرجاع' : 'غير متاح في الصفحة الحالية'}
+                      onClick={() => openWorkspaceItem(entry)}
+                      title={isOpenable ? `فتح ${entry.title}` : 'غير متاح في الصفحة الحالية'}
                       disabled={!isOpenable}
                     >
-                      <span className="material-icons-round text-sm">open_in_full</span>
+                      <span className="block text-[12.5px] font-semibold text-[var(--color-text)] truncate">
+                        {entry.favorite ? `⭐ ${entry.title}` : entry.title}
+                      </span>
+                      <span className="block text-[10.5px] text-[var(--color-text-muted)] truncate mt-0.5">
+                        {normalizeRoute(entry.route) === currentRoute
+                          ? 'الصفحة الحالية'
+                          : (isOpenable ? entry.route : `غير متاح • ${entry.route}`)}
+                      </span>
                     </button>
-                    <button
-                      onClick={() => {
-                        const runtime = minimized.find((m) => m.workspaceId === entry.id);
-                        if (runtime) closeEntry(runtime.id);
-                        removeWorkspaceItem(entry.id);
-                      }}
-                      className="text-slate-400 hover:text-rose-500 transition-colors"
-                      title="إزالة من القائمة"
-                    >
-                      <span className="material-icons-round text-sm">close</span>
-                    </button>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        onClick={() => openWorkspaceItem(entry)}
+                        className={`p-1 rounded-[var(--border-radius-sm)] transition-colors ${
+                          isOpenable
+                            ? 'text-[var(--color-text-muted)] hover:text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.08)]'
+                            : 'text-[var(--color-border)] cursor-not-allowed'
+                        }`}
+                        title="استرجاع"
+                        disabled={!isOpenable}
+                      >
+                        <span className="material-icons-round text-[14px]">open_in_full</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          const runtime = minimized.find((m) => m.workspaceId === entry.id);
+                          if (runtime) closeEntry(runtime.id);
+                          removeWorkspaceItem(entry.id);
+                        }}
+                        className="p-1 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                        title="إزالة"
+                      >
+                        <span className="material-icons-round text-[14px]">close</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
                 );
               })}
             </div>
           )}
+
           {openHint && (
-            <div className="mt-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 px-2.5 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+            <div className="mt-2 rounded-[var(--border-radius-sm)] border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-medium text-amber-700">
               {openHint}
             </div>
           )}

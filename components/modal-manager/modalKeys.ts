@@ -12,6 +12,7 @@ export const MODAL_KEYS = {
   EMPLOYEE_ALLOWANCE_CREATE: 'employees.allowance.create',
   EMPLOYEE_DEDUCTION_CREATE: 'employees.deduction.create',
   INVENTORY_IMPORT_IN_BY_CODE: 'inventory.movements.importInByCode',
+  PRODUCTION_PLANS_IMPORT: 'productionPlans.import',
   INVENTORY_WAREHOUSES_CREATE: 'inventory.warehouses.create',
   INVENTORY_RAW_MATERIALS_CREATE: 'inventory.rawMaterials.create',
   SYSTEM_ROLES_CREATE: 'system.roles.create',

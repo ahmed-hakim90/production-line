@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+﻿import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -287,12 +287,12 @@ export const HRImport: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="erp-page-head">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">
+          <h2 className="page-title">
             استيراد بيانات الموظفين
           </h2>
-          <p className="text-sm text-slate-500 font-medium">
+          <p className="page-subtitle">
             استيراد الأقسام والمناصب والموظفين من ملف Excel
           </p>
         </div>
@@ -311,7 +311,7 @@ export const HRImport: React.FC = () => {
           const isPast = ['upload', 'preview', 'importing', 'done'].indexOf(step) > i;
           return (
             <React.Fragment key={s}>
-              {i > 0 && <div className={`flex-1 h-0.5 ${isPast ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'}`} />}
+              {i > 0 && <div className={`flex-1 h-0.5 ${isPast ? 'bg-primary' : 'bg-slate-200'}`} />}
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${
                 isActive ? 'bg-primary/10 text-primary' : isPast ? 'text-primary' : 'text-slate-400'
               }`}>
@@ -328,20 +328,20 @@ export const HRImport: React.FC = () => {
         <>
           <Card>
             <div
-              className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-10 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+              className="border-2 border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-10 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
               onClick={() => !lookupsLoading && fileRef.current?.click()}
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
             >
               {lookupsLoading ? (
                 <>
-                  <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block animate-pulse">hourglass_empty</span>
+                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block animate-pulse">hourglass_empty</span>
                   <p className="text-sm font-bold text-slate-400">جاري تحميل البيانات المرجعية...</p>
                 </>
               ) : (
                 <>
-                  <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">cloud_upload</span>
-                  <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">
+                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">cloud_upload</span>
+                  <p className="text-sm font-bold text-[var(--color-text-muted)] mb-1">
                     اسحب ملف Excel هنا أو اضغط للاختيار
                   </p>
                   <p className="text-xs text-slate-400">
@@ -361,16 +361,16 @@ export const HRImport: React.FC = () => {
           </Card>
 
           {parseError && (
-            <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 flex items-center gap-3">
+            <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
               <span className="material-icons-round text-rose-500">error</span>
-              <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{parseError}</p>
+              <p className="text-sm font-bold text-rose-700">{parseError}</p>
             </div>
           )}
 
           <Card>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="flex-1">
-                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">تحميل القالب</h3>
+                <h3 className="text-sm font-bold text-[var(--color-text)] mb-1">تحميل القالب</h3>
                 <p className="text-xs text-slate-400">
                   قم بتحميل ملف Excel نموذجي يحتوي على الأعمدة المطلوبة (3 أوراق: الأقسام، المناصب، الموظفين)
                 </p>
@@ -384,21 +384,21 @@ export const HRImport: React.FC = () => {
 
           {!lookupsLoading && lookups && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                <p className="text-xs text-slate-400 font-bold mb-1">أقسام حالية</p>
-                <p className="text-xl font-black text-slate-700 dark:text-white">{lookups.departments.length}</p>
+              <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أقسام حالية</p>
+                <p className="text-xl font-bold text-[var(--color-text)]">{lookups.departments.length}</p>
               </div>
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                <p className="text-xs text-slate-400 font-bold mb-1">مناصب حالية</p>
-                <p className="text-xl font-black text-slate-700 dark:text-white">{lookups.positions.length}</p>
+              <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مناصب حالية</p>
+                <p className="text-xl font-bold text-[var(--color-text)]">{lookups.positions.length}</p>
               </div>
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                <p className="text-xs text-slate-400 font-bold mb-1">ورديات حالية</p>
-                <p className="text-xl font-black text-slate-700 dark:text-white">{lookups.shifts.length}</p>
+              <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">ورديات حالية</p>
+                <p className="text-xl font-bold text-[var(--color-text)]">{lookups.shifts.length}</p>
               </div>
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                <p className="text-xs text-slate-400 font-bold mb-1">موظفين حاليين</p>
-                <p className="text-xl font-black text-slate-700 dark:text-white">{lookups.employees.length}</p>
+              <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفين حاليين</p>
+                <p className="text-xl font-bold text-[var(--color-text)]">{lookups.employees.length}</p>
               </div>
             </div>
           )}
@@ -410,34 +410,34 @@ export const HRImport: React.FC = () => {
         <>
           {/* Summary cards */}
           <div className={`grid grid-cols-1 gap-4 ${totalUpdates > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-blue-500 text-3xl mb-2 block">description</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">إجمالي الصفوف</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي الصفوف</p>
               <p className="text-2xl font-black">
                 {(result.departments.rows.length + result.positions.rows.length + result.employees.rows.length).toLocaleString('en-US')}
               </p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-emerald-500 text-3xl mb-2 block">add_circle</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">جديد</p>
-              <p className="text-2xl font-black text-emerald-600">{totalNew.toLocaleString('en-US')}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">جديد</p>
+              <p className="text-2xl font-bold text-emerald-600">{totalNew.toLocaleString('en-US')}</p>
             </div>
             {totalUpdates > 0 && (
-              <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-amber-200 dark:border-amber-800 text-center">
+              <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-amber-200 text-center">
                 <span className="material-icons-round text-amber-500 text-3xl mb-2 block">sync</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">تحديث موظفين حاليين</p>
-                <p className="text-2xl font-black text-amber-600">{totalUpdates.toLocaleString('en-US')}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">تحديث موظفين حاليين</p>
+                <p className="text-2xl font-bold text-amber-600">{totalUpdates.toLocaleString('en-US')}</p>
               </div>
             )}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-rose-500 text-3xl mb-2 block">error</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">بها أخطاء</p>
-              <p className="text-2xl font-black text-rose-600">{totalErrors.toLocaleString('en-US')}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بها أخطاء</p>
+              <p className="text-2xl font-bold text-rose-600">{totalErrors.toLocaleString('en-US')}</p>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+          <div className="flex gap-1 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1">
             {([
               { key: 'employees' as PreviewTab, label: 'الموظفين', count: result.employees.rows.length, icon: 'groups' },
               { key: 'departments' as PreviewTab, label: 'الأقسام', count: result.departments.rows.length, icon: 'business' },
@@ -446,17 +446,17 @@ export const HRImport: React.FC = () => {
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-bold transition-all ${
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
                   tab === t.key
-                    ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    ? 'bg-[var(--color-card)] text-primary'
+                    : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
                 }`}
               >
                 <span className="material-icons-round text-base">{t.icon}</span>
                 <span className="hidden sm:inline">{t.label}</span>
                 {t.count > 0 && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
-                    tab === t.key ? 'bg-primary/10 text-primary' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    tab === t.key ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-500'
                   }`}>
                     {t.count}
                   </span>
@@ -469,29 +469,29 @@ export const HRImport: React.FC = () => {
           {tab === 'departments' && (
             <Card title={`الأقسام — ${result.departments.valid} صالح، ${result.departments.errors} خطأ`}>
               {result.departments.rows.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-8">لا توجد بيانات أقسام في الملف (ورقة "الأقسام")</p>
+                <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات أقسام في الملف (ورقة "الأقسام")</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                        <th className="text-right py-3 px-3">#</th>
-                        <th className="text-right py-3 px-3">الاسم</th>
-                        <th className="text-right py-3 px-3">الرمز</th>
-                        <th className="text-right py-3 px-3">الحالة</th>
+                    <thead className="erp-thead">
+                      <tr>
+                        <th className="erp-th">#</th>
+                        <th className="erp-th">الاسم</th>
+                        <th className="erp-th">الرمز</th>
+                        <th className="erp-th">الحالة</th>
                       </tr>
                     </thead>
                     <tbody>
                       {result.departments.rows.map((row) => (
-                        <tr key={row.rowIndex} className={`border-b border-slate-50 dark:border-slate-800/50 ${row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}`}>
-                          <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">{row.rowIndex}</td>
+                        <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}`}>
+                          <td className="py-2.5 px-3 font-mono text-[var(--color-text-muted)] text-xs">{row.rowIndex}</td>
                           <td className="py-2.5 px-3 font-bold">{row.name || '—'}</td>
                           <td className="py-2.5 px-3 font-mono text-xs">{row.code || '—'}</td>
                           <td className="py-2.5 px-3">
                             {row.errors.length > 0 ? (
                               <div className="space-y-0.5">
                                 {row.errors.map((err, i) => (
-                                  <div key={i} className="flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400">
+                                  <div key={i} className="flex items-center gap-1 text-xs text-rose-600">
                                     <span className="material-icons-round text-xs">error</span>
                                     {err}
                                   </div>
@@ -514,31 +514,31 @@ export const HRImport: React.FC = () => {
           {tab === 'positions' && (
             <Card title={`المناصب — ${result.positions.valid} صالح، ${result.positions.errors} خطأ`}>
               {result.positions.rows.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-8">لا توجد بيانات مناصب في الملف (ورقة "المناصب")</p>
+                <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات مناصب في الملف (ورقة "المناصب")</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                        <th className="text-right py-3 px-3">#</th>
-                        <th className="text-right py-3 px-3">المنصب</th>
-                        <th className="text-right py-3 px-3">القسم</th>
-                        <th className="text-right py-3 px-3">المستوى</th>
-                        <th className="text-right py-3 px-3">الحالة</th>
+                    <thead className="erp-thead">
+                      <tr>
+                        <th className="erp-th">#</th>
+                        <th className="erp-th">المنصب</th>
+                        <th className="erp-th">القسم</th>
+                        <th className="erp-th">المستوى</th>
+                        <th className="erp-th">الحالة</th>
                       </tr>
                     </thead>
                     <tbody>
                       {result.positions.rows.map((row) => (
-                        <tr key={row.rowIndex} className={`border-b border-slate-50 dark:border-slate-800/50 ${row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}`}>
-                          <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">{row.rowIndex}</td>
+                        <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}`}>
+                          <td className="py-2.5 px-3 font-mono text-[var(--color-text-muted)] text-xs">{row.rowIndex}</td>
                           <td className="py-2.5 px-3 font-bold">{row.title || '—'}</td>
-                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{row.departmentName || '—'}</td>
+                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.departmentName || '—'}</td>
                           <td className="py-2.5 px-3 text-sm">{JOB_LEVEL_LABELS[row.level] ?? row.level}</td>
                           <td className="py-2.5 px-3">
                             {row.errors.length > 0 ? (
                               <div className="space-y-0.5">
                                 {row.errors.map((err, i) => (
-                                  <div key={i} className="flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400">
+                                  <div key={i} className="flex items-center gap-1 text-xs text-rose-600">
                                     <span className="material-icons-round text-xs">error</span>
                                     {err}
                                   </div>
@@ -561,13 +561,13 @@ export const HRImport: React.FC = () => {
           {tab === 'employees' && (
             <Card title={`الموظفين — ${result.employees.valid - result.employees.updates} جديد، ${result.employees.updates} تحديث، ${result.employees.errors} خطأ`}>
               {result.employees.rows.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-8">لا توجد بيانات موظفين في الملف (ورقة "الموظفين")</p>
+                <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات موظفين في الملف (ورقة "الموظفين")</p>
               ) : (
                 <>
                   {result.employees.updates > 0 && (
-                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 flex items-start gap-2">
+                    <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-base)] p-3 mb-4 flex items-start gap-2">
                       <span className="material-icons-round text-amber-500 text-lg mt-0.5">info</span>
-                      <div className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                      <div className="text-xs text-amber-700 font-medium">
                         <p className="font-bold mb-0.5">تم اكتشاف موظفين حاليين</p>
                         <p>الصفوف المميزة بـ "تحديث" سيتم تحديث بياناتها فقط بالأعمدة الموجودة في الملف — لن يتم مسح أي بيانات قديمة.</p>
                       </div>
@@ -575,34 +575,34 @@ export const HRImport: React.FC = () => {
                   )}
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                          <th className="text-right py-3 px-3">#</th>
-                          <th className="text-right py-3 px-3">العملية</th>
-                          <th className="text-right py-3 px-3">الاسم</th>
-                          <th className="text-right py-3 px-3">الرمز</th>
-                          <th className="text-right py-3 px-3">رقم الهاتف</th>
-                          <th className="text-right py-3 px-3">القسم</th>
-                          <th className="text-right py-3 px-3">المنصب</th>
-                          <th className="text-right py-3 px-3">المستوى</th>
-                          <th className="text-right py-3 px-3">نوع التوظيف</th>
-                          <th className="text-right py-3 px-3">الراتب</th>
-                          <th className="text-right py-3 px-3">المركبة</th>
-                          <th className="text-right py-3 px-3">البريد</th>
-                          <th className="text-right py-3 px-3">نشط</th>
-                          <th className="text-right py-3 px-3">الأخطاء</th>
+                      <thead className="erp-thead">
+                        <tr>
+                          <th className="erp-th">#</th>
+                          <th className="erp-th">العملية</th>
+                          <th className="erp-th">الاسم</th>
+                          <th className="erp-th">الرمز</th>
+                          <th className="erp-th">رقم الهاتف</th>
+                          <th className="erp-th">القسم</th>
+                          <th className="erp-th">المنصب</th>
+                          <th className="erp-th">المستوى</th>
+                          <th className="erp-th">نوع التوظيف</th>
+                          <th className="erp-th">الراتب</th>
+                          <th className="erp-th">المركبة</th>
+                          <th className="erp-th">البريد</th>
+                          <th className="erp-th">نشط</th>
+                          <th className="erp-th">الأخطاء</th>
                         </tr>
                       </thead>
                       <tbody>
                         {result.employees.rows.map((row) => (
-                          <tr key={row.rowIndex} className={`border-b border-slate-50 dark:border-slate-800/50 ${
+                          <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${
                             row.errors.length > 0
                               ? 'bg-rose-50/50 dark:bg-rose-900/10'
                               : row.existingId
                                 ? 'bg-amber-50/50 dark:bg-amber-900/10'
                                 : ''
                           }`}>
-                            <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">{row.rowIndex}</td>
+                            <td className="py-2.5 px-3 font-mono text-[var(--color-text-muted)] text-xs">{row.rowIndex}</td>
                             <td className="py-2.5 px-3">
                               {row.errors.length > 0 ? null : row.existingId ? (
                                 <Badge variant="warning">تحديث</Badge>
@@ -613,8 +613,8 @@ export const HRImport: React.FC = () => {
                             <td className="py-2.5 px-3 font-bold">{row.name || '—'}</td>
                             <td className="py-2.5 px-3 font-mono text-xs">{row.code || '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('phone') ? row.phone : '—'}</td>
-                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-xs">{row.departmentName || '—'}</td>
-                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-xs">{row.positionTitle || '—'}</td>
+                            <td className="py-2.5 px-3 text-[var(--color-text-muted)] text-xs">{row.departmentName || '—'}</td>
+                            <td className="py-2.5 px-3 text-[var(--color-text-muted)] text-xs">{row.positionTitle || '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('level') ? (JOB_LEVEL_LABELS[row.level] ?? row.level) : '—'}</td>
                             <td className="py-2.5 px-3 text-xs">{row.providedFields.includes('employmentType') ? (EMPLOYMENT_TYPE_LABELS[row.employmentType] ?? row.employmentType) : '—'}</td>
                             <td className="py-2.5 px-3 font-mono text-xs">{row.providedFields.includes('baseSalary') ? row.baseSalary.toLocaleString('en-US') : '—'}</td>
@@ -625,7 +625,7 @@ export const HRImport: React.FC = () => {
                               {row.errors.length > 0 ? (
                                 <div className="space-y-0.5">
                                   {row.errors.map((err, i) => (
-                                    <div key={i} className="flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400">
+                                    <div key={i} className="flex items-center gap-1 text-xs text-rose-600">
                                       <span className="material-icons-round text-xs">error</span>
                                       {err}
                                     </div>
@@ -670,12 +670,12 @@ export const HRImport: React.FC = () => {
           <div className="text-center py-12 space-y-6">
             <span className="material-icons-round text-5xl text-primary animate-spin block">sync</span>
             <div>
-              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">جاري الاستيراد...</p>
+              <p className="text-sm font-bold text-[var(--color-text-muted)] mb-4">جاري الاستيراد...</p>
               <div className="max-w-sm mx-auto space-y-3">
                 {result && result.departments.valid > 0 && (
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-500 w-16 text-left">الأقسام</span>
-                    <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">الأقسام</span>
+                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.depts / result.departments.valid) * 100}%` }}
@@ -686,8 +686,8 @@ export const HRImport: React.FC = () => {
                 )}
                 {result && result.positions.valid > 0 && (
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-500 w-16 text-left">المناصب</span>
-                    <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">المناصب</span>
+                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.positions / result.positions.valid) * 100}%` }}
@@ -698,8 +698,8 @@ export const HRImport: React.FC = () => {
                 )}
                 {result && (result.employees.valid - result.employees.updates) > 0 && (
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-500 w-16 text-left">موظفين جدد</span>
-                    <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">موظفين جدد</span>
+                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.employees / (result.employees.valid - result.employees.updates)) * 100}%` }}
@@ -711,7 +711,7 @@ export const HRImport: React.FC = () => {
                 {result && result.employees.updates > 0 && (
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-amber-500 w-16 text-left">تحديث</span>
-                    <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-amber-500 rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.updated / result.employees.updates) * 100}%` }}
@@ -730,39 +730,39 @@ export const HRImport: React.FC = () => {
       {step === 'done' && (
         <>
           <div className={`grid grid-cols-2 gap-4 ${importDone.updated > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-blue-500 text-3xl mb-2 block">business</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">أقسام</p>
-              <p className="text-2xl font-black text-blue-600">{importDone.depts}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أقسام</p>
+              <p className="text-2xl font-bold text-blue-600">{importDone.depts}</p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-indigo-500 text-3xl mb-2 block">work</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">مناصب</p>
-              <p className="text-2xl font-black text-indigo-600">{importDone.positions}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مناصب</p>
+              <p className="text-2xl font-bold text-indigo-600">{importDone.positions}</p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-emerald-500 text-3xl mb-2 block">person_add</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">موظفين جدد</p>
-              <p className="text-2xl font-black text-emerald-600">{importDone.employees}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفين جدد</p>
+              <p className="text-2xl font-bold text-emerald-600">{importDone.employees}</p>
             </div>
             {importDone.updated > 0 && (
-              <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-amber-200 dark:border-amber-800 text-center">
+              <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-amber-200 text-center">
                 <span className="material-icons-round text-amber-500 text-3xl mb-2 block">sync</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">تم تحديثهم</p>
-                <p className="text-2xl font-black text-amber-600">{importDone.updated}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">تم تحديثهم</p>
+                <p className="text-2xl font-bold text-amber-600">{importDone.updated}</p>
               </div>
             )}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-rose-500 text-3xl mb-2 block">error</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">أخطاء</p>
-              <p className="text-2xl font-black text-rose-600">{importDone.errors}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أخطاء</p>
+              <p className="text-2xl font-bold text-rose-600">{importDone.errors}</p>
             </div>
           </div>
 
           {importDone.errors === 0 && (importDone.depts + importDone.positions + importDone.employees + importDone.updated) > 0 && (
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
               <span className="material-icons-round text-emerald-500">check_circle</span>
-              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+              <p className="text-sm font-bold text-emerald-700">
                 تم الاستيراد بنجاح!
                 {importDone.depts > 0 && ` تمت إضافة ${importDone.depts} قسم`}
                 {importDone.positions > 0 && ` و${importDone.positions} منصب`}
@@ -777,7 +777,7 @@ export const HRImport: React.FC = () => {
             <Card title="أخطاء الاستيراد">
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {importErrors.map((err, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400">
+                  <div key={i} className="flex items-start gap-2 text-xs text-rose-600">
                     <span className="material-icons-round text-sm mt-0.5 shrink-0">error</span>
                     <span>{err}</span>
                   </div>

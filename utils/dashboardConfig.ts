@@ -2,7 +2,7 @@ import type {
   SystemSettings, AlertSettings, KPIThreshold, WidgetConfig, PrintTemplateSettings,
   PlanSettings, BrandingSettings, ThemeSettings, DashboardDisplaySettings, AlertToggleSettings,
   QuickActionColor, QuickActionType, CustomWidgetType, CustomWidgetConfig,
-  ExportImportSettings, ExportImportPageControl,
+  ExportImportSettings, ExportImportPageControl, SidebarIconStyle,
 } from '../types';
 
 // ─── Widget Registry ─────────────────────────────────────────────────────────
@@ -165,6 +165,7 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   allowOverProduction: true,
   autoClosePlan: true,
   defaultProductionWarehouseId: '',
+  rawMaterialWarehouseId: '',
   decomposedSourceWarehouseId: '',
   finishedReceiveWarehouseId: '',
   wasteReceiveWarehouseId: '',
@@ -173,6 +174,7 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   transferDisplayUnit: 'piece',
   allowNegativeDecomposedStock: false,
   allowNegativeFinishedTransferStock: false,
+  requireFinishedStockApprovalForReports: true,
   maxWasteThreshold: 5,
   efficiencyCalculationMode: 'standard',
   averageProductionMode: 'daily',
@@ -195,8 +197,11 @@ export const DEFAULT_THEME: ThemeSettings = {
   darkMode: 'light',
   baseFontFamily: 'Cairo',
   baseFontSize: 14,
-  borderRadius: 12,
+  borderRadius: 6,
   density: 'comfortable',
+  sidebarIconStyle: 'colorful',
+  textColor: '#1a1a1a',
+  mutedTextColor: '#8d99a6',
 };
 
 export const DEFAULT_DASHBOARD_DISPLAY: DashboardDisplaySettings = {

@@ -37,36 +37,57 @@
     </script>
     <style>
       :root {
-        --color-primary: 168 0 8;
+        /* Primary — changeable from Settings */
+        --color-primary: 36 99 235;
         --color-secondary: 100 116 139;
         --color-success: 16 185 129;
         --color-warning: 245 158 11;
         --color-danger: 239 68 68;
-        --color-background: #f6f7f8;
+
+        /* Surfaces — ERPNext Espresso palette */
+        --color-background: #f0f2f5;
+        --color-bg: #f0f2f5;
+        --color-card: #ffffff;
+        --color-border: #d1d8dd;
+        --color-text: #1a1a1a;
+        --color-text-muted: #8d99a6;
+
+        /* Sidebar */
+        --color-sidebar-bg: #ffffff;
+        --color-sidebar-text: #1f272e;
+        --color-sidebar-border: #e8e8e8;
+
+        /* Typography */
         --font-family-base: 'Cairo', 'Noto Sans Arabic', sans-serif;
-        --font-size-base: 14px;
-        --border-radius-base: 12px;
+        --font-size-base: 13px;
+        --font-size-sm: 12px;
+
+        /* Geometry — controlled via Settings > استدارة الحواف (borderRadius) */
+        /* default: base=6  →  sm=4, base=6, lg=8, xl=12 */
+        --border-radius-sm:   4px;
+        --border-radius-base: 6px;
+        --border-radius-lg:   8px;
+        --border-radius-xl:   12px;
+
+        /* Elevation */
+        --shadow-card: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+        --shadow-dropdown: 0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06);
+        --shadow-modal: 0 16px 48px rgba(0,0,0,0.14);
+
         --density-scale: 1;
       }
       body {
         font-family: var(--font-family-base);
         font-size: var(--font-size-base);
         background-color: var(--color-background);
+        color: var(--color-text);
+        line-height: 1.5;
       }
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 10px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgb(var(--color-primary));
-      }
+      ::-webkit-scrollbar { width: 5px; height: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #d1d8dd; border-radius: 8px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgb(var(--color-primary)); }
+      .layout-transition { transition: margin 300ms ease, width 300ms ease !important; }
     </style>
   <script type="importmap">
 {

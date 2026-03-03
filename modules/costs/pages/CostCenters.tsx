@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Badge, Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -155,15 +155,15 @@ export const CostCenters: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">مراكز التكلفة</h2>
-          <p className="text-sm text-slate-500 font-medium">إدارة مراكز التكلفة المباشرة وغير المباشرة.</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">مراكز التكلفة</h2>
+          <p className="text-sm text-[var(--color-text-muted)] font-medium">إدارة مراكز التكلفة المباشرة وغير المباشرة.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input
             type="month"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
           />
           {canExport && costCenters.length > 0 && (
             <Button variant={pageControl.exportVariant} onClick={handleExportCenters}>
@@ -194,17 +194,17 @@ export const CostCenters: React.FC = () => {
             <Card key={cc.id} className="transition-all hover:ring-2 hover:ring-primary/10">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center ${
                     cc.type === 'indirect'
                       ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400'
-                      : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                      : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'
                   }`}>
                     <span className="material-icons-round text-lg">
                       {cc.type === 'indirect' ? 'share' : 'engineering'}
                     </span>
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-800 dark:text-white">{cc.name}</h4>
+                    <h4 className="font-bold text-[var(--color-text)]">{cc.name}</h4>
                     <Badge variant={cc.type === 'indirect' ? 'warning' : 'success'}>
                       {cc.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
                     </Badge>
@@ -215,9 +215,9 @@ export const CostCenters: React.FC = () => {
                 )}
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 mb-4">
-                <p className="text-[11px] font-bold text-slate-400 mb-1">قيمة الشهر المحدد</p>
-                <p className="text-lg font-black text-slate-800 dark:text-white">
+              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 mb-4">
+                <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">قيمة الشهر المحدد</p>
+                <p className="text-lg font-bold text-[var(--color-text)]">
                   {getSelectedMonthValue(cc.id!).toLocaleString('en-US')} ج.م
                 </p>
               </div>
@@ -226,7 +226,7 @@ export const CostCenters: React.FC = () => {
                 {cc.type === 'indirect' && (
                   <button
                     onClick={() => navigate(`/cost-centers/${cc.id}`)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/10 dark:hover:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg transition-all"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/10 dark:hover:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-[var(--border-radius-base)] transition-all"
                   >
                     <span className="material-icons-round text-sm">pie_chart</span>
                     التوزيع
@@ -236,14 +236,14 @@ export const CostCenters: React.FC = () => {
                   <>
                     <button
                       onClick={() => openEdit(cc)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg transition-all"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-[var(--border-radius-base)] transition-all"
                     >
                       <span className="material-icons-round text-sm">edit</span>
                       تعديل
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(cc.id!)}
-                      className="py-2 px-3 text-xs font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/10 dark:hover:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg transition-all"
+                      className="py-2 px-3 text-xs font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/10 dark:hover:bg-rose-900/20 border border-rose-200 rounded-[var(--border-radius-base)] transition-all"
                     >
                       <span className="material-icons-round text-sm">delete</span>
                     </button>
@@ -258,27 +258,27 @@ export const CostCenters: React.FC = () => {
       {/* Create / Edit Modal */}
       {modal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setModal(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">{modal === 'new' ? 'إضافة مركز تكلفة' : 'تعديل مركز التكلفة'}</h3>
-              <button onClick={() => setModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={() => setModal(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 space-y-5">
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">اسم مركز التكلفة *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم مركز التكلفة *</label>
                 <input
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="مثال: إيجار المصنع"
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">النوع *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">النوع *</label>
                 <select
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={form.type}
                   onChange={(e) => setForm({ ...form, type: e.target.value as 'indirect' | 'direct' })}
                 >
@@ -291,12 +291,12 @@ export const CostCenters: React.FC = () => {
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                  className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary/20"
+                  className="w-5 h-5 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                 />
-                <span className="text-sm font-bold text-slate-600 dark:text-slate-400">مفعل</span>
+                <span className="text-sm font-bold text-[var(--color-text-muted)]">مفعل</span>
               </label>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setModal(null)}>إلغاء</Button>
               <Button variant="primary" onClick={handleSave} disabled={saving || !form.name.trim()}>
                 {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -310,15 +310,15 @@ export const CostCenters: React.FC = () => {
       {/* Delete Confirm */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <span className="material-icons-round text-rose-500 text-4xl mb-3">warning</span>
             <h3 className="text-lg font-bold mb-2">حذف مركز التكلفة</h3>
-            <p className="text-sm text-slate-500 mb-6">هل أنت متأكد من حذف هذا المركز؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا المركز؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirm(null)}>إلغاء</Button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
-                className="px-6 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-all"
+                className="px-6 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-[var(--border-radius-lg)] transition-all"
               >
                 حذف
               </button>

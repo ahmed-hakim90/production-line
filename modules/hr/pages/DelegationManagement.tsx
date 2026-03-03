@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -150,7 +150,7 @@ export const DelegationManagement: React.FC = () => {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+          <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
             <span className="material-icons-round text-primary text-2xl">swap_horiz</span>
           </div>
           <div>
@@ -167,7 +167,7 @@ export const DelegationManagement: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+          <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
             <span className="material-icons-round text-primary text-2xl">swap_horiz</span>
           </div>
           <div>
@@ -191,11 +191,11 @@ export const DelegationManagement: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">المفوّض إليه *</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">المفوّض إليه *</label>
                 <select
                   value={toEmployeeId}
                   onChange={(e) => setToEmployeeId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="">اختر الموظف...</option>
                   {eligibleDelegatees.map((emp: FirestoreEmployee) => (
@@ -205,13 +205,13 @@ export const DelegationManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">أنواع الطلبات</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">أنواع الطلبات</label>
                 <div className="flex gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setRequestTypes('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      requestTypes === 'all' ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
+                      requestTypes === 'all' ? 'bg-primary text-white' : 'bg-[#f0f2f5] text-slate-500'
                     }`}
                   >الكل</button>
                   {(Object.entries(REQUEST_TYPE_LABELS) as [ApprovalRequestType, string][]).map(([key, label]) => (
@@ -219,10 +219,10 @@ export const DelegationManagement: React.FC = () => {
                       key={key}
                       type="button"
                       onClick={() => toggleRequestType(key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
                         requestTypes !== 'all' && requestTypes.includes(key)
                           ? 'bg-primary text-white'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                          : 'bg-[#f0f2f5] text-slate-500'
                       }`}
                     >{label}</button>
                   ))}
@@ -230,21 +230,21 @@ export const DelegationManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">تاريخ البداية *</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">تاريخ البداية *</label>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">تاريخ النهاية *</label>
+                <label className="block text-sm font-bold text-[var(--color-text)]">تاريخ النهاية *</label>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
             </div>
@@ -265,9 +265,9 @@ export const DelegationManagement: React.FC = () => {
       {delegations.length === 0 ? (
         <Card>
           <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">swap_horiz</span>
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">swap_horiz</span>
             <p className="text-sm font-bold text-slate-500">لا توجد تفويضات حالياً</p>
-            <p className="text-xs text-slate-400 mt-1">أنشئ تفويضاً لتمكين شخص آخر من الموافقة نيابةً عنك</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">أنشئ تفويضاً لتمكين شخص آخر من الموافقة نيابةً عنك</p>
           </div>
         </Card>
       ) : (
@@ -277,22 +277,22 @@ export const DelegationManagement: React.FC = () => {
             const expired = !d.isActive || d.endDate < new Date().toISOString().slice(0, 10);
 
             return (
-              <div key={d.id} className={`bg-white dark:bg-slate-900 rounded-xl border p-5 ${
-                active ? 'border-emerald-200 dark:border-emerald-800' : 'border-slate-200 dark:border-slate-800 opacity-70'
+              <div key={d.id} className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border p-5 ${
+                active ? 'border-emerald-200' : 'border-[var(--color-border)] opacity-70'
               }`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      active ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-slate-100 dark:bg-slate-800'
+                    <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center ${
+                      active ? 'bg-emerald-100' : 'bg-[#f0f2f5]'
                     }`}>
                       <span className={`material-icons-round ${active ? 'text-emerald-500' : 'text-slate-400'}`}>swap_horiz</span>
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-slate-800 dark:text-white">
+                        <span className="font-bold text-[var(--color-text)]">
                           {employeeMap.get(d.fromEmployeeId) || d.fromEmployeeName}
                         </span>
-                        <span className="material-icons-round text-slate-400 text-sm">arrow_forward</span>
+                        <span className="material-icons-round text-[var(--color-text-muted)] text-sm">arrow_forward</span>
                         <span className="font-bold text-primary">
                           {employeeMap.get(d.toEmployeeId) || d.toEmployeeName}
                         </span>
@@ -300,7 +300,7 @@ export const DelegationManagement: React.FC = () => {
                         {expired && <Badge variant="neutral">منتهي</Badge>}
                         {!d.isActive && !expired && <Badge variant="danger">ملغي</Badge>}
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                         {formatDate(d.startDate)} → {formatDate(d.endDate)}
                         {' — '}
                         {d.requestTypes === 'all' ? 'جميع الأنواع' :
@@ -326,7 +326,7 @@ export const DelegationManagement: React.FC = () => {
       )}
 
       {toast && (
-        <div className={`fixed bottom-6 left-6 z-50 px-5 py-3 rounded-xl shadow-xl text-sm font-bold text-white flex items-center gap-2 animate-slide-up ${
+        <div className={`fixed bottom-6 left-6 z-50 px-5 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold text-white flex items-center gap-2 animate-slide-up ${
           toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
         }`}>
           <span className="material-icons-round text-lg">

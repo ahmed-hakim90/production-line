@@ -4,26 +4,66 @@ import { useAppStore } from '@/store/useAppStore';
 import { usePermission, useCurrentRole } from '@/utils/permissions';
 import { MENU_CONFIG } from '@/config/menu.config';
 import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSidebar';
+import type { SidebarIconStyle } from '@/types';
 
 export interface SidebarProps {
   open: boolean;
   onClose: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
-  const { can } = usePermission();
-  const { roleName, roleColor, isReadOnly } = useCurrentRole();
-  const userDisplayName = useAppStore((s) => s.userDisplayName);
-  const userEmail = useAppStore((s) => s.userEmail);
-  const logout = useAppStore((s) => s.logout);
-  const location = useLocation();
+/* ── ERPNext-style icon colors (colorful mode) */
+const COLORFUL_ICON: Record<string, string> = {
+  dashboards: 'text-blue-600',
+  production: 'text-emerald-600',
+  inventory:  'text-teal-600',
+  hr:         'text-violet-600',
+  costs:      'text-amber-600',
+  quality:    'text-cyan-600',
+  system:     'text-rose-600',
+};
 
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+const COLORFUL_BG: Record<string, string> = {
+  dashboards: 'bg-blue-50',
+  production: 'bg-emerald-50',
+  inventory:  'bg-teal-50',
+  hr:         'bg-violet-50',
+  costs:      'bg-amber-50',
+  quality:    'bg-cyan-50',
+  system:     'bg-rose-50',
+};
+
+function getIconClasses(
+  groupKey: string,
+  style: SidebarIconStyle,
+): { iconColor: string; activeBg: string } {
+  if (style === 'colorful') {
+    return {
+      iconColor: COLORFUL_ICON[groupKey] ?? 'text-slate-500',
+      activeBg:  COLORFUL_BG[groupKey]  ?? 'bg-primary/5',
+    };
+  }
+  if (style === 'primary') {
+    return { iconColor: 'text-primary', activeBg: 'bg-primary/8' };
+  }
+  // muted
+  return { iconColor: 'text-slate-400', activeBg: 'bg-slate-100' };
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
+  const { can }  = usePermission();
+  const { roleName, roleColor, isReadOnly } = useCurrentRole();
+  const userDisplayName    = useAppStore((s) => s.userDisplayName);
+  const userEmail          = useAppStore((s) => s.userEmail);
+  const logout             = useAppStore((s) => s.logout);
+  const sidebarIconStyle   = useAppStore((s) => (s.systemSettings?.theme?.sidebarIconStyle ?? 'colorful') as SidebarIconStyle);
+  const location        = useLocation();
+
+  const [openGroup,   setOpenGroup]   = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const { collapsed } = useSidebar();
-  const badgeCounts = useSidebarBadges();
+  const { collapsed, toggleCollapse } = useSidebar();
+  const badgeCounts   = useSidebarBadges();
   const { isActiveItem, isActiveGroup, activeGroupKey } = useSidebarActiveRoute();
 
   const visibleGroups = useMemo(
@@ -37,124 +77,197 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   useEffect(() => { onClose(); setProfileOpen(false); }, [location.pathname]);
 
   useEffect(() => {
-    if (activeGroupKey) {
-      setOpenGroup(activeGroupKey);
-    }
-  }, [activeGroupKey]);
+    if (activeGroupKey && !collapsed) setOpenGroup(activeGroupKey);
+  }, [activeGroupKey, collapsed]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+      if (profileRef.current && !profileRef.current.contains(e.target as Node))
+        setProfileOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const toggleGroup = (key: string) => setOpenGroup((p) => (p === key ? null : key));
-  const w = collapsed ? 'w-20' : 'w-64';
+  const sidebarW = collapsed ? 'w-[52px]' : 'w-[260px]';
 
   return (
     <>
+      {/* Mobile overlay */}
       {open && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} />
+        <div
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+          onClick={onClose}
+        />
       )}
 
       <aside
-        className={`${w} bg-[var(--color-sidebar-bg)] text-[var(--color-sidebar-text)] border-l border-[var(--color-border)] flex flex-col fixed h-full z-50 transition-all duration-300 ease-in-out ${open ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}
+        className={[
+          sidebarW,
+          'fixed inset-y-0 right-0 z-50 flex flex-col',
+          'bg-[var(--color-sidebar-bg)]',
+          'border-l border-[var(--color-sidebar-border)]',
+          'transition-[width] duration-300 ease-in-out overflow-hidden',
+          open ? 'translate-x-0' : 'translate-x-full lg:translate-x-0',
+        ].join(' ')}
+        style={{ boxShadow: open ? '0 4px 20px rgba(0,0,0,0.1)' : undefined }}
       >
-        {/* ── Header ── */}
-        <div className="p-4 flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/30 shrink-0">
-            <span className="material-icons-round text-xl">factory</span>
-          </div>
-          {!collapsed && (
-            <p className="flex-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider min-w-0">
-              نظام إدارة الإنتاج
-            </p>
-          )}
+
+        {/* ── Header ─────────────────────────────────────────────────── */}
+        <div className={[
+          'shrink-0 flex items-center border-b border-[var(--color-sidebar-border)]',
+          collapsed ? 'justify-center h-[52px] px-0' : 'h-[52px] px-3 gap-2.5',
+        ].join(' ')}>
+
+          {/* Logo icon */}
           <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all lg:hidden shrink-0"
+            onClick={collapsed ? toggleCollapse : undefined}
+            title={collapsed ? 'توسيع القائمة' : undefined}
+            className={[
+              'w-8 h-8 bg-primary rounded-[var(--border-radius-base)] flex items-center justify-center text-white shrink-0',
+              collapsed ? 'hover:opacity-90 cursor-pointer' : 'cursor-default',
+            ].join(' ')}
           >
-            <span className="material-icons-round text-xl">close</span>
+            <span className="material-icons-round text-[16px]">factory</span>
           </button>
+
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12.5px] font-bold text-[var(--color-text)] truncate leading-tight">مؤسسة المغربي</p>
+                <p className="text-[10px] text-[var(--color-text-muted)] truncate leading-tight">نظام إدارة الإنتاج</p>
+              </div>
+
+              {/* Desktop collapse */}
+              <button
+                onClick={toggleCollapse}
+                title="طي القائمة"
+                className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] transition-colors shrink-0"
+              >
+                <span className="material-icons-round text-[16px]">keyboard_double_arrow_left</span>
+              </button>
+
+              {/* Mobile close */}
+              <button
+                onClick={onClose}
+                className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
+              >
+                <span className="material-icons-round text-[16px]">close</span>
+              </button>
+            </>
+          )}
         </div>
 
+        {/* ── Read-only notice ─────────────────────────────────────── */}
         {isReadOnly && !collapsed && (
-          <div className="mx-3 mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center gap-2">
-            <span className="material-icons-round text-amber-500 text-sm">visibility</span>
-            <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">وضع القراءة فقط</span>
+          <div className="mx-2 mt-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-sm)] flex items-center gap-1.5 shrink-0">
+            <span className="material-icons-round text-amber-500 text-[14px]">visibility</span>
+            <span className="text-[11px] font-semibold text-amber-700">وضع القراءة فقط</span>
           </div>
         )}
 
-        {/* ── Navigation ── */}
-        <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-2">
-          {visibleGroups.map((group) => {
-            const active = isActiveGroup(group.key);
-            const isOpen = openGroup === group.key;
+        {/* ── Navigation ───────────────────────────────────────────── */}
+        <nav className={['flex-1 overflow-y-auto overflow-x-hidden py-2', collapsed ? 'px-1.5' : 'px-2'].join(' ')}>
+          {visibleGroups.map((group, gIdx) => {
+            const active     = isActiveGroup(group.key);
+            const isOpen     = openGroup === group.key;
             const totalBadge = group.children.reduce((s, c) => s + (badgeCounts[c.key] || 0), 0);
+            const { iconColor, activeBg } = getIconClasses(group.key, sidebarIconStyle);
 
+            /* ── Collapsed: icon-only pill ── */
+            if (collapsed) {
+              return (
+                <div key={group.key} className="relative mb-0.5 group/nav">
+                  <button
+                    title={group.label}
+                    onClick={() => { toggleCollapse(); setOpenGroup(group.key); }}
+                    className={[
+                      'w-full flex justify-center items-center h-9 rounded-[var(--border-radius-sm)] transition-colors cursor-pointer',
+                      active
+                        ? `${activeBg} ${iconColor}`
+                        : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)]',
+                    ].join(' ')}
+                  >
+                    <span className="material-icons-round text-[18px]">{group.icon}</span>
+                    {totalBadge > 0 && (
+                      <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-rose-500 rounded-full" />
+                    )}
+                  </button>
+                  {/* Tooltip towards content (left side for RTL right sidebar) */}
+                  <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]">
+                    {group.label}
+                  </span>
+                </div>
+              );
+            }
+
+            /* ── Expanded: accordion group ── */
             return (
-              <div key={group.key}>
+              <div key={group.key} className={gIdx > 0 ? 'mt-1' : ''}>
+                {/* Separator line between groups (except first) */}
+                {gIdx > 0 && (
+                  <div className="h-px bg-[var(--color-sidebar-border)] mx-2 mb-1" />
+                )}
+
+                {/* Group header button */}
                 <button
-                  onClick={() => collapsed ? undefined : toggleGroup(group.key)}
-                  title={collapsed ? group.label : undefined}
-                  className={`group relative w-full flex items-center gap-3 rounded-xl transition-all select-none ${collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'} ${
+                  onClick={() => toggleGroup(group.key)}
+                  className={[
+                    'w-full flex items-center gap-2 px-2 py-2 rounded-[var(--border-radius-sm)] transition-colors select-none text-start',
                     active
-                      ? 'bg-primary/10 text-primary font-bold'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 font-bold'
-                  }`}
+                      ? `${iconColor} font-semibold`
+                      : 'text-[var(--color-text)] font-medium hover:bg-[#f0f2f5]',
+                  ].join(' ')}
                 >
-                  {active && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-l-full" />}
-                  <span className="material-icons-round text-[22px] shrink-0">{group.icon}</span>
-
-                  {!collapsed && (
-                    <>
-                      <span className="flex-1 text-start text-[14px]">{group.label}</span>
-                      {totalBadge > 0 && (
-                        <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
-                          {totalBadge > 99 ? '99+' : totalBadge}
-                        </span>
-                      )}
-                      <span className={`material-icons-round text-lg text-slate-400 transition-transform duration-300 ${isOpen ? '-rotate-90' : ''}`}>
-                        chevron_left
-                      </span>
-                    </>
-                  )}
-
-                  {collapsed && totalBadge > 0 && (
-                    <span className="absolute top-1 left-1 w-2.5 h-2.5 bg-rose-500 rounded-full" />
-                  )}
-
-                  {collapsed && (
-                    <span className="pointer-events-none absolute right-full mr-3 px-3 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg z-[60]">
-                      {group.label}
+                  <span className={[
+                    'material-icons-round text-[17px] shrink-0',
+                    active ? iconColor : 'text-[var(--color-text-muted)]',
+                  ].join(' ')}>
+                    {group.icon}
+                  </span>
+                  <span className="flex-1 text-[13px] truncate">{group.label}</span>
+                  {totalBadge > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full shrink-0">
+                      {totalBadge > 99 ? '99+' : totalBadge}
                     </span>
                   )}
+                  <span className={`material-icons-round text-[14px] text-[var(--color-text-muted)] transition-transform duration-200 shrink-0 ${isOpen ? '-rotate-90' : ''}`}>
+                    chevron_left
+                  </span>
                 </button>
 
-                {!collapsed && (
-                  <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                    <div className="pt-1 pb-1 mr-4 border-r-2 border-slate-200/80 dark:border-slate-700/80 space-y-0.5">
+                {/* Sub-items */}
+                <div className={[
+                  'grid transition-all duration-200 ease-in-out',
+                  isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+                ].join(' ')}>
+                  <div className="overflow-hidden">
+                    <div className="py-0.5 mr-5 border-r border-[var(--color-sidebar-border)]">
                       {group.children.map((item) => {
                         const itemActive = isActiveItem(item);
-                        const badge = badgeCounts[item.key] || 0;
-
+                        const badge      = badgeCounts[item.key] || 0;
                         return (
                           <NavLink
                             key={item.path}
                             to={item.path}
-                            className={`group/item relative flex items-center gap-3 pr-9 pl-3 py-2.5 rounded-lg text-[13.5px] transition-all ${
+                            className={[
+                              'relative flex items-center gap-2 pr-2.5 pl-2 py-1.5 rounded-[var(--border-radius-sm)] text-[12.5px] transition-colors',
                               itemActive
-                                ? 'bg-primary/10 text-primary font-bold'
-                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-700 dark:hover:text-slate-300 font-medium'
-                            }`}
+                                ? `${activeBg} ${iconColor} font-semibold`
+                                : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] font-medium',
+                            ].join(' ')}
                           >
-                            {itemActive && <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-l-full" />}
-                            <span className="material-icons-round text-[19px]">{item.icon}</span>
+                            {/* Active right-border indicator */}
+                            {itemActive && (
+                              <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current rounded-l-full" />
+                            )}
+                            <span className={`material-icons-round text-[15px] shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
+                              {item.icon}
+                            </span>
                             <span className="flex-1 truncate">{item.label}</span>
                             {badge > 0 && (
-                              <span className="min-w-[20px] h-[20px] px-1 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
+                              <span className="min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-bold bg-rose-500 text-white rounded-full shrink-0">
                                 {badge > 99 ? '99+' : badge}
                               </span>
                             )}
@@ -163,76 +276,86 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       })}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
         </nav>
 
-        {/* ── Profile ── */}
-        <div className="border-t border-slate-100 dark:border-slate-800 shrink-0" ref={profileRef}>
+        {/* ── Profile ──────────────────────────────────────────────── */}
+        <div
+          ref={profileRef}
+          className="shrink-0 border-t border-[var(--color-sidebar-border)]"
+        >
           {collapsed ? (
-            <div className="p-2 flex flex-col items-center gap-2">
+            <div className="p-1.5 flex justify-center">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
                 title={userDisplayName ?? 'المستخدم'}
-                className="group relative w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center hover:from-primary/30 hover:to-primary/10 transition-all ring-2 ring-primary/20"
+                className="group/prof relative w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center ring-1 ring-primary/25 hover:ring-primary/40 transition-all"
               >
-                <span className="text-primary font-bold text-sm">
+                <span className="text-primary font-bold text-xs">
                   {(userDisplayName ?? 'U').charAt(0).toUpperCase()}
                 </span>
-                <span className="pointer-events-none absolute right-full mr-3 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg z-[60]">
+                <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/prof:opacity-100 transition-opacity shadow-lg z-[60]">
                   {userDisplayName ?? 'المستخدم'}
                 </span>
               </button>
             </div>
           ) : (
-            <div className="p-3">
+            <div className="p-2">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
-                className={`w-full p-3 rounded-xl transition-all text-start ${profileOpen ? 'bg-primary/5 ring-1 ring-primary/20' : 'bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80'}`}
+                className={[
+                  'w-full flex items-center gap-2.5 p-2 rounded-[var(--border-radius-base)] transition-colors text-start',
+                  profileOpen
+                    ? 'bg-[#f0f2f5]'
+                    : 'hover:bg-[#f0f2f5]',
+                ].join(' ')}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 ring-2 ring-primary/20">
-                    <span className="text-primary font-bold text-sm">
-                      {(userDisplayName ?? 'U').charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="overflow-hidden flex-1 min-w-0">
-                    <p className="text-sm font-bold truncate">{userDisplayName ?? 'المستخدم'}</p>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold mt-0.5 ${roleColor}`}>
-                      {roleName}
-                    </span>
-                  </div>
-                  <span className={`material-icons-round text-sm text-slate-400 transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''}`}>
-                    expand_less
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
+                  <span className="text-primary font-bold text-xs">
+                    {(userDisplayName ?? 'U').charAt(0).toUpperCase()}
                   </span>
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold truncate text-[var(--color-text)] leading-tight">
+                    {userDisplayName ?? 'المستخدم'}
+                  </p>
+                  <span className={`inline-flex items-center px-1.5 py-px rounded text-[10px] font-semibold mt-0.5 ${roleColor}`}>
+                    {roleName}
+                  </span>
+                </div>
+                <span className={`material-icons-round text-[14px] text-[var(--color-text-muted)] transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''}`}>
+                  expand_less
+                </span>
               </button>
 
               {profileOpen && (
-                <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 bg-white dark:bg-slate-800">
-                  <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700">
-                    <p className="text-[10px] text-slate-400 font-mono truncate" dir="ltr">{userEmail}</p>
+                <div className="mt-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden bg-[var(--color-card)]" style={{ boxShadow: 'var(--shadow-dropdown)' }}>
+                  <div className="px-3 py-2 border-b border-[var(--color-border)] bg-[#f8f9fa]">
+                    <p className="text-[10px] text-[var(--color-text-muted)] font-mono truncate" dir="ltr">
+                      {userEmail}
+                    </p>
                   </div>
-
-                  {can('selfService.view') && (
-                    <NavLink
-                      to="/self-service"
-                      className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                  <div className="p-1">
+                    {can('selfService.view') && (
+                      <NavLink
+                        to="/self-service"
+                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-medium text-[var(--color-text)] hover:bg-[#f0f2f5] transition-colors"
+                      >
+                        <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">account_circle</span>
+                        <span>ملفي الشخصي</span>
+                      </NavLink>
+                    )}
+                    <button
+                      onClick={logout}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-start border-t border-[var(--color-border)] mt-1 pt-2"
                     >
-                      <span className="material-icons-round text-lg text-slate-400">account_circle</span>
-                      <span>ملفي الشخصي</span>
-                    </NavLink>
-                  )}
-
-                  <button
-                    onClick={logout}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors text-start border-t border-slate-100 dark:border-slate-700"
-                  >
-                    <span className="material-icons-round text-lg">logout</span>
-                    <span>تسجيل الخروج</span>
-                  </button>
+                      <span className="material-icons-round text-[16px]">logout</span>
+                      <span>تسجيل الخروج</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

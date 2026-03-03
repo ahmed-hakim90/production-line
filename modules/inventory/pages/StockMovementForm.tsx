@@ -39,6 +39,8 @@ export const StockMovementForm: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
+  const uid = useAppStore((s) => s.uid);
+  const userEmail = useAppStore((s) => s.userEmail);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const defaultProductionWarehouseId = useAppStore(
@@ -75,7 +77,7 @@ export const StockMovementForm: React.FC = () => {
     documentTitle: 'stock-transfer',
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const [whs, rms, txs, bals] = await Promise.all([
       warehouseService.getAll(),
       rawMaterialService.getAll(),
@@ -92,11 +94,11 @@ export const StockMovementForm: React.FC = () => {
       return Math.max(max, Number(match[1] || 0));
     }, 0);
     setNextReferenceSeq(maxExisting + 1);
-  };
+  }, []);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [loadData]);
 
   const openImportInByCodeModal = useCallback(() => {
     openModal(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE, {
@@ -374,7 +376,8 @@ export const StockMovementForm: React.FC = () => {
           referenceNo: resolvedReferenceNo,
           lines: requestLines,
           note: '',
-          createdBy: userDisplayName || 'Current User',
+          createdBy: userDisplayName || userEmail || 'Current User',
+          createdByUserId: uid || undefined,
         });
       } else {
         if (!selectedItem) {
@@ -524,80 +527,78 @@ export const StockMovementForm: React.FC = () => {
     setShowPrintPreview(true);
   };
 
+  /* ── ERPNext field helpers ── */
+  const fieldClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f8f9fa] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-white focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
+  const fieldDisabledClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f0f2f5] text-[var(--color-text)] font-medium select-none cursor-default';
+  const labelClass = 'block text-[11.5px] font-semibold text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wide';
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدخال حركة مخزون</h2>
-        <p className="text-sm text-slate-500 font-medium">وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة.</p>
+    <div className="space-y-5">
+
+      {/* ── Page Header ── */}
+      <div className="erp-page-head">
+        <div className="erp-page-title-block">
+          <h2 className="page-title">إدخال حركة مخزون</h2>
+          <p className="page-subtitle">وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة</p>
+        </div>
       </div>
 
-      <Card>
-        <div className="mb-4 sm:mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-base sm:text-lg font-black text-slate-800 dark:text-white">تسجيل الحركة</h3>
-          {can('inventory.transactions.create') && (
-            <Button
-              variant="outline"
-              data-modal-key={MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE}
-              onClick={openImportInByCodeModal}
-              className="w-full sm:w-auto"
+      {/* ── Main Form Card ── */}
+      <div
+        className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]"
+        style={{ boxShadow: 'var(--shadow-card)' }}
+      >
+        {/* Card header */}
+        <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[var(--color-text)]">تسجيل الحركة</span>
+          {/* Reference badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-[var(--color-text-muted)] font-medium">رقم المرجع</span>
+            <span
+              className="text-[12.5px] font-bold px-2.5 py-0.5 rounded-full"
+              style={{
+                background: 'rgb(var(--color-primary)/0.1)',
+                color: 'rgb(var(--color-primary))',
+                border: '1px solid rgb(var(--color-primary)/0.2)',
+              }}
             >
-              <span className="material-icons-round text-sm">upload_file</span>
-              استيراد منتج نهائي بالكود
-            </Button>
-          )}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-sm font-bold text-slate-600 dark:text-slate-300">رقم المرجع</label>
-            <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-100 dark:bg-slate-800/70 text-sm font-bold text-slate-700 dark:text-slate-200">
               {referenceNo}
-            </div>
+            </span>
           </div>
-          {movementType === 'TRANSFER' && (
-            <div className="md:col-span-2 rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary/10 px-4 py-3 text-center">
-              <p className="text-xs font-bold text-primary/80">عنوان التحويلة</p>
-              <p className="text-sm font-black text-primary sm:text-base">تحويلة مخزنية رقم {referenceNo}</p>
-            </div>
-          )}
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-600 dark:text-slate-300">نوع الحركة</label>
-            <div className="grid grid-cols-2 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-              {[
-                { value: 'IN' as MovementType, label: 'وارد' },
-                { value: 'OUT' as MovementType, label: 'منصرف' },
-                { value: 'TRANSFER' as MovementType, label: 'تحويل' },
-                { value: 'ADJUSTMENT' as MovementType, label: 'تسوية (+/-)' },
-              ].map((opt) => (
+        </div>
+
+        {/* Form body */}
+        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+
+          {/* Movement type segmented */}
+          <div>
+            <label className={labelClass}>نوع الحركة</label>
+            <div className="erp-date-seg" style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+              {([
+                { value: 'TRANSFER' as MovementType, label: 'تحويل', icon: 'swap_horiz' },
+                { value: 'IN'       as MovementType, label: 'وارد',  icon: 'south_west' },
+                { value: 'OUT'      as MovementType, label: 'منصرف', icon: 'north_east' },
+                { value: 'ADJUSTMENT' as MovementType, label: 'تسوية', icon: 'tune' },
+              ] as const).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => setMovementType(opt.value)}
-                  className={`px-3 py-2.5 text-sm font-bold transition-all border-slate-200 dark:border-slate-700 ${
-                    movementType === opt.value
-                      ? 'bg-primary text-white'
-                      : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  } ${opt.value === 'IN' || opt.value === 'OUT' ? 'border-b' : ''} ${opt.value === 'IN' || opt.value === 'TRANSFER' ? 'border-l' : ''}`}
+                  className={`erp-date-seg-btn${movementType === opt.value ? ' active' : ''}`}
+                  style={{ justifyContent: 'center' }}
                 >
+                  <span className="material-icons-round" style={{ fontSize: 14 }}>{opt.icon}</span>
                   {opt.label}
                 </button>
               ))}
             </div>
           </div>
-          {movementType === 'TRANSFER' && (
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-300">مخزن الوجهة</label>
-              <SearchableSelect
-                options={toWarehouseSelectOptions}
-                value={toWarehouseId}
-                onChange={(value) => setToWarehouseId(value)}
-                placeholder="ابحث واختر مخزن الوجهة"
-              />
-            </div>
-          )}
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-600 dark:text-slate-300">نوع الصنف</label>
+
+          {/* Item type */}
+          <div>
+            <label className={labelClass}>نوع الصنف</label>
             <select
-              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
+              className={fieldClass}
               value={itemType}
               onChange={(e) => {
                 const nextType = e.target.value as ItemType;
@@ -612,12 +613,14 @@ export const StockMovementForm: React.FC = () => {
               <option value="raw_material">مادة خام</option>
             </select>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-600 dark:text-slate-300">المخزن</label>
+
+          {/* Source warehouse */}
+          <div>
+            <label className={labelClass}>المخزن</label>
             {isFinishedTransferFlow && hasAutoTransferSource ? (
-              <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-100 dark:bg-slate-800/70 text-sm font-bold text-slate-700 dark:text-slate-200">
+              <div className={fieldDisabledClass}>
                 {selectedFromWarehouse?.name || 'غير محدد'}
-                <span className="text-xs text-slate-500 mr-2">(من تم الصنع)</span>
+                <span className="text-[11px] text-[var(--color-text-muted)] mr-2">(من تم الصنع)</span>
               </div>
             ) : (
               <SearchableSelect
@@ -628,10 +631,24 @@ export const StockMovementForm: React.FC = () => {
               />
             )}
           </div>
-         
+
+          {/* Destination warehouse (TRANSFER only) */}
+          {movementType === 'TRANSFER' && (
+            <div>
+              <label className={labelClass}>مخزن الوجهة</label>
+              <SearchableSelect
+                options={toWarehouseSelectOptions}
+                value={toWarehouseId}
+                onChange={(value) => setToWarehouseId(value)}
+                placeholder="ابحث واختر مخزن الوجهة"
+              />
+            </div>
+          )}
+
+          {/* Item (non-TRANSFER) */}
           {movementType !== 'TRANSFER' && (
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-300">الصنف</label>
+            <div>
+              <label className={labelClass}>الصنف</label>
               <SearchableSelect
                 options={itemSelectOptions}
                 value={itemId}
@@ -640,33 +657,58 @@ export const StockMovementForm: React.FC = () => {
               />
             </div>
           )}
+
+          {/* Quantity (non-TRANSFER) */}
           {movementType !== 'TRANSFER' && (
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-300">الكمية</label>
+            <div>
+              <label className={labelClass}>الكمية</label>
               <input
                 type="number"
                 step="any"
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
+                className={fieldClass}
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
               />
             </div>
           )}
+
+          {/* Transfer lines (TRANSFER only) */}
           {movementType === 'TRANSFER' && (
-            <div className="space-y-3 md:col-span-2">
+            <div className="md:col-span-2 space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-bold text-slate-600 dark:text-slate-300">أصناف التحويلة</label>
-                <Button
-                  variant="outline"
+                <label className={labelClass} style={{ marginBottom: 0 }}>أصناف التحويلة</label>
+                <button
+                  type="button"
+                  className="btn btn-secondary hidden sm:inline-flex"
                   onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                   disabled={saving}
-                  className="hidden sm:inline-flex"
                 >
-                  <span className="material-icons-round text-sm">add</span>
+                  <span className="material-icons-round" style={{ fontSize: 15 }}>add</span>
                   إضافة منتج
-                </Button>
+                </button>
               </div>
-              <div className="space-y-3">
+
+              {/* Lines table */}
+              <div
+                className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden"
+                style={{ background: 'var(--color-card)' }}
+              >
+                {/* Table header */}
+                <div
+                  className="grid gap-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] px-3 py-2"
+                  style={{
+                    gridTemplateColumns: '1fr 160px 140px 40px',
+                    borderBottom: '1px solid var(--color-border)',
+                    background: '#f8f9fa',
+                  }}
+                >
+                  <span>الصنف</span>
+                  <span className="text-center">الوحدة</span>
+                  <span className="text-center">الكمية</span>
+                  <span />
+                </div>
+
+                {/* Rows */}
                 {transferItems.map((line, idx) => {
                   const lineItem = getItemById(line.itemId);
                   const available = getAvailableForItem(line.itemId);
@@ -675,9 +717,17 @@ export const StockMovementForm: React.FC = () => {
                     .reduce((sum, x) => sum + lineQuantityInPieces(x), 0);
                   const remaining = available - requestedForItem;
                   return (
-                    <div key={line.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 sm:p-3 grid grid-cols-1 md:grid-cols-12 gap-3">
-                      <div className="md:col-span-5 space-y-1">
-                        <label className="text-xs font-bold text-slate-500">الصنف #{idx + 1}</label>
+                    <div
+                      key={line.id}
+                      className="grid gap-0 px-3 py-2.5 items-start"
+                      style={{
+                        gridTemplateColumns: '1fr 160px 140px 40px',
+                        borderBottom: idx < transferItems.length - 1 ? '1px solid var(--color-border)' : 'none',
+                      }}
+                    >
+                      {/* Item search */}
+                      <div className="pl-3">
+                        <div className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1">الصنف #{idx + 1}</div>
                         <SearchableSelect
                           options={itemSelectOptions}
                           value={line.itemId}
@@ -689,65 +739,57 @@ export const StockMovementForm: React.FC = () => {
                           placeholder="ابحث واختر الصنف"
                         />
                         {line.itemId && (
-                          <p className={`text-xs font-bold ${remaining < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                            المتاح: {available} | المتبقي بعد الإجمالي: {remaining}
+                          <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
+                            متاح: {available} · متبقي: {remaining}
                           </p>
                         )}
                       </div>
-                      <div className="md:col-span-3 space-y-1">
-                        <label className="text-xs font-bold text-slate-500">الوحدة</label>
+
+                      {/* Unit toggle */}
+                      <div className="px-2">
                         {itemType === 'finished_good' ? (
-                          <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden w-full">
+                          <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
                             <button
                               type="button"
+                              className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
                               onClick={() =>
                                 setTransferItems((prev) =>
                                   prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)),
                                 )
                               }
-                              className={`flex-1 px-2.5 py-2 text-xs sm:text-sm font-bold transition-all ${
-                                line.unit === 'piece'
-                                  ? 'bg-primary text-white'
-                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                              }`}
                             >
                               قطعة
                             </button>
                             <button
                               type="button"
+                              className={`erp-date-seg-btn flex-1${line.unit === 'carton' ? ' active' : ''}`}
                               onClick={() =>
                                 setTransferItems((prev) =>
                                   prev.map((x) => (x.id === line.id ? { ...x, unit: 'carton' } : x)),
                                 )
                               }
-                              className={`flex-1 px-2.5 py-2 text-xs sm:text-sm font-bold transition-all ${
-                                line.unit === 'carton'
-                                  ? 'bg-primary text-white'
-                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                              }`}
                             >
                               كرتونة
                             </button>
                           </div>
                         ) : (
-                          <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-100 dark:bg-slate-800/70 text-sm font-bold text-slate-700 dark:text-slate-200">
-                            وحدة
-                          </div>
+                          <div className={fieldDisabledClass} style={{ textAlign: 'center' }}>وحدة</div>
                         )}
                         {itemType === 'finished_good' && line.unit === 'carton' && (
-                          <p className="text-xs text-slate-500">
+                          <p className="text-[10.5px] text-[var(--color-text-muted)] mt-1 text-center">
                             {Number(lineItem?.unitsPerCarton || 0) > 0
-                              ? `الوحدات/كرتونة: ${lineItem?.unitsPerCarton}`
-                              : 'لا توجد قيمة وحدات/كرتونة لهذا المنتج.'}
+                              ? `${lineItem?.unitsPerCarton} وحدة/كرتونة`
+                              : 'لا توجد قيمة'}
                           </p>
                         )}
                       </div>
-                      <div className="md:col-span-3 space-y-1">
-                        <label className="text-xs font-bold text-slate-500">الكمية</label>
+
+                      {/* Quantity input */}
+                      <div className="px-2">
                         <input
                           type="number"
                           step="any"
-                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
+                          className={fieldClass}
                           value={line.quantity}
                           onChange={(e) =>
                             setTransferItems((prev) =>
@@ -756,115 +798,145 @@ export const StockMovementForm: React.FC = () => {
                           }
                         />
                       </div>
-                      <div className="md:col-span-1 flex items-end">
+
+                      {/* Delete */}
+                      <div className="flex items-center justify-center pt-0.5">
                         <button
                           type="button"
                           onClick={() =>
                             setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))
                           }
-                          className="w-full rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 px-2 py-2 font-bold disabled:opacity-40"
+                          className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
                           disabled={transferItems.length <= 1}
                           title="حذف الصف"
                         >
-                          <span className="material-icons-round text-sm">delete</span>
+                          <span className="material-icons-round" style={{ fontSize: 16 }}>delete_outline</span>
                         </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <Button
-                variant="outline"
+
+              {/* Add row button (mobile) */}
+              <button
+                type="button"
+                className="btn btn-secondary w-full sm:hidden"
                 onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                 disabled={saving}
-                className="w-full sm:hidden"
               >
-                <span className="material-icons-round text-sm">add</span>
+                <span className="material-icons-round" style={{ fontSize: 15 }}>add</span>
                 إضافة منتج
-              </Button>
+              </button>
             </div>
           )}
         </div>
 
+        {/* Status message */}
         {message && (
-          <div className={`mt-4 rounded-xl px-4 py-3 text-sm font-bold ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-            {message.text}
+          <div className={`mx-5 mb-4 erp-alert${message.type === 'success' ? ' erp-alert-success' : ' erp-alert-error'}`}>
+            <span className="material-icons-round text-[16px] shrink-0">
+              {message.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <span>{message.text}</span>
           </div>
         )}
 
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          {/* {movementType === 'TRANSFER' && (
-            <Button
-              variant="outline"
-              onClick={() => void handleSubmit('preview')}
-              disabled={!can('inventory.transactions.create') || saving}
-              className="w-full sm:w-auto"
-            >
-              <span className="material-icons-round text-sm">{saving ? 'hourglass_top' : 'preview'}</span>
-              حفظ ومعاينة الطباعة
-            </Button>
-          )} */}
+        {/* Form actions */}
+        <div
+          className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end items-center"
+          style={{ background: '#f8f9fa', borderRadius: '0 0 var(--border-radius-lg) var(--border-radius-lg)' }}
+        >
           {movementType === 'TRANSFER' && (
-            <Button
-              variant="outline"
+            <button
+              type="button"
+              className="btn btn-secondary w-full sm:w-auto"
               onClick={() => void handleSubmit('share')}
               disabled={!can('inventory.transactions.create') || saving}
-              className="w-full sm:w-auto"
             >
-              <span className="material-icons-round text-sm">{saving ? 'hourglass_top' : 'share'}</span>
+              <span className="material-icons-round" style={{ fontSize: 15 }}>
+                {saving ? 'hourglass_top' : 'share'}
+              </span>
               حفظ ومشاركة واتساب
-            </Button>
+            </button>
           )}
-          <Button
-            variant="primary"
+          <button
+            type="button"
+            className="btn btn-primary w-full sm:w-auto"
             onClick={() => void handleSubmit('none')}
             disabled={!can('inventory.transactions.create') || saving}
-            className="w-full sm:w-auto"
           >
-            <span className="material-icons-round text-sm">{saving ? 'hourglass_top' : 'save'}</span>
-            حفظ الحركة
-          </Button>
+            <span className="material-icons-round" style={{ fontSize: 15 }}>
+              {saving ? 'hourglass_top' : 'save'}
+            </span>
+            {saving ? 'جاري الحفظ...' : 'حفظ الحركة'}
+          </button>
         </div>
-      </Card>
+      </div>
 
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+      {/* Hidden print component */}
+      <div style={{ position: 'fixed', right: 0, top: 0, zIndex: -1, pointerEvents: 'none' }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
 
+      {/* Share toast */}
       {shareToast && (
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 shadow-lg">
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{shareToast}</p>
+        <div
+          className="fixed bottom-5 left-1/2 z-50 erp-alert erp-alert-success"
+          style={{ transform: 'translateX(-50%)', maxWidth: 420, boxShadow: 'var(--shadow-modal)' }}
+        >
+          <span className="material-icons-round text-[16px] shrink-0">share</span>
+          <p className="flex-1 text-[13px]">{shareToast}</p>
+          <button
+            onClick={() => setShareToast(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', opacity: 0.7 }}
+          >
+            <span className="material-icons-round" style={{ fontSize: 15 }}>close</span>
+          </button>
         </div>
       )}
 
+      {/* Print preview modal */}
       {showPrintPreview && previewData && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4"
           onClick={() => setShowPrintPreview(false)}
         >
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-800 max-h-[92vh] flex flex-col"
+            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-5xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="text-base sm:text-lg font-bold">معاينة طباعة التحويلة</h3>
-              <button onClick={() => setShowPrintPreview(false)} className="text-slate-400 hover:text-slate-600">
-                <span className="material-icons-round">close</span>
+            {/* Modal header */}
+            <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 18 }}>preview</span>
+                <span className="text-[14px] font-semibold">معاينة طباعة التحويلة</span>
+              </div>
+              <button
+                onClick={() => setShowPrintPreview(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors"
+              >
+                <span className="material-icons-round" style={{ fontSize: 18 }}>close</span>
               </button>
             </div>
-            <div className="p-2 sm:p-4 overflow-auto flex-1 bg-slate-50 dark:bg-slate-950/40">
+            {/* Modal body */}
+            <div className="p-3 sm:p-5 overflow-auto flex-1" style={{ background: '#f8f9fa' }}>
               <div className="mx-auto w-fit">
                 <StockTransferPrint data={previewData} printSettings={printTemplate} />
               </div>
             </div>
-            <div className="px-4 sm:px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowPrintPreview(false)} className="w-full sm:w-auto">
+            {/* Modal footer */}
+            <div
+              className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2"
+              style={{ background: '#f8f9fa' }}
+            >
+              <button className="btn btn-secondary w-full sm:w-auto" onClick={() => setShowPrintPreview(false)}>
                 إغلاق
-              </Button>
-              <Button variant="primary" onClick={() => void handlePrintFromPreview()} className="w-full sm:w-auto">
-                <span className="material-icons-round text-sm">print</span>
+              </button>
+              <button className="btn btn-primary w-full sm:w-auto" onClick={() => void handlePrintFromPreview()}>
+                <span className="material-icons-round" style={{ fontSize: 15 }}>print</span>
                 طباعة الآن
-              </Button>
+              </button>
             </div>
           </div>
         </div>

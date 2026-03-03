@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -17,10 +17,10 @@ const STATUS_LABELS: Record<QualityReworkOrder['status'], string> = {
   scrap: 'سكراب',
 };
 const STATUS_BADGE_CLASS: Record<QualityReworkOrder['status'], string> = {
-  open: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800',
+  open: 'bg-amber-50 text-amber-700 border-amber-200',
   in_progress: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800',
-  done: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
-  scrap: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800',
+  done: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  scrap: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
 export const ReworkOrders: React.FC = () => {
@@ -63,12 +63,12 @@ export const ReworkOrders: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="erp-page-head">
         <div>
-          <h2 className="text-2xl font-black">Rework Orders</h2>
-          <p className="text-sm text-slate-500">متابعة حالات إعادة التشغيل</p>
+          <h2 className="page-title">Rework Orders</h2>
+          <p className="page-subtitle">متابعة حالات إعادة التشغيل</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="erp-page-actions">
           <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>طباعة التقرير</Button>
           <Button
             variant="outline"
@@ -103,10 +103,10 @@ export const ReworkOrders: React.FC = () => {
 
       <Card>
         {message && (
-          <div className={`mb-3 rounded-lg border px-3 py-2 text-sm font-semibold ${
+          <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
             message.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300'
-              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-300'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60'
+              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60'
           }`}>
             {message.text}
           </div>
@@ -114,13 +114,13 @@ export const ReworkOrders: React.FC = () => {
         <div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500">
-                <th className="text-right py-2 px-2">أمر الشغل</th>
-                <th className="text-right py-2 px-2">العيب</th>
-                <th className="text-right py-2 px-2">السيريال</th>
-                <th className="text-right py-2 px-2">الحالة</th>
-                <th className="text-right py-2 px-2">تحديث</th>
+            <thead className="erp-thead">
+              <tr className="border-b border-[var(--color-border)] text-slate-500">
+                <th className="erp-th">أمر الشغل</th>
+                <th className="erp-th">العيب</th>
+                <th className="erp-th">السيريال</th>
+                <th className="erp-th">الحالة</th>
+                <th className="erp-th">تحديث</th>
               </tr>
             </thead>
             <tbody>
@@ -131,7 +131,7 @@ export const ReworkOrders: React.FC = () => {
                   </td>
                 </tr>
               ) : displayRows.map((row) => (
-                <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800">
+                <tr key={row.id} className="border-b border-[var(--color-border)]">
                   <td className="py-2 px-2 font-mono">
                     <div>{row.workOrderNumber}</div>
                     <div className="text-xs text-slate-500">{row.lineName} — {row.productName}</div>
@@ -179,7 +179,7 @@ export const ReworkOrders: React.FC = () => {
                           }}
                           disabled={!canManageRework || busyId === row.id || row.status === status}
                           className={`px-2 py-1 rounded text-xs font-bold border ${
-                            row.status === status ? 'bg-primary/10 border-primary/30 text-primary' : 'border-slate-200 dark:border-slate-700'
+                            row.status === status ? 'bg-primary/10 border-primary/30 text-primary' : 'border-[var(--color-border)]'
                           }`}
                         >
                           {STATUS_LABELS[status]}

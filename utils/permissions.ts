@@ -15,9 +15,9 @@ import { useAppStore } from '../store/useAppStore';
 
 export type Permission =
   | 'dashboard.view'
-  | 'products.view' | 'products.create' | 'products.edit' | 'products.delete' | 'products.createRawMaterial'
+  | 'products.view' | 'products.create' | 'products.edit' | 'products.delete' | 'products.createRawMaterial' | 'products.rawMaterials.view'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
-  | 'inventory.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage' | 'inventory.transfers.approve'
+  | 'inventory.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
@@ -83,6 +83,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     label: 'الإنتاج',
     permissions: [
       { key: 'products.view', label: 'عرض المنتجات' },
+      { key: 'products.rawMaterials.view', label: 'عرض صفحة المواد الخام (الإنتاج)' },
       { key: 'products.create', label: 'إنشاء منتج' },
       { key: 'products.createRawMaterial', label: 'إضافة مادة خام' },
       { key: 'products.edit', label: 'تعديل المنتجات' },
@@ -127,6 +128,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'inventory.warehouses.manage', label: 'إدارة المخازن' },
       { key: 'inventory.items.manage', label: 'إدارة الأصناف الخام' },
       { key: 'inventory.transfers.approve', label: 'اعتماد تحويلات المخازن' },
+      { key: 'inventory.finishedStock.allowNegativeApprove', label: 'الموافقة على تحويل تم الصنع بالسالب' },
     ],
   },
   {
@@ -409,6 +411,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/': 'dashboard.view',
   '/employee-dashboard': 'employeeDashboard.view',
   '/products': 'products.view',
+  '/products/raw-materials': 'products.rawMaterials.view',
   '/products/:id': 'products.view',
   '/inventory': 'inventory.view',
   '/inventory/balances': 'inventory.view',

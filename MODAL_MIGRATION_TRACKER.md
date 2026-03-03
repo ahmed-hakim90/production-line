@@ -12,6 +12,7 @@ Tracks migration from page-scoped modals to Global Modal Manager architecture.
 - `inventory.warehouses.create`
 - `inventory.rawMaterials.create`
 - `inventory.movements.importInByCode`
+- `productionPlans.import`
 
 ## In Progress
 

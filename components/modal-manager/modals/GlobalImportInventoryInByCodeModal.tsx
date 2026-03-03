@@ -172,7 +172,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
       onClick={handleClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-4xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -183,33 +183,33 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
           onChange={handleImportFileSelected}
         />
 
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold">استيراد منتج نهائي بالكود</h3>
-            <p className="text-xs text-slate-500 mt-1">{importFileName || '—'}</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">{importFileName || '—'}</p>
           </div>
           {/* <div className="flex items-center gap-2">
             <Button variant="outline" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
               <span className="material-icons-round text-sm">upload_file</span>
               اختيار ملف
             </Button>
-            <button onClick={handleClose} className="text-slate-400 hover:text-slate-600" disabled={importSaving}>
+            <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600" disabled={importSaving}>
               <span className="material-icons-round">close</span>
             </button>
           </div> */}
         </div>
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-            <p className="text-xs text-slate-500 mb-2">المخزن المستهدف</p>
+          <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+            <p className="text-xs text-[var(--color-text-muted)] mb-2">المخزن المستهدف</p>
             <SearchableSelect
               options={warehouseSelectOptions}
               value={warehouseId}
               onChange={(value) => setWarehouseId(value)}
               placeholder="ابحث واختر المخزن"
             />
-            <p className="text-xs text-slate-500 mt-2">
-              المخزن الحالي: <span className="font-bold text-slate-700 dark:text-slate-300">{selectedWarehouse?.name || 'غير محدد'}</span>
+            <p className="text-xs text-[var(--color-text-muted)] mt-2">
+              المخزن الحالي: <span className="font-bold text-[var(--color-text)]">{selectedWarehouse?.name || 'غير محدد'}</span>
             </p>
           </div>
 
@@ -226,31 +226,31 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                   <p className="text-xs text-slate-500">إجمالي الصفوف</p>
                   <p className="text-lg font-black">{importResult.totalRows}</p>
                 </div>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-900/10 p-3">
+                <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-900/10 p-3">
                   <p className="text-xs text-emerald-700">صفوف صالحة</p>
-                  <p className="text-lg font-black text-emerald-700">{importResult.validCount}</p>
+                  <p className="text-lg font-bold text-emerald-700">{importResult.validCount}</p>
                 </div>
-                <div className="rounded-xl border border-rose-200 bg-rose-50/60 dark:bg-rose-900/10 p-3">
+                <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50/60 dark:bg-rose-900/10 p-3">
                   <p className="text-xs text-rose-700">صفوف بها أخطاء</p>
-                  <p className="text-lg font-black text-rose-700">{importResult.errorCount}</p>
+                  <p className="text-lg font-bold text-rose-700">{importResult.errorCount}</p>
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">#</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">كود المنتج</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">اسم المنتج</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">الكمية</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">الحالة</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">#</th>
+                      <th className="erp-th">كود المنتج</th>
+                      <th className="erp-th">اسم المنتج</th>
+                      <th className="erp-th">الكمية</th>
+                      <th className="erp-th">الحالة</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[var(--color-border)]">
                     {importResult.rows.map((row) => (
                       <tr key={`${row.rowIndex}-${row.productCode}`}>
                         <td className="px-3 py-2 text-sm">{row.rowIndex}</td>
@@ -274,7 +274,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
 
           {message && (
             <div
-              className={`rounded-xl px-4 py-3 text-sm font-bold ${
+              className={`rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold ${
                 message.type === 'success'
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                   : 'bg-rose-50 text-rose-700 border border-rose-200'
@@ -285,7 +285,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
           <Button variant="outline" onClick={handleClose} disabled={importSaving}>
             إغلاق
           </Button>

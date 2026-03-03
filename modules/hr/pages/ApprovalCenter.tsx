@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -27,8 +27,8 @@ import { LEAVE_TYPE_LABELS } from '../types';
 
 const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; color: string; bg: string }> = {
   overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/30' },
-  leave: { label: 'إجازة', icon: 'beach_access', color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-  loan: { label: 'سلفة', icon: 'payments', color: 'text-amber-500', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+  leave: { label: 'إجازة', icon: 'beach_access', color: 'text-blue-500', bg: 'bg-blue-100' },
+  loan: { label: 'سلفة', icon: 'payments', color: 'text-amber-500', bg: 'bg-amber-100' },
 };
 
 const STATUS_CONFIG: Record<ApprovalRequestStatus, { label: string; variant: 'warning' | 'success' | 'danger' | 'info' | 'neutral' }> = {
@@ -75,16 +75,16 @@ const StepIndicator: React.FC<{ chain: ApprovalChainSnapshot[]; currentStep: num
               step.status === 'approved' ? 'bg-emerald-400' :
               step.status === 'rejected' ? 'bg-rose-400' :
               step.status === 'skipped' ? 'bg-amber-400' :
-              'bg-slate-200 dark:bg-slate-700'
+              'bg-slate-200'
             }`} />
           )}
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
-              step.status === 'approved' ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-              step.status === 'rejected' ? 'border-rose-400 bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' :
-              step.status === 'skipped' ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+              step.status === 'approved' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' :
+              step.status === 'rejected' ? 'border-rose-400 bg-rose-50 text-rose-700' :
+              step.status === 'skipped' ? 'border-amber-400 bg-amber-50 text-amber-700' :
               i === currentStep ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/20' :
-              'border-slate-200 dark:border-slate-600 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              'border-[var(--color-border)] bg-[#f8f9fa] text-[var(--color-text-muted)]'
             }`}
             title={`${step.approverName} — ${step.approverJobTitle}${step.notes ? ` — ${step.notes}` : ''}${step.delegatedToName ? ` (مفوّض: ${step.delegatedToName})` : ''}`}
           >
@@ -265,10 +265,10 @@ export const ApprovalCenter: React.FC = () => {
     return (
       <div className="space-y-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
+          <div className="h-8 bg-slate-200 rounded w-1/3" />
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-slate-200 dark:bg-slate-700 rounded-xl" />
+              <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)]" />
             ))}
           </div>
         </div>
@@ -280,17 +280,17 @@ export const ApprovalCenter: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">
+          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">
             مركز الموافقات
           </h2>
-          <p className="text-sm text-slate-500 font-medium">
+          <p className="text-sm text-[var(--color-text-muted)] font-medium">
             مراجعة واعتماد الطلبات — {role === 'admin' ? 'مدير النظام' : role === 'hr' ? 'الموارد البشرية' : role === 'manager' ? 'مدير' : 'موظف'}
           </p>
         </div>
         {actionableCount > 0 && (
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2 flex items-center gap-2">
+          <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-2 flex items-center gap-2">
             <span className="material-icons-round text-amber-500 text-lg">notifications_active</span>
-            <span className="text-sm font-bold text-amber-700 dark:text-amber-400">
+            <span className="text-sm font-bold text-amber-700">
               {actionableCount} طلب بانتظار إجراءك
             </span>
           </div>
@@ -304,9 +304,9 @@ export const ApprovalCenter: React.FC = () => {
           { label: 'مُعتمد', value: stats.approved, icon: 'check_circle', color: 'text-emerald-500' },
           { label: 'مرفوض', value: stats.rejected, icon: 'cancel', color: 'text-rose-500' },
         ].map((stat) => (
-          <div key={stat.label} className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+          <div key={stat.label} className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
             <span className={`material-icons-round ${stat.color} text-3xl mb-2 block`}>{stat.icon}</span>
-            <p className="text-xs text-slate-400 font-bold mb-1">{stat.label}</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">{stat.label}</p>
             <p className="text-2xl font-black">{stat.value}</p>
           </div>
         ))}
@@ -324,17 +324,17 @@ export const ApprovalCenter: React.FC = () => {
           <button
             key={f.key}
             onClick={() => setFilterStatus(f.key as any)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-              filterStatus === f.key ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            className={`px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
+              filterStatus === f.key ? 'bg-primary text-white' : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
             }`}
           >
             {f.label}
           </button>
         ))}
-        <div className="w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+        <div className="w-px bg-slate-200 mx-1" />
         <button
           onClick={() => setFilterType('')}
-          className={`px-3 py-2 rounded-lg text-sm font-bold transition-all ${
+          className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
             filterType === '' ? 'bg-primary/10 text-primary' : 'text-slate-400 hover:text-slate-600'
           }`}
         >الكل</button>
@@ -342,7 +342,7 @@ export const ApprovalCenter: React.FC = () => {
           <button
             key={key}
             onClick={() => setFilterType(key)}
-            className={`px-3 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1 ${
+            className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all flex items-center gap-1 ${
               filterType === key ? 'bg-primary/10 text-primary' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -355,7 +355,7 @@ export const ApprovalCenter: React.FC = () => {
       {filtered.length === 0 ? (
         <Card>
           <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">task_alt</span>
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">task_alt</span>
             <p className="text-sm font-bold text-slate-500">
               {filterStatus === 'actionable' ? 'لا توجد طلبات بانتظار إجراءك' : 'لا توجد طلبات'}
             </p>
@@ -374,14 +374,14 @@ export const ApprovalCenter: React.FC = () => {
             return (
               <div
                 key={req.id}
-                className={`bg-white dark:bg-slate-900 rounded-xl border overflow-hidden ${
-                  isOverdue ? 'border-rose-300 dark:border-rose-700 shadow-lg shadow-rose-500/5' :
-                  canAct ? 'border-primary/30 shadow-lg shadow-primary/5' :
-                  'border-slate-200 dark:border-slate-800'
+                className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border overflow-hidden ${
+                  isOverdue ? 'border-rose-300 dark:border-rose-700 shadow-rose-500/5' :
+                  canAct ? 'border-primary/30 shadow-primary/5' :
+                  'border-[var(--color-border)]'
                 }`}
               >
                 {isOverdue && (
-                  <div className="bg-rose-50 dark:bg-rose-900/20 px-5 py-2 flex items-center gap-2 text-xs font-bold text-rose-600 dark:text-rose-400 border-b border-rose-200 dark:border-rose-800">
+                  <div className="bg-rose-50 px-5 py-2 flex items-center gap-2 text-xs font-bold text-rose-600 border-b border-rose-200">
                     <span className="material-icons-round text-sm">warning</span>
                     هذا الطلب متأخر ويحتاج تدخل عاجل
                   </div>
@@ -389,18 +389,18 @@ export const ApprovalCenter: React.FC = () => {
                 <div className="p-5">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeCfg.bg}`}>
+                      <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center ${typeCfg.bg}`}>
                         <span className={`material-icons-round ${typeCfg.color}`}>{typeCfg.icon}</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-bold text-slate-800 dark:text-white">{formatRequestSummary(req)}</h4>
+                          <h4 className="font-bold text-[var(--color-text)]">{formatRequestSummary(req)}</h4>
                           <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
                           {req.approvalChain[req.currentStep]?.delegatedToName && (
                             <Badge variant="info">مفوّض</Badge>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
+                        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                           <span className="font-bold">{req.employeeName}</span> — {formatRequestDetail(req)}
                         </p>
                       </div>
@@ -409,11 +409,11 @@ export const ApprovalCenter: React.FC = () => {
                   </div>
 
                   {canAct && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
                       <div className="flex flex-col sm:flex-row gap-3">
                         <input
                           type="text"
-                          className="flex-1 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-2.5 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                           placeholder="ملاحظات (اختياري)..."
                           value={actionNotes[req.id!] || ''}
                           onChange={(e) => setActionNotes((prev) => ({ ...prev, [req.id!]: e.target.value }))}
@@ -440,12 +440,12 @@ export const ApprovalCenter: React.FC = () => {
                   )}
 
                   {isOwn && req.status === 'pending' && req.currentStep === 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
                       <Button
                         variant="outline"
                         onClick={() => handleCancel(req)}
                         disabled={isProcessing}
-                        className="!text-slate-500 !border-slate-200"
+                        className="!text-slate-500 !border-[var(--color-border)]"
                       >
                         <span className="material-icons-round text-sm">block</span>
                         إلغاء الطلب

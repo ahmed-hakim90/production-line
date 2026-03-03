@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+﻿import React, { useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -24,6 +24,20 @@ export const GlobalImportReportsModal: React.FC = () => {
 
   const validRows = useMemo(
     () => (result?.rows || []).filter((row) => row.errors.length === 0 && !row.isDuplicate),
+    [result],
+  );
+  const futureDateErrorRowsCount = useMemo(
+    () =>
+      (result?.rows || []).filter((row) =>
+        row.errors.some((error) => error.includes('تاريخ مستقبلي غير مسموح'))
+      ).length,
+    [result],
+  );
+  const futureDateErrorRowIndexes = useMemo(
+    () =>
+      (result?.rows || [])
+        .filter((row) => row.errors.some((error) => error.includes('تاريخ مستقبلي غير مسموح')))
+        .map((row) => row.rowIndex),
     [result],
   );
 
@@ -52,7 +66,19 @@ export const GlobalImportReportsModal: React.FC = () => {
         existingReports: reports,
       });
       setResult(parsed);
-      if (parsed.rows.length === 0) setMessage('لا توجد بيانات صالحة داخل الملف');
+      if (parsed.rows.length === 0) {
+        setMessage('لا توجد بيانات صالحة داخل الملف');
+      } else {
+        const futureRows = parsed.rows
+          .filter((row) => row.errors.some((error) => error.includes('تاريخ مستقبلي غير مسموح')))
+          .map((row) => row.rowIndex);
+        const hasFutureDates = futureRows.length > 0;
+        if (hasFutureDates) {
+          setMessage(
+            `يوجد صفوف بتاريخ مستقبلي (${futureRows.join('، ')}). تم إلغاء حفظ الشيت بالكامل.`
+          );
+        }
+      }
     } catch {
       setMessage('تعذر قراءة الملف');
     } finally {
@@ -61,6 +87,12 @@ export const GlobalImportReportsModal: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (futureDateErrorRowsCount > 0) {
+      setMessage(
+        `لا يمكن الحفظ: الصفوف (${futureDateErrorRowIndexes.join('، ')}) تحتوي على تاريخ مستقبلي. عدل التاريخ ثم أعد الرفع.`
+      );
+      return;
+    }
     if (validRows.length === 0) return;
     setSaving(true);
     setMessage(null);
@@ -94,24 +126,24 @@ export const GlobalImportReportsModal: React.FC = () => {
       onClick={handleClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-3xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 sm:px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
-              <span className="material-icons-round text-emerald-600 dark:text-emerald-400">upload_file</span>
+            <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+              <span className="material-icons-round text-emerald-600">upload_file</span>
             </div>
             <div>
               <h3 className="text-lg font-bold">استيراد تقارير من Excel</h3>
               {result && (
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                   {result.totalRows} صف — {result.validCount} صالح — {result.errorCount} خطأ
                 </p>
               )}
             </div>
           </div>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <span className="material-icons-round">close</span>
           </button>
         </div>
@@ -138,16 +170,16 @@ export const GlobalImportReportsModal: React.FC = () => {
 
           {result && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold">
-              <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-blue-700 dark:text-blue-300">إجمالي: {result.totalRows}</div>
-              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 text-emerald-700 dark:text-emerald-300">صالح: {result.validCount}</div>
-              <div className="rounded-lg bg-rose-50 dark:bg-rose-900/20 px-3 py-2 text-rose-700 dark:text-rose-300">أخطاء: {result.errorCount}</div>
-              <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 px-3 py-2 text-orange-700 dark:text-orange-300">مكرر: {result.duplicateCount}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-blue-700 dark:text-blue-300">إجمالي: {result.totalRows}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-3 py-2 text-emerald-700">صالح: {result.validCount}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-3 py-2 text-rose-700">أخطاء: {result.errorCount}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-orange-50 dark:bg-orange-900/20 px-3 py-2 text-orange-700 dark:text-orange-300">مكرر: {result.duplicateCount}</div>
             </div>
           )}
 
           {saving && (
             <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="flex-1 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-300"
                   style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
@@ -158,15 +190,19 @@ export const GlobalImportReportsModal: React.FC = () => {
           )}
 
           {message && (
-            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 px-3 py-2 text-xs font-bold text-amber-700 dark:text-amber-300">
+            <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs font-bold text-amber-700">
               {message}
             </div>
           )}
         </div>
 
-        <div className="px-5 sm:px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
+        <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={handleClose} disabled={saving}>إغلاق</Button>
-          <Button variant="primary" onClick={handleSave} disabled={saving || validRows.length === 0}>
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            disabled={saving || validRows.length === 0 || futureDateErrorRowsCount > 0}
+          >
             {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
             <span className="material-icons-round text-sm">save</span>
             حفظ {validRows.length} تقرير

@@ -21,6 +21,7 @@ import type {
   FirestoreEmployeeDeduction,
 } from '../types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../types';
+import { PageHeader } from '../../../components/PageHeader';
 
 type TransactionType = 'all' | 'leave' | 'loan' | 'allowance' | 'deduction';
 
@@ -49,9 +50,9 @@ const TYPE_ICONS: Record<HRTransaction['type'], string> = {
 };
 
 const TYPE_COLORS: Record<HRTransaction['type'], string> = {
-  leave: 'text-blue-600 bg-blue-50 dark:bg-blue-900/30',
-  loan: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30',
-  allowance: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30',
+  leave: 'text-blue-600 bg-blue-50',
+  loan: 'text-amber-600 bg-amber-50',
+  allowance: 'text-emerald-600 bg-emerald-50',
   deduction: 'text-red-600 bg-red-50 dark:bg-red-900/30',
 };
 
@@ -436,42 +437,39 @@ export const HRTransactions: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-            <span className="material-icons-round text-primary">receipt_long</span>
-            سجل حركات الموارد البشرية
-          </h2>
-          <p className="text-sm text-slate-500 font-medium">
-            جميع الإجازات والسلف والبدلات والاستقطاعات في مكان واحد
-          </p>
-        </div>
-        {canExportFromPage && (
-          <Button onClick={handleExport} variant={pageControl.exportVariant} size="sm">
-            <span className="material-icons-round text-base ml-1">download</span>
-            تصدير Excel
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="سجل حركات الموارد البشرية"
+        subtitle="جميع الإجازات والسلف والبدلات والاستقطاعات في مكان واحد"
+        icon="receipt_long"
+        moreActions={[
+          {
+            label: 'تصدير Excel',
+            icon: 'download',
+            group: 'تصدير',
+            hidden: !canExportFromPage,
+            onClick: handleExport,
+          },
+        ]}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <button
           onClick={() => setFilterType('all')}
-          className={`rounded-xl p-3 text-center transition-all border-2 ${filterType === 'all' ? 'border-primary bg-primary/5' : 'border-transparent bg-white dark:bg-slate-800'}`}
+          className={`rounded-[var(--border-radius-lg)] p-3 text-center transition-all border-2 ${filterType === 'all' ? 'border-primary bg-primary/5' : 'border-transparent bg-[var(--color-card)]'}`}
         >
-          <div className="text-2xl font-black text-slate-800 dark:text-white">{stats.total}</div>
+          <div className="text-2xl font-bold text-[var(--color-text)]">{stats.total}</div>
           <div className="text-xs text-slate-500">الكل</div>
         </button>
         {([['leave', 'إجازات', 'beach_access'], ['loan', 'سُلف', 'payments'], ['allowance', 'بدلات', 'trending_up'], ['deduction', 'استقطاعات', 'trending_down']] as const).map(([key, label, icon]) => (
           <button
             key={key}
             onClick={() => setFilterType(key)}
-            className={`rounded-xl p-3 text-center transition-all border-2 ${filterType === key ? 'border-primary bg-primary/5' : 'border-transparent bg-white dark:bg-slate-800'}`}
+            className={`rounded-[var(--border-radius-lg)] p-3 text-center transition-all border-2 ${filterType === key ? 'border-primary bg-primary/5' : 'border-transparent bg-[var(--color-card)]'}`}
           >
             <div className="flex items-center justify-center gap-1">
               <span className={`material-icons-round text-base ${TYPE_COLORS[key].split(' ')[0]}`}>{icon}</span>
-              <span className="text-2xl font-black text-slate-800 dark:text-white">{stats.byType[key]}</span>
+              <span className="text-2xl font-bold text-[var(--color-text)]">{stats.byType[key]}</span>
             </div>
             <div className="text-xs text-slate-500">{label}</div>
           </button>
@@ -482,7 +480,7 @@ export const HRTransactions: React.FC = () => {
       <Card>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">بحث</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بحث</label>
             <input
               type="text"
               className="input input-sm w-full"
@@ -492,7 +490,7 @@ export const HRTransactions: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">الموظف</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الموظف</label>
             <SearchableSelect
               options={empOptions}
               value={filterEmployee}
@@ -501,7 +499,7 @@ export const HRTransactions: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">الحالة</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الحالة</label>
             <select
               className="input input-sm w-full"
               value={filterStatus}
@@ -514,7 +512,7 @@ export const HRTransactions: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">من تاريخ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">من تاريخ</label>
             <input
               type="date"
               className="input input-sm w-full"
@@ -523,7 +521,7 @@ export const HRTransactions: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">إلى تاريخ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إلى تاريخ</label>
             <input
               type="date"
               className="input input-sm w-full"
@@ -563,16 +561,16 @@ export const HRTransactions: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 text-xs">
-                  <th className="text-right py-3 px-2 font-bold">النوع</th>
-                  <th className="text-right py-3 px-2 font-bold">الموظف</th>
-                  <th className="text-right py-3 px-2 font-bold">التفاصيل</th>
-                  <th className="text-right py-3 px-2 font-bold">المبلغ</th>
-                  <th className="text-right py-3 px-2 font-bold">الحالة</th>
-                  <th className="text-right py-3 px-2 font-bold">التاريخ</th>
+              <thead className="erp-thead">
+                <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs">
+                  <th className="erp-th">النوع</th>
+                  <th className="erp-th">الموظف</th>
+                  <th className="erp-th">التفاصيل</th>
+                  <th className="erp-th">المبلغ</th>
+                  <th className="erp-th">الحالة</th>
+                  <th className="erp-th">التاريخ</th>
                   {canManage && (
-                    <th className="text-center py-3 px-2 font-bold">إجراءات</th>
+                    <th className="erp-th text-center">إجراءات</th>
                   )}
                 </tr>
               </thead>
@@ -580,10 +578,10 @@ export const HRTransactions: React.FC = () => {
                 {filtered.map((txn) => (
                   <tr
                     key={`${txn.type}-${txn.id}`}
-                    className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                    className="border-b border-[var(--color-border)]/50 hover:bg-[#f8f9fa] transition-colors"
                   >
                     <td className="py-3 px-2">
-                      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold ${TYPE_COLORS[txn.type]}`}>
+                      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-[var(--border-radius-base)] text-xs font-bold ${TYPE_COLORS[txn.type]}`}>
                         <span className="material-icons-round text-sm">{TYPE_ICONS[txn.type]}</span>
                         {txn.typeLabel}
                       </div>
@@ -598,20 +596,20 @@ export const HRTransactions: React.FC = () => {
                           if (emp?.id) navigate(`/employees/${emp.id}`);
                         }}
                       >
-                        <div className="font-bold text-slate-800 dark:text-white text-sm">
+                        <div className="font-bold text-[var(--color-text)] text-sm">
                           {getEmpName(txn.employeeId)}
                         </div>
                         {getEmpCode(txn.employeeId) && (
-                          <div className="text-[10px] text-slate-400 font-mono">
+                          <div className="text-[10px] text-[var(--color-text-muted)] font-mono">
                             {getEmpCode(txn.employeeId)}
                           </div>
                         )}
                       </button>
                     </td>
-                    <td className="py-3 px-2 text-slate-600 dark:text-slate-300 max-w-xs truncate">
+                    <td className="py-3 px-2 text-[var(--color-text-muted)] max-w-xs truncate">
                       {txn.description}
                     </td>
-                    <td className="py-3 px-2 font-bold text-slate-800 dark:text-white whitespace-nowrap">
+                    <td className="py-3 px-2 font-bold text-[var(--color-text)] whitespace-nowrap">
                       {txn.amount !== null ? formatCurrency(txn.amount) : '—'}
                     </td>
                     <td className="py-3 px-2">
@@ -619,7 +617,7 @@ export const HRTransactions: React.FC = () => {
                         {STATUS_MAP[txn.status]?.label || txn.status}
                       </Badge>
                     </td>
-                    <td className="py-3 px-2 text-slate-500 text-xs whitespace-nowrap">
+                    <td className="py-3 px-2 text-[var(--color-text-muted)] text-xs whitespace-nowrap">
                       {txn.dateLabel}
                     </td>
                     {canManage && (
@@ -669,17 +667,17 @@ export const HRTransactions: React.FC = () => {
       {/* Edit Modal */}
       {editModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
               <span className="material-icons-round text-primary">edit</span>
               تعديل {editModal.typeLabel}
             </h3>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-[var(--color-text-muted)] mb-4">
               {getEmpName(editModal.employeeId)} — {editModal.typeLabel}
             </p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">المبلغ</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المبلغ</label>
                 <input
                   type="number"
                   className="input w-full"
@@ -690,7 +688,7 @@ export const HRTransactions: React.FC = () => {
               </div>
               {editModal.type === 'deduction' && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">السبب</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">السبب</label>
                   <input
                     type="text"
                     className="input w-full"
@@ -715,16 +713,16 @@ export const HRTransactions: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
               <span className="material-icons-round text-5xl text-red-500 mb-2">warning</span>
-              <h3 className="text-lg font-black text-slate-800 dark:text-white mb-2">
+              <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">
                 تأكيد الحذف
               </h3>
-              <p className="text-sm text-slate-500 mb-1">
+              <p className="text-sm text-[var(--color-text-muted)] mb-1">
                 هل تريد حذف هذا الإجراء نهائياً؟
               </p>
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-[var(--color-text-muted)] mb-4">
                 {confirmDelete.typeLabel} — {getEmpName(confirmDelete.employeeId)}
               </p>
             </div>

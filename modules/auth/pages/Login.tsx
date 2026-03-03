@@ -1,209 +1,325 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
-import { Button } from '@/src/shared/ui/atoms/Button';
-import { Input } from '@/src/shared/ui/atoms/Input';
 
 export const Login: React.FC = () => {
-  const login = useAppStore((s) => s.login);
+  const login    = useAppStore((s) => s.login);
   const register = useAppStore((s) => s.register);
-  const loading = useAppStore((s) => s.loading);
+  const resetUserPassword = useAppStore((s) => s.resetUserPassword);
+  const loading  = useAppStore((s) => s.loading);
   const authError = useAppStore((s) => s.authError);
 
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPwd, setShowPwd]       = useState(false);
   const [localError, setLocalError] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
+
+  const errorMsg = localError || authError;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
     setLocalError('');
+    setInfoMsg('');
     await login(email, password);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError('');
+    setInfoMsg('');
     if (!email || !password || !displayName) return;
-    if (password.length < 6) {
-      setLocalError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      return;
-    }
+    if (password.length < 6) { setLocalError('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return; }
     await register(email, password, displayName);
   };
 
-  const switchMode = () => {
-    setIsRegister(!isRegister);
+  const handleForgotPassword = async () => {
     setLocalError('');
+    setInfoMsg('');
+    if (!email.trim()) {
+      setLocalError('اكتب البريد الإلكتروني أولًا ثم أعد المحاولة.');
+      return;
+    }
+    await resetUserPassword(email.trim());
+    setInfoMsg('إذا كان البريد مسجلًا، تم إرسال رابط إعادة تعيين كلمة المرور.');
   };
 
-  const errorMsg = localError || authError;
+  const switchMode = (m: 'login' | 'register') => {
+    setMode(m);
+    setLocalError('');
+    setInfoMsg('');
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary/30 mx-auto mb-4">
-            <span className="material-icons-round text-4xl">factory</span>
+    <div className="erp-auth-page">
+
+      {/* ── Left branding panel (desktop) ── */}
+      <div className="erp-auth-panel">
+        <div className="erp-auth-panel-logo">
+          <span className="material-icons-round" style={{ fontSize: 26, color: '#fff' }}>factory</span>
+        </div>
+        <div className="erp-auth-panel-name">HAKIMO ERP</div>
+        <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
+        <div className="erp-auth-panel-features">
+          {[
+            { icon: 'inventory_2',   label: 'إدارة الإنتاج والمخزون' },
+            { icon: 'groups',        label: 'إدارة الموظفين والحضور' },
+            { icon: 'bar_chart',     label: 'تقارير وتحليلات مفصلة' },
+            { icon: 'admin_panel_settings', label: 'نظام صلاحيات متقدم' },
+          ].map((f) => (
+            <div key={f.icon} className="erp-auth-panel-feature">
+              <span className="material-icons-round">{f.icon}</span>
+              <span>{f.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Right form panel ── */}
+      <div className="erp-auth-container">
+
+        {/* Logo (mobile only) */}
+        <div className="erp-auth-brand">
+          <div className="erp-auth-logo">
+            <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
           </div>
-          <h1 className="text-3xl font-black text-primary tracking-tight">HAKIMO</h1>
-          <p className="text-sm font-bold mt-1" style={{ color: 'var(--color-text)', opacity: 0.6 }}>نظام إدارة الإنتاج</p>
+          <div className="erp-auth-app-name">HAKIMO ERP</div>
+          <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 
         {/* Card */}
-        <div
-          className="rounded-2xl shadow-xl p-5 sm:p-8"
-          style={{
-            backgroundColor: 'var(--color-card)',
-            border: '1px solid var(--color-border)',
-          }}
-        >
-          <div className="text-center mb-6">
-            <h2 className="text-xl font-black" style={{ color: 'var(--color-text)' }}>
-              {isRegister ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}
-            </h2>
-            <p className="text-sm mt-1" style={{ color: 'var(--color-text)', opacity: 0.6 }}>
-              {isRegister ? 'أدخل بياناتك لإنشاء حساب' : 'أدخل بيانات حسابك للمتابعة'}
-            </p>
-          </div>
-
-          {errorMsg && (
-            <div className="mb-6 px-4 py-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center gap-3">
-              <span className="material-icons-round text-rose-500 text-xl">error</span>
-              <span className="text-sm font-bold text-rose-700 dark:text-rose-400">{errorMsg}</span>
+        <div className="erp-auth-card">
+          <div className="erp-auth-card-body">
+            <div className="erp-auth-headline">
+              <h3>{mode === 'login' ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}</h3>
+              <p>{mode === 'login' ? 'أدخل بياناتك للوصول إلى النظام' : 'سيتم مراجعة الحساب من قِبل المسؤول'}</p>
             </div>
-          )}
 
-          {isRegister ? (
-            /* ═══════ Register Form ═══════ */
-            <form onSubmit={handleRegister} className="space-y-4">
-              <Input
-                label="الاسم الكامل"
-                icon="badge"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="مثال: أحمد محمد"
-                required
-              />
+            {/* Tab switcher */}
+            <div className="erp-auth-tabs">
+              <button
+                type="button"
+                className={`erp-auth-tab${mode === 'login' ? ' active' : ''}`}
+                onClick={() => switchMode('login')}
+              >
+                تسجيل الدخول
+              </button>
+              <button
+                type="button"
+                className={`erp-auth-tab${mode === 'register' ? ' active' : ''}`}
+                onClick={() => switchMode('register')}
+              >
+                حساب جديد
+              </button>
+            </div>
 
-              <Input
-                label="البريد الإلكتروني"
-                icon="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="user@example.com"
-                autoComplete="email"
-                required
-                dir="ltr"
-              />
+            {/* Alerts */}
+            {errorMsg && (
+              <div className="erp-alert erp-alert-error" style={{ marginBottom: 14 }}>
+                <span className="material-icons-round text-[17px] shrink-0">error_outline</span>
+                <span>{errorMsg}</span>
+              </div>
+            )}
+            {infoMsg && (
+              <div className="erp-alert erp-alert-success" style={{ marginBottom: 14 }}>
+                <span className="material-icons-round text-[17px] shrink-0">check_circle</span>
+                <span>{infoMsg}</span>
+              </div>
+            )}
 
-              <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">كلمة المرور</label>
-                <div className="relative">
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 material-icons-round text-slate-400 text-lg pointer-events-none">lock</span>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl border bg-slate-50 dark:bg-slate-800 font-medium transition-all outline-none focus:ring-2 focus:bg-white dark:focus:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-primary/20 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 pr-10 pl-11 h-11 text-sm"
-                    placeholder="6 أحرف على الأقل"
-                    minLength={6}
-                    required
-                    dir="ltr"
-                  />
+            {/* ── Login form ── */}
+            {mode === 'login' && (
+              <form onSubmit={handleLogin} autoComplete="on">
+                <div className="erp-auth-field">
+                  <label htmlFor="login-email">البريد الإلكتروني</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">email</span>
+                    <input
+                      id="login-email"
+                      type="email"
+                      className="erp-auth-input"
+                      placeholder="admin@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      dir="ltr"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="erp-auth-field">
+                  <label htmlFor="login-pwd">كلمة المرور</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">lock</span>
+                    <input
+                      id="login-pwd"
+                      type={showPwd ? 'text' : 'password'}
+                      className="erp-auth-input has-right-action"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
+                      dir="ltr"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="erp-auth-input-right-action"
+                      onClick={() => setShowPwd(!showPwd)}
+                      tabIndex={-1}
+                    >
+                      <span className="material-icons-round" style={{ fontSize: 19 }}>
+                        {showPwd ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="erp-auth-helper-row" style={{ marginBottom: 16 }}>
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    className="erp-auth-link-btn"
+                    onClick={() => void handleForgotPassword()}
+                    disabled={loading}
                   >
-                    <span className="material-icons-round text-xl">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                    نسيت كلمة المرور؟
                   </button>
                 </div>
-              </div>
 
-              <Button
-                type="submit"
-                fullWidth
-                size="lg"
-                loading={loading}
-                disabled={!email || !password || !displayName}
-                icon="person_add"
-              >
-                {loading ? 'جاري الإنشاء...' : 'إنشاء الحساب'}
-              </Button>
-
-              <p className="text-center text-sm mt-4" style={{ color: 'var(--color-text)', opacity: 0.6 }}>
-                عندك حساب بالفعل؟{' '}
-                <button type="button" onClick={switchMode} className="text-primary font-bold hover:underline">
-                  تسجيل الدخول
+                <button
+                  type="submit"
+                  className="erp-auth-btn"
+                  disabled={loading || !email || !password}
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity=".25" />
+                        <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      جاري تسجيل الدخول...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-icons-round" style={{ fontSize: 17 }}>login</span>
+                      تسجيل الدخول
+                    </>
+                  )}
                 </button>
-              </p>
-            </form>
-          ) : (
-            /* ═══════ Login Form ═══════ */
-            <form onSubmit={handleLogin} className="space-y-5">
-              <Input
-                label="البريد الإلكتروني"
-                icon="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
-                autoComplete="email"
-                required
-                dir="ltr"
-              />
 
-              <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">كلمة المرور</label>
-                <div className="relative">
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 material-icons-round text-slate-400 text-lg pointer-events-none">lock</span>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl border bg-slate-50 dark:bg-slate-800 font-medium transition-all outline-none focus:ring-2 focus:bg-white dark:focus:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-primary/20 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 pr-10 pl-11 h-11 text-sm"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    required
-                    dir="ltr"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    <span className="material-icons-round text-xl">{showPassword ? 'visibility_off' : 'visibility'}</span>
-                  </button>
+                <div className="erp-auth-footer">
+                  ليس لديك حساب؟{' '}
+                  <button type="button" onClick={() => switchMode('register')}>إنشاء حساب جديد</button>
                 </div>
-              </div>
+              </form>
+            )}
 
-              <Button
-                type="submit"
-                fullWidth
-                size="lg"
-                loading={loading}
-                disabled={!email || !password}
-                icon="login"
-              >
-                {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
-              </Button>
+            {/* ── Register form ── */}
+            {mode === 'register' && (
+              <form onSubmit={handleRegister} autoComplete="on">
+                <div className="erp-auth-field">
+                  <label htmlFor="reg-name">الاسم الكامل</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">badge</span>
+                    <input
+                      id="reg-name"
+                      type="text"
+                      className="erp-auth-input"
+                      placeholder="مثال: أحمد محمد"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      autoComplete="name"
+                      required
+                    />
+                  </div>
+                </div>
 
-              <p className="text-center text-sm mt-4" style={{ color: 'var(--color-text)', opacity: 0.6 }}>
-                ليس لديك حساب؟{' '}
-                <button type="button" onClick={switchMode} className="text-primary font-bold hover:underline">
-                  إنشاء حساب جديد
+                <div className="erp-auth-field">
+                  <label htmlFor="reg-email">البريد الإلكتروني</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">email</span>
+                    <input
+                      id="reg-email"
+                      type="email"
+                      className="erp-auth-input"
+                      placeholder="user@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      dir="ltr"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="erp-auth-field">
+                  <label htmlFor="reg-pwd">كلمة المرور</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">lock</span>
+                    <input
+                      id="reg-pwd"
+                      type={showPwd ? 'text' : 'password'}
+                      className="erp-auth-input has-right-action"
+                      placeholder="6 أحرف على الأقل"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="new-password"
+                      minLength={6}
+                      dir="ltr"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="erp-auth-input-right-action"
+                      onClick={() => setShowPwd(!showPwd)}
+                      tabIndex={-1}
+                    >
+                      <span className="material-icons-round" style={{ fontSize: 19 }}>
+                        {showPwd ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="erp-auth-btn"
+                  disabled={loading || !email || !password || !displayName}
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity=".25" />
+                        <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      جاري الإنشاء...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-icons-round" style={{ fontSize: 17 }}>person_add</span>
+                      إنشاء الحساب
+                    </>
+                  )}
                 </button>
-              </p>
-            </form>
-          )}
+
+                <div className="erp-auth-footer">
+                  عندك حساب بالفعل؟{' '}
+                  <button type="button" onClick={() => switchMode('login')}>تسجيل الدخول</button>
+                </div>
+              </form>
+            )}
+
+            <div className="erp-auth-tip">
+              <span className="material-icons-round">verified_user</span>
+              <p>الحسابات الجديدة تحتاج موافقة المسؤول قبل تفعيل الدخول.</p>
+            </div>
+          </div>
         </div>
 
-        <p className="text-center text-xs mt-6 font-medium" style={{ color: 'var(--color-text)', opacity: 0.5 }}>
+        <p className="erp-auth-copyright">
           © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM
         </p>
       </div>

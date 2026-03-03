@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -147,8 +147,8 @@ export const QualityWorkers: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">عمال الجودة</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">عمال الجودة</h1>
+          <p className="text-sm text-[var(--color-text-muted)] mt-1">
             ربط أدوار الجودة بالموظفين الحاليين دون إنشاء بيانات موظف منفصلة.
           </p>
         </div>
@@ -157,7 +157,7 @@ export const QualityWorkers: React.FC = () => {
 
       {message && (
         <Card>
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{message}</p>
+          <p className="text-sm font-semibold text-[var(--color-text)]">{message}</p>
         </Card>
       )}
 
@@ -165,12 +165,12 @@ export const QualityWorkers: React.FC = () => {
         <Card className="xl:col-span-1" title={form.id ? 'تعديل تعيين' : 'تعيين عامل جودة'}>
           <form onSubmit={onSubmit} className="space-y-3">
             <div className="space-y-1">
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">الموظف</label>
+              <label className="block text-sm font-bold text-[var(--color-text)]">الموظف</label>
               <select
                 value={form.employeeId}
                 onChange={(e) => setForm((prev) => ({ ...prev, employeeId: e.target.value }))}
                 disabled={!canManage}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
               >
                 <option value="">اختر موظفًا</option>
                 {rawEmployees
@@ -184,12 +184,12 @@ export const QualityWorkers: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">الدور</label>
+              <label className="block text-sm font-bold text-[var(--color-text)]">الدور</label>
               <select
                 value={form.qualityRole}
                 onChange={(e) => setForm((prev) => ({ ...prev, qualityRole: e.target.value as QualityRole }))}
                 disabled={!canManage}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
               >
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role.value} value={role.value}>{role.label}</option>
@@ -198,28 +198,28 @@ export const QualityWorkers: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">الخطوط الفعالة (CSV)</label>
+              <label className="block text-sm font-bold text-[var(--color-text)]">الخطوط الفعالة (CSV)</label>
               <input
                 value={form.activeLines}
                 onChange={(e) => setForm((prev) => ({ ...prev, activeLines: e.target.value }))}
                 disabled={!canManage}
                 placeholder="line-a, line-b"
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">المنتجات الفعالة (CSV)</label>
+              <label className="block text-sm font-bold text-[var(--color-text)]">المنتجات الفعالة (CSV)</label>
               <input
                 value={form.activeProducts}
                 onChange={(e) => setForm((prev) => ({ ...prev, activeProducts: e.target.value }))}
                 disabled={!canManage}
                 placeholder="prod-1, prod-2"
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
               />
             </div>
 
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
               <input
                 type="checkbox"
                 checked={form.isActive}
@@ -249,20 +249,20 @@ export const QualityWorkers: React.FC = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="بحث بالاسم أو الكود أو الدور..."
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
             />
           </div>
 
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th className="text-right py-2 px-2">الموظف</th>
-                  <th className="text-right py-2 px-2">الدور</th>
-                  <th className="text-right py-2 px-2">الحالة</th>
-                  <th className="text-right py-2 px-2">الخطوط</th>
-                  <th className="text-right py-2 px-2">المنتجات</th>
-                  <th className="text-right py-2 px-2">إجراءات</th>
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">الموظف</th>
+                  <th className="erp-th">الدور</th>
+                  <th className="erp-th">الحالة</th>
+                  <th className="erp-th">الخطوط</th>
+                  <th className="erp-th">المنتجات</th>
+                  <th className="erp-th">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,13 +270,13 @@ export const QualityWorkers: React.FC = () => {
                   const employee = employeeMap.get(row.employeeId);
                   const roleLabel = ROLE_OPTIONS.find((role) => role.value === row.qualityRole)?.label ?? row.qualityRole;
                   return (
-                    <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800">
+                    <tr key={row.id} className="border-b border-[var(--color-border)]">
                       <td className="py-2 px-2">
-                        <div className="font-semibold text-slate-700 dark:text-slate-200">
+                        <div className="font-semibold text-[var(--color-text)]">
                           {employee?.name ?? `#${row.employeeId}`}
                         </div>
                         {employee?.code && (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">{employee.code}</div>
+                          <div className="text-xs text-[var(--color-text-muted)]">{employee.code}</div>
                         )}
                       </td>
                       <td className="py-2 px-2">{roleLabel}</td>
@@ -307,7 +307,7 @@ export const QualityWorkers: React.FC = () => {
                 })}
                 {filteredAssignments.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={6} className="py-6 text-center text-[var(--color-text-muted)]">
                       لا توجد تعيينات مطابقة.
                     </td>
                   </tr>

@@ -61,6 +61,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'reports', label: 'التقارير', icon: 'bar_chart', path: '/reports', permission: 'reports.view' },
       { key: 'lines', label: 'خطوط الإنتاج', icon: 'precision_manufacturing', path: '/lines', permission: 'lines.view', activePatterns: ['/lines/'] },
       { key: 'products', label: 'المنتجات', icon: 'inventory_2', path: '/products', permission: 'products.view', activePatterns: ['/products/'] },
+      { key: 'raw-materials', label: 'المواد الخام', icon: 'science', path: '/products/raw-materials', permission: 'products.rawMaterials.view' },
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'employees.view', activePatterns: ['/supervisors/'] },

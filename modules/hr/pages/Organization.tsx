@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -40,15 +40,15 @@ const emptyPenalty: Omit<FirestorePenaltyRule, 'id'> = { name: '', type: 'discip
 const emptyLateRule: Omit<FirestoreLateRule, 'id'> = { minutesFrom: 0, minutesTo: 15, penaltyType: 'fixed', penaltyValue: 0 };
 const emptyAllowance: Omit<FirestoreAllowanceType, 'id'> = { name: '', calculationType: 'fixed', value: 0, isActive: true };
 
-const inputClass = 'w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium focus:border-primary focus:ring-2 focus:ring-primary/20';
-const selectClass = 'w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium';
+const inputClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium focus:border-primary focus:ring-2 focus:ring-primary/20';
+const selectClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium';
 
 const Toggle: React.FC<{ value: boolean; onChange: (v: boolean) => void; label: string; color?: string }> = ({ value, onChange, label, color = 'bg-emerald-500' }) => (
   <div className="flex items-center gap-3">
-    <label className="text-sm font-bold text-slate-600 dark:text-slate-400">{label}</label>
+    <label className="text-sm font-bold text-[var(--color-text-muted)]">{label}</label>
     <button type="button" onClick={() => onChange(!value)}
       className={`w-11 h-6 rounded-full transition-colors relative ${value ? color : 'bg-slate-300 dark:bg-slate-600'}`}>
-      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${value ? 'left-5' : 'left-0.5'}`} />
+      <span className={`absolute top-0.5 w-5 h-5 bg-[var(--color-card)] rounded-full shadow transition-all ${value ? 'left-5' : 'left-0.5'}`} />
     </button>
   </div>
 );
@@ -220,11 +220,11 @@ export const Organization: React.FC = () => {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-10 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse w-48" />
+        <div className="h-10 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse w-48" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse" />)}
+          {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />)}
         </div>
-        <div className="h-64 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse" />
+        <div className="h-64 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />
       </div>
     );
   }
@@ -234,8 +234,8 @@ export const Organization: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-white">الهيكل التنظيمي</h1>
-          <p className="text-sm text-slate-500 mt-1">إدارة الأقسام والمناصب والورديات والجزاءات والبدلات</p>
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">الهيكل التنظيمي</h1>
+          <p className="text-sm text-[var(--color-text-muted)] mt-1">إدارة الأقسام والمناصب والورديات والجزاءات والبدلات</p>
         </div>
         {canEdit && (
           <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.ORGANIZATION_CREATE}>
@@ -255,12 +255,12 @@ export const Organization: React.FC = () => {
           { label: 'قواعد التأخير', count: lateRulesList.length, icon: 'timer_off', color: 'text-amber-500 bg-amber-500/10' },
           { label: 'البدلات', count: allowances.filter((a) => a.isActive).length, icon: 'card_giftcard', color: 'text-teal-500 bg-teal-500/10' },
         ].map((s) => (
-          <div key={s.label} className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3">
-            <div className={`w-10 h-10 ${s.color} rounded-lg flex items-center justify-center`}>
+          <div key={s.label} className="bg-[var(--color-card)] p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] flex items-center gap-3">
+            <div className={`w-10 h-10 ${s.color} rounded-[var(--border-radius-base)] flex items-center justify-center`}>
               <span className="material-icons-round text-xl">{s.icon}</span>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 font-medium">{s.label}</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] font-medium">{s.label}</p>
               <p className="text-lg font-black">{s.count}</p>
             </div>
           </div>
@@ -268,11 +268,11 @@ export const Organization: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 overflow-x-auto">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
-              tab === t.key ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--border-radius-base)] text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+              tab === t.key ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
             }`}>
             <span className="material-icons-round text-lg">{t.icon}</span>
             {t.label}
@@ -286,10 +286,10 @@ export const Organization: React.FC = () => {
           {departments.length === 0 ? <EmptyState icon="business" label="لا يوجد أقسام" sub='اضغط "إضافة قسم" للبدء' /> : (
             <DataTable headers={['القسم', 'الرمز', 'مدير القسم', { label: 'الموظفين', center: true }, { label: 'المناصب', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {departments.map((d) => (
-                <tr key={d.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{d.name}</td>
-                  <td className="py-3 px-4"><span className="bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded text-xs font-mono">{d.code}</span></td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{d.managerId ? getManagerName(d.managerId) : '—'}</td>
+                <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                  <td className="py-3 px-4 font-bold text-[var(--color-text)]">{d.name}</td>
+                  <td className="py-3 px-4"><span className="bg-[#f0f2f5] text-[var(--color-text-muted)] px-2 py-0.5 rounded text-xs font-mono">{d.code}</span></td>
+                  <td className="py-3 px-4 text-[var(--color-text-muted)]">{d.managerId ? getManagerName(d.managerId) : '—'}</td>
                   <td className="py-3 px-4 text-center font-bold">{deptEmployeeCount[d.id!] || 0}</td>
                   <td className="py-3 px-4 text-center font-bold">{posCountByDept[d.id!] || 0}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={d.isActive ? 'success' : 'neutral'}>{d.isActive ? 'نشط' : 'معطل'}</Badge></td>
@@ -307,11 +307,11 @@ export const Organization: React.FC = () => {
           {positions.length === 0 ? <EmptyState icon="work" label="لا يوجد مناصب" sub='اضغط "إضافة منصب" للبدء' /> : (
             <DataTable headers={['المنصب', 'القسم', { label: 'المستوى', center: true }, { label: 'دخول نظام', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {positions.map((p) => (
-                <tr key={p.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{p.title}</td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{getDeptName(p.departmentId)}</td>
+                <tr key={p.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                  <td className="py-3 px-4 font-bold text-[var(--color-text)]">{p.title}</td>
+                  <td className="py-3 px-4 text-[var(--color-text-muted)]">{getDeptName(p.departmentId)}</td>
                   <td className="py-3 px-4 text-center"><span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full text-xs font-bold">{JOB_LEVEL_LABELS[p.level]}</span></td>
-                  <td className="py-3 px-4 text-center"><span className={`material-icons-round text-lg ${p.hasSystemAccessDefault ? 'text-emerald-500' : 'text-slate-300'}`}>{p.hasSystemAccessDefault ? 'check_circle' : 'cancel'}</span></td>
+                  <td className="py-3 px-4 text-center"><span className={`material-icons-round text-lg ${p.hasSystemAccessDefault ? 'text-emerald-500' : 'text-[var(--color-text-muted)]'}`}>{p.hasSystemAccessDefault ? 'check_circle' : 'cancel'}</span></td>
                   <td className="py-3 px-4 text-center"><Badge variant={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'نشط' : 'معطل'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditPos(p)} onDelete={() => setDeleteConfirmId(p.id!)} />}
                 </tr>
@@ -327,8 +327,8 @@ export const Organization: React.FC = () => {
           {shifts.length === 0 ? <EmptyState icon="schedule" label="لا يوجد ورديات" sub='اضغط "إضافة وردية" للبدء' /> : (
             <DataTable headers={['الوردية', { label: 'من', center: true }, { label: 'إلى', center: true }, { label: 'استراحة', center: true }, { label: 'سماح تأخير', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {shifts.map((s) => (
-                <tr key={s.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{s.name}</td>
+                <tr key={s.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                  <td className="py-3 px-4 font-bold text-[var(--color-text)]">{s.name}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.startTime}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.endTime}</td>
                   <td className="py-3 px-4 text-center">{s.breakMinutes} ط¯</td>
@@ -348,8 +348,8 @@ export const Organization: React.FC = () => {
           {penalties.length === 0 ? <EmptyState icon="gavel" label="لا يوجد جزاءات" sub='اضغط "إضافة جزاء" لإنشاء قاعدة جزاء' /> : (
             <DataTable headers={['الجزاء', { label: 'النوع', center: true }, { label: 'طريقة الحساب', center: true }, { label: 'القيمة', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {penalties.map((p) => (
-                <tr key={p.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{p.name}</td>
+                <tr key={p.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                  <td className="py-3 px-4 font-bold text-[var(--color-text)]">{p.name}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={p.type === 'disciplinary' ? 'danger' : p.type === 'absence' ? 'warning' : 'info'}>{PENALTY_TYPE_LABELS[p.type]}</Badge></td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[p.valueType]}</td>
                   <td className="py-3 px-4 text-center font-bold">{p.value}{p.valueType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
@@ -365,15 +365,15 @@ export const Organization: React.FC = () => {
       {/* ── Late Rules Tab ── */}
       {tab === 'lateRules' && (
         <Card>
-          <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-            <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
+          <div className="mb-4 p-3 rounded-[var(--border-radius-base)] bg-amber-50 border border-amber-200">
+            <p className="text-xs font-bold text-amber-700">
               قواعد التأخير بتحدد الخصم حسب عدد دقائق التأخير. كل قاعدة بتغطي نطاق معين من الدقائق.
             </p>
           </div>
           {lateRulesList.length === 0 ? <EmptyState icon="timer_off" label="لا يوجد قواعد تأخير" sub='اضغط "إضافة قاعدة" لإنشاء قاعدة تأخير' /> : (
             <DataTable headers={[{ label: 'من (دقيقة)', center: true }, { label: 'إلى (دقيقة)', center: true }, { label: 'طريقة الخصم', center: true }, { label: 'القيمة', center: true }]} canEdit={canEdit}>
               {lateRulesList.map((r) => (
-                <tr key={r.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                <tr key={r.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesFrom}</td>
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesTo}</td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[r.penaltyType]}</td>
@@ -392,8 +392,8 @@ export const Organization: React.FC = () => {
           {allowances.length === 0 ? <EmptyState icon="card_giftcard" label="لا يوجد بدلات" sub='اضغط "إضافة بدل" لإنشاء نوع بدل' /> : (
             <DataTable headers={['البدل', { label: 'طريقة الحساب', center: true }, { label: 'القيمة', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {allowances.map((a) => (
-                <tr key={a.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{a.name}</td>
+                <tr key={a.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                  <td className="py-3 px-4 font-bold text-[var(--color-text)]">{a.name}</td>
                   <td className="py-3 px-4 text-center text-sm">{CALC_TYPE_LABELS[a.calculationType]}</td>
                   <td className="py-3 px-4 text-center font-bold text-emerald-600">{a.value}{a.calculationType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={a.isActive ? 'success' : 'neutral'}>{a.isActive ? 'نشط' : 'معطل'}</Badge></td>
@@ -408,16 +408,16 @@ export const Organization: React.FC = () => {
       {/* ── Create/Edit Modal ── */}
       {showModal && canEdit && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">{editId ? 'تعديل' : 'إضافة'} {MODAL_LABELS[tab]}</h3>
-              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 space-y-4">
               {saveMsg && (
-                <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'}`}>
+                <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
                   <span className="material-icons-round text-base">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
                   <p className="flex-1">{saveMsg.text}</p>
                   <button onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
@@ -532,7 +532,7 @@ export const Organization: React.FC = () => {
                 </>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>
               <Button variant="primary" onClick={handleSave} disabled={saving}>
                 {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -546,12 +546,12 @@ export const Organization: React.FC = () => {
       {/* ── Delete Confirmation Modal ── */}
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-14 h-14 bg-rose-100 dark:bg-rose-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-3xl text-rose-500">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد الحذف</h3>
-            <p className="text-sm text-slate-500 mb-6">هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
               <Button variant="danger" onClick={handleDelete}>حذف</Button>
@@ -567,26 +567,26 @@ export const Organization: React.FC = () => {
 
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="space-y-2">
-    <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">{label}</label>
+    <label className="block text-sm font-bold text-[var(--color-text-muted)]">{label}</label>
     {children}
   </div>
 );
 
 const EmptyState: React.FC<{ icon: string; label: string; sub: string }> = ({ icon, label, sub }) => (
   <div className="text-center py-12">
-    <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600">{icon}</span>
-    <p className="text-slate-500 font-bold mt-3">{label}</p>
-    <p className="text-xs text-slate-400 mt-1">{sub}</p>
+    <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600">{icon}</span>
+    <p className="text-[var(--color-text-muted)] font-bold mt-3">{label}</p>
+    <p className="text-xs text-[var(--color-text-muted)] mt-1">{sub}</p>
   </div>
 );
 
 const ActionCell: React.FC<{ onEdit: () => void; onDelete: () => void }> = ({ onEdit, onDelete }) => (
   <td className="py-3 px-4 text-center">
     <div className="flex items-center justify-center gap-1">
-      <button onClick={onEdit} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500 hover:text-primary">
+      <button onClick={onEdit} className="p-1.5 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)] transition-colors text-[var(--color-text-muted)] hover:text-primary">
         <span className="material-icons-round text-lg">edit</span>
       </button>
-      <button onClick={onDelete} className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors text-slate-400 hover:text-rose-500">
+      <button onClick={onDelete} className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-colors text-[var(--color-text-muted)] hover:text-rose-500">
         <span className="material-icons-round text-lg">delete</span>
       </button>
     </div>
@@ -600,14 +600,14 @@ const DataTable: React.FC<{
 }> = ({ headers, canEdit, children }) => (
   <div className="overflow-x-auto">
     <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-500">
+      <thead className="erp-thead">
+        <tr>
           {headers.map((h, i) => {
             const label = typeof h === 'string' ? h : h.label;
             const center = typeof h === 'object' && h.center;
-            return <th key={i} className={`py-3 px-4 font-bold ${center ? 'text-center' : 'text-right'}`}>{label}</th>;
+            return <th key={i} className={`erp-th ${center ? "text-center" : ""}`}>{label}</th>;
           })}
-          {canEdit && <th className="text-center py-3 px-4 font-bold">إجراءات</th>}
+          {canEdit && <th className="erp-th text-center">إجراءات</th>}
         </tr>
       </thead>
       <tbody>{children}</tbody>

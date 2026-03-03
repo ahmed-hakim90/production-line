@@ -11,6 +11,7 @@ import type { MonthlyProductionCost } from '../../../types';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { PageHeader } from '../../../components/PageHeader';
 
 type ExtraColumnKey = 'materialsAndPackaging' | 'sellingPrice' | 'profit';
 const EXTRA_COLUMNS_PREF_KEY = 'monthly_costs_extra_columns_v1';
@@ -335,31 +336,25 @@ export const MonthlyProductionCosts: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/70 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-            <span className="material-icons-round text-white text-2xl">price_check</span>
-          </div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">تكلفة الإنتاج الشهرية</h2>
-            <p className="text-sm text-slate-500 font-medium">حساب ومراجعة تكلفة الإنتاج لكل منتج حسب الشهر</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
+      <PageHeader
+        title="تكلفة الإنتاج الشهرية"
+        subtitle="حساب ومراجعة تكلفة الإنتاج لكل منتج حسب الشهر"
+        icon="price_check"
+        primaryAction={canManage ? {
+          label: calculating ? 'جاري الحساب...' : 'حساب الكل',
+          icon: 'calculate',
+          onClick: handleCalculateAll,
+          disabled: calculating,
+        } : undefined}
+        extra={
           <input
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
           />
-          {canManage && (
-            <Button onClick={handleCalculateAll} disabled={calculating}>
-              <span className="material-icons-round text-[18px] ml-1">calculate</span>
-              {calculating ? 'جاري الحساب...' : 'حساب الكل'}
-            </Button>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -394,18 +389,18 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       {/* Month close banner */}
       {allClosed && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
           <span className="material-icons-round text-emerald-600">lock</span>
-          <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+          <p className="text-sm font-semibold text-emerald-700">
             فترة {monthLabel} مُغلقة — لا يمكن إعادة الحساب
           </p>
         </div>
       )}
       {!allClosed && staleProductsCount > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <span className="material-icons-round text-amber-600">warning</span>
-            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            <p className="text-sm font-semibold text-amber-700">
               تم تعديل مدخلات التكلفة بعد آخر حساب في {staleProductsCount} منتج — برجاء إعادة حساب الكل لتحديث القيم.
             </p>
           </div>
@@ -421,21 +416,21 @@ export const MonthlyProductionCosts: React.FC = () => {
       {/* Table */}
       <Card>
         {tableRecords.length > 0 && (
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center gap-3">
+          <div className="p-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center gap-3">
             <div className="flex items-center gap-2 md:ml-auto">
-              <span className="material-icons-round text-slate-400 text-sm">search</span>
+              <span className="material-icons-round text-[var(--color-text-muted)] text-sm">search</span>
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث بالاسم أو الكود..."
-                className="h-10 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/50 w-full md:w-64"
+                className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:ring-2 focus:ring-primary/50 w-full md:w-64"
               />
             </div>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/50"
+              className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:ring-2 focus:ring-primary/50"
             >
               <option value="">كل الفئات</option>
               {categoryOptions.map((c) => (
@@ -471,43 +466,43 @@ export const MonthlyProductionCosts: React.FC = () => {
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300">
-                  <th className="py-3 px-4 text-right font-bold">#</th>
-                  <th className="py-3 px-4 text-right font-bold">كود المنتج</th>
-                  <th className="py-3 px-4 text-right font-bold">اسم المنتج</th>
-                  <th className="py-3 px-4 text-right font-bold">الكمية المنتجة</th>
-                  <th className="py-3 px-4 text-right font-bold">إجمالي التكلفة</th>
-                  <th className="py-3 px-4 text-right font-bold">مباشر / غير مباشر</th>
-                  <th className="py-3 px-4 text-right font-bold">متوسط تكلفة الوحدة</th>
+              <thead className="erp-thead">
+                <tr className="bg-[#f8f9fa]/50 text-[var(--color-text-muted)]">
+                  <th className="erp-th">#</th>
+                  <th className="erp-th">كود المنتج</th>
+                  <th className="erp-th">اسم المنتج</th>
+                  <th className="erp-th">الكمية المنتجة</th>
+                  <th className="erp-th">إجمالي التكلفة</th>
+                  <th className="erp-th">مباشر / غير مباشر</th>
+                  <th className="erp-th">متوسط تكلفة الوحدة</th>
                   {extraColumns.materialsAndPackaging && (
-                    <th className="py-3 px-4 text-right font-bold">إجمالي تكلفة المواد والتغليف</th>
+                    <th className="erp-th">إجمالي تكلفة المواد والتغليف</th>
                   )}
                   {extraColumns.sellingPrice && (
-                    <th className="py-3 px-4 text-right font-bold">سعر البيع</th>
+                    <th className="erp-th">سعر البيع</th>
                   )}
                   {extraColumns.profit && (
-                    <th className="py-3 px-4 text-right font-bold">ربح القطعة</th>
+                    <th className="erp-th">ربح القطعة</th>
                   )}
-                  <th className="py-3 px-4 text-center font-bold">الحالة</th>
+                  <th className="erp-th text-center">الحالة</th>
                 </tr>
               </thead>
               <tbody>
                 {displayRecords.map((r, i) => (
                   <tr
                     key={r.id}
-                    className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
+                    className="border-t border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors cursor-pointer"
                     onClick={() => navigate(`/products/${r.productId}`)}
                   >
-                    <td className="py-3 px-4 text-slate-400 font-mono">{i + 1}</td>
+                    <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono">{i + 1}</td>
                     <td className="py-3 px-4 font-mono text-xs text-slate-500">{productCodeMap.get(r.productId) || '—'}</td>
-                    <td className="py-3 px-4 font-semibold text-slate-800 dark:text-white">
+                    <td className="py-3 px-4 font-semibold text-[var(--color-text)]">
                       <span title={productNameMap.get(r.productId) || r.productId}>
                         {shortProductName(productNameMap.get(r.productId) || r.productId)}
                       </span>
                     </td>
                     <td className="py-3 px-4 font-mono">{formatCost(r.totalProducedQty)}</td>
-                    <td className="py-3 px-4 font-mono font-semibold text-amber-700 dark:text-amber-400">
+                    <td className="py-3 px-4 font-mono font-semibold text-amber-700">
                       {formatCost(r.totalProductionCost)}
                     </td>
                     <td className="py-3 px-4">
@@ -519,11 +514,11 @@ export const MonthlyProductionCosts: React.FC = () => {
                         const indirectPerPiece = r.totalProducedQty > 0 ? indirect / r.totalProducedQty : 0;
                         return (
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-xs tabular-nums text-blue-600 dark:text-blue-400 font-bold leading-5">
+                            <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
                               {formatCost(direct)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
                               <span className="text-[10px] font-medium opacity-70"> — {formatCost(directPerPiece)} / قطعة</span>
                             </span>
-                            <span className="text-xs tabular-nums text-slate-500 font-bold leading-5">
+                            <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold leading-5">
                               {formatCost(indirect)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span>
                               <span className="text-[10px] font-medium opacity-70"> — {formatCost(indirectPerPiece)} / قطعة</span>
                             </span>
@@ -535,7 +530,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                       {formatCost(r.averageUnitCost)}
                     </td>
                     {extraColumns.materialsAndPackaging && (
-                      <td className="py-3 px-4 font-mono font-bold text-slate-700 dark:text-slate-200">
+                      <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">
                         {(() => {
                           const raw = rawProductMap.get(r.productId);
                           const chinese = raw?.chineseUnitCost ?? 0;
@@ -549,7 +544,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                       </td>
                     )}
                     {extraColumns.sellingPrice && (
-                      <td className="py-3 px-4 font-mono font-bold text-slate-700 dark:text-slate-200">
+                      <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">
                         {formatCost(rawProductMap.get(r.productId)?.sellingPrice ?? 0)}
                       </td>
                     )}
@@ -557,10 +552,10 @@ export const MonthlyProductionCosts: React.FC = () => {
                       <td className="py-3 px-4 font-mono font-black">
                         {(() => {
                           const sellingPrice = rawProductMap.get(r.productId)?.sellingPrice ?? 0;
-                          if (sellingPrice <= 0) return <span className="text-slate-400">—</span>;
+                          if (sellingPrice <= 0) return <span className="text-[var(--color-text-muted)]">—</span>;
                           const profit = sellingPrice - r.averageUnitCost;
                           return (
-                            <span className={profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                            <span className={profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
                               {formatCost(profit)}
                             </span>
                           );
@@ -575,17 +570,17 @@ export const MonthlyProductionCosts: React.FC = () => {
                   </tr>
                 ))}
                 {/* Totals row */}
-                <tr className="border-t-2 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 font-bold">
+                <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50 font-bold">
                   <td className="py-3 px-4" colSpan={3}>الإجمالي</td>
                   <td className="py-3 px-4 font-mono">{formatCost(totalQty)}</td>
-                  <td className="py-3 px-4 font-mono text-amber-700 dark:text-amber-400">{formatCost(totalCost)}</td>
+                  <td className="py-3 px-4 font-mono text-amber-700">{formatCost(totalCost)}</td>
                   <td className="py-3 px-4">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-xs tabular-nums text-blue-600 dark:text-blue-400 font-bold leading-5">
+                      <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
                         {formatCost(totalDirect)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
                         <span className="text-[10px] font-medium opacity-70"> — {formatCost(totalQty > 0 ? totalDirect / totalQty : 0)} / قطعة</span>
                       </span>
-                      <span className="text-xs tabular-nums text-slate-500 font-bold leading-5">
+                      <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold leading-5">
                         {formatCost(totalIndirect)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span>
                         <span className="text-[10px] font-medium opacity-70"> — {formatCost(totalQty > 0 ? totalIndirect / totalQty : 0)} / قطعة</span>
                       </span>
@@ -593,7 +588,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 font-mono text-primary">{formatCost(overallAvg)}</td>
                   {extraColumns.materialsAndPackaging && (
-                    <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-200">
+                    <td className="py-3 px-4 font-mono text-[var(--color-text)]">
                       {formatCost(displayRecords.reduce((s, r) => {
                         const raw = rawProductMap.get(r.productId);
                         const chinese = raw?.chineseUnitCost ?? 0;
@@ -608,7 +603,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                     </td>
                   )}
                   {extraColumns.sellingPrice && (
-                    <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-200">
+                    <td className="py-3 px-4 font-mono text-[var(--color-text)]">
                       {formatCost(displayRecords.reduce((s, r) => {
                         const sp = rawProductMap.get(r.productId)?.sellingPrice ?? 0;
                         return s + (sp * r.totalProducedQty);
@@ -625,7 +620,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                         }, 0) / (totalQty > 0 ? totalQty : 1);
                         const totalProfit = weightedSellingPerUnit - overallAvg;
                         return (
-                          <span className={totalProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                          <span className={totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
                             {formatCost(totalProfit)}
                           </span>
                         );
@@ -649,7 +644,7 @@ export const MonthlyProductionCosts: React.FC = () => {
               إغلاق فترة {monthLabel}
             </Button>
           ) : (
-            <div className="flex items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+            <div className="flex items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-[var(--border-radius-lg)] p-4">
               <span className="material-icons-round text-red-500">warning</span>
               <p className="text-sm text-red-700 dark:text-red-400 font-semibold">
                 سيتم إغلاق الفترة ولن يمكن إعادة الحساب. متأكد؟
@@ -667,13 +662,13 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       {showColumnsModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+              <div className="erp-page-actions">
                 <span className="material-icons-round text-primary">tune</span>
                 <h3 className="text-lg font-bold">إدارة الأعمدة</h3>
               </div>
-              <button onClick={() => setShowColumnsModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -685,26 +680,26 @@ export const MonthlyProductionCosts: React.FC = () => {
               ].map((opt) => (
                 <label
                   key={opt.key}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
                     extraColumns[opt.key]
-                      ? 'border-primary/30 bg-primary/5 dark:bg-primary/10'
-                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                      ? 'border-primary/30 bg-primary/5'
+                      : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={extraColumns[opt.key]}
                     onChange={(e) => toggleExtraColumn(opt.key, e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20"
+                    className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                   />
                   <span className={`material-icons-round text-lg ${extraColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`}>{opt.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-white">{opt.label}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{opt.label}</p>
                   </div>
                 </label>
               ))}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end">
               <Button variant="outline" onClick={() => setShowColumnsModal(false)}>إغلاق</Button>
             </div>
           </div>

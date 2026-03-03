@@ -87,6 +87,7 @@ export interface FirestoreProduct {
 export interface ProductMaterial {
   id?: string;
   productId: string;
+  materialId?: string;
   materialName: string;
   quantityUsed: number;
   unitCost: number;
@@ -616,6 +617,7 @@ export interface PlanSettings {
   allowOverProduction: boolean;
   autoClosePlan: boolean;
   defaultProductionWarehouseId?: string;
+  rawMaterialWarehouseId?: string;
   decomposedSourceWarehouseId?: string;
   finishedReceiveWarehouseId?: string;
   wasteReceiveWarehouseId?: string;
@@ -624,6 +626,7 @@ export interface PlanSettings {
   transferDisplayUnit?: 'piece' | 'carton';
   allowNegativeDecomposedStock?: boolean;
   allowNegativeFinishedTransferStock?: boolean;
+  requireFinishedStockApprovalForReports?: boolean;
   maxWasteThreshold: number;
   efficiencyCalculationMode: 'standard' | 'weighted';
   averageProductionMode: 'daily' | 'weekly' | 'monthly';
@@ -641,6 +644,8 @@ export interface BrandingSettings {
 export type ThemeMode = 'light' | 'dark' | 'auto';
 export type UIDensity = 'comfortable' | 'compact';
 
+export type SidebarIconStyle = 'colorful' | 'primary' | 'muted';
+
 export interface ThemeSettings {
   primaryColor: string;
   secondaryColor: string;
@@ -653,6 +658,9 @@ export interface ThemeSettings {
   baseFontSize: number;
   borderRadius: number;
   density: UIDensity;
+  sidebarIconStyle: SidebarIconStyle;
+  textColor?: string;
+  mutedTextColor?: string;
 }
 
 export interface DashboardDisplaySettings {

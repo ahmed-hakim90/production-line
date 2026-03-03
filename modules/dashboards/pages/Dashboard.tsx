@@ -39,24 +39,24 @@ const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
   const data = payload[0]?.payload;
   if (!data) return null;
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-lg text-right min-w-[180px]" dir="rtl">
-      <p className="text-xs font-black text-slate-600 dark:text-slate-400 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1.5">{data.date}</p>
+    <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 shadow-lg text-right min-w-[180px]" dir="rtl">
+      <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2 border-b border-[var(--color-border)] pb-1.5">{data.date}</p>
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between gap-6">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500 shrink-0"></span><span className="text-slate-500 font-bold">الإنتاج</span></span>
-          <span className="font-black text-blue-600">{formatNumber(data.production)} وحدة</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500 shrink-0"></span><span className="text-[var(--color-text-muted)] font-bold">الإنتاج</span></span>
+          <span className="font-bold text-blue-600">{formatNumber(data.production)} وحدة</span>
         </div>
         <div className="flex justify-between gap-6">
-          <span className="text-slate-500 font-bold">تكلفة العمالة</span>
-          <span className="font-black text-slate-700 dark:text-slate-300">{formatCost(data.laborCost)} ج.م</span>
+          <span className="text-[var(--color-text-muted)] font-bold">تكلفة العمالة</span>
+          <span className="font-bold text-[var(--color-text)]">{formatCost(data.laborCost)} ج.م</span>
         </div>
         <div className="flex justify-between gap-6">
-          <span className="text-slate-500 font-bold">غير مباشرة</span>
-          <span className="font-black text-slate-700 dark:text-slate-300">{formatCost(data.indirectCost)} ج.م</span>
+          <span className="text-[var(--color-text-muted)] font-bold">غير مباشرة</span>
+          <span className="font-bold text-[var(--color-text)]">{formatCost(data.indirectCost)} ج.م</span>
         </div>
-        <div className="flex justify-between gap-6 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0"></span><span className="text-slate-500 font-bold">تكلفة الوحدة</span></span>
-          <span className="font-black text-violet-600">{formatCost(data.costPerUnit)} ج.م</span>
+        <div className="flex justify-between gap-6 pt-1.5 border-t border-[var(--color-border)]">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0"></span><span className="text-[var(--color-text-muted)] font-bold">تكلفة الوحدة</span></span>
+          <span className="font-bold text-violet-600">{formatCost(data.costPerUnit)} ج.م</span>
         </div>
       </div>
     </div>
@@ -300,8 +300,8 @@ export const Dashboard: React.FC = () => {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">مؤسسة المغربي</h2>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">جاري تحميل البيانات...</p>
+          <h2 className="text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
+          <p className="text-[var(--color-text-muted)] mt-1 font-medium">جاري تحميل البيانات...</p>
         </div>
         <LoadingSkeleton type="card" rows={6} />
       </div>
@@ -311,8 +311,8 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* <div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">مؤسسة المغربي</h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
+        <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
       </div> */}
 
       <CustomDashboardWidgets dashboardKey="dashboard" systemSettings={systemSettings} />
@@ -320,22 +320,22 @@ export const Dashboard: React.FC = () => {
       {isVisible('kpi_row') && (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {/* Production Card — Daily & Monthly */}
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm sm:col-span-2 md:col-span-1">
+        <div className="bg-[var(--color-card)] p-4 sm:p-6 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-2 md:col-span-1">
           <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
               <span className="material-icons-round text-2xl sm:text-3xl">inventory</span>
             </div>
-            <p className="text-slate-500 text-sm font-bold">إجمالي الإنتاج</p>
+            <p className="text-[var(--color-text-muted)] text-sm font-bold">إجمالي الإنتاج</p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <div className="bg-blue-50/60 dark:bg-blue-900/10 rounded-xl p-3 sm:p-4 text-center border border-blue-100 dark:border-blue-900/20">
-              <p className="text-[11px] font-bold text-slate-400 mb-1.5">إنتاج اليوم</p>
-              <h3 className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">{formatNumber(kpis.todayProduction)}</h3>
+            <div className="bg-blue-50/60 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] p-3 sm:p-4 text-center border border-blue-100 dark:border-blue-900/20">
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1.5">إنتاج اليوم</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-blue-600">{formatNumber(kpis.todayProduction)}</h3>
               <span className="text-[10px] font-medium text-slate-400">وحدة</span>
             </div>
-            <div className="bg-indigo-50/60 dark:bg-indigo-900/10 rounded-xl p-3 sm:p-4 text-center border border-indigo-100 dark:border-indigo-900/20">
-              <p className="text-[11px] font-bold text-slate-400 mb-1.5">إنتاج الشهر</p>
-              <h3 className="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400">{formatNumber(kpis.monthlyProduction)}</h3>
+            <div className="bg-indigo-50/60 dark:bg-indigo-900/10 rounded-[var(--border-radius-lg)] p-3 sm:p-4 text-center border border-indigo-100 dark:border-indigo-900/20">
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1.5">إنتاج الشهر</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatNumber(kpis.monthlyProduction)}</h3>
               <span className="text-[10px] font-medium text-slate-400">وحدة</span>
             </div>
           </div>
@@ -353,20 +353,20 @@ export const Dashboard: React.FC = () => {
 
       {/* ── Product Cost Analysis Section ── */}
       {isVisible('product_cost_analysis') && canViewCosts && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
+          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-lg flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-violet-600 dark:text-violet-400">price_check</span>
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-800 dark:text-white">تحليل تكلفة المنتجات</h3>
-                <p className="text-[11px] text-slate-400 font-medium">اختر منتج أو أكثر لمقارنة متوسط التكلفة الشهرية</p>
+                <h3 className="text-base font-bold text-[var(--color-text)]">تحليل تكلفة المنتجات</h3>
+                <p className="text-[11px] text-[var(--color-text-muted)] font-medium">اختر منتج أو أكثر لمقارنة متوسط التكلفة الشهرية</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <select
-                className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[200px] transition-all"
+                className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[200px] transition-all"
                 value=""
                 onChange={(e) => {
                   if (e.target.value && !costProductIds.includes(e.target.value)) {
@@ -382,7 +382,7 @@ export const Dashboard: React.FC = () => {
               {costProductIds.length > 0 && (
                 <button
                   onClick={() => setCostProductIds([])}
-                  className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-all"
+                  className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all"
                   title="مسح الكل"
                 >
                   <span className="material-icons-round text-sm">clear_all</span>
@@ -414,37 +414,37 @@ export const Dashboard: React.FC = () => {
             <div className="p-5 sm:p-6">
               <div className="overflow-x-auto">
                 <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">المنتج</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">تكلفة الوحدة</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">تكلفة العمالة</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">غير مباشرة</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">إجمالي التكلفة</th>
-                      <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الإنتاج</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">المنتج</th>
+                      <th className="erp-th text-center">تكلفة الوحدة</th>
+                      <th className="erp-th text-center">تكلفة العمالة</th>
+                      <th className="erp-th text-center">غير مباشرة</th>
+                      <th className="erp-th text-center">إجمالي التكلفة</th>
+                      <th className="erp-th text-center">الإنتاج</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[var(--color-border)]">
                     {costProductIds.map((pid) => {
                       const data = costAnalysisMap[pid];
                       const p = products.find((pr) => pr.id === pid);
                       if (!data) return (
-                        <tr key={pid} className="text-slate-400">
+                        <tr key={pid} className="text-[var(--color-text-muted)]">
                           <td className="px-4 py-3 text-sm font-bold">{p?.name || '—'}</td>
                           <td colSpan={5} className="px-4 py-3 text-center text-xs">لا توجد بيانات</td>
                         </tr>
                       );
                       return (
-                        <tr key={pid} onClick={() => navigate(`/products/${pid}`)} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
+                        <tr key={pid} onClick={() => navigate(`/products/${pid}`)} className="hover:bg-[#f8f9fa]/50 transition-colors cursor-pointer">
                           <td className="px-4 py-3 text-sm font-bold text-primary">{p?.name || '—'}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 text-sm font-black ring-1 ring-violet-500/20">
+                            <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-violet-50 dark:bg-violet-900/20 text-violet-600 text-sm font-bold ring-1 ring-violet-500/20">
                               {formatCost(data.costPerUnit)} ج.م
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-slate-600 dark:text-slate-400">{formatCost(data.laborCost)} ج.م</td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-slate-600 dark:text-slate-400">{formatCost(data.indirectCost)} ج.م</td>
-                          <td className="px-4 py-3 text-center text-sm font-black text-primary">{formatCost(data.totalCost)} ج.م</td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(data.laborCost)} ج.م</td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(data.indirectCost)} ج.م</td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-primary">{formatCost(data.totalCost)} ج.م</td>
                           <td className="px-4 py-3 text-center text-sm font-bold text-emerald-600">{formatNumber(data.quantityProduced)} وحدة</td>
                         </tr>
                       );
@@ -452,8 +452,8 @@ export const Dashboard: React.FC = () => {
                   </tbody>
                   {Object.keys(costAnalysisMap).length > 1 && (
                     <tfoot>
-                      <tr className="bg-slate-50 dark:bg-slate-800/50 border-t-2 border-slate-200 dark:border-slate-700">
-                        <td className="px-4 py-3 text-sm font-black text-slate-800 dark:text-white">الإجمالي</td>
+                      <tr className="bg-[#f8f9fa]/50 border-t-2 border-[var(--color-border)]">
+                        <td className="px-4 py-3 text-sm font-bold text-[var(--color-text)]">الإجمالي</td>
                         {(() => {
                           const vals = Object.values(costAnalysisMap) as ProductCostData[];
                           const sumLabor = vals.reduce((s, v) => s + v.laborCost, 0);
@@ -463,11 +463,11 @@ export const Dashboard: React.FC = () => {
                           const avgCPU = sumQty > 0 ? sumTotal / sumQty : 0;
                           return (
                             <>
-                              <td className="px-4 py-3 text-center text-sm font-black text-violet-600">{avgCPU > 0 ? `${formatCost(avgCPU)} ج.م` : '—'}</td>
-                              <td className="px-4 py-3 text-center text-sm font-black text-slate-600 dark:text-slate-400">{formatCost(sumLabor)} ج.م</td>
-                              <td className="px-4 py-3 text-center text-sm font-black text-slate-600 dark:text-slate-400">{formatCost(sumIndirect)} ج.م</td>
-                              <td className="px-4 py-3 text-center text-sm font-black text-primary">{formatCost(sumTotal)} ج.م</td>
-                              <td className="px-4 py-3 text-center text-sm font-black text-emerald-600">{formatNumber(sumQty)} وحدة</td>
+                              <td className="px-4 py-3 text-center text-sm font-bold text-violet-600">{avgCPU > 0 ? `${formatCost(avgCPU)} ج.م` : '—'}</td>
+                              <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(sumLabor)} ج.م</td>
+                              <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(sumIndirect)} ج.م</td>
+                              <td className="px-4 py-3 text-center text-sm font-bold text-primary">{formatCost(sumTotal)} ج.م</td>
+                              <td className="px-4 py-3 text-center text-sm font-bold text-emerald-600">{formatNumber(sumQty)} وحدة</td>
                             </>
                           );
                         })()}
@@ -488,22 +488,22 @@ export const Dashboard: React.FC = () => {
 
       {/* ── Daily Production vs Cost Chart ── */}
       {isVisible('daily_cost_chart') && canViewCosts && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
+          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center shrink-0">
-                <span className="material-icons-round text-blue-600 dark:text-blue-400">insights</span>
+              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-blue-600">insights</span>
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-800 dark:text-white">الإنتاج اليومي مقابل التكلفة</h3>
-                <p className="text-[11px] text-slate-400 font-medium">تحليل يومي للإنتاج والتكاليف خلال الشهر المحدد</p>
+                <h3 className="text-base font-bold text-[var(--color-text)]">الإنتاج اليومي مقابل التكلفة</h3>
+                <p className="text-[11px] text-[var(--color-text-muted)] font-medium">تحليل يومي للإنتاج والتكاليف خلال الشهر المحدد</p>
               </div>
             </div>
           </div>
 
           <div className="px-5 sm:px-6 pt-4 flex flex-wrap gap-3">
             <select
-              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
               value={chartProductId}
               onChange={(e) => setChartProductId(e.target.value)}
             >
@@ -514,7 +514,7 @@ export const Dashboard: React.FC = () => {
             </select>
 
             <select
-              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
               value={chartLineId}
               onChange={(e) => setChartLineId(e.target.value)}
             >
@@ -525,7 +525,7 @@ export const Dashboard: React.FC = () => {
             </select>
 
             <select
-              className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
               value={chartMonth}
               onChange={(e) => setChartMonth(e.target.value)}
             >
@@ -631,8 +631,8 @@ export const Dashboard: React.FC = () => {
                 <div className="cursor-pointer" onClick={() => navigate(`/lines/${line.id}`)}>
                   <div className="flex justify-between items-start mb-5">
                     <div>
-                      <h4 className="font-bold text-lg text-slate-800 dark:text-white">{line.name}</h4>
-                      <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">{line.employeeName}</span>
+                      <h4 className="font-bold text-lg text-[var(--color-text)]">{line.name}</h4>
+                      <span className="text-xs text-[var(--color-text-muted)] font-bold uppercase tracking-wider">{line.employeeName}</span>
                     </div>
                     <Badge variant={getVariant(line.status)} pulse={line.status === ProductionLineStatus.ACTIVE}>
                       {getStatusLabel(line.status)}
@@ -640,19 +640,19 @@ export const Dashboard: React.FC = () => {
                   </div>
 
                   <div className="mb-6">
-                    <p className="text-xs text-slate-400 font-bold mb-1 uppercase tracking-tight">المنتج الحالي</p>
-                    <p className="text-base font-bold text-slate-700 dark:text-slate-200">{line.currentProduct}</p>
+                    <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1 uppercase tracking-tight">المنتج الحالي</p>
+                    <p className="text-base font-bold text-[var(--color-text)]">{line.currentProduct}</p>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex justify-between text-xs font-bold">
-                      <span className="text-slate-500">الإنتاج: {formatNumber(line.achievement)} / {formatNumber(line.target)}</span>
+                      <span className="text-[var(--color-text-muted)]">الإنتاج: {formatNumber(line.achievement)} / {formatNumber(line.target)}</span>
                       <span className={`${line.efficiency > 80 ? 'text-emerald-600' : 'text-amber-600'}`}>{line.efficiency}%</span>
                     </div>
                     {line.target > 0 && (
                       <p className="text-[11px] font-bold text-slate-400">المتبقي: {formatNumber(Math.max(line.target - line.achievement, 0))}</p>
                     )}
-                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                    <div className="w-full h-2.5 bg-[#f0f2f5] rounded-full overflow-hidden shadow-inner">
                       <div 
                         className={`h-full rounded-full transition-all duration-1000 ${line.status === ProductionLineStatus.WARNING ? 'bg-amber-500' : 'bg-primary shadow-[0_0_10px_rgba(19,146,236,0.3)]'}`} 
                         style={{ width: `${Math.min(line.efficiency, 100)}%` }}
@@ -661,22 +661,22 @@ export const Dashboard: React.FC = () => {
                   </div>
 
                   {canViewCosts && lineCosts[line.id] && (lineCosts[line.id].laborCost > 0 || lineCosts[line.id].indirectCost > 0) && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-3">
+                    <div className="mt-4 pt-4 border-t border-[var(--color-border)] grid grid-cols-2 gap-3">
                       <div>
                         <p className="text-[10px] font-bold text-slate-400">تكلفة العمالة</p>
-                        <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCost(lineCosts[line.id].laborCost)} ج.م</p>
+                        <p className="text-xs font-bold text-[var(--color-text)]">{formatCost(lineCosts[line.id].laborCost)} ج.م</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-slate-400">تكلفة غير مباشرة</p>
-                        <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCost(lineCosts[line.id].indirectCost)} ج.م</p>
+                        <p className="text-xs font-bold text-[var(--color-text)]">{formatCost(lineCosts[line.id].indirectCost)} ج.م</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-slate-400">إجمالي التكلفة</p>
-                        <p className="text-xs font-black text-primary">{formatCost(lineCosts[line.id].totalCost)} ج.م</p>
+                        <p className="text-xs font-bold text-primary">{formatCost(lineCosts[line.id].totalCost)} ج.م</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-slate-400">تكلفة الوحدة (المنتج)</p>
-                        <p className="text-xs font-black text-emerald-600">
+                        <p className="text-xs font-bold text-emerald-600">
                           {line.currentProductId && productCosts[line.currentProductId]?.costPerUnit > 0
                             ? `${formatCost(productCosts[line.currentProductId].costPerUnit)} ج.م`
                             : '—'}
@@ -688,7 +688,7 @@ export const Dashboard: React.FC = () => {
                 {can("lineStatus.edit") && (
                   <button
                     onClick={(e) => { e.stopPropagation(); openTargetModal(line.id, line.name); }}
-                    className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg transition-all"
+                    className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-[var(--border-radius-base)] transition-all"
                   >
                     <span className="material-icons-round text-sm">flag</span>
                     {line.target > 0 ? 'تعديل الهدف' : 'تعيين الهدف'}
@@ -700,12 +700,12 @@ export const Dashboard: React.FC = () => {
         </div>}
 
         {isVisible('smart_planning') && <div className="lg:col-span-1">
-          <Card className="sticky top-24 border-primary/20 shadow-xl shadow-primary/5" title="التخطيط الذكي">
+          <Card className="sticky top-24 border-primary/20 shadow-primary/5" title="التخطيط الذكي">
             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">اختر المنتج</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المنتج</label>
                 <select
-                  className="w-full border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
                 >
@@ -717,9 +717,9 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الكمية المطلوبة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المطلوبة</label>
                 <input 
-                  className="w-full border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" 
+                  className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" 
                   placeholder="أدخل الكمية..." 
                   type="number"
                   min={0}
@@ -728,40 +728,40 @@ export const Dashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="p-5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 space-y-4">
+              <div className="p-5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
                 {planResults ? (
                   <>
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-slate-500">متوسط وقت التجميع</span>
-                      <span className="text-sm font-black text-primary">{planResults.avgAssemblyTime} دقيقة/وحدة</span>
+                      <span className="text-sm font-bold text-primary">{planResults.avgAssemblyTime} دقيقة/وحدة</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-slate-500">الطاقة اليومية لكل خط</span>
-                      <span className="text-sm font-black text-primary">{formatNumber(planResults.dailyCapacityPerLine)} وحدة</span>
+                      <span className="text-sm font-bold text-primary">{formatNumber(planResults.dailyCapacityPerLine)} وحدة</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-slate-500">إجمالي الطاقة اليومية</span>
-                      <span className="text-sm font-black text-primary">
+                      <span className="text-sm font-bold text-primary">
                         {formatNumber(planResults.totalDailyCapacity)} وحدة ({planResults.activeLinesCount} خط)
                       </span>
                     </div>
-                    <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-600">
+                    <div className="flex justify-between items-center pt-3 border-t border-[var(--color-border)]">
                       <span className="text-xs font-bold text-slate-500">الأيام المقدرة للإنجاز</span>
-                      <span className="text-sm font-black text-emerald-600">
+                      <span className="text-sm font-bold text-emerald-600">
                         {planResults.estimatedDays > 0 ? `${planResults.estimatedDays} يوم` : '—'}
                       </span>
                     </div>
                     {selectedProductCost && planQuantity > 0 && (
-                      <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-slate-600">
+                      <div className="flex justify-between items-center pt-3 border-t border-[var(--color-border)]">
                         <span className="text-xs font-bold text-slate-500">التكلفة المتوقعة</span>
-                        <span className="text-sm font-black text-primary">
+                        <span className="text-sm font-bold text-primary">
                           {formatCost(selectedProductCost.costPerUnit * planQuantity)} ج.م
                         </span>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="text-center text-slate-400 py-2">
+                  <div className="text-center text-[var(--color-text-muted)] py-2">
                     <span className="material-icons-round text-2xl mb-1 block opacity-40">calculate</span>
                     <p className="text-xs font-bold">اختر منتج وأدخل الكمية لعرض التقديرات</p>
                   </div>
@@ -783,50 +783,50 @@ export const Dashboard: React.FC = () => {
             )}
 
             {canViewCosts && selectedProductCost && (
-              <div className="mt-6 p-4 bg-violet-50 dark:bg-violet-900/10 rounded-xl border border-violet-200 dark:border-violet-800 space-y-3">
+              <div className="mt-6 p-4 bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] border border-violet-200 dark:border-violet-800 space-y-3">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-icons-round text-violet-600 text-sm">price_check</span>
-                  <h4 className="text-xs font-black text-violet-600">تحليل تكلفة المنتج (متوسط الشهر)</h4>
+                  <h4 className="text-xs font-bold text-violet-600">تحليل تكلفة المنتج (متوسط الشهر)</h4>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-slate-500">متوسط تكلفة الوحدة</span>
-                  <span className="text-sm font-black text-violet-600">{formatCost(selectedProductCost.costPerUnit)} ج.م</span>
+                  <span className="text-sm font-bold text-violet-600">{formatCost(selectedProductCost.costPerUnit)} ج.م</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-slate-500">تكلفة العمالة</span>
-                  <span className="text-sm font-black text-slate-700 dark:text-slate-300">{formatCost(selectedProductCost.laborCost)} ج.م</span>
+                  <span className="text-sm font-bold text-[var(--color-text)]">{formatCost(selectedProductCost.laborCost)} ج.م</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-slate-500">تكلفة غير مباشرة</span>
-                  <span className="text-sm font-black text-slate-700 dark:text-slate-300">{formatCost(selectedProductCost.indirectCost)} ج.م</span>
+                  <span className="text-sm font-bold text-[var(--color-text)]">{formatCost(selectedProductCost.indirectCost)} ج.م</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-violet-200 dark:border-violet-700">
                   <span className="text-xs font-bold text-slate-500">إجمالي الإنتاج</span>
-                  <span className="text-sm font-black text-slate-700 dark:text-slate-300">{formatNumber(selectedProductCost.quantityProduced)} وحدة</span>
+                  <span className="text-sm font-bold text-[var(--color-text)]">{formatNumber(selectedProductCost.quantityProduced)} وحدة</span>
                 </div>
               </div>
             )}
 
-            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">أهم تنبيهات النظام</h4>
+            <div className="mt-8 pt-6 border-t border-[var(--color-border)]">
+              <h4 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.2em] mb-4">أهم تنبيهات النظام</h4>
               {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length > 0 ? (
-                <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-lg border border-amber-100 dark:border-amber-900/20">
+                <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-[var(--border-radius-base)] border border-amber-100 dark:border-amber-900/20">
                   <span className="material-icons-round text-amber-500 text-sm mt-0.5">info</span>
-                  <p className="text-xs text-slate-600 dark:text-amber-200/80 leading-relaxed font-medium">
+                  <p className="text-xs text-[var(--color-text-muted)] dark:text-amber-200/80 leading-relaxed font-medium">
                     يوجد {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length} خط إنتاج في وضع الاستعداد. يمكن تشغيلها لزيادة الطاقة الإنتاجية.
                   </p>
                 </div>
               ) : productionLines.filter((l) => l.status === ProductionLineStatus.MAINTENANCE).length > 0 ? (
-                <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
-                  <span className="material-icons-round text-slate-400 text-sm mt-0.5">build</span>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                <div className="flex items-start gap-3 bg-[#f8f9fa] p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+                  <span className="material-icons-round text-[var(--color-text-muted)] text-sm mt-0.5">build</span>
+                  <p className="text-xs text-[var(--color-text-muted)] leading-relaxed font-medium">
                     يوجد {productionLines.filter((l) => l.status === ProductionLineStatus.MAINTENANCE).length} خط في وضع الصيانة.
                   </p>
                 </div>
               ) : (
-                <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/20">
+                <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-[var(--border-radius-base)] border border-emerald-100 dark:border-emerald-900/20">
                   <span className="material-icons-round text-emerald-500 text-sm mt-0.5">check_circle</span>
-                  <p className="text-xs text-slate-600 dark:text-emerald-200/80 leading-relaxed font-medium">
+                  <p className="text-xs text-[var(--color-text-muted)] dark:text-emerald-200/80 leading-relaxed font-medium">
                     جميع الخطوط تعمل بشكل طبيعي.
                   </p>
                 </div>
@@ -840,21 +840,21 @@ export const Dashboard: React.FC = () => {
 
       {targetModal && can("lineStatus.edit") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold">تعيين هدف اليوم</h3>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">{targetModal.lineName}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-medium mt-0.5">{targetModal.lineName}</p>
               </div>
-              <button onClick={() => setTargetModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={() => setTargetModal(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 space-y-5">
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المنتج الحالي *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج الحالي *</label>
                 <select
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={targetForm.currentProductId}
                   onChange={(e) => setTargetForm({ ...targetForm, currentProductId: e.target.value })}
                 >
@@ -865,27 +865,27 @@ export const Dashboard: React.FC = () => {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الهدف اليومي (كمية) *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهدف اليومي (كمية) *</label>
                 <input
                   type="number"
                   min={0}
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={targetForm.targetTodayQty || ''}
                   onChange={(e) => setTargetForm({ ...targetForm, targetTodayQty: Number(e.target.value) })}
                   placeholder="مثال: 500"
                 />
               </div>
               {targetForm.currentProductId && targetForm.targetTodayQty > 0 && (
-                <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 flex items-center gap-3">
+                <div className="bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
                   <span className="material-icons-round text-primary text-lg">info</span>
-                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                    سيتم تعيين هدف <span className="font-black text-primary">{formatNumber(targetForm.targetTodayQty)}</span> وحدة
-                    من <span className="font-black text-slate-800 dark:text-white">{_rawProducts.find(p => p.id === targetForm.currentProductId)?.name}</span> لهذا الخط
+                  <p className="text-xs font-medium text-[var(--color-text-muted)]">
+                    سيتم تعيين هدف <span className="font-bold text-primary">{formatNumber(targetForm.targetTodayQty)}</span> وحدة
+                    من <span className="font-bold text-[var(--color-text)]">{_rawProducts.find(p => p.id === targetForm.currentProductId)?.name}</span> لهذا الخط
                   </p>
                 </div>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setTargetModal(null)}>إلغاء</Button>
               <Button
                 variant="primary"

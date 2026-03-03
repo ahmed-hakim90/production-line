@@ -10,21 +10,29 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
-import type { InventoryTransferRequest, TransferRequestLine, TransferRequestStatus } from '../types';
+import type {
+  InventoryTransferRequest,
+  TransferRequestLine,
+  TransferRequestStatus,
+  TransferRequestType,
+} from '../types';
 import { stockService } from './stockService';
 
 const COLLECTION = 'inventory_transfer_requests';
 const toIsoNow = () => new Date().toISOString();
 
 type CreateTransferRequestInput = {
+  requestType?: TransferRequestType;
   fromWarehouseId: string;
   fromWarehouseName?: string;
   toWarehouseId: string;
   toWarehouseName?: string;
   referenceNo: string;
   note?: string;
+  sourceReportId?: string;
   lines: TransferRequestLine[];
   createdBy: string;
+  createdByUserId?: string;
 };
 
 type UpdateTransferRequestInput = {
@@ -34,7 +42,10 @@ type UpdateTransferRequestInput = {
 
 type ApproveRequestOptions = {
   allowNegativeFromSource?: boolean;
+  approverUserId?: string;
 };
+
+const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
 
 export const transferApprovalService = {
   async getAll(): Promise<InventoryTransferRequest[]> {
@@ -62,12 +73,27 @@ export const transferApprovalService = {
     return { id: snap.id, ...snap.data() } as InventoryTransferRequest;
   },
 
+  async getBySourceReportId(sourceReportId: string): Promise<InventoryTransferRequest[]> {
+    if (!isConfigured || !sourceReportId.trim()) return [];
+    const q = query(
+      collection(db, COLLECTION),
+      where('sourceReportId', '==', sourceReportId.trim()),
+      orderBy('createdAt', 'desc'),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+  },
+
   async createRequest(input: CreateTransferRequestInput): Promise<string | null> {
     if (!isConfigured) return null;
-    if (!input.fromWarehouseId || !input.toWarehouseId) {
+    if (!input.toWarehouseId) {
       throw new Error('يجب تحديد المخزن المصدر والوجهة.');
     }
-    if (input.fromWarehouseId === input.toWarehouseId) {
+    const requestType: TransferRequestType = input.requestType || 'transfer';
+    if (requestType === 'transfer' && !input.fromWarehouseId) {
+      throw new Error('يجب تحديد المخزن المصدر والوجهة.');
+    }
+    if (requestType === 'transfer' && input.fromWarehouseId === input.toWarehouseId) {
       throw new Error('المخزن المصدر يجب أن يكون مختلفا عن مخزن الوجهة.');
     }
     const lines = input.lines
@@ -77,15 +103,18 @@ export const transferApprovalService = {
       throw new Error('لا توجد أصناف صالحة في طلب التحويل.');
     }
     const payload: InventoryTransferRequest = {
+      requestType,
       fromWarehouseId: input.fromWarehouseId,
       fromWarehouseName: input.fromWarehouseName,
       toWarehouseId: input.toWarehouseId,
       toWarehouseName: input.toWarehouseName,
       referenceNo: input.referenceNo.trim(),
       note: input.note,
+      sourceReportId: input.sourceReportId,
       lines,
       status: 'pending',
       createdBy: input.createdBy,
+      createdByUserId: input.createdByUserId?.trim() || undefined,
       createdAt: toIsoNow(),
     };
     const ref = await addDoc(collection(db, COLLECTION), payload);
@@ -100,35 +129,67 @@ export const transferApprovalService = {
       throw new Error('لا يمكن اعتماد طلب غير معلق.');
     }
 
+    const requestType: TransferRequestType = request.requestType || 'transfer';
+    if (requestType === 'production_entry') {
+      const sameUserById = Boolean(
+        options?.approverUserId &&
+        request.createdByUserId &&
+        options.approverUserId.trim() === request.createdByUserId.trim(),
+      );
+      const sameUserByName = !sameUserById && (
+        normalizeActor(approvedBy) !== '' &&
+        normalizeActor(approvedBy) === normalizeActor(request.createdBy)
+      );
+      if (sameUserById || sameUserByName) {
+        throw new Error('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب أن يعتمدها مستخدم آخر مخوّل.');
+      }
+    }
     for (const line of request.lines) {
-      await stockService.createMovement({
-        warehouseId: request.fromWarehouseId,
-        toWarehouseId: request.toWarehouseId,
-        itemType: line.itemType,
-        itemId: line.itemId,
-        itemName: line.itemName,
-        itemCode: line.itemCode,
-        movementType: 'TRANSFER',
-        quantity: Number(line.quantity || 0),
-        requestQuantity: Number(line.requestQuantity ?? line.quantity ?? 0),
-        requestUnit: line.requestUnit || (line.itemType === 'finished_good' ? 'piece' : 'unit'),
-        unitsPerCarton: Number(line.unitsPerCarton || 0) || undefined,
-        minStock: line.minStock,
-        note: request.note,
-        referenceNo: request.referenceNo,
-        createdBy: approvedBy,
-        allowNegative: Boolean(options?.allowNegativeFromSource),
-      });
+      if (requestType === 'production_entry') {
+        await stockService.createMovement({
+          warehouseId: request.toWarehouseId,
+          itemType: line.itemType,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          itemCode: line.itemCode,
+          movementType: 'IN',
+          quantity: Number(line.quantity || 0),
+          minStock: line.minStock,
+          note: request.note || `Approved production entry ${id}`,
+          referenceNo: request.referenceNo,
+          createdBy: approvedBy,
+        });
+      } else {
+        await stockService.createMovement({
+          warehouseId: request.fromWarehouseId,
+          toWarehouseId: request.toWarehouseId,
+          itemType: line.itemType,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          itemCode: line.itemCode,
+          movementType: 'TRANSFER',
+          quantity: Number(line.quantity || 0),
+          requestQuantity: Number(line.requestQuantity ?? line.quantity ?? 0),
+          requestUnit: line.requestUnit || (line.itemType === 'finished_good' ? 'piece' : 'unit'),
+          unitsPerCarton: Number(line.unitsPerCarton || 0) || undefined,
+          minStock: line.minStock,
+          note: request.note,
+          referenceNo: request.referenceNo,
+          createdBy: approvedBy,
+          allowNegative: Boolean(options?.allowNegativeFromSource),
+        });
+      }
     }
 
     await updateDoc(doc(db, COLLECTION, id), {
       status: 'approved',
       approvedBy,
+      approvedByUserId: options?.approverUserId?.trim() || undefined,
       approvedAt: toIsoNow(),
     });
   },
 
-  async rejectRequest(id: string, rejectedBy: string, rejectionReason?: string): Promise<void> {
+  async rejectRequest(id: string, rejectedBy: string, rejectionReason?: string, rejectedByUserId?: string): Promise<void> {
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
     if (!request) throw new Error('طلب التحويل غير موجود.');
@@ -138,12 +199,13 @@ export const transferApprovalService = {
     await updateDoc(doc(db, COLLECTION, id), {
       status: 'rejected',
       rejectedBy,
+      rejectedByUserId: rejectedByUserId?.trim() || undefined,
       rejectedAt: toIsoNow(),
       rejectionReason: rejectionReason?.trim() || '',
     });
   },
 
-  async cancelRequest(id: string, cancelledBy: string, cancellationReason?: string): Promise<void> {
+  async cancelRequest(id: string, cancelledBy: string, cancellationReason?: string, cancelledByUserId?: string): Promise<void> {
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
     if (!request) throw new Error('طلب التحويل غير موجود.');
@@ -153,11 +215,25 @@ export const transferApprovalService = {
     if (!request.referenceNo?.trim()) {
       throw new Error('لا يمكن إلغاء الحركة بدون رقم مرجع.');
     }
-
-    await stockService.deleteTransferByReference(request.referenceNo.trim());
+    const requestType: TransferRequestType = request.requestType || 'transfer';
+    if (requestType === 'production_entry') {
+      const rows = await stockService.getTransactionsByReferenceNo(request.referenceNo.trim());
+      const approvedRows = rows.filter(
+        (tx) =>
+          tx.movementType === 'IN' &&
+          tx.warehouseId === request.toWarehouseId &&
+          request.lines.some((line) => line.itemType === tx.itemType && line.itemId === tx.itemId),
+      );
+      for (const tx of approvedRows) {
+        await stockService.deleteMovement(tx);
+      }
+    } else {
+      await stockService.deleteTransferByReference(request.referenceNo.trim());
+    }
     await updateDoc(doc(db, COLLECTION, id), {
       status: 'cancelled',
       cancelledBy,
+      cancelledByUserId: cancelledByUserId?.trim() || undefined,
       cancelledAt: toIsoNow(),
       cancellationReason: cancellationReason?.trim() || '',
     });

@@ -14,6 +14,7 @@ import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { PageHeader } from '../../../components/PageHeader';
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
 
@@ -371,41 +372,41 @@ export const ProductionWorkers: React.FC = () => {
             <span className="material-icons-round text-lg text-teal-600">construction</span>
           </div>
           <div className="min-w-0">
-            <span className="font-bold text-slate-800 dark:text-white block truncate">{w.name}</span>
+            <span className="font-bold text-[var(--color-text)] block truncate">{w.name}</span>
             {w.code && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-mono font-bold mt-0.5">{w.code}</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-sm)] bg-[#f0f2f5] text-[var(--color-text-muted)] text-[10px] font-mono font-bold mt-0.5">{w.code}</span>
             )}
           </div>
           {hoveredWorker === w.id && (
-            <div className="absolute top-full right-0 mt-2 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl p-4 w-64 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+            <div className="absolute top-full right-0 mt-2 z-50 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] shadow-2xl p-4 w-64 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-[var(--color-border)]">
                 <div className="w-8 h-8 rounded-full bg-teal-500/10 flex items-center justify-center">
                   <span className="material-icons-round text-teal-600 text-sm">construction</span>
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-slate-800 dark:text-white">{w.name}</p>
+                  <p className="font-bold text-sm text-[var(--color-text)]">{w.name}</p>
                   <p className="text-[10px] text-slate-400">{getDepartmentName(w.departmentId ?? '')}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-lg p-2 text-center">
+                <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
                   <p className="text-emerald-500 font-medium">إنتاج اليوم</p>
-                  <p className="font-black text-emerald-700 dark:text-emerald-300 text-sm">{formatNumber(w.todayProduced)}</p>
+                  <p className="font-bold text-emerald-700 text-sm">{formatNumber(w.todayProduced)}</p>
                 </div>
-                <div className="bg-blue-50 dark:bg-blue-900/10 rounded-lg p-2 text-center">
+                <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
                   <p className="text-blue-500 font-medium">الأسبوع</p>
-                  <p className="font-black text-blue-700 dark:text-blue-300 text-sm">{formatNumber(w.weekProduced)}</p>
+                  <p className="font-bold text-blue-700 dark:text-blue-300 text-sm">{formatNumber(w.weekProduced)}</p>
                 </div>
-                <div className="bg-rose-50 dark:bg-rose-900/10 rounded-lg p-2 text-center">
+                <div className="bg-rose-50 dark:bg-rose-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
                   <p className="text-rose-500 font-medium">الهالك</p>
-                  <p className="font-black text-rose-700 dark:text-rose-300 text-sm">{w.scrapRate}%</p>
+                  <p className="font-bold text-rose-700 text-sm">{w.scrapRate}%</p>
                 </div>
-                <div className={`rounded-lg p-2 text-center ${w.performanceScore >= 85 ? 'bg-emerald-50 dark:bg-emerald-900/10' : w.performanceScore >= 70 ? 'bg-amber-50 dark:bg-amber-900/10' : 'bg-rose-50 dark:bg-rose-900/10'}`}>
+                <div className={`rounded-[var(--border-radius-base)] p-2 text-center ${w.performanceScore >= 85 ? 'bg-emerald-50 dark:bg-emerald-900/10' : w.performanceScore >= 70 ? 'bg-amber-50 dark:bg-amber-900/10' : 'bg-rose-50 dark:bg-rose-900/10'}`}>
                   <p className={`font-medium ${w.performanceScore >= 85 ? 'text-emerald-500' : w.performanceScore >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>الأداء</p>
-                  <p className={`font-black text-sm ${w.performanceScore >= 85 ? 'text-emerald-700 dark:text-emerald-300' : w.performanceScore >= 70 ? 'text-amber-700 dark:text-amber-300' : 'text-rose-700 dark:text-rose-300'}`}>{w.performanceScore}</p>
+                  <p className={`font-black text-sm ${w.performanceScore >= 85 ? 'text-emerald-700' : w.performanceScore >= 70 ? 'text-amber-700' : 'text-rose-700'}`}>{w.performanceScore}</p>
                 </div>
               </div>
-              <div className="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+              <div className="mt-2 text-[10px] text-[var(--color-text-muted)] flex items-center gap-1">
                 <span className="material-icons-round text-[10px]">precision_manufacturing</span>
                 {w.assignedLines.length} خط إنتاج
               </div>
@@ -416,7 +417,7 @@ export const ProductionWorkers: React.FC = () => {
     },
     {
       header: 'القسم',
-      render: (w) => <span className="text-sm text-slate-600 dark:text-slate-400">{getDepartmentName(w.departmentId ?? '')}</span>,
+      render: (w) => <span className="text-sm text-[var(--color-text-muted)]">{getDepartmentName(w.departmentId ?? '')}</span>,
     },
     {
       header: 'الحالة',
@@ -433,7 +434,7 @@ export const ProductionWorkers: React.FC = () => {
       headerClassName: 'text-center',
       className: 'text-center',
       render: (w) => (
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-bold">
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[#f0f2f5] text-[var(--color-text-muted)] text-sm font-bold">
           <span className="material-icons-round text-xs">precision_manufacturing</span>
           {w.assignedLines.length}
         </span>
@@ -444,7 +445,7 @@ export const ProductionWorkers: React.FC = () => {
       headerClassName: 'text-center',
       className: 'text-center',
       render: (w) => (
-        <span className={`text-sm font-bold ${w.todayProduced > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+        <span className={`text-sm font-bold ${w.todayProduced > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
           {formatNumber(w.todayProduced)}
         </span>
       ),
@@ -454,7 +455,7 @@ export const ProductionWorkers: React.FC = () => {
       headerClassName: 'text-center',
       className: 'text-center',
       render: (w) => (
-        <span className={`text-sm font-bold ${w.weekProduced > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
+        <span className={`text-sm font-bold ${w.weekProduced > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
           {formatNumber(w.weekProduced)}
         </span>
       ),
@@ -467,7 +468,7 @@ export const ProductionWorkers: React.FC = () => {
         const pct = w.scrapRate;
         return (
           <div className="flex items-center gap-2 justify-center">
-            <div className="w-16 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="w-16 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${pct > 5 ? 'bg-rose-500' : pct > 2 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                 style={{ width: `${Math.min(pct * 5, 100)}%` }}
@@ -486,12 +487,12 @@ export const ProductionWorkers: React.FC = () => {
       className: 'text-center',
       render: (w) => {
         const { variant } = getScoreBadge(w.performanceScore);
-        const colorMap = { success: 'text-emerald-600 dark:text-emerald-400', warning: 'text-amber-600 dark:text-amber-400', danger: 'text-rose-600 dark:text-rose-400' };
+        const colorMap = { success: 'text-emerald-600', warning: 'text-amber-600', danger: 'text-rose-600' };
         const bgMap = { success: 'bg-emerald-500', warning: 'bg-amber-500', danger: 'bg-rose-500' };
         return (
           <div className="flex flex-col items-center gap-1">
-            <span className={`text-lg font-black ${colorMap[variant]}`}>{w.performanceScore}</span>
-            <div className="w-12 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <span className={`text-lg font-bold ${colorMap[variant]}`}>{w.performanceScore}</span>
+            <div className="w-12 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
               <div className={`h-full rounded-full ${bgMap[variant]}`} style={{ width: `${w.performanceScore}%` }} />
             </div>
           </div>
@@ -503,7 +504,7 @@ export const ProductionWorkers: React.FC = () => {
       headerClassName: 'text-center',
       className: 'text-center',
       render: (w) => (
-        <span className="text-xs text-slate-400 font-medium">
+        <span className="text-xs text-[var(--color-text-muted)] font-medium">
           {w.lastActivity === '—' ? '—' : w.lastActivity.slice(5)}
         </span>
       ),
@@ -514,14 +515,14 @@ export const ProductionWorkers: React.FC = () => {
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
       <button
         onClick={() => navigate(`/production-workers/${w.id}`)}
-        className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-all"
+        className="p-2 text-[var(--color-text-muted)] hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-[var(--border-radius-base)] transition-all"
         title="عرض التفاصيل"
       >
         <span className="material-icons-round text-lg">visibility</span>
       </button>
       <button
         onClick={() => navigate(`/employees/${w.id}`)}
-        className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
+        className="p-2 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-[var(--border-radius-base)] transition-all"
         title="الملف الشخصي"
       >
         <span className="material-icons-round text-lg">person</span>
@@ -561,18 +562,16 @@ export const ProductionWorkers: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">عمال الإنتاج</h2>
-          <p className="text-sm text-slate-500 font-medium">لوحة إدارة عمال الإنتاج وتحليل الأداء</p>
-        </div>
-        {hasActiveFilters && (
-          <Button variant="outline" onClick={clearAllFilters}>
-            <span className="material-icons-round text-sm">filter_alt_off</span>
-            مسح الفلاتر
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="عمال الإنتاج"
+        subtitle="لوحة إدارة عمال الإنتاج وتحليل الأداء"
+        icon="construction"
+        secondaryAction={hasActiveFilters ? {
+          label: 'مسح الفلاتر',
+          icon: 'filter_alt_off',
+          onClick: clearAllFilters,
+        } : undefined}
+      />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -581,7 +580,7 @@ export const ProductionWorkers: React.FC = () => {
             label="إنتاج اليوم"
             value={formatNumber(stats.todayTotal)}
             icon="today"
-            colorClass={statFilter === 'today' ? 'bg-teal-600 text-white' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'}
+            colorClass={statFilter === 'today' ? 'bg-teal-600 text-white' : 'bg-emerald-50 text-emerald-600'}
             trend={stats.todayChange !== 0 ? `${Math.abs(stats.todayChange)}% عن أمس` : undefined}
             trendUp={stats.todayChange >= 0}
           />
@@ -591,7 +590,7 @@ export const ProductionWorkers: React.FC = () => {
             label="إنتاج الأسبوع"
             value={formatNumber(stats.weekTotal)}
             icon="date_range"
-            colorClass={statFilter === 'week' ? 'bg-teal-600 text-white' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}
+            colorClass={statFilter === 'week' ? 'bg-teal-600 text-white' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}
             trend={stats.weekChange !== 0 ? `${Math.abs(stats.weekChange)}% عن الأسبوع الماضي` : undefined}
             trendUp={stats.weekChange >= 0}
           />
@@ -601,7 +600,7 @@ export const ProductionWorkers: React.FC = () => {
             label="نسبة الهالك الكلية"
             value={`${stats.overallScrapRate}%`}
             icon="delete_sweep"
-            colorClass={statFilter === 'highScrap' ? 'bg-teal-600 text-white' : stats.overallScrapRate > 5 ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400' : 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'}
+            colorClass={statFilter === 'highScrap' ? 'bg-teal-600 text-white' : stats.overallScrapRate > 5 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}
           />
         </button>
         <button className="text-right" onClick={() => toggleStatFilter('lowScore')}>
@@ -609,7 +608,7 @@ export const ProductionWorkers: React.FC = () => {
             label="متوسط درجة الأداء"
             value={stats.avgScore}
             icon="speed"
-            colorClass={statFilter === 'lowScore' ? 'bg-teal-600 text-white' : stats.avgScore >= 85 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : stats.avgScore >= 70 ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'}
+            colorClass={statFilter === 'lowScore' ? 'bg-teal-600 text-white' : stats.avgScore >= 85 ? 'bg-emerald-50 text-emerald-600' : stats.avgScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
           />
         </button>
         <button className="text-right" onClick={() => toggleStatFilter('active')}>
@@ -627,33 +626,33 @@ export const ProductionWorkers: React.FC = () => {
       <Card>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 mb-4">
           <div className="relative sm:col-span-2">
-            <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
+            <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] text-xl">search</span>
             <input
               type="text"
               placeholder="بحث بالاسم أو الرمز..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+              className="w-full pr-10 pl-4 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
             />
           </div>
           <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
             <option value="">كل الأقسام</option>
             {uniqueDepartments.map((dId) => <option key={dId} value={dId}>{getDepartmentName(dId)}</option>)}
           </select>
           <select value={filterLine} onChange={(e) => setFilterLine(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
             <option value="">كل الخطوط</option>
             {uniqueLines.map((lId) => <option key={lId} value={lId}>{getLineName(lId)}</option>)}
           </select>
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
             <option value="">كل الحالات</option>
             <option value="active">نشط</option>
             <option value="inactive">غير نشط</option>
           </select>
           <select value={filterScoreRange} onChange={(e) => setFilterScoreRange(e.target.value as any)}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
             <option value="">كل مستويات الأداء</option>
             <option value="high">ممتاز (85+)</option>
             <option value="mid">جيد (70–84)</option>
@@ -666,10 +665,10 @@ export const ProductionWorkers: React.FC = () => {
             <span className="font-medium">فترة التقارير:</span>
           </div>
           <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
-          <span className="text-slate-400">—</span>
+            className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
+          <span className="text-[var(--color-text-muted)]">—</span>
           <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
+            className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
           {hasActiveFilters && (
             <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-teal-500/10 text-teal-600 text-xs font-bold">
               {filtered.length} نتيجة

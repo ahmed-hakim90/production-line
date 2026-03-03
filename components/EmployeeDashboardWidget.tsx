@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+﻿import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Badge, LoadingSkeleton } from './UI';
 import { useShallowStore } from '../store/useAppStore';
 import {
@@ -22,15 +22,15 @@ const PERIOD_OPTIONS: { value: Period; label: string; icon: string }[] = [
 ];
 
 const DashboardPeriodFilter: React.FC<{ value: Period; onChange: (p: Period) => void }> = ({ value, onChange }) => (
-  <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
+  <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 gap-1">
     {PERIOD_OPTIONS.map((opt) => (
       <button
         key={opt.value}
         onClick={() => onChange(opt.value)}
-        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+        className={`flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
           value === opt.value
-            ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
-            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            ? 'bg-white text-primary'
+            : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
         }`}
       >
         <span className="material-icons-round text-sm">{opt.icon}</span>
@@ -213,7 +213,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
   if (loading) {
     return (
       <div className="space-y-8">
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">لوحة المشرف</h2>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">لوحة المشرف</h2>
         <LoadingSkeleton type="card" rows={4} />
       </div>
     );
@@ -224,8 +224,8 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
       {/* Header + Period Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white">لوحة المشرف</h2>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">لوحة المشرف</h2>
+          <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm">
             مرحباً <span className="font-bold text-primary">{employeeName}</span> — متابعة أدائك وإنتاجك
           </p>
         </div>
@@ -241,68 +241,68 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-              <span className="material-icons-round text-blue-600 dark:text-blue-400 text-xl">inventory</span>
+            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
+              <span className="material-icons-round text-blue-600 text-xl">inventory</span>
             </div>
             <p className="text-[11px] font-bold text-slate-400">إجمالي الإنتاج</p>
           </div>
-          <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatNumber(kpis.totalProduction)}</h3>
-          <p className="text-[10px] text-slate-400 font-medium mt-0.5">وحدة — {periodLabel}</p>
+          <h3 className="text-2xl font-bold text-blue-600">{formatNumber(kpis.totalProduction)}</h3>
+          <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">وحدة — {periodLabel}</p>
         </div>
 
         {activePlan && (
-          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
-                <span className="material-icons-round text-emerald-600 dark:text-emerald-400 text-xl">task_alt</span>
+              <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <span className="material-icons-round text-emerald-600 text-xl">task_alt</span>
               </div>
               <p className="text-[11px] font-bold text-slate-400">تحقيق الخطة</p>
             </div>
-            <h3 className={`text-2xl font-black ${activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}`}>
+            <h3 className={`text-2xl font-bold ${activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}`}>
               {activePlan.progress}%
             </h3>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">من الخطة الحالية</p>
+            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">من الخطة الحالية</p>
           </div>
         )}
 
         {activePlan && (
-          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
                 <span className="material-icons-round text-indigo-600 dark:text-indigo-400 text-xl">pending_actions</span>
               </div>
               <p className="text-[11px] font-bold text-slate-400">الكمية المتبقية</p>
             </div>
-            <h3 className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{formatNumber(activePlan.remaining)}</h3>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">وحدة متبقية</p>
+            <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatNumber(activePlan.remaining)}</h3>
+            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">وحدة متبقية</p>
           </div>
         )}
 
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-10 h-10 bg-rose-50 dark:bg-rose-900/20 rounded-lg flex items-center justify-center">
-              <span className="material-icons-round text-rose-600 dark:text-rose-400 text-xl">delete_sweep</span>
+            <div className="w-10 h-10 bg-rose-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+              <span className="material-icons-round text-rose-600 text-xl">delete_sweep</span>
             </div>
             <p className="text-[11px] font-bold text-slate-400">نسبة الهالك</p>
           </div>
-          <h3 className={`text-2xl font-black ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300'}`}>
+          <h3 className={`text-2xl font-bold ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-[var(--color-text)]'}`}>
             {kpis.wasteRatio}%
           </h3>
-          <p className="text-[10px] text-slate-400 font-medium mt-0.5">{formatNumber(kpis.totalWaste)} وحدة هالك</p>
+          <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{formatNumber(kpis.totalWaste)} وحدة هالك</p>
         </div>
 
         {period !== 'daily' && (
-          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex items-center justify-center">
-                <span className="material-icons-round text-amber-600 dark:text-amber-400 text-xl">speed</span>
+              <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <span className="material-icons-round text-amber-600 text-xl">speed</span>
               </div>
               <p className="text-[11px] font-bold text-slate-400">متوسط يومي</p>
             </div>
-            <h3 className="text-2xl font-black text-amber-600 dark:text-amber-400">{formatNumber(kpis.avgPerDay)}</h3>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">وحدة/يوم ({kpis.uniqueDays} يوم)</p>
+            <h3 className="text-2xl font-bold text-amber-600">{formatNumber(kpis.avgPerDay)}</h3>
+            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">وحدة/يوم ({kpis.uniqueDays} يوم)</p>
           </div>
         )}
       </div>
@@ -311,14 +311,14 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
         {/* ── Active Plan Card (takes 2 cols) ── */}
         <div className="lg:col-span-2 space-y-6">
           {activePlan ? (
-            <Card className="border-primary/20 shadow-lg shadow-primary/5">
+            <Card className="border-primary/20 shadow-primary/5">
               <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center">
                   <span className="material-icons-round text-primary">event_note</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">الخطة النشطة</h3>
-                  <p className="text-xs text-slate-400 font-medium">تتبع تقدم خطة الإنتاج الحالية</p>
+                  <h3 className="text-lg font-bold text-[var(--color-text)]">الخطة النشطة</h3>
+                  <p className="text-xs text-[var(--color-text-muted)] font-medium">تتبع تقدم خطة الإنتاج الحالية</p>
                 </div>
                 <div className="mr-auto">
                   <Badge variant={activePlan.plan.status === 'in_progress' ? 'warning' : 'info'}>
@@ -328,35 +328,35 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5 text-center border border-slate-100 dark:border-slate-700">
-                  <p className="text-[10px] font-bold text-slate-400 mb-1">المنتج</p>
-                  <p className="text-sm font-black text-slate-800 dark:text-white">
+                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">
                     {_rawProducts.find((p) => p.id === activePlan.plan.productId)?.name ?? '—'}
                   </p>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5 text-center border border-slate-100 dark:border-slate-700">
-                  <p className="text-[10px] font-bold text-slate-400 mb-1">الكمية المخططة</p>
-                  <p className="text-sm font-black text-primary">{formatNumber(activePlan.plan.plannedQuantity)}</p>
+                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الكمية المخططة</p>
+                  <p className="text-sm font-bold text-primary">{formatNumber(activePlan.plan.plannedQuantity)}</p>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5 text-center border border-slate-100 dark:border-slate-700">
-                  <p className="text-[10px] font-bold text-slate-400 mb-1">تم إنتاج ({periodLabel})</p>
-                  <p className="text-sm font-black text-blue-600">{formatNumber(periodPlanProduced)}</p>
+                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">تم إنتاج ({periodLabel})</p>
+                  <p className="text-sm font-bold text-blue-600">{formatNumber(periodPlanProduced)}</p>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5 text-center border border-slate-100 dark:border-slate-700">
-                  <p className="text-[10px] font-bold text-slate-400 mb-1">المتبقي (إجمالي)</p>
-                  <p className="text-sm font-black text-indigo-600">{formatNumber(activePlan.remaining)}</p>
+                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">المتبقي (إجمالي)</p>
+                  <p className="text-sm font-bold text-indigo-600">{formatNumber(activePlan.remaining)}</p>
                 </div>
               </div>
 
               {/* Progress bar */}
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-bold">
-                  <span className="text-slate-500">التقدم الإجمالي</span>
+                  <span className="text-[var(--color-text-muted)]">التقدم الإجمالي</span>
                   <span className={activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}>
                     {activePlan.progress}%
                   </span>
                 </div>
-                <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                <div className="w-full h-3 bg-[#f0f2f5] rounded-full overflow-hidden shadow-inner">
                   <div
                     className={`h-full rounded-full transition-all duration-1000 ${
                       activePlan.progress >= 80 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
@@ -366,7 +366,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                     style={{ width: `${Math.min(activePlan.progress, 100)}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-[11px] text-slate-400 font-medium">
+                <div className="flex justify-between text-[11px] text-[var(--color-text-muted)] font-medium">
                   <span>تم إنتاج {formatNumber(activePlan.actualProduced)} من {formatNumber(activePlan.plan.plannedQuantity)}</span>
                   <span>الخط: {_rawLines.find((l) => l.id === activePlan.plan.lineId)?.name ?? '—'}</span>
                 </div>
@@ -386,16 +386,16 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           {alerts.length > 0 && (
             <Card>
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex items-center justify-center">
-                  <span className="material-icons-round text-amber-600 dark:text-amber-400">notifications_active</span>
+                <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+                  <span className="material-icons-round text-amber-600">notifications_active</span>
                 </div>
-                <h3 className="text-base font-bold text-slate-800 dark:text-white">تنبيهات</h3>
+                <h3 className="text-base font-bold text-[var(--color-text)]">تنبيهات</h3>
               </div>
               <div className="space-y-3">
                 {alerts.map((alert, i) => (
                   <div
                     key={i}
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border ${
+                    className={`flex items-start gap-3 p-3.5 rounded-[var(--border-radius-lg)] border ${
                       alert.type === 'danger'
                         ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-900/20'
                         : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-900/20'
@@ -404,7 +404,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                     <span className={`material-icons-round text-lg mt-0.5 ${
                       alert.type === 'danger' ? 'text-rose-500' : 'text-amber-500'
                     }`}>{alert.icon}</span>
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed">{alert.text}</p>
+                    <p className="text-sm font-medium text-[var(--color-text)] leading-relaxed">{alert.text}</p>
                   </div>
                 ))}
               </div>
@@ -414,65 +414,65 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
         {/* ── Personal Performance (right sidebar) ── */}
         <div className="lg:col-span-1">
-          <Card className="sticky top-24 border-emerald-500/20 shadow-lg shadow-emerald-500/5">
+          <Card className="sticky top-24 border-emerald-500/20 shadow-emerald-500/5">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
-                <span className="material-icons-round text-emerald-600 dark:text-emerald-400">person</span>
+              <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <span className="material-icons-round text-emerald-600">person</span>
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-800 dark:text-white">الأداء الشخصي</h3>
-                <p className="text-[11px] text-slate-400 font-medium">{periodLabel}</p>
+                <h3 className="text-base font-bold text-[var(--color-text)]">الأداء الشخصي</h3>
+                <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{periodLabel}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               {/* Reports count */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <span className="material-icons-round text-blue-500 text-lg">description</span>
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-400">عدد التقارير</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">عدد التقارير</span>
                 </div>
-                <span className="text-lg font-black text-blue-600">{kpis.reportsCount}</span>
+                <span className="text-lg font-bold text-blue-600">{kpis.reportsCount}</span>
               </div>
 
               {/* Avg production per hour */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <span className="material-icons-round text-emerald-500 text-lg">speed</span>
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-400">متوسط إنتاج/ساعة</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">متوسط إنتاج/ساعة</span>
                 </div>
-                <span className="text-lg font-black text-emerald-600">{kpis.avgPerHour > 0 ? formatNumber(kpis.avgPerHour) : '—'}</span>
+                <span className="text-lg font-bold text-emerald-600">{kpis.avgPerHour > 0 ? formatNumber(kpis.avgPerHour) : '—'}</span>
               </div>
 
               {/* Total work hours */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <span className="material-icons-round text-amber-500 text-lg">schedule</span>
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-400">ساعات العمل</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل</span>
                 </div>
-                <span className="text-lg font-black text-amber-600">{kpis.totalHours > 0 ? `${kpis.totalHours} س` : '—'}</span>
+                <span className="text-lg font-bold text-amber-600">{kpis.totalHours > 0 ? `${kpis.totalHours} س` : '—'}</span>
               </div>
 
               {/* Total production */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <span className="material-icons-round text-primary text-lg">inventory</span>
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-400">إجمالي الإنتاج</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">إجمالي الإنتاج</span>
                 </div>
-                <span className="text-lg font-black text-primary">{formatNumber(kpis.totalProduction)}</span>
+                <span className="text-lg font-bold text-primary">{formatNumber(kpis.totalProduction)}</span>
               </div>
 
               {/* Waste */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <span className="material-icons-round text-rose-500 text-lg">delete_sweep</span>
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-400">الهالك</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">الهالك</span>
                 </div>
                 <div className="text-left">
-                  <span className={`text-lg font-black ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-slate-600 dark:text-slate-400'}`}>
+                  <span className={`text-lg font-bold ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
                     {formatNumber(kpis.totalWaste)}
                   </span>
-                  <span className="text-[11px] text-slate-400 font-medium mr-1">({kpis.wasteRatio}%)</span>
+                  <span className="text-[11px] text-[var(--color-text-muted)] font-medium mr-1">({kpis.wasteRatio}%)</span>
                 </div>
               </div>
             </div>
@@ -487,10 +487,10 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
             {/* Alerts summary at bottom */}
             {alerts.length === 0 && kpis.reportsCount > 0 && (
-              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/20">
+              <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
+                <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-[var(--border-radius-base)] border border-emerald-100 dark:border-emerald-900/20">
                   <span className="material-icons-round text-emerald-500 text-sm mt-0.5">check_circle</span>
-                  <p className="text-xs text-slate-600 dark:text-emerald-200/80 leading-relaxed font-medium">
+                  <p className="text-xs text-[var(--color-text-muted)] dark:text-emerald-200/80 leading-relaxed font-medium">
                     أداؤك جيد — لا توجد تنبيهات حالياً.
                   </p>
                 </div>

@@ -61,8 +61,10 @@ import { activityLogService } from '../services/activityLogService';
 import { systemSettingsService } from '../services/systemSettingsService';
 import { scanEventService } from '../modules/production/services/scanEventService';
 import { stockService } from '../modules/inventory/services/stockService';
+import { transferApprovalService } from '../modules/inventory/services/transferApprovalService';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { rawMaterialService } from '../modules/inventory/services/rawMaterialService';
+import type { StockItemBalance } from '../modules/inventory/types';
 import { productMaterialService } from '../services/productMaterialService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
@@ -71,9 +73,11 @@ import {
   buildProducts,
   buildProductionLines,
   getTodayDateString,
+  getOperationalDateString,
   getMonthDateRange,
 } from '../utils/calculations';
 import { eventBus, SystemEvents } from '../shared/events';
+import { useJobsStore } from '../components/background-jobs/useJobsStore';
 
 // ─── Helper: build full admin permissions map (fallback) ─────────────────────
 
@@ -143,6 +147,70 @@ function normalizeText(value: string): string {
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
     .replace(/\s+/g, ' ');
+}
+
+function collectHiddenProductIdsFromRawWarehouse(
+  balances: StockItemBalance[],
+  rawMaterialWarehouseId?: string,
+): Set<string> {
+  const targetWarehouseId = (rawMaterialWarehouseId || '').trim();
+  if (!targetWarehouseId) return new Set();
+  const hiddenIds = new Set<string>();
+  for (const row of balances) {
+    if (row.warehouseId !== targetWarehouseId) continue;
+    if (row.itemType !== 'finished_good') continue;
+    if (!row.itemId) continue;
+    hiddenIds.add(row.itemId);
+  }
+  return hiddenIds;
+}
+
+function collectHiddenProductIdsFromRawMaster(
+  rawProducts: FirestoreProduct[],
+  rawMaterials: Array<{ name?: string; code?: string }>,
+): Set<string> {
+  const rawNameSet = new Set<string>();
+  const rawCodeSet = new Set<string>();
+
+  for (const raw of rawMaterials) {
+    const name = normalizeText(String(raw.name || ''));
+    const code = String(raw.code || '').trim().toUpperCase();
+    if (name) rawNameSet.add(name);
+    if (code) rawCodeSet.add(code);
+  }
+
+  const hiddenIds = new Set<string>();
+  for (const product of rawProducts) {
+    if (!product.id) continue;
+    const productName = normalizeText(String(product.name || ''));
+    const productCode = String(product.code || '').trim().toUpperCase();
+    if ((productName && rawNameSet.has(productName)) || (productCode && rawCodeSet.has(productCode))) {
+      hiddenIds.add(product.id);
+    }
+  }
+  return hiddenIds;
+}
+
+async function filterProductsByRawMaterialWarehouse(
+  rawProducts: FirestoreProduct[],
+  rawMaterialWarehouseId?: string,
+): Promise<FirestoreProduct[]> {
+  const targetWarehouseId = (rawMaterialWarehouseId || '').trim();
+  try {
+    const [rawMaterials, balances] = await Promise.all([
+      rawMaterialService.getAll(),
+      targetWarehouseId ? stockService.getBalances() : Promise.resolve([]),
+    ]);
+
+    const hiddenByMaster = collectHiddenProductIdsFromRawMaster(rawProducts, rawMaterials);
+    const hiddenIds = collectHiddenProductIdsFromRawWarehouse(balances, targetWarehouseId);
+    const allHiddenIds = new Set<string>([...hiddenByMaster, ...hiddenIds]);
+    if (allHiddenIds.size === 0) return rawProducts;
+    return rawProducts.filter((product) => !product.id || !allHiddenIds.has(product.id));
+  } catch {
+    // If balances cannot be loaded, fail open to avoid blocking data.
+    return rawProducts;
+  }
 }
 
 async function syncProductAvgDailyProduction(productId: string): Promise<void> {
@@ -512,6 +580,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         userProfile: userDoc,
       });
 
+      console.log('[Auth] Login success:', {
+        uid,
+        email: userDoc.email,
+        displayName: userDoc.displayName,
+      });
+
       get()._applyRole(role);
       await get()._loadAppData();
 
@@ -537,6 +611,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج');
     }
     await signOut();
+    useJobsStore.getState().resetUiState();
     set({
       isAuthenticated: false,
       isPendingApproval: false,
@@ -713,7 +788,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         systemSettingsService.get(),
       ]);
 
-    const today = getTodayDateString();
+    const today = getOperationalDateString(8);
     const { start: monthStart, end: monthEnd } = getMonthDateRange();
     const [todayReports, monthlyReports, lineStatuses] = await Promise.all([
       reportService.getByDateRange(today, today),
@@ -737,6 +812,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     const mergedSettings = systemSettingsRaw
       ? { ...DEFAULT_SYSTEM_SETTINGS, ...systemSettingsRaw }
       : DEFAULT_SYSTEM_SETTINGS;
+    const filteredRawProducts = await filterProductsByRawMaterialWarehouse(
+      rawProducts,
+      mergedSettings.planSettings?.rawMaterialWarehouseId,
+    );
 
     // Resolve current employee record for the logged-in user
     const uid = get().uid;
@@ -745,7 +824,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       : null;
 
     set({
-      _rawProducts: rawProducts,
+      _rawProducts: filteredRawProducts,
       _rawLines: rawLines,
       _rawEmployees: rawEmployees,
       currentEmployee,
@@ -863,7 +942,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ productsLoading: true, error: null });
     try {
       const rawProducts = await productService.getAll();
-      set({ _rawProducts: rawProducts });
+      const rawMaterialWarehouseId = get().systemSettings.planSettings?.rawMaterialWarehouseId;
+      const filteredRawProducts = await filterProductsByRawMaterialWarehouse(rawProducts, rawMaterialWarehouseId);
+      set({ _rawProducts: filteredRawProducts });
       get()._rebuildProducts();
       set({ productsLoading: false });
     } catch (error) {
@@ -1142,10 +1223,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         const existingReports = await reportService.getByWorkOrderId(id);
         if (existingReports.length === 0) {
           const toLocalDateString = (value: any): string => {
-            if (!value) return getTodayDateString();
+            if (!value) return getOperationalDateString(8);
             if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
             const dt = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
-            if (Number.isNaN(dt.getTime())) return getTodayDateString();
+            if (Number.isNaN(dt.getTime())) return getOperationalDateString(8);
             const y = dt.getFullYear();
             const m = String(dt.getMonth() + 1).padStart(2, '0');
             const day = String(dt.getDate()).padStart(2, '0');
@@ -1203,11 +1284,18 @@ export const useAppStore = create<AppState>((set, get) => ({
               productMaterialService.getByProduct(updatedWorkOrder.productId),
               rawMaterialService.getAll(),
             ]);
+            const rawById = new Map(
+              rawMaterials
+                .filter((rm) => Boolean(rm.id))
+                .map((rm) => [String(rm.id), rm]),
+            );
             const rawByName = new Map(
               rawMaterials.map((rm) => [normalizeText(rm.name), rm]),
             );
             for (const material of materials) {
-              const raw = rawByName.get(normalizeText(material.materialName || ''));
+              const raw =
+                (material.materialId ? rawById.get(material.materialId) : undefined) ??
+                rawByName.get(normalizeText(material.materialName || ''));
               if (!raw?.id) continue;
               const qtyToConsume = Number(material.quantityUsed || 0) * producedQty;
               if (qtyToConsume <= 0) continue;
@@ -1226,7 +1314,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             }
           }
 
-          const today = getTodayDateString();
+          const today = getOperationalDateString(8);
           const { start: monthStart, end: monthEnd } = getMonthDateRange();
           const [todayReports, monthlyReports] = await Promise.all([
             reportService.getByDateRange(today, today),
@@ -1503,21 +1591,46 @@ export const useAppStore = create<AppState>((set, get) => ({
         const routing = await resolveInventoryRouting(systemSettings);
         const product = get()._rawProducts.find((p) => p.id === data.productId);
         const actorName = get().userDisplayName || get().userEmail || 'System';
+        const actorUserId = get().uid || undefined;
         const producedQty = Number(data.quantityProduced || 0);
         const wasteQty = Number(data.quantityWaste || 0);
 
+        const requiresFinishedApproval = systemSettings.planSettings?.requireFinishedStockApprovalForReports !== false;
         if (product && routing.finishedReceiveWarehouseId && producedQty > 0) {
-          await stockService.createMovement({
-            warehouseId: routing.finishedReceiveWarehouseId,
-            itemType: 'finished_good',
-            itemId: data.productId,
-            itemName: product.name,
-            itemCode: product.code,
-            movementType: 'IN',
-            quantity: producedQty,
-            note: `Auto from production report ${id}`,
-            createdBy: actorName,
-          });
+          if (requiresFinishedApproval) {
+            await transferApprovalService.createRequest({
+              requestType: 'production_entry',
+              fromWarehouseId: '__production_report__',
+              fromWarehouseName: 'تقارير الإنتاج',
+              toWarehouseId: routing.finishedReceiveWarehouseId,
+              toWarehouseName: 'مخزن تم الصنع',
+              referenceNo: `PR-${id}`,
+              note: `Pending production entry from report ${id}`,
+              sourceReportId: id,
+              lines: [{
+                itemType: 'finished_good',
+                itemId: data.productId,
+                itemName: product.name,
+                itemCode: product.code,
+                quantity: producedQty,
+                minStock: product.minStock,
+              }],
+              createdBy: actorName,
+              createdByUserId: actorUserId,
+            });
+          } else {
+            await stockService.createMovement({
+              warehouseId: routing.finishedReceiveWarehouseId,
+              itemType: 'finished_good',
+              itemId: data.productId,
+              itemName: product.name,
+              itemCode: product.code,
+              movementType: 'IN',
+              quantity: producedQty,
+              note: `Auto from production report ${id}`,
+              createdBy: actorName,
+            });
+          }
         }
 
         if (product && routing.wasteReceiveWarehouseId && wasteQty > 0) {
@@ -1541,11 +1654,18 @@ export const useAppStore = create<AppState>((set, get) => ({
               productMaterialService.getByProduct(data.productId),
               rawMaterialService.getAll(),
             ]);
+            const rawById = new Map(
+              rawMaterials
+                .filter((rm) => Boolean(rm.id))
+                .map((rm) => [String(rm.id), rm]),
+            );
             const rawByName = new Map(
               rawMaterials.map((rm) => [normalizeText(rm.name), rm]),
             );
             for (const material of materials) {
-              const raw = rawByName.get(normalizeText(material.materialName || ''));
+              const raw =
+                (material.materialId ? rawById.get(material.materialId) : undefined) ??
+                rawByName.get(normalizeText(material.materialName || ''));
               if (!raw?.id) continue;
               const qtyToConsume = Number(material.quantityUsed || 0) * baseUnits;
               if (qtyToConsume <= 0) continue;
@@ -1593,7 +1713,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       try {
-        const today = getTodayDateString();
+        const today = getOperationalDateString(8);
         const { start: monthStart, end: monthEnd } = getMonthDateRange();
         const [todayReports, monthlyReports, workOrders] = await Promise.all([
           reportService.getByDateRange(today, today),
@@ -1662,7 +1782,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           syncProductAvgDailyProduction(productId)
         )
       );
-      const today = getTodayDateString();
+      const today = getOperationalDateString(8);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -1699,6 +1819,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       const reportToDelete = await reportService.getById(id);
       if (!reportToDelete) {
         throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
+      }
+      const actorName = get().userDisplayName || get().userEmail || 'System';
+      const linkedEntryRequests = await transferApprovalService.getBySourceReportId(id);
+      for (const request of linkedEntryRequests) {
+        if (!request.id) continue;
+        if (request.status === 'approved') {
+          throw new Error('لا يمكن حذف التقرير بعد اعتماد دخول مخزن تم الصنع. قم بإلغاء الحركة أولاً من شاشة اعتماد التحويلات.');
+        }
+        if (request.status === 'pending') {
+          await transferApprovalService.rejectRequest(
+            request.id,
+            actorName,
+            'تم إلغاء طلب دخول تم الصنع تلقائياً بسبب حذف التقرير المصدر.',
+          );
+        }
       }
 
       const autoWarehouseId = await resolveProductionWarehouseId(get().systemSettings);
@@ -1751,7 +1886,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       await reportService.delete(id);
       await syncProductAvgDailyProduction(reportToDelete.productId);
-      const today = getTodayDateString();
+      const today = getOperationalDateString(8);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, workOrders] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -1780,7 +1915,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       get()._logActivity('DELETE_REPORT', `حذف تقرير إنتاج`, { reportId: id });
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = (error as Error)?.message || 'تعذر حذف التقرير.';
+      set({ error: message });
+      throw error;
     }
   },
 
@@ -1925,6 +2062,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data) {
         const merged = { ...DEFAULT_SYSTEM_SETTINGS, ...data };
         set({ systemSettings: merged });
+        await get().fetchProducts();
         applyTheme(merged.theme);
         setupAutoThemeListener(merged.theme);
       }
@@ -1937,6 +2075,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await systemSettingsService.set(data);
       set({ systemSettings: data });
+      await get().fetchProducts();
       applyTheme(data.theme);
       setupAutoThemeListener(data.theme);
     } catch (error) {
@@ -1947,7 +2086,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Real-time Subscriptions ───────────────────────────────────────────────
 
   subscribeToDashboard: () => {
-    const today = getTodayDateString();
+    const today = getOperationalDateString(8);
     return reportService.subscribeToday(today, (reports) => {
       set({ todayReports: reports });
       get()._rebuildProducts();
@@ -1991,7 +2130,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   subscribeToScanEventsToday: () => {
-    const today = getTodayDateString();
+    const today = getOperationalDateString(8);
     return scanEventService.subscribeLiveToday(today, (events) => {
       const validWorkOrderIds = new Set(
         get().workOrders

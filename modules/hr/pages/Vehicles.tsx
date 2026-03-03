@@ -11,6 +11,7 @@ import type { FirestoreVehicle } from '../types';
 import type { FirestoreEmployee } from '@/types';
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { PageHeader } from '../../../components/PageHeader';
 
 const EMPTY_VEHICLE: Omit<FirestoreVehicle, 'id'> = {
   name: '',
@@ -223,10 +224,10 @@ export const Vehicles: React.FC = () => {
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
+        <div className="h-8 bg-slate-200 rounded w-1/3" />
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-slate-200 dark:bg-slate-700 rounded-xl" />
+            <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)]" />
           ))}
         </div>
       </div>
@@ -236,45 +237,42 @@ export const Vehicles: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-            <span className="material-icons-round text-primary">directions_bus</span>
-            إدارة المركبات
-          </h2>
-          <p className="text-sm text-slate-500 font-medium">
-            تعريف المركبات وربط الموظفين وحساب تكلفة النقل
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {vehicles.length > 0 && canExportFromPage && (
-            <Button variant={pageControl.exportVariant} onClick={handleExport}>
-              <span className="material-icons-round text-sm">download</span>
-              تصدير Excel
-            </Button>
-          )}
-          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.VEHICLES_CREATE}>
-            <span className="material-icons-round text-sm">add</span>
-            إضافة مركبة
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="إدارة المركبات"
+        subtitle="تعريف المركبات وربط الموظفين وحساب تكلفة النقل"
+        icon="directions_bus"
+        primaryAction={{
+          label: 'إضافة مركبة',
+          icon: 'add',
+          onClick: openCreate,
+          dataModalKey: MODAL_KEYS.VEHICLES_CREATE,
+        }}
+        moreActions={[
+          {
+            label: 'تصدير Excel',
+            icon: 'download',
+            group: 'تصدير',
+            hidden: !canExportFromPage || vehicles.length === 0,
+            onClick: handleExport,
+          },
+        ]}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
           { label: 'إجمالي المركبات', value: stats.total, icon: 'directions_bus', color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' },
-          { label: 'نشطة', value: stats.active, icon: 'check_circle', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
+          { label: 'نشطة', value: stats.active, icon: 'check_circle', color: 'bg-emerald-100 text-emerald-600' },
           { label: 'إجمالي السعة', value: stats.totalCapacity, icon: 'groups', color: 'bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400' },
           { label: 'موظفين مربوطين', value: stats.totalAssigned, icon: 'person_pin', color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400' },
-          { label: 'تكلفة شهرية', value: formatCurrency(stats.totalMonthlyCost), icon: 'payments', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
+          { label: 'تكلفة شهرية', value: formatCurrency(stats.totalMonthlyCost), icon: 'payments', color: 'bg-amber-100 text-amber-600' },
         ].map((kpi) => (
-          <div key={kpi.label} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3 shadow-sm">
-            <div className={`w-12 h-12 ${kpi.color} rounded-lg flex items-center justify-center shrink-0`}>
+          <div key={kpi.label} className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] flex items-center gap-3">
+            <div className={`w-12 h-12 ${kpi.color} rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0`}>
               <span className="material-icons-round text-2xl">{kpi.icon}</span>
             </div>
             <div className="min-w-0">
-              <p className="text-slate-500 text-xs font-medium">{kpi.label}</p>
+              <p className="text-[var(--color-text-muted)] text-xs font-medium">{kpi.label}</p>
               <h3 className="text-xl font-bold">{kpi.value}</h3>
             </div>
           </div>
@@ -284,9 +282,9 @@ export const Vehicles: React.FC = () => {
       {/* Search */}
       <div className="flex gap-3">
         <div className="relative flex-1 sm:max-w-sm">
-          <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+          <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] text-lg">search</span>
           <input
-            className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pr-10 pl-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] pr-10 pl-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
             placeholder="بحث بالاسم أو رقم اللوحة أو السائق..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -299,76 +297,76 @@ export const Vehicles: React.FC = () => {
         <Card title={editingId ? 'تعديل مركبة' : 'إضافة مركبة جديدة'}>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">اسم المركبة *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">اسم المركبة *</label>
               <input
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="مثال: باص 1"
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">رقم اللوحة *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">رقم اللوحة *</label>
               <input
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={form.plateNumber}
                 onChange={(e) => setForm({ ...form, plateNumber: e.target.value })}
                 placeholder="أ ب ج 1234"
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">السعة (عدد الركاب)</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">السعة (عدد الركاب)</label>
               <input
                 type="number"
                 min={1}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={form.capacity}
                 onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) || 1 })}
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">الأجر اليومي (ج.م)</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">الأجر اليومي (ج.م)</label>
               <input
                 type="number"
                 min={0}
                 step={0.01}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={form.dailyRate}
                 onChange={(e) => setForm({ ...form, dailyRate: Number(e.target.value) || 0 })}
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">أيام العمل / شهر</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">أيام العمل / شهر</label>
               <input
                 type="number"
                 min={1}
                 max={31}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={form.workingDaysPerMonth}
                 onChange={(e) => setForm({ ...form, workingDaysPerMonth: Math.min(31, Number(e.target.value) || 1) })}
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                 التكلفة الشهرية
               </label>
-              <div className="border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">
+              <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold bg-emerald-50 text-emerald-700">
                 {formatCurrency(form.dailyRate * form.workingDaysPerMonth)}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">اسم السائق</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">اسم السائق</label>
               <input
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={form.driverName}
                 onChange={(e) => setForm({ ...form, driverName: e.target.value })}
                 placeholder="اسم السائق"
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">هاتف السائق</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">هاتف السائق</label>
               <input
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={form.driverPhone}
                 onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
                 placeholder="01xxxxxxxxx"
@@ -381,9 +379,9 @@ export const Vehicles: React.FC = () => {
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                  className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary"
                 />
-                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">نشطة</span>
+                <span className="text-sm font-bold text-[var(--color-text-muted)]">نشطة</span>
               </label>
             </div>
           </div>
@@ -391,11 +389,11 @@ export const Vehicles: React.FC = () => {
           {/* Employee Assignment */}
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-bold text-slate-600 dark:text-slate-300">
+              <label className="text-sm font-bold text-[var(--color-text-muted)]">
                 ربط الموظفين ({form.assignedEmployees.length}/{form.capacity})
               </label>
               {form.assignedEmployees.length >= form.capacity && (
-                <span className="text-xs text-amber-600 dark:text-amber-400 font-bold">المركبة ممتلئة</span>
+                <span className="text-xs text-amber-600 font-bold">المركبة ممتلئة</span>
               )}
             </div>
 
@@ -412,7 +410,7 @@ export const Vehicles: React.FC = () => {
                 {form.assignedEmployees.map((empId) => (
                   <span
                     key={empId}
-                    className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800"
+                    className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium px-3 py-1.5 rounded-[var(--border-radius-base)] border border-indigo-200 dark:border-indigo-800"
                   >
                     {getEmpName(empId)}
                     <button
@@ -427,7 +425,7 @@ export const Vehicles: React.FC = () => {
             )}
 
             {form.assignedEmployees.length > 0 && form.dailyRate > 0 && (
-              <div className="mt-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-3 flex items-center gap-2">
+              <div className="mt-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-2">
                 <span className="material-icons-round text-sky-500 text-sm">info</span>
                 <span className="text-sm font-bold text-sky-700 dark:text-sky-400">
                   تكلفة الموظف الواحد: {formatCurrency((form.dailyRate * form.workingDaysPerMonth) / form.assignedEmployees.length)} / شهر
@@ -438,9 +436,9 @@ export const Vehicles: React.FC = () => {
 
           {/* Notes */}
           <div className="mt-4">
-            <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">ملاحظات</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">ملاحظات</label>
             <textarea
-              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none"
               rows={2}
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -467,7 +465,7 @@ export const Vehicles: React.FC = () => {
       {filtered.length === 0 ? (
         <Card>
           <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">directions_bus</span>
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">directions_bus</span>
             <p className="text-sm font-bold text-slate-500">لا توجد مركبات{searchQuery ? ' مطابقة للبحث' : ''}</p>
           </div>
         </Card>
@@ -483,29 +481,29 @@ export const Vehicles: React.FC = () => {
             return (
               <div
                 key={v.id}
-                className={`bg-white dark:bg-slate-900 rounded-xl border shadow-sm transition-all ${
+                className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border transition-all ${
                   v.isActive
-                    ? 'border-slate-200 dark:border-slate-800'
+                    ? 'border-[var(--color-border)]'
                     : 'border-rose-200 dark:border-rose-900 opacity-70'
                 }`}
               >
                 {/* Card Header */}
                 <div className="p-4 flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${v.isActive ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                    <div className={`w-12 h-12 rounded-[var(--border-radius-lg)] flex items-center justify-center ${v.isActive ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-[#f0f2f5] text-slate-400'}`}>
                       <span className="material-icons-round text-2xl">directions_bus</span>
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-800 dark:text-white">{v.name}</h3>
-                      <p className="text-xs text-slate-500 font-mono" dir="ltr">{v.plateNumber}</p>
+                      <h3 className="font-bold text-[var(--color-text)]">{v.name}</h3>
+                      <p className="text-xs text-[var(--color-text-muted)] font-mono" dir="ltr">{v.plateNumber}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <Badge variant={v.isActive ? 'success' : 'danger'}>{v.isActive ? 'نشطة' : 'متوقفة'}</Badge>
-                    <button onClick={() => openEdit(v)} className="p-1.5 text-slate-400 hover:text-primary transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <button onClick={() => openEdit(v)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary transition-colors rounded-[var(--border-radius-base)] hover:bg-[#f0f2f5]">
                       <span className="material-icons-round text-lg">edit</span>
                     </button>
-                    <button onClick={() => handleDelete(v.id!)} className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <button onClick={() => handleDelete(v.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 transition-colors rounded-[var(--border-radius-base)] hover:bg-[#f0f2f5]">
                       <span className="material-icons-round text-lg">delete</span>
                     </button>
                   </div>
@@ -513,31 +511,31 @@ export const Vehicles: React.FC = () => {
 
                 {/* Stats Grid */}
                 <div className="px-4 grid grid-cols-4 gap-2 text-center">
-                  <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <p className="text-lg font-black text-slate-800 dark:text-white">{v.capacity}</p>
-                    <p className="text-[10px] text-slate-500 font-medium">السعة</p>
+                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
+                    <p className="text-lg font-bold text-[var(--color-text)]">{v.capacity}</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] font-medium">السعة</p>
                   </div>
-                  <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">{assignedEmployeeIds.length}</p>
-                    <p className="text-[10px] text-slate-500 font-medium">مربوطين</p>
+                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
+                    <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{assignedEmployeeIds.length}</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] font-medium">مربوطين</p>
                   </div>
-                  <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatNumber(v.dailyRate)}</p>
-                    <p className="text-[10px] text-slate-500 font-medium">يومي ج.م</p>
+                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
+                    <p className="text-lg font-bold text-emerald-600">{formatNumber(v.dailyRate)}</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] font-medium">يومي ج.م</p>
                   </div>
-                  <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <p className="text-lg font-black text-amber-600 dark:text-amber-400">{v.workingDaysPerMonth}</p>
-                    <p className="text-[10px] text-slate-500 font-medium">يوم/شهر</p>
+                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
+                    <p className="text-lg font-bold text-amber-600">{v.workingDaysPerMonth}</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] font-medium">يوم/شهر</p>
                   </div>
                 </div>
 
                 {/* Occupancy Bar */}
                 <div className="px-4 mt-3">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-slate-500 font-medium">الإشغال</span>
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{Math.round(occupancy)}%</span>
+                    <span className="text-xs text-[var(--color-text-muted)] font-medium">الإشغال</span>
+                    <span className="text-xs font-bold text-[var(--color-text-muted)]">{Math.round(occupancy)}%</span>
                   </div>
-                  <div className="bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div className="bg-[#f0f2f5] rounded-full h-2 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
                         occupancy >= 90 ? 'bg-rose-500' : occupancy >= 60 ? 'bg-amber-500' : 'bg-emerald-500'
@@ -551,7 +549,7 @@ export const Vehicles: React.FC = () => {
                 <div className="px-4 mt-3 flex items-center justify-between">
                   <div>
                     <span className="text-xs text-slate-500">تكلفة شهرية: </span>
-                    <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(monthlyCost)}</span>
+                    <span className="text-sm font-bold text-emerald-600">{formatCurrency(monthlyCost)}</span>
                   </div>
                   {costPerEmp > 0 && (
                     <div>
@@ -571,7 +569,7 @@ export const Vehicles: React.FC = () => {
                 )}
 
                 {/* Expand employees */}
-                <div className="px-4 py-3 mt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="px-4 py-3 mt-2 border-t border-[var(--color-border)]">
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : v.id!)}
                     className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
@@ -585,11 +583,11 @@ export const Vehicles: React.FC = () => {
                         <p className="text-xs text-slate-400">لا يوجد موظفين مربوطين</p>
                       ) : (
                         assignedEmployeeIds.map((empId) => (
-                          <div key={empId} className="flex items-center gap-2 py-1.5 px-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-sm">
-                            <span className="material-icons-round text-slate-400 text-sm">person</span>
-                            <span className="font-medium text-slate-700 dark:text-slate-300">{getEmpName(empId)}</span>
+                          <div key={empId} className="flex items-center gap-2 py-1.5 px-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)] text-sm">
+                            <span className="material-icons-round text-[var(--color-text-muted)] text-sm">person</span>
+                            <span className="font-medium text-[var(--color-text)]">{getEmpName(empId)}</span>
                             {getEmpCode(empId) && (
-                              <span className="text-xs text-slate-400 font-mono">{getEmpCode(empId)}</span>
+                              <span className="text-xs text-[var(--color-text-muted)] font-mono">{getEmpCode(empId)}</span>
                             )}
                           </div>
                         ))

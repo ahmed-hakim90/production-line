@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, KPIBox } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
@@ -31,6 +31,8 @@ export const QualityReports: React.FC = () => {
     firstPassYield: 0,
   });
   const [loading, setLoading] = useState(false);
+  const [tableQuery, setTableQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'rejected' | 'pending' | 'not_required'>('all');
   const [defects, setDefects] = useState<QualityDefect[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deletingWorkOrderId, setDeletingWorkOrderId] = useState<string | null>(null);
@@ -45,15 +47,15 @@ export const QualityReports: React.FC = () => {
   const qualityStatusMeta = (status?: string) => {
     const normalized = status ?? 'pending';
     if (normalized === 'approved') {
-      return { label: 'معتمد', className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' };
+      return { label: 'معتمد', className: 'bg-emerald-50 text-emerald-700' };
     }
     if (normalized === 'rejected') {
-      return { label: 'مرفوض', className: 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300' };
+      return { label: 'مرفوض', className: 'bg-rose-50 text-rose-700' };
     }
     if (normalized === 'not_required') {
-      return { label: 'غير مطلوب', className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' };
+      return { label: 'غير مطلوب', className: 'bg-[#f0f2f5] text-[var(--color-text)]' };
     }
-    return { label: 'قيد المراجعة', className: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' };
+    return { label: 'قيد المراجعة', className: 'bg-amber-50 text-amber-700' };
   };
   const qualityReportRows = useMemo(
     () =>
@@ -64,10 +66,27 @@ export const QualityReports: React.FC = () => {
           const aMs = a.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.() ?? new Date(a.qualityApprovedAt || 0).getTime();
           const bMs = b.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.() ?? new Date(b.qualityApprovedAt || 0).getTime();
           return (bMs || 0) - (aMs || 0);
-        })
-        .slice(0, 8),
+        }),
     [workOrders],
   );
+  const filteredQualityReportRows = useMemo(() => {
+    const query = tableQuery.trim().toLowerCase();
+    return qualityReportRows.filter((wo) => {
+      const normalizedStatus = (wo.qualityStatus ?? 'pending') as 'approved' | 'rejected' | 'pending' | 'not_required';
+      if (statusFilter !== 'all' && normalizedStatus !== statusFilter) return false;
+      if (!query) return true;
+      const productName = (_rawProducts.find((p) => p.id === wo.productId)?.name ?? '').toLowerCase();
+      const lineName = (_rawLines.find((l) => l.id === wo.lineId)?.name ?? '').toLowerCase();
+      const orderNo = String(wo.workOrderNumber ?? '').toLowerCase();
+      const reportCode = String(wo.qualityReportCode ?? '').toLowerCase();
+      return (
+        productName.includes(query) ||
+        lineName.includes(query) ||
+        orderNo.includes(query) ||
+        reportCode.includes(query)
+      );
+    });
+  }, [_rawLines, _rawProducts, qualityReportRows, statusFilter, tableQuery]);
 
   const runReport = async () => {
     if (!selectedWorkOrderId) return;
@@ -164,76 +183,75 @@ export const QualityReports: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-2xl font-black">تقارير الجودة</h2>
-          <p className="text-sm text-slate-500">ملخص جودة لكل أمر شغل + جاهز للطباعة</p>
+      {/* ── Page Header ── */}
+      <div className="erp-page-head">
+        <div className="erp-page-title-block">
+          <h2 className="page-title">تقارير الجودة</h2>
+          <p className="page-subtitle">ملخص جودة لكل أمر شغل + جاهز للطباعة</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>طباعة التقرير</Button>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              if (!printRef.current) return;
-              try {
-                await qualityPrintService.exportDocumentPdf(
-                  printRef.current,
-                  `quality-kpi-${selectedWorkOrder?.workOrderNumber ?? 'snapshot'}`,
-                  'quality_kpi',
-                  selectedWorkOrder?.id,
-                  {
-                    paperSize: printTemplate?.paperSize,
-                    orientation: printTemplate?.orientation,
-                    copies: printTemplate?.copies,
-                  },
-                );
-                setMessage({ type: 'success', text: 'تم تصدير تقرير KPI بنجاح.' });
-              } catch (error) {
-                setMessage({
-                  type: 'error',
-                  text: error instanceof Error ? error.message : 'تعذر تصدير تقرير KPI.',
-                });
-              }
-            }}
-            disabled={!canPrint || !selectedWorkOrder?.id}
-          >
-            PDF KPI
-          </Button>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              if (!defectsPrintRef.current || !selectedWorkOrder?.id) return;
-              try {
-                await qualityPrintService.exportDocumentPdf(
-                  defectsPrintRef.current,
-                  `quality-defects-${selectedWorkOrder.workOrderNumber ?? 'snapshot'}`,
-                  'defects',
-                  selectedWorkOrder.id,
-                  {
-                    paperSize: printTemplate?.paperSize,
-                    orientation: printTemplate?.orientation,
-                    copies: printTemplate?.copies,
-                  },
-                );
-                setMessage({ type: 'success', text: 'تم تصدير تقرير العيوب بنجاح.' });
-              } catch (error) {
-                setMessage({
-                  type: 'error',
-                  text: error instanceof Error ? error.message : 'تعذر تصدير تقرير العيوب.',
-                });
-              }
-            }}
-            disabled={!canPrint || !selectedWorkOrder?.id}
-          >
-            PDF Defects
-          </Button>
+        <div className="erp-page-actions">
+          {canPrint && selectedWorkOrder && (
+            <button className="btn btn-primary" onClick={() => handlePrint()}>
+              <span className="material-icons-round" style={{ fontSize: 16 }}>print</span>
+              طباعة
+            </button>
+          )}
+          {canPrint && selectedWorkOrder?.id && (
+            <div className="relative" id="quality-more-menu-anchor">
+              <button
+                className="btn btn-secondary"
+                title="تصدير PDF"
+                onClick={async () => {
+                  if (!printRef.current) return;
+                  try {
+                    await qualityPrintService.exportDocumentPdf(
+                      printRef.current,
+                      `quality-kpi-${selectedWorkOrder?.workOrderNumber ?? 'snapshot'}`,
+                      'quality_kpi',
+                      selectedWorkOrder?.id,
+                      { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
+                    );
+                    setMessage({ type: 'success', text: 'تم تصدير تقرير KPI بنجاح.' });
+                  } catch (error) {
+                    setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر تصدير تقرير KPI.' });
+                  }
+                }}
+              >
+                <span className="material-icons-round" style={{ fontSize: 16 }}>picture_as_pdf</span>
+                <span className="hidden sm:inline">PDF KPI</span>
+              </button>
+            </div>
+          )}
+          {canPrint && selectedWorkOrder?.id && defectsPrintRef && (
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                if (!defectsPrintRef.current || !selectedWorkOrder?.id) return;
+                try {
+                  await qualityPrintService.exportDocumentPdf(
+                    defectsPrintRef.current,
+                    `quality-defects-${selectedWorkOrder.workOrderNumber ?? 'snapshot'}`,
+                    'defects',
+                    selectedWorkOrder.id,
+                    { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
+                  );
+                  setMessage({ type: 'success', text: 'تم تصدير تقرير العيوب بنجاح.' });
+                } catch (error) {
+                  setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر تصدير تقرير العيوب.' });
+                }
+              }}
+            >
+              <span className="material-icons-round" style={{ fontSize: 16 }}>picture_as_pdf</span>
+              <span className="hidden sm:inline">PDF العيوب</span>
+            </button>
+          )}
         </div>
       </div>
       {message && (
-        <div className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
+        <div className={`rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
           message.type === 'success'
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300'
-            : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-300'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60'
+            : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60'
         }`}>
           {message.text}
         </div>
@@ -245,7 +263,7 @@ export const QualityReports: React.FC = () => {
             <select
               value={selectedWorkOrderId}
               onChange={(e) => setSelectedWorkOrderId(e.target.value)}
-              className="md:col-span-3 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+              className="md:col-span-3 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
             >
               <option value="">اختر أمر شغل</option>
               {workOrders.map((wo) => (
@@ -258,34 +276,66 @@ export const QualityReports: React.FC = () => {
           </div>
         </Card>
 
-        <Card title="ملخص تقارير الجودة (آخر أوامر الشغل)">
+        <Card title="جدول تقارير الجودة">
+          <div className="mb-4 grid md:grid-cols-3 gap-3">
+            <input
+              value={tableQuery}
+              onChange={(e) => setTableQuery(e.target.value)}
+              placeholder="بحث برقم أمر الشغل / كود التقرير / المنتج / الخط"
+              className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
+            >
+              <option value="all">كل الحالات</option>
+              <option value="approved">معتمد</option>
+              <option value="rejected">مرفوض</option>
+              <option value="pending">قيد المراجعة</option>
+              <option value="not_required">غير مطلوب</option>
+            </select>
+          </div>
           {qualityReportRows.length === 0 ? (
             <p className="text-sm text-slate-500">لا توجد تقارير جودة مرتبطة بأوامر الشغل حاليًا.</p>
+          ) : filteredQualityReportRows.length === 0 ? (
+            <p className="text-sm text-slate-500">لا توجد نتائج مطابقة للبحث/التصفية الحالية.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-right py-2 px-2">أمر الشغل</th>
-                    <th className="text-right py-2 px-2">كود تقرير الجودة</th>
-                    <th className="text-right py-2 px-2">الحالة</th>
-                    <th className="text-right py-2 px-2">Inspected</th>
-                    <th className="text-right py-2 px-2">Failed</th>
-                    <th className="text-right py-2 px-2">إجراء</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">أمر الشغل</th>
+                    <th className="erp-th">المنتج</th>
+                    <th className="erp-th">الخط</th>
+                    <th className="erp-th">كود تقرير الجودة</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">Inspected</th>
+                    <th className="erp-th">Failed</th>
+                    <th className="erp-th">آخر تحديث</th>
+                    <th className="erp-th">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {qualityReportRows.map((wo) => {
+                  {filteredQualityReportRows.map((wo) => {
                     const qm = qualityStatusMeta(wo.qualityStatus);
+                    const productName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '—';
+                    const lineName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
+                    const lastInspectionDate =
+                      wo.qualitySummary?.lastInspectionAt?.toDate?.()?.toLocaleString?.('ar-EG') ??
+                      (wo.qualityApprovedAt ? new Date(wo.qualityApprovedAt).toLocaleString('ar-EG') : '—');
                     return (
-                      <tr key={wo.id} className="border-b border-slate-100 dark:border-slate-800">
+                      <tr key={wo.id} className="border-b border-[var(--color-border)]">
                         <td className="py-2 px-2 font-bold">#{wo.workOrderNumber}</td>
+                        <td className="py-2 px-2">{productName}</td>
+                        <td className="py-2 px-2">{lineName}</td>
                         <td className="py-2 px-2 font-mono text-xs text-primary">{wo.qualityReportCode || '—'}</td>
                         <td className="py-2 px-2">
                           <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full ${qm.className}`}>{qm.label}</span>
                         </td>
                         <td className="py-2 px-2">{wo.qualitySummary?.inspectedUnits ?? 0}</td>
                         <td className="py-2 px-2">{wo.qualitySummary?.failedUnits ?? 0}</td>
+                        <td className="py-2 px-2 text-xs text-slate-500">{lastInspectionDate}</td>
                         <td className="py-2 px-2">
                           <div className="flex items-center gap-2">
                             <Button
@@ -294,6 +344,7 @@ export const QualityReports: React.FC = () => {
                               onClick={() => setSelectedWorkOrderId(wo.id ?? '')}
                               disabled={!wo.id}
                             >
+                              <span className="material-icons-round text-sm">open_in_new</span>
                               فتح
                             </Button>
                             {canDeleteQualityReports && (
@@ -303,6 +354,7 @@ export const QualityReports: React.FC = () => {
                                 onClick={() => void handleDeleteQualityReport(wo.id ?? '', wo.workOrderNumber)}
                                 disabled={!wo.id || deletingWorkOrderId === wo.id}
                               >
+                                <span className="material-icons-round text-sm">delete</span>
                                 {deletingWorkOrderId === wo.id ? 'جاري الحذف...' : 'حذف التقرير'}
                               </Button>
                             )}
@@ -315,6 +367,9 @@ export const QualityReports: React.FC = () => {
               </table>
             </div>
           )}
+          <p className="mt-3 text-xs text-slate-400">
+            إجمالي التقارير: {filteredQualityReportRows.length} / {qualityReportRows.length}
+          </p>
         </Card>
 
         {selectedWorkOrder && (
@@ -333,9 +388,9 @@ export const QualityReports: React.FC = () => {
               ) : (
                 <div className="space-y-2">
                   {topDefectReasons.map((item) => (
-                    <div key={item.reasonLabel} className="flex items-center justify-between text-sm py-2 border-b border-slate-100 dark:border-slate-800">
-                      <span className="font-semibold text-slate-700 dark:text-slate-200">{item.reasonLabel}</span>
-                      <span className="font-black text-primary">{item.quantity}</span>
+                    <div key={item.reasonLabel} className="flex items-center justify-between text-sm py-2 border-b border-[var(--color-border)]">
+                      <span className="font-semibold text-[var(--color-text)]">{item.reasonLabel}</span>
+                      <span className="font-bold text-primary">{item.quantity}</span>
                     </div>
                   ))}
                 </div>

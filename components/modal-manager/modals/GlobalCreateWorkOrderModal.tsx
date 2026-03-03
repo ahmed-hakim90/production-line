@@ -65,6 +65,27 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     [employees],
   );
 
+  const productNameById = useMemo(
+    () => new Map(products.map((p) => [p.id!, p.name])),
+    [products],
+  );
+
+  const activePlans = useMemo(
+    () => plans.filter((p) => p.status === 'planned' || p.status === 'in_progress'),
+    [plans],
+  );
+
+  const planOptions = useMemo(
+    () => [
+      { value: '', label: 'بدون خطة' },
+      ...activePlans.map((p) => ({
+        value: p.id!,
+        label: `${productNameById.get(p.productId) || 'منتج غير معروف'}${p.plannedEndDate ? ` - ${p.plannedEndDate}` : ''}`,
+      })),
+    ],
+    [activePlans, productNameById],
+  );
+
   if (!isOpen) return null;
   if (!can('workOrders.create')) return null;
 
@@ -126,48 +147,49 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800"
+        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-lg border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <h3 className="text-lg font-bold">أمر شغل جديد</h3>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
+          <h3 className="text-base sm:text-lg font-bold">أمر شغل جديد</h3>
+          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <span className="material-icons-round">close</span>
           </button>
         </div>
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {message && (
-            <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
+            <div className="erp-alert erp-alert-success">
               <span className="material-icons-round text-emerald-500 text-base">check_circle</span>
-              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex-1">{message}</p>
+              <p className="text-sm font-bold text-emerald-700 flex-1">{message}</p>
             </div>
           )}
           {error && (
-            <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-3">
+            <div className="erp-alert erp-alert-error">
               <span className="material-icons-round text-rose-500 text-base">error</span>
-              <p className="text-sm font-bold text-rose-700 dark:text-rose-300 flex-1">{error}</p>
+              <p className="text-sm font-bold text-rose-700 flex-1">{error}</p>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">خطة الإنتاج (اختياري)</label>
-            <select
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خطة الإنتاج (اختياري)</label>
+            <SearchableSelect
+              options={planOptions}
               value={form.planId}
-              onChange={(e) => {
-                const plan = plans.find((p) => p.id === e.target.value);
-                setForm((f) => ({ ...f, planId: e.target.value, productId: plan?.productId || f.productId }));
+              onChange={(value) => {
+                const plan = plans.find((p) => p.id === value);
+                setForm((f) => ({
+                  ...f,
+                  planId: value,
+                  productId: plan?.productId || f.productId,
+                  lineId: plan?.lineId || f.lineId,
+                }));
               }}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
-            >
-              <option value="">بدون خطة</option>
-              {plans.filter((p) => p.status === 'planned' || p.status === 'in_progress').map((p) => (
-                <option key={p.id} value={p.id!}>{p.productId}</option>
-              ))}
-            </select>
+              placeholder="ابحث باسم المنتج أو اختر بدون خطة"
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">المنتج *</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المنتج *</label>
             <SearchableSelect
               options={products.map((p) => ({ value: p.id!, label: `${p.name} (${p.code})` }))}
               value={form.productId}
@@ -177,11 +199,11 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">خط الإنتاج *</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج *</label>
             <select
               value={form.lineId}
               onChange={(e) => setForm((f) => ({ ...f, lineId: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+              className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
             >
               <option value="">اختر الخط</option>
               {lines.map((l) => (
@@ -191,11 +213,11 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">المشرف *</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المشرف *</label>
             <select
               value={form.supervisorId}
               onChange={(e) => setForm((f) => ({ ...f, supervisorId: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+              className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
             >
               <option value="">اختر المشرف</option>
               {supervisors.map((s) => (
@@ -206,39 +228,39 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">الكمية *</label>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الكمية *</label>
               <input
                 type="number"
                 min={1}
                 value={form.quantity || ''}
                 onChange={(e) => setForm((f) => ({ ...f, quantity: Number(e.target.value) }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">عدد العمالة *</label>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">عدد العمالة *</label>
               <input
                 type="number"
                 min={1}
                 value={form.maxWorkers || ''}
                 onChange={(e) => setForm((f) => ({ ...f, maxWorkers: Number(e.target.value) }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">ساعات العمل *</label>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ساعات العمل *</label>
               <input
                 type="number"
                 min={0}
                 step={0.5}
                 value={form.workHours || ''}
                 onChange={(e) => setForm((f) => ({ ...f, workHours: Number(e.target.value) }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
               />
             </div>
           </div>
         </div>
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+        <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
           <Button variant="outline" onClick={handleClose} disabled={saving}>إلغاء</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0}>
             {saving ? <span className="material-icons-round animate-spin text-sm">refresh</span> : null}

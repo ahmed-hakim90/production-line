@@ -5,8 +5,9 @@
  */
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, WorkOrder } from '../types';
+import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, WorkOrder, ProductionPlan } from '../types';
 import type { ProductCostBreakdown } from './productCostBreakdown';
+import { formatOperationDateTime } from './calculations';
 
 interface ReportRow {
   'كود التقرير': string;
@@ -132,13 +133,22 @@ const downloadExcel = (rows: Record<string, any>[], sheetName: string, fileName:
     return cleaned || 'export';
   })();
 
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const normalizedRows = rows.map((row) =>
+    Object.fromEntries(
+      Object.entries(row).map(([key, value]) => {
+        const formattedDateTime = formatOperationDateTime(value);
+        return [key, formattedDateTime ?? value];
+      }),
+    ),
+  );
+
+  const ws = XLSX.utils.json_to_sheet(normalizedRows);
 
   // Auto-fit column widths
-  const colWidths = Object.keys(rows[0] || {}).map((key) => {
+  const colWidths = Object.keys(normalizedRows[0] || {}).map((key) => {
     const maxLen = Math.max(
       key.length,
-      ...rows.map((r) => String(r[key] ?? '').length)
+      ...normalizedRows.map((r) => String(r[key] ?? '').length)
     );
     return { wch: Math.min(maxLen + 4, 30) };
   });
@@ -518,4 +528,49 @@ export const exportWorkOrders = (
   }));
   const date = new Date().toISOString().slice(0, 10);
   downloadExcel(rows, 'أوامر الشغل', `أوامر-الشغل-${date}`);
+};
+
+// ─── Production Plans Export ────────────────────────────────────────────────
+
+const PLAN_PRIORITY_AR: Record<string, string> = {
+  low: 'منخفضة',
+  medium: 'متوسطة',
+  high: 'عالية',
+  urgent: 'عاجلة',
+};
+
+const PLAN_STATUS_AR: Record<string, string> = {
+  planned: 'مخطط',
+  in_progress: 'قيد التنفيذ',
+  completed: 'مكتمل',
+  paused: 'متوقف',
+  cancelled: 'ملغي',
+};
+
+interface PlanExportLookups {
+  getProductName: (id: string) => string;
+  getProductCode: (id: string) => string;
+  getLineName: (id: string) => string;
+}
+
+export const exportProductionPlans = (
+  plans: ProductionPlan[],
+  lookups: PlanExportLookups
+) => {
+  if (plans.length === 0) return;
+  const rows = plans.map((plan) => ({
+    'اسم المنتج': lookups.getProductName(plan.productId),
+    'كود المنتج': lookups.getProductCode(plan.productId),
+    'خط الإنتاج': lookups.getLineName(plan.lineId),
+    'الكمية المخططة': plan.plannedQuantity,
+    'الكمية المنتجة': plan.producedQuantity ?? 0,
+    'تاريخ البدء': plan.plannedStartDate || plan.startDate,
+    'تاريخ الانتهاء المتوقع': plan.plannedEndDate || '',
+    'المدة المقدرة (يوم)': plan.estimatedDurationDays || 0,
+    'الهدف اليومي': plan.avgDailyTarget || 0,
+    'الأولوية': PLAN_PRIORITY_AR[plan.priority] || plan.priority,
+    'الحالة': PLAN_STATUS_AR[plan.status] || plan.status,
+  }));
+  const date = new Date().toISOString().slice(0, 10);
+  downloadExcel(rows, 'خطط الإنتاج', `خطط-الإنتاج-${date}`);
 };

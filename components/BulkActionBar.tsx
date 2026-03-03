@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { usePermission } from '../utils/permissions';
 import type { Permission } from '../utils/permissions';
 
@@ -32,22 +32,22 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
   const variantStyles: Record<string, string> = {
     primary:
-      'bg-primary text-white hover:bg-primary/90 shadow-sm shadow-primary/20',
+      'bg-primary text-white hover:bg-primary/90 shadow-primary/20',
     danger:
-      'bg-rose-500 text-white hover:bg-rose-600 shadow-sm shadow-rose-500/20',
+      'bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20',
     default:
-      'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600',
+      'bg-white text-[var(--color-text)] hover:bg-[#f8f9fa] dark:hover:bg-slate-600 border border-[var(--color-border)]',
   };
 
   return (
-    <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+    <div className="bg-primary/5 border border-primary/20 rounded-[var(--border-radius-lg)] px-4 py-3 flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
       <div className="flex items-center gap-2 shrink-0">
-        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+        <div className="w-8 h-8 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center">
           <span className="material-icons-round text-primary text-lg">
             checklist
           </span>
         </div>
-        <span className="text-sm font-black text-primary">
+        <span className="text-sm font-bold text-primary">
           {selectedCount} محدد
         </span>
       </div>
@@ -60,7 +60,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
             key={i}
             onClick={action.action}
             disabled={action.disabled}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
               variantStyles[action.variant || 'default']
             }`}
           >
@@ -76,7 +76,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
       <button
         onClick={onClear}
-        className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 rounded-lg transition-all shrink-0"
+        className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 dark:hover:text-[var(--color-text-muted)] hover:bg-[#e8eaed]/50/50 rounded-[var(--border-radius-base)] transition-all shrink-0"
         title="إلغاء التحديد"
       >
         <span className="material-icons-round text-lg">close</span>

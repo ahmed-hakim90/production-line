@@ -15,9 +15,14 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: 'مرفوضة',
   cancelled: 'ملغاة',
 };
+const REQUEST_TYPE_LABEL: Record<string, string> = {
+  transfer: 'تحويل مخزني',
+  production_entry: 'دخول تم الصنع',
+};
 
 export const TransferApprovals: React.FC = () => {
   const { can } = usePermission();
+  const uid = useAppStore((s) => s.uid);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
@@ -49,6 +54,8 @@ export const TransferApprovals: React.FC = () => {
   });
 
   const canApprove = can(transferApprovalPermission as any);
+  const canApproveNegativeFinishedTransfer = can('inventory.finishedStock.allowNegativeApprove');
+  const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
 
   const loadData = async () => {
     setLoading(true);
@@ -119,8 +126,25 @@ export const TransferApprovals: React.FC = () => {
   const handleApprove = async (requestId?: string) => {
     if (!requestId || !canApprove) return;
     const request = requests.find((row) => row.id === requestId);
+    const isSelfProductionEntryRequest = Boolean(
+      request &&
+      (request.requestType || 'transfer') === 'production_entry' &&
+      (
+        (uid && request.createdByUserId && uid === request.createdByUserId) ||
+        (
+          !request.createdByUserId &&
+          normalizeActor(request.createdBy) !== '' &&
+          normalizeActor(request.createdBy) === normalizeActor(userDisplayName || userEmail || '')
+        )
+      ),
+    );
+    if (isSelfProductionEntryRequest) {
+      window.alert('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتماد الطلب من مستخدم آخر مخوّل.');
+      return;
+    }
     const allowNegativeFromSource =
       Boolean(allowNegativeFinishedTransferStock) &&
+      Boolean(canApproveNegativeFinishedTransfer) &&
       Boolean(finishedReceiveWarehouseId) &&
       request?.fromWarehouseId === finishedReceiveWarehouseId;
     setProcessingId(requestId);
@@ -128,7 +152,7 @@ export const TransferApprovals: React.FC = () => {
       await transferApprovalService.approveRequest(
         requestId,
         userDisplayName || userEmail || 'Current User',
-        { allowNegativeFromSource },
+        { allowNegativeFromSource, approverUserId: uid || undefined },
       );
       await loadData();
     } catch (error: any) {
@@ -148,6 +172,7 @@ export const TransferApprovals: React.FC = () => {
         requestId,
         userDisplayName || userEmail || 'Current User',
         reason || '',
+        uid || undefined,
       );
       await loadData();
     } catch (error: any) {
@@ -169,6 +194,7 @@ export const TransferApprovals: React.FC = () => {
         requestId,
         userDisplayName || userEmail || 'Current User',
         reason || '',
+        uid || undefined,
       );
       await loadData();
     } catch (error: any) {
@@ -180,14 +206,14 @@ export const TransferApprovals: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="erp-page-head">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">اعتماد تحويلات المخازن</h2>
-          <p className="text-sm text-slate-500 font-medium">التحويلات لا تؤثر على المخزون قبل الاعتماد.</p>
+          <h2 className="page-title">اعتماد تحويلات المخازن</h2>
+          <p className="page-subtitle">التحويلات ودخول تم الصنع لا تؤثر على المخزون قبل الاعتماد.</p>
         </div>
         <div className="flex items-center gap-2">
           <select
-            className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800 text-sm font-bold"
+            className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm font-bold"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
           >
@@ -205,8 +231,15 @@ export const TransferApprovals: React.FC = () => {
       </div>
 
       {!canApprove && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">
+        <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">
           لا تملك صلاحية الاعتماد الحالية: <span dir="ltr">{transferApprovalPermission}</span>
+        </div>
+      )}
+      {canApprove && allowNegativeFinishedTransferStock && !canApproveNegativeFinishedTransfer && (
+        <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
+          تم تفعيل التحويل بالسالب لمخزن تم الصنع من الإعدادات، لكن دورك لا يملك صلاحية
+          <span dir="ltr" className="mx-1">inventory.finishedStock.allowNegativeApprove</span>
+          لذلك الاعتماد بالسالب غير متاح لك.
         </div>
       )}
 
@@ -218,25 +251,44 @@ export const TransferApprovals: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                  <th className="px-4 py-3 text-xs font-black text-slate-500">رقم المرجع</th>
-                  <th className="px-4 py-3 text-xs font-black text-slate-500">من</th>
-                  <th className="px-4 py-3 text-xs font-black text-slate-500">إلى</th>
-                  <th className="px-4 py-3 text-xs font-black text-slate-500">الأصناف</th>
-                  <th className="px-4 py-3 text-xs font-black text-slate-500">الحالة</th>
-                  <th className="px-4 py-3 text-xs font-black text-slate-500">المنشئ</th>
-                  <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">إجراءات</th>
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">رقم المرجع</th>
+                  <th className="erp-th">من</th>
+                  <th className="erp-th">إلى</th>
+                  <th className="erp-th">الأصناف</th>
+                  <th className="erp-th">الحالة</th>
+                  <th className="erp-th">المنشئ</th>
+                  <th className="erp-th text-center">إجراءات</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-[var(--color-border)]">
                 {filtered.map((row) => {
                   const rowProcessing = processingId === row.id;
-                  const fromName = warehouseMap.get(row.fromWarehouseId) || row.fromWarehouseName || row.fromWarehouseId;
+                  const requestType = row.requestType || 'transfer';
+                  const isSelfProductionEntryRequest = Boolean(
+                    requestType === 'production_entry' &&
+                    (
+                      (uid && row.createdByUserId && uid === row.createdByUserId) ||
+                      (
+                        !row.createdByUserId &&
+                        normalizeActor(row.createdBy) !== '' &&
+                        normalizeActor(row.createdBy) === normalizeActor(userDisplayName || userEmail || '')
+                      )
+                    ),
+                  );
+                  const fromName = requestType === 'production_entry'
+                    ? (row.fromWarehouseName || 'تقارير الإنتاج')
+                    : (warehouseMap.get(row.fromWarehouseId) || row.fromWarehouseName || row.fromWarehouseId);
                   const toName = warehouseMap.get(row.toWarehouseId) || row.toWarehouseName || row.toWarehouseId;
                   return (
-                    <tr key={row.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                      <td className="px-4 py-3 text-sm font-bold">{row.referenceNo}</td>
+                    <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                      <td className="px-4 py-3 text-sm">
+                        <div className="space-y-1">
+                          <p className="font-bold">{row.referenceNo}</p>
+                          <p className="text-[11px] text-slate-500">{REQUEST_TYPE_LABEL[requestType] || requestType}</p>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm">{fromName}</td>
                       <td className="px-4 py-3 text-sm">{toName}</td>
                       <td className="px-4 py-3 text-sm">
@@ -288,7 +340,8 @@ export const TransferApprovals: React.FC = () => {
                               <Button
                                 variant="primary"
                                 onClick={() => void handleApprove(row.id)}
-                                disabled={!canApprove || rowProcessing}
+                                disabled={!canApprove || rowProcessing || isSelfProductionEntryRequest}
+                                title={isSelfProductionEntryRequest ? 'لا يمكن اعتماد طلب تم إنشاؤه بواسطة نفس المستخدم.' : undefined}
                               >
                                 <span className="material-icons-round text-sm">check_circle</span>
                                 اعتماد
@@ -335,43 +388,47 @@ export const TransferApprovals: React.FC = () => {
           onClick={() => setSelectedRequest(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-3xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold">تفاصيل طلب التحويل</h3>
-                <p className="text-xs text-slate-500 mt-1">مرجع: {selectedRequest.referenceNo}</p>
+                <h3 className="text-lg font-bold">
+                  {selectedRequest.requestType === 'production_entry' ? 'تفاصيل طلب دخول تم الصنع' : 'تفاصيل طلب التحويل'}
+                </h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">مرجع: {selectedRequest.referenceNo}</p>
               </div>
-              <button onClick={() => setSelectedRequest(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setSelectedRequest(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 overflow-auto flex-1 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                   <p className="text-xs text-slate-500">من المخزن</p>
                   <p className="text-sm font-black">
-                    {warehouseMap.get(selectedRequest.fromWarehouseId) || selectedRequest.fromWarehouseName || selectedRequest.fromWarehouseId}
+                    {(selectedRequest.requestType || 'transfer') === 'production_entry'
+                      ? (selectedRequest.fromWarehouseName || 'تقارير الإنتاج')
+                      : (warehouseMap.get(selectedRequest.fromWarehouseId) || selectedRequest.fromWarehouseName || selectedRequest.fromWarehouseId)}
                   </p>
                 </div>
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                   <p className="text-xs text-slate-500">إلى المخزن</p>
                   <p className="text-sm font-black">
                     {warehouseMap.get(selectedRequest.toWarehouseId) || selectedRequest.toWarehouseName || selectedRequest.toWarehouseId}
                   </p>
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">الصنف</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">النوع</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500 text-center">الكمية</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">الصنف</th>
+                      <th className="erp-th">النوع</th>
+                      <th className="erp-th text-center">الكمية</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[var(--color-border)]">
                     {selectedRequest.lines.map((line) => (
                       <tr key={`${line.itemId}-${line.itemType}`}>
                         <td className="px-3 py-2 text-sm font-bold">{line.itemName} <span className="text-xs text-slate-400">({line.itemCode})</span></td>
@@ -388,7 +445,7 @@ export const TransferApprovals: React.FC = () => {
                 </table>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
               <Button variant="outline" onClick={() => setSelectedRequest(null)}>
                 إغلاق
               </Button>

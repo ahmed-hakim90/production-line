@@ -1,4 +1,4 @@
-
+﻿
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Button, Badge, LoadingSkeleton } from '../components/UI';
@@ -26,7 +26,9 @@ import { ProductionReport, MonthlyProductionCost, ProductMaterial } from '../../
 import { monthlyProductionCostService } from '../../../services/monthlyProductionCostService';
 import { productMaterialService } from '../../../services/productMaterialService';
 import { stockService } from '../../inventory/services/stockService';
+import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { StockItemBalance } from '../../inventory/types';
+import type { RawMaterial } from '../../inventory/types';
 import { calculateProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import { exportProductReports, exportSingleProduct } from '../../../utils/exportExcel';
 import type { SingleProductExportData } from '../../../utils/exportExcel';
@@ -48,6 +50,16 @@ import {
 } from 'recharts';
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+
+const normalizeMaterialText = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ');
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -78,10 +90,11 @@ export const ProductDetails: React.FC = () => {
   const [currentMonthCost, setCurrentMonthCost] = useState<MonthlyProductionCost | null>(null);
   const [previousMonthCost, setPreviousMonthCost] = useState<MonthlyProductionCost | null>(null);
   const [materials, setMaterials] = useState<ProductMaterial[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<ProductMaterial | null>(null);
-  const [materialForm, setMaterialForm] = useState({ materialName: '', quantityUsed: 0, unitCost: 0 });
+  const [materialForm, setMaterialForm] = useState({ materialId: '', materialName: '', quantityUsed: 0, unitCost: 0 });
   const [savingMaterial, setSavingMaterial] = useState(false);
   const [materialSaveMsg, setMaterialSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const printComponentRef = useRef<HTMLDivElement>(null);
@@ -127,6 +140,17 @@ export const ProductDetails: React.FC = () => {
   useEffect(() => {
     void (async () => {
       try {
+        const rows = await rawMaterialService.getAll();
+        setRawMaterials(rows.filter((row) => row.isActive !== false));
+      } catch {
+        setRawMaterials([]);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
         const rows = await stockService.getBalances();
         setInventoryBalances(rows);
       } catch {
@@ -148,20 +172,30 @@ export const ProductDetails: React.FC = () => {
   }, [costBreakdown, chineseRate]);
 
   const handleSaveMaterial = useCallback(async () => {
-    if (!id || !materialForm.materialName || savingMaterial) return;
+    if (!id || savingMaterial) return;
+    const selectedRawMaterial = rawMaterials.find((row) => row.id === materialForm.materialId);
+    const cleanName = (selectedRawMaterial?.name || materialForm.materialName || '').trim();
+    if (!cleanName) {
+      setMaterialSaveMsg({ type: 'error', text: 'اختر مادة خام من تعريف المواد الخام أولاً.' });
+      return;
+    }
+
     setSavingMaterial(true);
     setMaterialSaveMsg(null);
     try {
+      const resolvedMaterialId = selectedRawMaterial?.id ?? materialForm.materialId ?? undefined;
       if (editingMaterial?.id) {
         await productMaterialService.update(editingMaterial.id, {
-          materialName: materialForm.materialName,
+          materialId: resolvedMaterialId,
+          materialName: cleanName,
           quantityUsed: materialForm.quantityUsed,
           unitCost: materialForm.unitCost,
         });
       } else {
         await productMaterialService.create({
           productId: id,
-          materialName: materialForm.materialName,
+          materialId: resolvedMaterialId,
+          materialName: cleanName,
           quantityUsed: materialForm.quantityUsed,
           unitCost: materialForm.unitCost,
         });
@@ -169,7 +203,7 @@ export const ProductDetails: React.FC = () => {
       await loadMaterials();
       setMaterialSaveMsg({ type: 'success', text: editingMaterial ? 'تم حفظ تعديلات المادة بنجاح' : 'تمت إضافة المادة بنجاح' });
       if (!editingMaterial) {
-        setMaterialForm({ materialName: '', quantityUsed: 0, unitCost: 0 });
+        setMaterialForm({ materialId: '', materialName: '', quantityUsed: 0, unitCost: 0 });
       }
     } catch (err) {
       console.error('Save material error:', err);
@@ -177,7 +211,7 @@ export const ProductDetails: React.FC = () => {
     } finally {
       setSavingMaterial(false);
     }
-  }, [id, materialForm, savingMaterial, editingMaterial, loadMaterials]);
+  }, [id, materialForm, savingMaterial, editingMaterial, loadMaterials, rawMaterials]);
 
   const handleDeleteMaterial = useCallback(async (materialId: string) => {
     try {
@@ -189,15 +223,24 @@ export const ProductDetails: React.FC = () => {
   }, [loadMaterials]);
 
   const openEditMaterial = (m: ProductMaterial) => {
+    const matchedRawMaterial = m.materialId
+      ? rawMaterials.find((row) => row.id === m.materialId)
+      : rawMaterials.find((row) => normalizeMaterialText(row.name) === normalizeMaterialText(m.materialName || ''));
+
     setEditingMaterial(m);
-    setMaterialForm({ materialName: m.materialName, quantityUsed: m.quantityUsed, unitCost: m.unitCost });
+    setMaterialForm({
+      materialId: matchedRawMaterial?.id || m.materialId || '',
+      materialName: matchedRawMaterial?.name || m.materialName,
+      quantityUsed: m.quantityUsed,
+      unitCost: m.unitCost,
+    });
     setMaterialSaveMsg(null);
     setShowMaterialModal(true);
   };
 
   const openAddMaterial = () => {
     setEditingMaterial(null);
-    setMaterialForm({ materialName: '', quantityUsed: 0, unitCost: 0 });
+    setMaterialForm({ materialId: '', materialName: '', quantityUsed: 0, unitCost: 0 });
     setMaterialSaveMsg(null);
     setShowMaterialModal(true);
   };
@@ -314,6 +357,10 @@ export const ProductDetails: React.FC = () => {
   const finalBalance = useMemo(
     () => getWarehouseBalance(planSettings?.finalProductWarehouseId, id),
     [getWarehouseBalance, planSettings?.finalProductWarehouseId, id],
+  );
+  const decomposedBalanceAfterProduction = useMemo(
+    () => Math.max(0, decomposedBalance - finishedBalance - wasteBalance),
+    [decomposedBalance, finishedBalance, wasteBalance],
   );
 
   const todayCost = useMemo(() => {
@@ -459,26 +506,26 @@ export const ProductDetails: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="erp-page-head">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <button
             onClick={() => navigate('/products')}
-            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all shrink-0"
+            className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all shrink-0"
           >
             <span className="material-icons-round">arrow_forward</span>
           </button>
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div className="hidden sm:flex w-14 h-14 rounded-xl bg-primary/10 items-center justify-center shrink-0">
+            <div className="hidden sm:flex w-14 h-14 rounded-[var(--border-radius-lg)] bg-primary/10 items-center justify-center shrink-0">
               <span className="material-icons-round text-primary text-3xl">inventory_2</span>
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white truncate">
+              <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] truncate">
                 {product?.name || rawProduct?.name}
               </h2>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
-                <span className="text-xs sm:text-sm text-slate-400 font-mono">{product?.code || rawProduct?.code}</span>
+                <span className="text-xs sm:text-sm text-[var(--color-text-muted)] font-mono">{product?.code || rawProduct?.code}</span>
                 {(product?.category || rawProduct?.model) && (
-                  <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2.5 py-0.5 rounded-full font-bold">
+                  <span className="text-xs bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-0.5 rounded-full font-bold">
                     {product?.category || rawProduct?.model}
                   </span>
                 )}
@@ -491,7 +538,7 @@ export const ProductDetails: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="erp-page-actions">
           {rawProduct && (
             <Button variant="secondary" onClick={handleExportProduct}>
               <span className="material-icons-round text-sm">download</span>
@@ -540,7 +587,7 @@ export const ProductDetails: React.FC = () => {
                 تفصيل تكلفة المنتج: {productDisplayName}
               </h2>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5pt', marginBottom: '8mm' }}>
-                <thead>
+                <thead className="erp-thead">
                   <tr style={{ background: '#f1f5f9' }}>
                     <th style={{ padding: '3mm 4mm', textAlign: 'right', fontWeight: 800, fontSize: '9pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>عنصر التكلفة</th>
                     <th style={{ padding: '3mm 4mm', textAlign: 'center', fontWeight: 800, fontSize: '9pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>القيمة (ج.م)</th>
@@ -566,7 +613,7 @@ export const ProductDetails: React.FC = () => {
                 <>
                   <h3 style={{ margin: '0 0 4mm', fontSize: '13pt', fontWeight: 800, color: '#334155' }}>المواد الخام المستخدمة</h3>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
-                    <thead>
+                    <thead className="erp-thead">
                       <tr style={{ background: '#f1f5f9' }}>
                         <th style={{ padding: '2.5mm 4mm', textAlign: 'right', fontWeight: 800, fontSize: '8.5pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>اسم المادة</th>
                         <th style={{ padding: '2.5mm 4mm', textAlign: 'center', fontWeight: 800, fontSize: '8.5pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>الكمية</th>
@@ -602,47 +649,54 @@ export const ProductDetails: React.FC = () => {
 
       {/* Error Banner */}
       {fetchError && (
-        <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 flex items-center gap-3">
+        <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
           <span className="material-icons-round text-rose-500">warning</span>
-          <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{fetchError}</p>
+          <p className="text-sm font-medium text-rose-700">{fetchError}</p>
         </div>
       )}
 
       {shareToast && (
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 shadow-lg">
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{shareToast}</p>
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-lg">
+          <p className="text-sm font-medium text-emerald-700">{shareToast}</p>
         </div>
       )}
 
       {/* Basic Product Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-5">
         <KPIBox
           label="رصيد مفكك"
           value={formatNumber(decomposedBalance)}
           unit="وحدة"
           icon="call_split"
-          colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+          colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]"
+        />
+        <KPIBox
+          label="رصيد مفكك بعد الإنتاج"
+          value={formatNumber(decomposedBalanceAfterProduction)}
+          unit="وحدة"
+          icon="inventory_2"
+          colorClass="bg-amber-50 text-amber-600"
         />
         <KPIBox
           label="تم الصنع"
           value={formatNumber(finishedBalance)}
           unit="وحدة"
           icon="inventory"
-          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
+          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20"
         />
         <KPIBox
           label="الهالك"
           value={formatNumber(wasteBalance)}
           unit="وحدة"
           icon="delete_sweep"
-          colorClass="bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400"
+          colorClass="bg-rose-50 text-rose-600"
         />
         <KPIBox
           label="منتج تام"
           value={formatNumber(finalBalance)}
           unit="وحدة"
           icon="warehouse"
-          colorClass="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"
+          colorClass="bg-emerald-50 text-emerald-600"
         />
         <KPIBox
           label="نسبة الهالك"
@@ -656,12 +710,12 @@ export const ProductDetails: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
         <Card>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
               <span className="material-icons-round text-amber-600 text-2xl">schedule</span>
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-0.5">متوسط وقت التجميع الفعلي</p>
-              <p className="text-lg font-black text-slate-800 dark:text-white">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">متوسط وقت التجميع الفعلي</p>
+              <p className="text-lg font-bold text-[var(--color-text)]">
                 {reports.length > 0 ? `${avgAssemblyTime} دقيقة/وحدة` : (product?.avgAssemblyTime ? `${product.avgAssemblyTime} دقيقة/وحدة` : '—')}
               </p>
             </div>
@@ -669,12 +723,12 @@ export const ProductDetails: React.FC = () => {
         </Card>
         <Card>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center">
               <span className="material-icons-round text-primary text-2xl">timer</span>
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-0.5">وقت التجميع القياسي</p>
-              <p className="text-lg font-black text-slate-800 dark:text-white">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">وقت التجميع القياسي</p>
+              <p className="text-lg font-bold text-[var(--color-text)]">
                 {standardTime > 0 ? `${standardTime} دقيقة/وحدة` : 'غير محدد'}
               </p>
             </div>
@@ -682,23 +736,23 @@ export const ProductDetails: React.FC = () => {
         </Card>
         <Card>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
               <span className="material-icons-round text-emerald-600 text-2xl">emoji_events</span>
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-0.5">أفضل خط إنتاج أداءً</p>
-              <p className="text-lg font-black text-slate-800 dark:text-white">{bestLine}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">أفضل خط إنتاج أداءً</p>
+              <p className="text-lg font-bold text-[var(--color-text)]">{bestLine}</p>
             </div>
           </div>
         </Card>
         <Card>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
               <span className="material-icons-round text-blue-600 text-2xl">trending_up</span>
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-0.5">متوسط الإنتاج اليومي</p>
-              <p className="text-lg font-black text-slate-800 dark:text-white">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">متوسط الإنتاج اليومي</p>
+              <p className="text-lg font-bold text-[var(--color-text)]">
                 {avgDailyProduction > 0 ? `${formatNumber(avgDailyProduction)} وحدة` : '—'}
               </p>
             </div>
@@ -735,7 +789,7 @@ export const ProductDetails: React.FC = () => {
             value={todayCost.costPerUnit > 0 ? formatCost(todayCost.costPerUnit) : '—'}
             unit={todayCost.costPerUnit > 0 ? 'ج.م' : ''}
             icon="price_check"
-            colorClass="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"
+            colorClass="bg-emerald-50 text-emerald-600"
           />
         </div>
       )}
@@ -745,12 +799,12 @@ export const ProductDetails: React.FC = () => {
         <Card>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
                 <span className="material-icons-round text-indigo-600 text-xl">calculate</span>
               </div>
               <div>
-                <h3 className="text-sm font-black text-slate-700 dark:text-white">متوسط تكلفة الإنتاج الشهري</h3>
-                <p className="text-[10px] text-slate-400 font-medium">{currentMonth}</p>
+                <h3 className="text-sm font-bold text-[var(--color-text)]">متوسط تكلفة الإنتاج الشهري</h3>
+                <p className="text-[10px] text-[var(--color-text-muted)] font-medium">{currentMonth}</p>
               </div>
             </div>
             <Button
@@ -768,61 +822,61 @@ export const ProductDetails: React.FC = () => {
           </div>
 
           {currentMonthCost?.isClosed && (
-            <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-base)]">
               <span className="material-icons-round text-amber-500 text-sm">lock</span>
-              <span className="text-xs font-bold text-amber-700 dark:text-amber-400">هذا الشهر مغلق — لا يمكن إعادة الحساب</span>
+              <span className="text-xs font-bold text-amber-700">هذا الشهر مغلق — لا يمكن إعادة الحساب</span>
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Current Month */}
-            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800 text-center">
-              <p className="text-[10px] font-bold text-slate-400 mb-1">الشهر الحالي</p>
+            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-[var(--border-radius-lg)] p-4 border border-indigo-100 dark:border-indigo-800 text-center">
+              <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الشهر الحالي</p>
               {currentMonthCost && currentMonthCost.totalProducedQty > 0 ? (
                 <>
-                  <p className="text-xl font-black text-indigo-600">{formatCost(currentMonthCost.averageUnitCost)}</p>
+                  <p className="text-xl font-bold text-indigo-600">{formatCost(currentMonthCost.averageUnitCost)}</p>
                   <span className="text-[10px] font-medium text-slate-400">ج.م / وحدة</span>
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
                     {formatCost(currentMonthCost.totalProductionCost)} ج.م ÷ {currentMonthCost.totalProducedQty.toLocaleString('en-US')} وحدة
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-slate-400 mt-2">لا يوجد إنتاج</p>
+                <p className="text-sm text-[var(--color-text-muted)] mt-2">لا يوجد إنتاج</p>
               )}
             </div>
 
             {/* Previous Month */}
-            <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 text-center">
-              <p className="text-[10px] font-bold text-slate-400 mb-1">الشهر السابق ({previousMonth})</p>
+            <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 border border-[var(--color-border)] text-center">
+              <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الشهر السابق ({previousMonth})</p>
               {previousMonthCost && previousMonthCost.totalProducedQty > 0 ? (
                 <>
-                  <p className="text-xl font-black text-slate-700 dark:text-white">{formatCost(previousMonthCost.averageUnitCost)}</p>
+                  <p className="text-xl font-bold text-[var(--color-text)]">{formatCost(previousMonthCost.averageUnitCost)}</p>
                   <span className="text-[10px] font-medium text-slate-400">ج.م / وحدة</span>
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
                     {formatCost(previousMonthCost.totalProductionCost)} ج.م ÷ {previousMonthCost.totalProducedQty.toLocaleString('en-US')} وحدة
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-slate-400 mt-2">لا يوجد إنتاج</p>
+                <p className="text-sm text-[var(--color-text-muted)] mt-2">لا يوجد إنتاج</p>
               )}
             </div>
 
             {/* % Change */}
-            <div className={`rounded-xl p-4 border text-center ${
+            <div className={`rounded-[var(--border-radius-lg)] p-4 border text-center ${
               monthlyCostChange === null
-                ? 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                ? 'bg-[#f8f9fa] border-[var(--color-border)]'
                 : monthlyCostChange <= 0
-                  ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800'
-                  : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'
+                  ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200'
+                  : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200'
             }`}>
-              <p className="text-[10px] font-bold text-slate-400 mb-1">التغيير</p>
+              <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">التغيير</p>
               {monthlyCostChange !== null ? (
                 <>
                   <div className="flex items-center justify-center gap-1">
                     <span className={`material-icons-round text-lg ${monthlyCostChange <= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                       {monthlyCostChange <= 0 ? 'trending_down' : 'trending_up'}
                     </span>
-                    <p className={`text-xl font-black ${monthlyCostChange <= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    <p className={`text-xl font-bold ${monthlyCostChange <= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                       {Math.abs(monthlyCostChange)}%
                     </p>
                   </div>
@@ -831,7 +885,7 @@ export const ProductDetails: React.FC = () => {
                   </span>
                 </>
               ) : (
-                <p className="text-sm text-slate-400 mt-2">—</p>
+                <p className="text-sm text-[var(--color-text-muted)] mt-2">—</p>
               )}
             </div>
           </div>
@@ -843,37 +897,37 @@ export const ProductDetails: React.FC = () => {
         <Card>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-teal-50 dark:bg-teal-900/20 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-teal-50 dark:bg-teal-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
                 <span className="material-icons-round text-teal-600 text-xl">receipt_long</span>
               </div>
               <div>
-                <h3 className="text-sm font-black text-slate-700 dark:text-white">تفصيل تكلفة المنتج</h3>
-                <p className="text-[10px] text-slate-400 font-medium">يتم الحساب تلقائياً عند تغيير أي عنصر</p>
+                <h3 className="text-sm font-bold text-[var(--color-text)]">تفصيل تكلفة المنتج</h3>
+                <p className="text-[10px] text-[var(--color-text-muted)] font-medium">يتم الحساب تلقائياً عند تغيير أي عنصر</p>
               </div>
             </div>
           </div>
 
           {/* Cost Items Table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 mb-4">
+          <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)] mb-4">
             <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">عنصر التكلفة</th>
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">القيمة</th>
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">عنصر التكلفة</th>
+                  <th className="erp-th text-center">القيمة</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-[var(--color-border)]">
                 {/* ── تكاليف المنتج (مواد + تغليف) ── */}
                 <tr className="bg-teal-50/50 dark:bg-teal-900/10">
-                  <td colSpan={2} className="px-5 py-2 text-xs font-black text-teal-600 dark:text-teal-400 uppercase tracking-wider">
+                  <td colSpan={2} className="px-5 py-2 text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
                       <span className="material-icons-round text-sm">receipt_long</span>
                       تكاليف المنتج (مواد + تغليف)
                     </div>
                   </td>
                 </tr>
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-3 pr-10 text-sm font-bold text-slate-700 dark:text-slate-300">
+                <tr className="hover:bg-[#f8f9fa]/50">
+                  <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-amber-500 text-base">local_shipping</span>
                       تكلفة الوحدة الصينية
@@ -881,13 +935,13 @@ export const ProductDetails: React.FC = () => {
                   </td>
                   <td className="px-5 py-3 text-center text-sm font-bold">{formatCost(costBreakdown?.chineseUnitCost ?? 0)} ج.م</td>
                 </tr>
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-3 pr-10 text-sm font-bold text-slate-700 dark:text-slate-300">
+                <tr className="hover:bg-[#f8f9fa]/50">
+                  <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-amber-500 text-base">currency_yuan</span>
                       السعر باليوان الصيني
                       {chineseRate > 0 && (
-                        <span className="text-[10px] text-slate-400 font-medium">
+                        <span className="text-[10px] text-[var(--color-text-muted)] font-medium">
                           ({formatCost(costBreakdown?.chineseUnitCost ?? 0)} ÷ {chineseRate})
                         </span>
                       )}
@@ -897,18 +951,18 @@ export const ProductDetails: React.FC = () => {
                     {chineseUnitCostInCny != null ? `¥ ${formatCost(chineseUnitCostInCny)}` : '—'}
                   </td>
                 </tr>
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-3 pr-10 text-sm font-bold text-slate-700 dark:text-slate-300">
+                <tr className="hover:bg-[#f8f9fa]/50">
+                  <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-blue-500 text-base">category</span>
                       تكلفة المواد الخام
-                      <span className="text-[10px] text-slate-400 font-medium">({materials.length} مادة)</span>
+                      <span className="text-[10px] text-[var(--color-text-muted)] font-medium">({materials.length} مادة)</span>
                     </div>
                   </td>
                   <td className="px-5 py-3 text-center text-sm font-bold">{formatCost(costBreakdown?.rawMaterialCost ?? 0)} ج.م</td>
                 </tr>
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-3 pr-10 text-sm font-bold text-slate-700 dark:text-slate-300">
+                <tr className="hover:bg-[#f8f9fa]/50">
+                  <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-orange-500 text-base">inventory_2</span>
                       تكلفة العلبة الداخلية
@@ -916,13 +970,13 @@ export const ProductDetails: React.FC = () => {
                   </td>
                   <td className="px-5 py-3 text-center text-sm font-bold">{formatCost(costBreakdown?.innerBoxCost ?? 0)} ج.م</td>
                 </tr>
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-3 pr-10 text-sm font-bold text-slate-700 dark:text-slate-300">
+                <tr className="hover:bg-[#f8f9fa]/50">
+                  <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-purple-500 text-base">package_2</span>
                       نصيب الكرتونة
                       {(costBreakdown?.unitsPerCarton ?? 0) > 0 && (
-                        <span className="text-[10px] text-slate-400 font-medium">
+                        <span className="text-[10px] text-[var(--color-text-muted)] font-medium">
                           ({formatCost(costBreakdown?.outerCartonCost ?? 0)} ÷ {costBreakdown?.unitsPerCarton})
                         </span>
                       )}
@@ -933,42 +987,42 @@ export const ProductDetails: React.FC = () => {
 
                 {/* ── تكاليف صناعية (م. وغ.م) ── */}
                 <tr className="bg-rose-50/50 dark:bg-rose-900/10">
-                  <td colSpan={2} className="px-5 py-2 text-xs font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+                  <td colSpan={2} className="px-5 py-2 text-xs font-bold text-rose-600 uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
                       <span className="material-icons-round text-sm">precision_manufacturing</span>
                       تكاليف صناعية (مباشرة وغير مباشرة)
                     </div>
                   </td>
                 </tr>
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-3 pr-10 text-sm font-bold text-slate-700 dark:text-slate-300">
+                <tr className="hover:bg-[#f8f9fa]/50">
+                  <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-rose-500 text-base">precision_manufacturing</span>
                       نصيب المصاريف الصناعية
-                      <span className="text-[10px] text-slate-400 font-medium">(متوسط شهري)</span>
+                      <span className="text-[10px] text-[var(--color-text-muted)] font-medium">(متوسط شهري)</span>
                     </div>
                   </td>
                   <td className="px-5 py-3 text-center text-sm font-bold">{formatCost(costBreakdown?.productionOverheadShare ?? 0)} ج.م</td>
                 </tr>
               </tbody>
               <tfoot>
-                <tr className="bg-primary/5 dark:bg-primary/10 border-t-2 border-primary/20">
-                  <td className="px-5 py-3 text-sm font-black text-primary">
+                <tr className="bg-primary/5 border-t-2 border-primary/20">
+                  <td className="px-5 py-3 text-sm font-bold text-primary">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-base">functions</span>
                       إجمالي التكلفة المحسوبة
                     </div>
                   </td>
                   <td className="px-5 py-3 text-center">
-                    <span className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm font-black ring-1 ring-primary/20">
+                    <span className="px-3 py-1.5 rounded-[var(--border-radius-base)] bg-primary/10 text-primary text-sm font-bold ring-1 ring-primary/20">
                       {formatCost(costBreakdown?.totalCalculatedCost ?? 0)} ج.م
                     </span>
                   </td>
                 </tr>
                 {(rawProduct?.sellingPrice ?? 0) > 0 && (
                   <>
-                    <tr className="border-t border-slate-200 dark:border-slate-700">
-                      <td className="px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-300">
+                    <tr className="border-t border-[var(--color-border)]">
+                      <td className="px-5 py-3 text-sm font-bold text-[var(--color-text)]">
                         <div className="flex items-center gap-2">
                           <span className="material-icons-round text-green-500 text-base">sell</span>
                           سعر البيع
@@ -992,7 +1046,7 @@ export const ProductDetails: React.FC = () => {
                           const profit = sp - tc;
                           const margin = sp > 0 ? (profit / sp) * 100 : 0;
                           return (
-                            <span className={`text-sm font-black ${profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <span className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                               {formatCost(Math.abs(profit))} ج.م ({margin.toFixed(1)}%)
                               {profit < 0 && ' خسارة'}
                             </span>
@@ -1007,9 +1061,9 @@ export const ProductDetails: React.FC = () => {
           </div>
 
           {/* Materials Sub-section */}
-          <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-            <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <h4 className="text-xs font-black text-slate-500 uppercase tracking-[0.15em]">المواد الخام المستخدمة</h4>
+          <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
+            <div className="px-5 py-3 bg-[#f8f9fa]/50 border-b border-[var(--color-border)] flex items-center justify-between">
+              <h4 className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-[0.15em]">المواد الخام المستخدمة</h4>
               {can('costs.manage') && (
                 <button
                   onClick={openAddMaterial}
@@ -1028,31 +1082,31 @@ export const ProductDetails: React.FC = () => {
               </div>
             ) : (
               <table className="w-full text-right border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800">
-                    <th className="px-5 py-2.5 text-[10px] font-black text-slate-400 uppercase">اسم المادة</th>
-                    <th className="px-5 py-2.5 text-[10px] font-black text-slate-400 uppercase text-center">الكمية</th>
-                    <th className="px-5 py-2.5 text-[10px] font-black text-slate-400 uppercase text-center">سعر الوحدة</th>
-                    <th className="px-5 py-2.5 text-[10px] font-black text-slate-400 uppercase text-center">الإجمالي</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">اسم المادة</th>
+                    <th className="erp-th text-center">الكمية</th>
+                    <th className="erp-th text-center">سعر الوحدة</th>
+                    <th className="erp-th text-center">الإجمالي</th>
                     {can('costs.manage') && (
-                      <th className="px-5 py-2.5 text-[10px] font-black text-slate-400 uppercase text-center">إجراء</th>
+                      <th className="erp-th text-center">إجراء</th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-50">
                   {materials.map((m) => (
-                    <tr key={m.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 group">
-                      <td className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300">{m.materialName}</td>
+                    <tr key={m.id} className="hover:bg-[#f8f9fa]/50 group">
+                      <td className="px-5 py-2.5 text-sm font-medium text-[var(--color-text)]">{m.materialName}</td>
                       <td className="px-5 py-2.5 text-center text-sm font-bold">{m.quantityUsed}</td>
                       <td className="px-5 py-2.5 text-center text-sm font-bold">{formatCost(m.unitCost)} ج.م</td>
-                      <td className="px-5 py-2.5 text-center text-sm font-black text-primary">{formatCost(m.quantityUsed * m.unitCost)} ج.م</td>
+                      <td className="px-5 py-2.5 text-center text-sm font-bold text-primary">{formatCost(m.quantityUsed * m.unitCost)} ج.م</td>
                       {can('costs.manage') && (
                         <td className="px-5 py-2.5 text-center">
                           <div className="flex items-center justify-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => openEditMaterial(m)} className="p-1 text-slate-400 hover:text-primary rounded transition-colors">
+                            <button onClick={() => openEditMaterial(m)} className="p-1 text-[var(--color-text-muted)] hover:text-primary rounded transition-colors">
                               <span className="material-icons-round text-sm">edit</span>
                             </button>
-                            <button onClick={() => m.id && handleDeleteMaterial(m.id)} className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors">
+                            <button onClick={() => m.id && handleDeleteMaterial(m.id)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded transition-colors">
                               <span className="material-icons-round text-sm">delete</span>
                             </button>
                           </div>
@@ -1073,24 +1127,24 @@ export const ProductDetails: React.FC = () => {
           {/* Forecast Summary */}
           <Card title="ملخص التكلفة والتوقعات">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 text-center">
-                <p className="text-[10px] font-bold text-slate-400 mb-1">متوسط تكلفة الوحدة</p>
-                <p className="text-xl font-black text-primary">{formatCost(historicalAvgCost.costPerUnit)}</p>
+              <div className="bg-primary/5 rounded-[var(--border-radius-lg)] p-4 border border-primary/10 text-center">
+                <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">متوسط تكلفة الوحدة</p>
+                <p className="text-xl font-bold text-primary">{formatCost(historicalAvgCost.costPerUnit)}</p>
                 <span className="text-[10px] font-medium text-slate-400">ج.م / وحدة</span>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 text-center">
-                <p className="text-[10px] font-bold text-slate-400 mb-1">إجمالي التكلفة التاريخية</p>
-                <p className="text-xl font-black text-slate-700 dark:text-white">{formatCost(historicalAvgCost.totalCost)}</p>
+              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 border border-[var(--color-border)] text-center">
+                <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إجمالي التكلفة التاريخية</p>
+                <p className="text-xl font-bold text-[var(--color-text)]">{formatCost(historicalAvgCost.totalCost)}</p>
                 <span className="text-[10px] font-medium text-slate-400">ج.م</span>
               </div>
               {costTrend && (
-                <div className={`rounded-xl p-4 border text-center ${costTrend.improving ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'}`}>
-                  <p className="text-[10px] font-bold text-slate-400 mb-1">اتجاه التكلفة</p>
+                <div className={`rounded-[var(--border-radius-lg)] p-4 border text-center ${costTrend.improving ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200' : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200'}`}>
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">اتجاه التكلفة</p>
                   <div className="flex items-center justify-center gap-1">
                     <span className={`material-icons-round text-lg ${costTrend.improving ? 'text-emerald-600' : 'text-rose-500'}`}>
                       {costTrend.improving ? 'trending_down' : 'trending_up'}
                     </span>
-                    <p className={`text-xl font-black ${costTrend.improving ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    <p className={`text-xl font-bold ${costTrend.improving ? 'text-emerald-600' : 'text-rose-500'}`}>
                       {Math.abs(costTrend.pctChange)}%
                     </p>
                   </div>
@@ -1098,9 +1152,9 @@ export const ProductDetails: React.FC = () => {
                 </div>
               )}
               {bestCostLine && costByLine.length > 1 && (
-                <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800 text-center">
-                  <p className="text-[10px] font-bold text-slate-400 mb-1">أفضل خط من حيث التكلفة</p>
-                  <p className="text-lg font-black text-emerald-600">{bestCostLine.lineName}</p>
+                <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] p-4 border border-emerald-200 text-center">
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">أفضل خط من حيث التكلفة</p>
+                  <p className="text-lg font-bold text-emerald-600">{bestCostLine.lineName}</p>
                   <span className="text-[10px] font-medium text-slate-400">{formatCost(bestCostLine.costPerUnit)} ج.م/وحدة</span>
                 </div>
               )}
@@ -1112,22 +1166,22 @@ export const ProductDetails: React.FC = () => {
             <Card title="تكلفة الإنتاج حسب خط الإنتاج">
               <div className="overflow-x-auto">
                 <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">خط الإنتاج</th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الكمية المنتجة</th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">إجمالي التكلفة</th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">تكلفة الوحدة</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">خط الإنتاج</th>
+                      <th className="erp-th text-center">الكمية المنتجة</th>
+                      <th className="erp-th text-center">إجمالي التكلفة</th>
+                      <th className="erp-th text-center">تكلفة الوحدة</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[var(--color-border)]">
                     {costByLine.map((lc) => (
-                      <tr key={lc.lineId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => navigate(`/lines/${lc.lineId}`)}>
-                        <td className="px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-300">{lc.lineName}</td>
+                      <tr key={lc.lineId} className="hover:bg-[#f8f9fa]/50 transition-colors cursor-pointer" onClick={() => navigate(`/lines/${lc.lineId}`)}>
+                        <td className="px-5 py-3 text-sm font-bold text-[var(--color-text)]">{lc.lineName}</td>
                         <td className="px-5 py-3 text-center text-sm font-bold">{formatNumber(lc.totalProduced)}</td>
                         <td className="px-5 py-3 text-center text-sm font-bold text-slate-600">{formatCost(lc.totalCost)} ج.م</td>
                         <td className="px-5 py-3 text-center">
-                          <span className={`px-2.5 py-1 rounded-lg text-sm font-black ring-1 ${bestCostLine?.lineId === lc.lineId ? 'bg-emerald-50 text-emerald-600 ring-emerald-500/20' : 'bg-primary/5 text-primary ring-primary/20'}`}>
+                          <span className={`px-2.5 py-1 rounded-[var(--border-radius-base)] text-sm font-bold ring-1 ${bestCostLine?.lineId === lc.lineId ? 'bg-emerald-50 text-emerald-600 ring-emerald-500/20' : 'bg-primary/5 text-primary ring-primary/20'}`}>
                             {formatCost(lc.costPerUnit)} ج.م
                           </span>
                         </td>
@@ -1168,7 +1222,7 @@ export const ProductDetails: React.FC = () => {
       {/* Production History Chart */}
       <Card title="سجل الإنتاج">
         {loading ? (
-          <div className="animate-pulse h-64 bg-slate-50 dark:bg-slate-800 rounded-lg"></div>
+          <div className="animate-pulse h-64 bg-[#f8f9fa] rounded-[var(--border-radius-base)]"></div>
         ) : chartData.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-4xl mb-2 block opacity-30">bar_chart</span>
@@ -1214,8 +1268,8 @@ export const ProductDetails: React.FC = () => {
       </Card>
 
       {/* Reports Table */}
-      <Card className="!p-0 border-none overflow-hidden shadow-xl shadow-slate-200/50" title="">
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+      <Card className="!p-0 border-none overflow-hidden " title="">
+        <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <h3 className="text-lg font-bold">التقارير التفصيلية</h3>
           {reports.length > 0 && (
             <span className="text-xs font-bold text-slate-400">
@@ -1227,27 +1281,27 @@ export const ProductDetails: React.FC = () => {
           <div className="animate-pulse space-y-3 p-6">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="flex gap-4">
-                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded flex-1"></div>
-                <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-20"></div>
-                <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-16"></div>
+                <div className="h-4 bg-slate-200 rounded flex-1"></div>
+                <div className="h-4 bg-[#f0f2f5] rounded w-20"></div>
+                <div className="h-4 bg-[#f0f2f5] rounded w-16"></div>
               </div>
             ))}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">التاريخ</th>
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">خط الإنتاج</th>
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">الموظف</th>
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الكمية</th>
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الهالك</th>
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">عمال</th>
-                  <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">ساعات</th>
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">التاريخ</th>
+                  <th className="erp-th">خط الإنتاج</th>
+                  <th className="erp-th">الموظف</th>
+                  <th className="erp-th text-center">الكمية</th>
+                  <th className="erp-th text-center">الهالك</th>
+                  <th className="erp-th text-center">عمال</th>
+                  <th className="erp-th text-center">ساعات</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-[var(--color-border)]">
                 {reports.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
@@ -1259,11 +1313,11 @@ export const ProductDetails: React.FC = () => {
                 )}
                 {reports.map((r) => (
                   <tr key={r.id}>
-                    <td className="px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-300">{r.date}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-slate-600 dark:text-slate-400">{getLineName(r.lineId)}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-slate-600 dark:text-slate-400">{getEmployeeName(r.employeeId)}</td>
+                    <td className="px-5 py-3 text-sm font-bold text-[var(--color-text)]">{r.date}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[var(--color-text-muted)]">{getLineName(r.lineId)}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[var(--color-text-muted)]">{getEmployeeName(r.employeeId)}</td>
                     <td className="px-5 py-3 text-center">
-                      <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-sm font-black ring-1 ring-emerald-500/20">
+                      <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 text-sm font-bold ring-1 ring-emerald-500/20">
                         {formatNumber(r.quantityProduced)}
                       </span>
                     </td>
@@ -1277,8 +1331,8 @@ export const ProductDetails: React.FC = () => {
           </div>
         )}
         {reports.length > 0 && (
-          <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <span className="text-sm text-slate-500 font-bold">
+          <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between">
+            <span className="text-sm text-[var(--color-text-muted)] font-bold">
               إجمالي <span className="text-primary">{reports.length}</span> تقرير
             </span>
             <div className="flex items-center gap-4 text-xs font-bold">
@@ -1296,16 +1350,16 @@ export const ProductDetails: React.FC = () => {
       {/* ── Material Add/Edit Modal ── */}
       {showMaterialModal && can('costs.manage') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">{editingMaterial ? 'تعديل مادة خام' : 'إضافة مادة خام'}</h3>
-              <button onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 space-y-5">
               {materialSaveMsg && (
-                <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${materialSaveMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'}`}>
+                <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${materialSaveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
                   <span className="material-icons-round text-base">{materialSaveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
                   <p className="flex-1">{materialSaveMsg.text}</p>
                   <button onClick={() => setMaterialSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
@@ -1315,19 +1369,36 @@ export const ProductDetails: React.FC = () => {
               )}
 
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">اسم المادة *</label>
-                <input
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={materialForm.materialName}
-                  onChange={(e) => setMaterialForm({ ...materialForm, materialName: e.target.value })}
-                  placeholder="مثال: مسامير ستانلس 3mm"
-                />
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">المادة الخام (من المخزن) *</label>
+                <select
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  value={materialForm.materialId}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    const selected = rawMaterials.find((row) => row.id === nextId);
+                    setMaterialForm({
+                      ...materialForm,
+                      materialId: nextId,
+                      materialName: selected?.name || '',
+                    });
+                  }}
+                >
+                  <option value="">اختر مادة خام</option>
+                  {rawMaterials.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name} {row.code ? `(${row.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400">
+                  المواد هنا من تعريف "المواد الخام" فقط، ولن تظهر في بحث المنتجات.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الكمية المستخدمة</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المستخدمة</label>
                   <input
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     type="number"
                     min={0}
                     step="any"
@@ -1336,9 +1407,9 @@ export const ProductDetails: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">سعر الوحدة (ج.م)</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">سعر الوحدة (ج.م)</label>
                   <input
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     type="number"
                     min={0}
                     step="any"
@@ -1348,15 +1419,15 @@ export const ProductDetails: React.FC = () => {
                 </div>
               </div>
               {materialForm.quantityUsed > 0 && materialForm.unitCost > 0 && (
-                <div className="bg-primary/5 rounded-xl p-3 text-center">
+                <div className="bg-primary/5 rounded-[var(--border-radius-lg)] p-3 text-center">
                   <span className="text-xs font-bold text-slate-400">الإجمالي: </span>
-                  <span className="text-sm font-black text-primary">{formatCost(materialForm.quantityUsed * materialForm.unitCost)} ج.م</span>
+                  <span className="text-sm font-bold text-primary">{formatCost(materialForm.quantityUsed * materialForm.unitCost)} ج.م</span>
                 </div>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }}>إلغاء</Button>
-              <Button variant="primary" onClick={handleSaveMaterial} disabled={savingMaterial || !materialForm.materialName}>
+              <Button variant="primary" onClick={handleSaveMaterial} disabled={savingMaterial || !materialForm.materialId}>
                 {savingMaterial ? (
                   <span className="material-icons-round animate-spin text-sm">refresh</span>
                 ) : (

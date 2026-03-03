@@ -20,6 +20,7 @@ import { stockService } from '../../inventory/services/stockService';
 import type { StockItemBalance } from '../../inventory/types';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { PageHeader } from '../../../components/PageHeader';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -135,6 +136,7 @@ export const Products: React.FC = () => {
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
   const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Search & Filters
   const [search, setSearch] = useState('');
@@ -402,128 +404,125 @@ export const Products: React.FC = () => {
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileSelect} />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">إدارة المنتجات</h2>
-          <p className="text-sm text-slate-500 font-medium">قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج.</p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          {products.length > 0 && canExportFromPage && (
-            <>
-              <Button variant={pageControl.exportVariant} onClick={() => {
-                const opts: ProductExportOptions = {
-                  stock: visibleColumns.openingStock || visibleColumns.totalProduction || visibleColumns.wasteUnits || visibleColumns.stockLevel,
-                  productCosts: visibleColumns.chineseUnitCost || visibleColumns.innerBoxCost || visibleColumns.outerCartonCost || visibleColumns.unitsPerCarton || visibleColumns.totalCost || visibleColumns.chinesePriceCny,
-                  manufacturingCosts: visibleColumns.costPerUnit,
-                  sellingPrice: canViewSellingPrice && visibleColumns.sellingPrice,
-                  profitMargin: canViewSellingPrice && visibleColumns.sellingPrice,
-                  chinesePriceCny: visibleColumns.chinesePriceCny,
-                };
-                setExportOptions(opts);
-                void doExportProducts(opts);
-              }} className="shrink-0">
-                <span className="material-icons-round text-sm">download</span>
-                <span className="hidden sm:inline">تصدير Excel</span>
-              </Button>
-              <Button variant="outline" onClick={() => setShowColumnsModal(true)} className="shrink-0">
-                <span className="material-icons-round text-sm">view_column</span>
-                <span className="hidden sm:inline">الأعمدة</span>
-              </Button>
-            </>
-          )}
-          {canImportFromPage && (
-            <>
-            <Button variant={pageControl.importVariant} onClick={downloadProductsTemplate} className="shrink-0">
-              <span className="material-icons-round text-sm">file_download</span>
-              <span className="hidden sm:inline">تحميل قالب</span>
-            </Button>
-            <Button variant={pageControl.importVariant} onClick={() => fileInputRef.current?.click()} className="shrink-0">
-              <span className="material-icons-round text-sm">upload_file</span>
-              <span className="hidden sm:inline">رفع Excel</span>
-            </Button>
-            </>
-          )}
-          {can("products.create") && (
-            <>
-            <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.PRODUCTS_CREATE} className="shrink-0">
-              <span className="material-icons-round text-sm">add</span>
-              إضافة منتج جديد
-            </Button>
-            </>
-          )}
-        </div>
-      </div>
+      {/* ── Page Header ── */}
+      <PageHeader
+        title="إدارة المنتجات"
+        subtitle="قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج"
+        icon="inventory_2"
+        primaryAction={can('products.create') ? {
+          label: 'منتج جديد',
+          icon: 'add',
+          onClick: openCreate,
+          dataModalKey: MODAL_KEYS.PRODUCTS_CREATE,
+        } : undefined}
+        moreActions={[
+          {
+            label: 'تصدير Excel',
+            icon: 'table_chart',
+            group: 'تصدير',
+            hidden: !canExportFromPage || products.length === 0,
+            onClick: () => {
+              const opts: ProductExportOptions = {
+                stock: visibleColumns.openingStock || visibleColumns.totalProduction || visibleColumns.wasteUnits || visibleColumns.stockLevel,
+                productCosts: visibleColumns.chineseUnitCost || visibleColumns.innerBoxCost || visibleColumns.outerCartonCost || visibleColumns.unitsPerCarton || visibleColumns.totalCost || visibleColumns.chinesePriceCny,
+                manufacturingCosts: visibleColumns.costPerUnit,
+                sellingPrice: canViewSellingPrice && visibleColumns.sellingPrice,
+                profitMargin: canViewSellingPrice && visibleColumns.sellingPrice,
+                chinesePriceCny: visibleColumns.chinesePriceCny,
+              };
+              setExportOptions(opts);
+              void doExportProducts(opts);
+            },
+          },
+          {
+            label: 'إدارة الأعمدة',
+            icon: 'view_column',
+            group: 'تصدير',
+            hidden: !canExportFromPage,
+            onClick: () => setShowColumnsModal(true),
+          },
+          {
+            label: 'تحميل القالب',
+            icon: 'file_download',
+            group: 'استيراد',
+            hidden: !canImportFromPage,
+            onClick: downloadProductsTemplate,
+          },
+          {
+            label: 'رفع Excel',
+            icon: 'upload_file',
+            group: 'استيراد',
+            hidden: !canImportFromPage,
+            onClick: () => fileInputRef.current?.click(),
+          },
+        ]}
+      />
 
-      {/* Search & Filters */}
-      <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap gap-3 sm:gap-4 items-center justify-between shadow-sm">
-        <div className="flex flex-1 min-w-0 sm:min-w-[250px] items-center gap-3 relative">
-          <span className="material-icons-round absolute right-3 text-slate-400">search</span>
+      {/* ── Search & Filters ── */}
+      <div className="erp-filter-bar">
+        <div className="erp-search-input" style={{ minWidth: 240, flex: '1 1 240px', maxWidth: 320 }}>
+          <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
           <input
-            className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm font-medium"
-            placeholder="ابحث عن منتج..."
             type="text"
+            placeholder="ابحث عن منتج..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+              <span className="material-icons-round" style={{ fontSize: 14 }}>close</span>
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <select
-            className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm font-bold focus:ring-primary outline-none min-w-[140px]"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="">كل الفئات</option>
-            <option value="منزلي">منزلي</option>
-            <option value="سريا">سريا</option>
-            <option value="عناية">عناية</option>
-          </select>
-          <select
-            className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm font-bold focus:ring-primary outline-none min-w-[140px]"
-            value={stockFilter}
-            onChange={(e) => setStockFilter(e.target.value)}
-          >
-            <option value="">حالة المخزون</option>
-            <option value="available">متوفر</option>
-            <option value="low">منخفض</option>
-            <option value="out">نفذ</option>
-          </select>
-          <button
-            className="p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-            onClick={() => { setSearch(''); setCategoryFilter(''); setStockFilter(''); }}
-          >
-            <span className="material-icons-round">filter_list_off</span>
+        <div className="erp-filter-sep" />
+        <select className={`erp-filter-select${categoryFilter ? ' active' : ''}`} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <option value="">كل الفئات</option>
+          <option value="منزلي">منزلي</option>
+          <option value="سريا">سريا</option>
+          <option value="عناية">عناية</option>
+        </select>
+        <select className={`erp-filter-select${stockFilter ? ' active' : ''}`} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
+          <option value="">حالة المخزون</option>
+          <option value="available">متوفر</option>
+          <option value="low">منخفض</option>
+          <option value="out">نفذ</option>
+        </select>
+        {(search || categoryFilter || stockFilter) && (
+          <button className="erp-filter-clear" onClick={() => { setSearch(''); setCategoryFilter(''); setStockFilter(''); }}>
+            <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
+            مسح
           </button>
-        </div>
+        )}
       </div>
 
       {/* Table */}
-      <Card className="!p-0 border-none overflow-hidden shadow-xl shadow-slate-200/50">
+      <Card className="!p-0 border-none overflow-hidden ">
         <div className="overflow-x-auto">
           <table className="w-full text-right border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                <th className="px-5 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400">المنتج</th>
-                {visibleColumns.openingStock && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">رصيد مفكك</th>}
-                {visibleColumns.totalProduction && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">تم الصنع</th>}
-                {visibleColumns.wasteUnits && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">الهالك</th>}
-                {visibleColumns.stockLevel && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">منتج تام</th>}
-                {canViewSellingPrice && visibleColumns.sellingPrice && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">سعر البيع</th>}
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th">المنتج</th>
+                {visibleColumns.openingStock && <th className="erp-th text-center">رصيد مفكك</th>}
+                {visibleColumns.totalProduction && <th className="erp-th text-center">تم الصنع</th>}
+                {visibleColumns.wasteUnits && <th className="erp-th text-center">الهالك</th>}
+                {visibleColumns.stockLevel && <th className="erp-th text-center">منتج تام</th>}
+                {canViewSellingPrice && visibleColumns.sellingPrice && <th className="erp-th text-center">سعر البيع</th>}
                 {canViewCosts && (
                   <>
-                    {visibleColumns.totalCost && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">إجمالي التكلفة</th>}
-                    {visibleColumns.directIndirect && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">مباشر / غير مباشر</th>}
-                    {visibleColumns.costPerUnit && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">تكلفة الوحدة</th>}
-                    {visibleColumns.chineseUnitCost && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">تكلفة الوحدة الصينية</th>}
-                    {visibleColumns.chinesePriceCny && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">السعر باليوان</th>}
-                    {visibleColumns.innerBoxCost && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">تكلفة العلبة الداخلية</th>}
-                    {visibleColumns.outerCartonCost && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">تكلفة الكرتونة الخارجية</th>}
-                    {visibleColumns.unitsPerCarton && <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center">عدد الوحدات/كرتونة</th>}
+                    {visibleColumns.totalCost && <th className="erp-th text-center">إجمالي التكلفة</th>}
+                    {visibleColumns.directIndirect && <th className="erp-th text-center">مباشر / غير مباشر</th>}
+                    {visibleColumns.costPerUnit && <th className="erp-th text-center">تكلفة الوحدة</th>}
+                    {visibleColumns.chineseUnitCost && <th className="erp-th text-center">تكلفة الوحدة الصينية</th>}
+                    {visibleColumns.chinesePriceCny && <th className="erp-th text-center">السعر باليوان</th>}
+                    {visibleColumns.innerBoxCost && <th className="erp-th text-center">تكلفة العلبة الداخلية</th>}
+                    {visibleColumns.outerCartonCost && <th className="erp-th text-center">تكلفة الكرتونة الخارجية</th>}
+                    {visibleColumns.unitsPerCarton && <th className="erp-th text-center">عدد الوحدات/كرتونة</th>}
                   </>
                 )}
-                <th className="px-4 py-3.5 text-xs font-black text-slate-500 dark:text-slate-400 text-center w-28">الإجراءات</th>
+                <th className="erp-th text-center w-28">الإجراءات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-[var(--color-border)]">
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={99} className="px-6 py-16 text-center text-slate-400">
@@ -543,15 +542,15 @@ export const Products: React.FC = () => {
                 const wasteBalance = productWarehouseBalances.getValue(planSettings?.wasteReceiveWarehouseId, product.id);
                 const finalBalance = productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, product.id);
                 return (
-                <tr key={product.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
+                <tr key={product.id} className="hover:bg-[#f8f9fa]/50 transition-colors group">
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 flex items-center justify-center shrink-0 border border-primary/10">
+                      <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-gradient-to-br from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 flex items-center justify-center shrink-0 border border-primary/10">
                         <span className="material-icons-round text-primary text-lg">inventory_2</span>
                       </div>
                       <div className="min-w-0">
                         <span
-                          className="font-bold text-sm text-slate-700 dark:text-slate-200 hover:text-primary cursor-pointer transition-colors block truncate max-w-[280px]"
+                          className="font-bold text-sm text-[var(--color-text)] hover:text-primary cursor-pointer transition-colors block truncate max-w-[280px]"
                           onClick={() => navigate(`/products/${product.id}`)}
                           title={product.name}
                         >
@@ -566,9 +565,9 @@ export const Products: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-slate-700 dark:text-slate-300 tabular-nums">{formatNumber(decomposedBalance)}</td>}
+                  {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-[var(--color-text)] tabular-nums">{formatNumber(decomposedBalance)}</td>}
                   {visibleColumns.totalProduction && <td className="px-4 py-4 text-center">
-                    <span className="inline-block px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-sm font-black tabular-nums">
+                    <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-emerald-50 text-emerald-600 text-sm font-bold tabular-nums">
                       {formatNumber(finishedBalance)}
                     </span>
                   </td>}
@@ -576,16 +575,16 @@ export const Products: React.FC = () => {
                     {wasteBalance > 0 ? (
                       <span className="text-sm font-bold text-rose-500 tabular-nums">{formatNumber(wasteBalance)}</span>
                     ) : (
-                      <span className="text-sm text-slate-300">0</span>
+                      <span className="text-sm text-[var(--color-text-muted)]">0</span>
                     )}
                   </td>}
                   {visibleColumns.stockLevel && <td className="px-4 py-4 text-center">
-                    <span className={`text-sm font-black tabular-nums ${finalBalance > 100 ? 'text-slate-700 dark:text-slate-200' : finalBalance > 0 ? 'text-amber-600' : 'text-rose-500'}`}>
+                    <span className={`text-sm font-bold tabular-nums ${finalBalance > 100 ? 'text-[var(--color-text)]' : finalBalance > 0 ? 'text-amber-600' : 'text-rose-500'}`}>
                       {formatNumber(finalBalance)}
                     </span>
                   </td>}
                   {canViewSellingPrice && visibleColumns.sellingPrice && (
-                    <td className="px-4 py-4 text-center text-sm font-black tabular-nums">
+                    <td className="px-4 py-4 text-center text-sm font-bold tabular-nums">
                       {formatCost((_rawProducts.find((r) => r.id === product.id)?.sellingPrice ?? 0))} ج.م
                     </td>
                   )}
@@ -599,52 +598,52 @@ export const Products: React.FC = () => {
                       <>
                         {visibleColumns.totalCost && <td className="px-4 py-4 text-center">
                           {hasCost ? (
-                            <span className="text-sm font-black text-amber-700 dark:text-amber-400 tabular-nums">{formatCost(c.totalCost)} <span className="text-[10px] font-medium opacity-70">ج.م</span></span>
+                            <span className="text-sm font-bold text-amber-700 tabular-nums">{formatCost(c.totalCost)} <span className="text-[10px] font-medium opacity-70">ج.م</span></span>
                           ) : (
-                            <span className="text-sm text-slate-300">—</span>
+                            <span className="text-sm text-[var(--color-text-muted)]">—</span>
                           )}
                         </td>}
                         {visibleColumns.directIndirect && <td className="px-4 py-4 text-center">
                           {hasCost ? (
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-xs tabular-nums text-blue-600 dark:text-blue-400 font-bold">{formatCost(c.laborCost)} <span className="text-[10px] font-normal opacity-70">مباشر</span></span>
-                              <span className="text-xs tabular-nums text-slate-500 font-bold">{formatCost(c.indirectCost)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span></span>
+                              <span className="text-xs tabular-nums text-blue-600 font-bold">{formatCost(c.laborCost)} <span className="text-[10px] font-normal opacity-70">مباشر</span></span>
+                              <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold">{formatCost(c.indirectCost)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span></span>
                             </div>
                           ) : (
-                            <span className="text-sm text-slate-300">—</span>
+                            <span className="text-sm text-[var(--color-text-muted)]">—</span>
                           )}
                         </td>}
                         {visibleColumns.costPerUnit && <td className="px-4 py-4 text-center">
                           {hasCost ? (
-                            <span className="inline-block px-2.5 py-1 rounded-md bg-primary/5 text-primary text-sm font-black tabular-nums ring-1 ring-primary/10">
+                            <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-primary/5 text-primary text-sm font-bold tabular-nums ring-1 ring-primary/10">
                               {formatCost(c.costPerUnit)} <span className="text-[10px] font-medium opacity-70">ج.م</span>
                             </span>
                           ) : (
-                            <span className="text-sm text-slate-300">—</span>
+                            <span className="text-sm text-[var(--color-text-muted)]">—</span>
                           )}
                         </td>}
                         {visibleColumns.chineseUnitCost && (
-                          <td className="px-4 py-4 text-center text-sm font-black tabular-nums">
+                          <td className="px-4 py-4 text-center text-sm font-bold tabular-nums">
                             {formatCost(chineseUnitCost)} ج.م
                           </td>
                         )}
                         {visibleColumns.chinesePriceCny && (
-                          <td className="px-4 py-4 text-center text-sm font-black tabular-nums">
+                          <td className="px-4 py-4 text-center text-sm font-bold tabular-nums">
                             {cnyRate > 0 ? `¥ ${formatCost(chineseUnitCost / cnyRate)}` : '—'}
                           </td>
                         )}
                         {visibleColumns.innerBoxCost && (
-                          <td className="px-4 py-4 text-center text-sm font-black tabular-nums">
+                          <td className="px-4 py-4 text-center text-sm font-bold tabular-nums">
                             {formatCost(raw?.innerBoxCost ?? 0)} ج.م
                           </td>
                         )}
                         {visibleColumns.outerCartonCost && (
-                          <td className="px-4 py-4 text-center text-sm font-black tabular-nums">
+                          <td className="px-4 py-4 text-center text-sm font-bold tabular-nums">
                             {formatCost(raw?.outerCartonCost ?? 0)} ج.م
                           </td>
                         )}
                         {visibleColumns.unitsPerCarton && (
-                          <td className="px-4 py-4 text-center text-sm font-black tabular-nums">
+                          <td className="px-4 py-4 text-center text-sm font-bold tabular-nums">
                             {raw?.unitsPerCarton ?? 0}
                           </td>
                         )}
@@ -653,16 +652,16 @@ export const Products: React.FC = () => {
                   })()}
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-0.5 justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => navigate(`/products/${product.id}`)} className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="عرض التفاصيل">
+                      <button onClick={() => navigate(`/products/${product.id}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="عرض التفاصيل">
                         <span className="material-icons-round text-[18px]">visibility</span>
                       </button>
                       {can("products.edit") && (
-                        <button onClick={() => openEdit(product.id)} className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="تعديل">
+                        <button onClick={() => openEdit(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
                           <span className="material-icons-round text-[18px]">edit</span>
                         </button>
                       )}
                       {can("products.delete") && (
-                        <button onClick={() => setDeleteConfirmId(product.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-all" title="حذف">
+                        <button onClick={() => setDeleteConfirmId(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
                           <span className="material-icons-round text-[18px]">delete</span>
                         </button>
                       )}
@@ -673,8 +672,8 @@ export const Products: React.FC = () => {
             </tbody>
           </table>
         </div>
-        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="text-sm text-slate-500 font-bold">
+        <div className="px-5 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between">
+          <div className="text-sm text-[var(--color-text-muted)] font-bold">
             إجمالي <span className="text-primary">{filtered.length}</span> منتج
           </div>
         </div>
@@ -683,16 +682,16 @@ export const Products: React.FC = () => {
       {/* ── Add / Edit Modal ── */}
       {showModal && (can("products.create") || can("products.edit")) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <h3 className="text-lg font-bold">{editId ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h3>
-              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
               {saveMsg && (
-                <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'}`}>
+                <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
                   <span className="material-icons-round text-base">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
                   <p className="flex-1">{saveMsg.text}</p>
                   <button onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
@@ -702,9 +701,9 @@ export const Products: React.FC = () => {
               )}
 
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">اسم المنتج *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم المنتج *</label>
                 <input
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="مثال: محرك هيدروليكي H-400"
@@ -712,18 +711,18 @@ export const Products: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الكود *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكود *</label>
                   <input
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
                     placeholder="PRD-00001"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الفئة / الموديل</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الفئة / الموديل</label>
                   <select
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.model}
                     onChange={(e) => setForm({ ...form, model: e.target.value })}
                   >
@@ -735,9 +734,9 @@ export const Products: React.FC = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">سعر البيع (ج.م)</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">سعر البيع (ج.م)</label>
                 <input
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   type="number"
                   min={0}
                   step="any"
@@ -749,44 +748,44 @@ export const Products: React.FC = () => {
               {/* ── Cost Breakdown Fields ── */}
               {canViewCosts && (
                 <>
-                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                    <h4 className="text-sm font-black text-slate-600 dark:text-slate-300 mb-3 flex items-center gap-2">
+                  <div className="border-t border-[var(--color-border)] pt-4">
+                    <h4 className="text-sm font-bold text-[var(--color-text-muted)] mb-3 flex items-center gap-2">
                       <span className="material-icons-round text-teal-500 text-base">receipt_long</span>
                       تفصيل التكلفة
                     </h4>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">تكلفة الوحدة الصينية (ج.م)</label>
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة الوحدة الصينية (ج.م)</label>
                       <input
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="any"
                         value={form.chineseUnitCost ?? 0}
                         onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">تكلفة العلبة الداخلية (ج.م)</label>
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة العلبة الداخلية (ج.م)</label>
                       <input
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="any"
                         value={form.innerBoxCost ?? 0}
                         onChange={(e) => setForm({ ...form, innerBoxCost: Number(e.target.value) })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">تكلفة الكرتونة الخارجية (ج.م)</label>
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة الكرتونة الخارجية (ج.م)</label>
                       <input
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="any"
                         value={form.outerCartonCost ?? 0}
                         onChange={(e) => setForm({ ...form, outerCartonCost: Number(e.target.value) })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">عدد الوحدات في الكرتونة</label>
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">عدد الوحدات في الكرتونة</label>
                       <input
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                         type="number" min={0} step="1"
                         value={form.unitsPerCarton ?? 0}
                         onChange={(e) => setForm({ ...form, unitsPerCarton: Number(e.target.value) })}
@@ -796,7 +795,7 @@ export const Products: React.FC = () => {
                 </>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>
               <Button variant="primary" onClick={handleSave} disabled={saving || !form.name || !form.code}>
                 {saving ? (
@@ -814,17 +813,17 @@ export const Products: React.FC = () => {
       {/* ── Delete Confirmation ── */}
       {deleteConfirmId && can("products.delete") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد الحذف</h3>
-            <p className="text-sm text-slate-500 mb-6">هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
               <button
                 onClick={() => handleDelete(deleteConfirmId)}
-                className="px-4 py-2.5 rounded-lg font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-500/20 transition-all flex items-center gap-2"
+                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
                 <span className="material-icons-round text-sm">delete</span>
                 نعم، احذف
@@ -837,11 +836,11 @@ export const Products: React.FC = () => {
       {/* ── Import Excel Modal ── */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-4">
-                  <span className="material-icons-round text-slate-400 cursor-move select-none" aria-hidden="true">drag_indicator</span>
+                  <span className="material-icons-round text-[var(--color-text-muted)] cursor-move select-none" aria-hidden="true">drag_indicator</span>
                   <h3 className="text-lg font-bold">رفع منتجات من Excel</h3>
                 </div>
                 <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
@@ -849,7 +848,7 @@ export const Products: React.FC = () => {
                   تحميل نموذج
                 </button>
               </div>
-                <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -864,9 +863,9 @@ export const Products: React.FC = () => {
 
               {!importParsing && importResult && importResult.totalRows === 0 && (
                 <div className="text-center py-12">
-                  <span className="material-icons-round text-5xl text-slate-300 mb-3 block">warning</span>
+                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">warning</span>
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
-                  <p className="text-sm text-slate-400 mt-1">تأكد من وجود شيت المنتجات (اسم المنتج، الكود...) ويمكن إضافة شيت المواد الخام اختياريًا</p>
+                  <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد من وجود شيت المنتجات (اسم المنتج، الكود...) ويمكن إضافة شيت المواد الخام اختياريًا</p>
                   <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
                     <span className="material-icons-round text-sm">download</span>
                     تحميل نموذج المنتجات
@@ -877,50 +876,50 @@ export const Products: React.FC = () => {
               {!importParsing && importResult && importResult.totalRows > 0 && (
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-3">
-                    <div className="bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-2 text-sm font-bold">
+                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold">
                       الإجمالي: <span className="text-primary">{importResult.totalRows}</span>
                     </div>
                     {importResult.newCount > 0 && (
-                      <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl px-4 py-2 text-sm font-bold text-emerald-600">
+                      <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-emerald-600">
                         <span className="material-icons-round text-xs align-middle ml-1">add_circle</span>
                         جديد: {importResult.newCount}
                       </div>
                     )}
                     {importResult.updateCount > 0 && (
-                      <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl px-4 py-2 text-sm font-bold text-amber-600">
+                      <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-600">
                         <span className="material-icons-round text-xs align-middle ml-1">sync</span>
                         تحديث: {importResult.updateCount}
                       </div>
                     )}
                     {importResult.errorCount > 0 && (
-                      <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl px-4 py-2 text-sm font-bold text-rose-500">
+                      <div className="bg-rose-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-rose-500">
                         يحتوي أخطاء: {importResult.errorCount}
                       </div>
                     )}
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <table className="w-full text-right text-sm border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-800/50">
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">صف</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">الحالة</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">اسم المنتج</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">الكود</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">الفئة</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">الوحدة الصينية</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">العلبة الداخلية</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">الكرتونة</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">وحدات/كرتونة</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">سعر البيع</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">مواد خام</th>
-                          <th className="px-3 py-3 text-xs font-black text-slate-500">التفاصيل</th>
+                      <thead className="erp-thead">
+                        <tr>
+                          <th className="erp-th">صف</th>
+                          <th className="erp-th">الحالة</th>
+                          <th className="erp-th">اسم المنتج</th>
+                          <th className="erp-th">الكود</th>
+                          <th className="erp-th">الفئة</th>
+                          <th className="erp-th">الوحدة الصينية</th>
+                          <th className="erp-th">العلبة الداخلية</th>
+                          <th className="erp-th">الكرتونة</th>
+                          <th className="erp-th">وحدات/كرتونة</th>
+                          <th className="erp-th">سعر البيع</th>
+                          <th className="erp-th">مواد خام</th>
+                          <th className="erp-th">التفاصيل</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <tbody className="divide-y divide-[var(--color-border)]">
                         {importResult.rows.map((row) => (
                           <tr key={row.rowIndex} className={row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}>
-                            <td className="px-3 py-2.5 text-slate-400 font-mono">{row.rowIndex}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.rowIndex}</td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
                                 <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
@@ -936,15 +935,15 @@ export const Products: React.FC = () => {
                                 </span>
                               )}
                             </td>
-                            <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row.name || '—'}</td>
+                            <td className="px-3 py-2.5 font-medium text-[var(--color-text)]">{row.name || '—'}</td>
                             <td className="px-3 py-2.5 font-mono text-slate-500">{row.code || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-500">{row.model || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.chineseUnitCost || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.innerBoxCost || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.outerCartonCost || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.unitsPerCarton || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.sellingPrice || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 font-mono">{row.materials.length || '—'}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.chineseUnitCost || '—'}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.innerBoxCost || '—'}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.outerCartonCost || '—'}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.unitsPerCarton || '—'}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.sellingPrice || '—'}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.materials.length || '—'}</td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
                                 <ul className="text-xs text-rose-500 space-y-0.5">
@@ -965,7 +964,7 @@ export const Products: React.FC = () => {
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between shrink-0">
               <Button variant="outline" onClick={() => { setShowImportModal(false); setImportResult(null); }}>إلغاء</Button>
               {importResult && importResult.validCount > 0 && (
                 <Button variant="primary" onClick={handleImportSave} disabled={importSaving}>
@@ -995,13 +994,13 @@ export const Products: React.FC = () => {
       {/* ── Column Control Modal ── */}
       {showColumnsModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">tune</span>
                 <h3 className="text-lg font-bold">إدارة الأعمدة</h3>
               </div>
-              <button onClick={() => setShowColumnsModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -1023,33 +1022,33 @@ export const Products: React.FC = () => {
               ].map((opt) => (
                 <label
                   key={opt.key}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
                     visibleColumns[opt.key]
-                      ? 'border-primary/30 bg-primary/5 dark:bg-primary/10'
-                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                      ? 'border-primary/30 bg-primary/5'
+                      : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={visibleColumns[opt.key]}
                     onChange={(e) => toggleColumn(opt.key, e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20"
+                    className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                   />
                   <span className={`material-icons-round text-lg ${visibleColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`}>{opt.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-white">{opt.label}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{opt.label}</p>
                   </div>
                 </label>
               ))}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between">
               <button
                 onClick={() => {
                   const empty = Object.keys(DEFAULT_VISIBLE_COLUMNS).reduce((acc, key) => ({ ...acc, [key]: false }), {} as Record<ProductTableColumnKey, boolean>);
                   setVisibleColumns(empty);
                   if (typeof window !== 'undefined') window.localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(empty));
                 }}
-                className="text-xs font-bold text-slate-400 hover:text-slate-600"
+                className="text-xs font-bold text-[var(--color-text-muted)] hover:text-slate-600"
               >
                 إلغاء تحديد الكل
               </button>

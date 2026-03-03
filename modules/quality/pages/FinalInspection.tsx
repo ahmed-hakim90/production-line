@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -227,12 +227,12 @@ export const FinalInspection: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="erp-page-head">
         <div>
-          <h2 className="text-2xl font-black">الفحص النهائي</h2>
-          <p className="text-sm text-slate-500">تسجيل نتيجة الفحص النهائي لكل أمر شغل</p>
+          <h2 className="page-title">الفحص النهائي</h2>
+          <p className="page-subtitle">تسجيل نتيجة الفحص النهائي لكل أمر شغل</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="erp-page-actions">
           <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>طباعة التقرير</Button>
           <Button
             variant="outline"
@@ -267,10 +267,10 @@ export const FinalInspection: React.FC = () => {
 
       <Card>
         {message && (
-          <div className={`mb-3 rounded-lg border px-3 py-2 text-sm font-semibold ${
+          <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
             message.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300'
-              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-300'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60'
+              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60'
           }`}>
             {message.text}
           </div>
@@ -281,7 +281,7 @@ export const FinalInspection: React.FC = () => {
             value={workOrderId}
             onChange={(e) => setWorkOrderId(e.target.value)}
             disabled={!canInspect}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           >
             <option value="">اختر أمر شغل</option>
             {activeWorkOrders.map((wo) => (
@@ -293,7 +293,7 @@ export const FinalInspection: React.FC = () => {
             value={status}
             onChange={(e) => setStatus(e.target.value as QualityInspectionStatus)}
             disabled={!canInspect}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           >
             <option value="passed">Passed</option>
             <option value="failed">Failed</option>
@@ -305,7 +305,7 @@ export const FinalInspection: React.FC = () => {
             value={reasonCode}
             onChange={(e) => setReasonCode(e.target.value)}
             disabled={!canInspect}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           >
             <option value="">سبب العيب (اختياري)</option>
             {reasonCatalog.map((reason) => (
@@ -318,10 +318,10 @@ export const FinalInspection: React.FC = () => {
             onChange={(e) => setNotes(e.target.value)}
             disabled={!canInspect}
             placeholder="ملاحظات"
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           />
           <div className="md:col-span-2 space-y-2">
-            <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">صور الفحص</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">صور الفحص</label>
             <label className="block cursor-pointer">
               <input
                 type="file"
@@ -337,16 +337,16 @@ export const FinalInspection: React.FC = () => {
                 }}
                 className="hidden"
               />
-              <div className="w-full border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 hover:border-primary/60 hover:bg-primary/5 transition-all">
+              <div className="w-full border-2 border-dashed border-[var(--color-border)] rounded-[var(--border-radius-xl)] p-4 sm:p-5 bg-[#f8f9fa]/70/40 hover:border-primary/60 hover:bg-primary/5 transition-all">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <div className="w-11 h-11 rounded-[var(--border-radius-lg)] bg-primary/10 text-primary flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-xl">add_photo_alternate</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-black text-slate-700 dark:text-slate-200 truncate">
+                    <p className="text-sm font-bold text-[var(--color-text)] truncate">
                       {photoFiles.length > 0 ? `${photoFiles.length} صورة محددة` : 'اختيار صور الفحص'}
                     </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">حد أقصى 3 صور — ضغط تلقائي حتى 500KB</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">حد أقصى 3 صور — ضغط تلقائي حتى 500KB</p>
                   </div>
                 </div>
               </div>
@@ -354,7 +354,7 @@ export const FinalInspection: React.FC = () => {
             {photoPreviews.length > 0 && (
               <div className="flex flex-wrap items-center gap-3">
                 {photoPreviews.map((url, idx) => (
-                  <div key={url} className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                  <div key={url} className="w-20 h-20 rounded-[var(--border-radius-lg)] overflow-hidden border border-[var(--color-border)] bg-[#f8f9fa]">
                     <img src={url} alt={`qc-${idx}`} className="w-full h-full object-cover" />
                   </div>
                 ))}
@@ -365,7 +365,7 @@ export const FinalInspection: React.FC = () => {
                     setPhotoPreviews([]);
                     setUploadProgress(0);
                   }}
-                  className="px-3 py-2 text-xs font-bold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-900/20 transition-all"
+                  className="px-3 py-2 text-xs font-bold rounded-[var(--border-radius-base)] border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-900/20 transition-all"
                 >
                   إزالة الصور
                 </button>

@@ -15,6 +15,7 @@ import type { WorkOrder, WorkOrderStatus } from '../../../types';
 import { qualitySettingsService } from '../../quality/services/qualitySettingsService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { PageHeader } from '../../../components/PageHeader';
 
 const STATUS_CONFIG: Record<WorkOrderStatus, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' }> = {
   pending: { label: 'قيد الانتظار', variant: 'info' },
@@ -400,25 +401,24 @@ export const WorkOrders: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">أوامر الشغل</h2>
-          <p className="text-sm text-slate-500 font-medium">إدارة ومتابعة أوامر التشغيل لخطوط الإنتاج</p>
-        </div>
-        {can('workOrders.create') && (
-          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.WORK_ORDERS_CREATE}>
-            <span className="material-icons-round text-sm">add</span>
-            أمر شغل جديد
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="أوامر الشغل"
+        subtitle="إدارة ومتابعة أوامر التشغيل لخطوط الإنتاج"
+        icon="assignment"
+        primaryAction={can('workOrders.create') ? {
+          label: 'أمر شغل جديد',
+          icon: 'add',
+          onClick: openCreate,
+          dataModalKey: MODAL_KEYS.WORK_ORDERS_CREATE,
+        } : undefined}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div onClick={() => setFilterStatus(filterStatus === 'in_progress' ? 'all' : 'in_progress')} className={`cursor-pointer rounded-xl transition-all ${filterStatus === 'in_progress' ? 'ring-2 ring-blue-400' : ''}`}>
+        <div onClick={() => setFilterStatus(filterStatus === 'in_progress' ? 'all' : 'in_progress')} className={`cursor-pointer rounded-[var(--border-radius-lg)] transition-all ${filterStatus === 'in_progress' ? 'ring-2 ring-blue-400' : ''}`}>
           <KPIBox label="أوامر نشطة" value={kpis.active} icon="pending_actions" color="blue" />
         </div>
-        <div onClick={() => setFilterStatus(filterStatus === 'completed' ? 'all' : 'completed')} className={`cursor-pointer rounded-xl transition-all ${filterStatus === 'completed' ? 'ring-2 ring-emerald-400' : ''}`}>
+        <div onClick={() => setFilterStatus(filterStatus === 'completed' ? 'all' : 'completed')} className={`cursor-pointer rounded-[var(--border-radius-lg)] transition-all ${filterStatus === 'completed' ? 'ring-2 ring-emerald-400' : ''}`}>
           <KPIBox label="مكتملة" value={kpis.completed} icon="check_circle" color="green" />
         </div>
         {can('workOrders.viewCost') && (
@@ -429,68 +429,71 @@ export const WorkOrders: React.FC = () => {
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative">
-          <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">search</span>
+      {/* ── Filters ── */}
+      <div className="erp-filter-bar">
+        <div className="erp-search-input" style={{ minWidth: 240 }}>
+          <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="بحث برقم أمر الشغل أو المنتج..."
-            className="pl-3 pr-9 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold w-64 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
           />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+              <span className="material-icons-round" style={{ fontSize: 14 }}>close</span>
+            </button>
+          )}
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as any)}
-          className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold"
-        >
+        <div className="erp-filter-sep" />
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className={`erp-filter-select${filterStatus !== 'all' ? ' active' : ''}`}>
           <option value="all">كل الحالات</option>
           {Object.entries(STATUS_CONFIG).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
-        <select
-          value={filterLine}
-          onChange={(e) => setFilterLine(e.target.value)}
-          className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold"
-        >
+        <select value={filterLine} onChange={(e) => setFilterLine(e.target.value)} className={`erp-filter-select${filterLine ? ' active' : ''}`}>
           <option value="">كل الخطوط</option>
           {_rawLines.map((l) => (
             <option key={l.id} value={l.id!}>{l.name}</option>
           ))}
         </select>
+        {(filterStatus !== 'all' || filterLine) && (
+          <button className="erp-filter-clear" onClick={() => { setFilterStatus('all'); setFilterLine(''); }}>
+            <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
+            مسح
+          </button>
+        )}
       </div>
 
       {/* Table */}
       <Card>
         {filtered.length === 0 ? (
           <div className="text-center py-16">
-            <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">assignment</span>
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">assignment</span>
             <p className="text-sm font-bold text-slate-400">لا توجد أوامر شغل</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                  <th className="text-right py-3 px-3">رقم الأمر</th>
-                  <th className="text-right py-3 px-3">المنتج</th>
-                  <th className="text-right py-3 px-3">الخط</th>
-                  <th className="text-right py-3 px-3">المشرف</th>
-                  <th className="text-right py-3 px-3">الكمية</th>
-                  <th className="text-right py-3 px-3">التقدم</th>
-                  <th className="text-right py-3 px-3">الحد الأقصى</th>
-                  <th className="text-right py-3 px-3">التاريخ</th>
+              <thead className="erp-thead">
+                <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
+                  <th className="erp-th">رقم الأمر</th>
+                  <th className="erp-th">المنتج</th>
+                  <th className="erp-th">الخط</th>
+                  <th className="erp-th">المشرف</th>
+                  <th className="erp-th">الكمية</th>
+                  <th className="erp-th">التقدم</th>
+                  <th className="erp-th">الحد الأقصى</th>
+                  <th className="erp-th">التاريخ</th>
                   {can('workOrders.viewCost') && (
                     <>
-                      <th className="text-right py-3 px-3">تكلفة مقدرة</th>
-                      <th className="text-right py-3 px-3">تكلفة فعلية</th>
+                      <th className="erp-th">تكلفة مقدرة</th>
+                      <th className="erp-th">تكلفة فعلية</th>
                     </>
                   )}
-                  <th className="text-right py-3 px-3">الحالة</th>
-                  <th className="text-right py-3 px-3">إجراءات</th>
+                  <th className="erp-th">الحالة</th>
+                  <th className="erp-th">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -501,27 +504,27 @@ export const WorkOrders: React.FC = () => {
                     <tr
                       key={wo.id}
                       ref={wo.id === highlightId ? highlightRef : undefined}
-                      className={`border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors duration-1000 ${
+                      className={`border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors duration-1000 ${
                         wo.id === highlightId ? 'bg-primary/10 ring-2 ring-primary/30 ring-inset' : ''
                       }`}
                     >
                       <td className="py-3 px-3 font-mono font-bold text-primary text-xs">{wo.workOrderNumber}</td>
                       <td className="py-3 px-3 font-bold">{shortProductName(wo.productId)}</td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{lineName(wo.lineId)}</td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{supervisorName(wo.supervisorId)}</td>
+                      <td className="py-3 px-3 text-[var(--color-text-muted)]">{lineName(wo.lineId)}</td>
+                      <td className="py-3 px-3 text-[var(--color-text-muted)]">{supervisorName(wo.supervisorId)}</td>
                       <td className="py-3 px-3 font-mono">
                         <span className="font-bold">{formatNumber(wo.producedQuantity)}</span>
-                        <span className="text-slate-400"> / {formatNumber(wo.quantity)}</span>
+                        <span className="text-[var(--color-text-muted)]"> / {formatNumber(wo.quantity)}</span>
                       </td>
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden min-w-[60px]">
+                          <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden min-w-[60px]">
                             <div
                               className={`h-full rounded-full transition-all ${prog >= 100 ? 'bg-emerald-500' : prog >= 50 ? 'bg-primary' : 'bg-amber-500'}`}
                               style={{ width: `${prog}%` }}
                             />
                           </div>
-                          <span className="text-xs font-bold text-slate-500 w-10 text-left">{prog.toFixed(0)}%</span>
+                          <span className="text-xs font-bold text-[var(--color-text-muted)] w-10 text-left">{prog.toFixed(0)}%</span>
                         </div>
                       </td>
                       <td className="py-3 px-3 font-mono text-slate-500">{wo.maxWorkers} عامل</td>
@@ -538,7 +541,7 @@ export const WorkOrders: React.FC = () => {
                                 )}
                               </span>
                             ) : (
-                              <span className="text-slate-400">{formatCurrency(wo.actualCost)}</span>
+                              <span className="text-[var(--color-text-muted)]">{formatCurrency(wo.actualCost)}</span>
                             )}
                           </td>
                         </>
@@ -549,14 +552,14 @@ export const WorkOrders: React.FC = () => {
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-1">
                           {can('print') && (
-                            <button onClick={() => triggerWOPrint(wo)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" title="طباعة">
+                            <button onClick={() => triggerWOPrint(wo)} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-[#f0f2f5] text-slate-500" title="طباعة">
                               <span className="material-icons-round text-sm">print</span>
                             </button>
                           )}
                           {can('workOrders.view') && (
                             <button
                               onClick={() => navigate(`/work-orders/${wo.id}/scanner`)}
-                              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary"
+                              className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-primary/10 text-primary"
                               title="فتح شاشة الاسكان"
                             >
                               <span className="material-icons-round text-sm">qr_code_scanner</span>
@@ -564,26 +567,26 @@ export const WorkOrders: React.FC = () => {
                           )}
                           {can('workOrders.edit') && wo.status === 'pending' && (
                             <>
-                              <button onClick={() => handleStatusChange(wo, 'in_progress')} className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600" title="بدء التنفيذ">
+                              <button onClick={() => handleStatusChange(wo, 'in_progress')} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600" title="بدء التنفيذ">
                                 <span className="material-icons-round text-sm">play_arrow</span>
                               </button>
-                              <button onClick={() => openEdit(wo)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600" title="تعديل">
+                              <button onClick={() => openEdit(wo)} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600" title="تعديل">
                                 <span className="material-icons-round text-sm">edit</span>
                               </button>
                             </>
                           )}
                           {can('workOrders.edit') && wo.status === 'in_progress' && (
-                            <button onClick={() => openCompleteModal(wo)} className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600" title="اكتمل">
+                            <button onClick={() => openCompleteModal(wo)} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600" title="اكتمل">
                               <span className="material-icons-round text-sm">check_circle</span>
                             </button>
                           )}
                           {can('workOrders.edit') && (wo.status === 'pending' || wo.status === 'in_progress') && (
-                            <button onClick={() => handleStatusChange(wo, 'cancelled')} className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-500" title="إلغاء">
+                            <button onClick={() => handleStatusChange(wo, 'cancelled')} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-500" title="إلغاء">
                               <span className="material-icons-round text-sm">cancel</span>
                             </button>
                           )}
                           {can('workOrders.delete') && wo.status !== 'in_progress' && (
-                            <button onClick={() => setDeleteConfirm(wo.id!)} className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-500" title="حذف">
+                            <button onClick={() => setDeleteConfirm(wo.id!)} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-500" title="حذف">
                               <span className="material-icons-round text-sm">delete</span>
                             </button>
                           )}
@@ -601,15 +604,15 @@ export const WorkOrders: React.FC = () => {
       {/* Create / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !saving && (setShowModal(false), setSaveError(null), setSaveToast(null))}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[var(--color-border)]">
               <h3 className="text-lg font-bold">{editingId ? 'تعديل أمر شغل' : 'أمر شغل جديد'}</h3>
             </div>
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               {saveToast && (
-                <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
+                <div className="erp-alert erp-alert-success">
                   <span className="material-icons-round text-emerald-500 text-base">check_circle</span>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex-1">{saveToast}</p>
+                  <p className="text-sm font-bold text-emerald-700 flex-1">{saveToast}</p>
                   <button onClick={() => setSaveToast(null)} className="text-emerald-400 hover:text-emerald-600 transition-colors">
                     <span className="material-icons-round text-base">close</span>
                   </button>
@@ -617,9 +620,9 @@ export const WorkOrders: React.FC = () => {
               )}
 
               {saveError && (
-                <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-3">
+                <div className="erp-alert erp-alert-error">
                   <span className="material-icons-round text-rose-500 text-base">error</span>
-                  <p className="text-sm font-bold text-rose-700 dark:text-rose-300 flex-1">{saveError}</p>
+                  <p className="text-sm font-bold text-rose-700 flex-1">{saveError}</p>
                   <button onClick={() => setSaveError(null)} className="text-rose-400 hover:text-rose-600 transition-colors">
                     <span className="material-icons-round text-base">close</span>
                   </button>
@@ -628,7 +631,7 @@ export const WorkOrders: React.FC = () => {
 
               {/* Plan (optional) */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">خطة الإنتاج (اختياري)</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خطة الإنتاج (اختياري)</label>
                 <select value={form.planId} onChange={(e) => {
                   const plan = productionPlans.find((p) => p.id === e.target.value);
                   setForm((f) => ({
@@ -636,7 +639,7 @@ export const WorkOrders: React.FC = () => {
                     planId: e.target.value,
                     productId: plan?.productId || f.productId,
                   }));
-                }} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold">
+                }} className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold">
                   <option value="">بدون خطة</option>
                   {productionPlans.filter((p) => p.status === 'planned' || p.status === 'in_progress').map((p) => (
                     <option key={p.id} value={p.id!}>
@@ -648,7 +651,7 @@ export const WorkOrders: React.FC = () => {
 
               {/* Product */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">المنتج *</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المنتج *</label>
                 <SearchableSelect
                   options={_rawProducts.map((p) => ({
                     value: p.id!,
@@ -672,14 +675,14 @@ export const WorkOrders: React.FC = () => {
                     costCenters, costCenterValues, costAllocations
                   );
                   return (
-                    <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 flex flex-wrap items-center gap-4 sm:gap-6">
+                    <div className="bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex flex-wrap items-center gap-4 sm:gap-6">
                       <div className="flex items-center gap-2">
                         <span className="material-icons-round text-primary text-lg">price_check</span>
                         <span className="text-xs font-bold text-slate-500">تكلفة تقديرية:</span>
                       </div>
                       <div className="flex items-center gap-4 sm:gap-6 text-xs font-bold">
-                        <span className="text-slate-600 dark:text-slate-400">عمالة: <span className="text-slate-800 dark:text-white">{formatCost(est.laborCost)} ج.م</span></span>
-                        <span className="text-slate-600 dark:text-slate-400">غير مباشرة: <span className="text-slate-800 dark:text-white">{formatCost(est.indirectCost)} ج.م</span></span>
+                        <span className="text-[var(--color-text-muted)]">عمالة: <span className="text-[var(--color-text)]">{formatCost(est.laborCost)} ج.م</span></span>
+                        <span className="text-[var(--color-text-muted)]">غير مباشرة: <span className="text-[var(--color-text)]">{formatCost(est.indirectCost)} ج.م</span></span>
                         <span className="text-primary font-black">الوحدة: {formatCost(est.costPerUnit)} ج.م</span>
                       </div>
                     </div>
@@ -689,9 +692,9 @@ export const WorkOrders: React.FC = () => {
 
               {/* Line */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">خط الإنتاج *</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج *</label>
                 <select value={form.lineId} onChange={(e) => setForm((f) => ({ ...f, lineId: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold">
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold">
                   <option value="">اختر الخط</option>
                   {_rawLines.map((l) => (
                     <option key={l.id} value={l.id!}>{l.name}</option>
@@ -701,9 +704,9 @@ export const WorkOrders: React.FC = () => {
 
               {/* Supervisor */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">المشرف *</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المشرف *</label>
                 <select value={form.supervisorId} onChange={(e) => setForm((f) => ({ ...f, supervisorId: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold">
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold">
                   <option value="">اختر المشرف</option>
                   {supervisors.map((s) => (
                     <option key={s.id} value={s.id!}>{s.name} {s.code ? `(${s.code})` : ''}</option>
@@ -714,71 +717,71 @@ export const WorkOrders: React.FC = () => {
               <div className="grid grid-cols-3 gap-4">
                 {/* Quantity */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">الكمية *</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الكمية *</label>
                   <input type="number" min={1} value={form.quantity || ''} onChange={(e) => setForm((f) => ({ ...f, quantity: Number(e.target.value) }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold" />
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold" />
                 </div>
 
                 {/* Max Workers */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">عدد العمالة *</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">عدد العمالة *</label>
                   <input type="number" min={1} value={form.maxWorkers || ''} onChange={(e) => setForm((f) => ({ ...f, maxWorkers: Number(e.target.value) }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold" />
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold" />
                 </div>
 
                 {/* Work Hours */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">ساعات العمل *</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ساعات العمل *</label>
                   <input type="number" min={0} step={0.5} value={form.workHours || ''} onChange={(e) => setForm((f) => ({ ...f, workHours: Number(e.target.value) }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold" />
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold" />
                 </div>
               </div>
 
               {/* Target Date */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">تاريخ التسليم المستهدف</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">تاريخ التسليم المستهدف</label>
                 <input type="date" value={form.targetDate} onChange={(e) => setForm((f) => ({ ...f, targetDate: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold" />
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold" />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">بداية البريك</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بداية البريك</label>
                   <input
                     type="time"
                     value={form.breakStartTime}
                     onChange={(e) => setForm((f) => ({ ...f, breakStartTime: e.target.value || DEFAULT_BREAK_START }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">نهاية البريك</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية البريك</label>
                   <input
                     type="time"
                     value={form.breakEndTime}
                     onChange={(e) => setForm((f) => ({ ...f, breakEndTime: e.target.value || DEFAULT_BREAK_END }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">نهاية العمل</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية العمل</label>
                   <input
                     type="time"
                     value={form.workdayEndTime}
                     onChange={(e) => setForm((f) => ({ ...f, workdayEndTime: e.target.value || DEFAULT_WORKDAY_END }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                   />
                 </div>
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ملاحظات</label>
                 <textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold resize-none" />
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold resize-none" />
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
               <Button variant="outline" onClick={() => { setShowModal(false); setSaveError(null); setSaveToast(null); }} disabled={saving}>إلغاء</Button>
               <Button variant="primary" onClick={handleSave} disabled={saving || !form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0}>
                 {saving ? <span className="material-icons-round animate-spin text-sm">refresh</span> : null}
@@ -797,10 +800,10 @@ export const WorkOrders: React.FC = () => {
       {/* Delete Confirm Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <span className="material-icons-round text-5xl text-rose-500 mb-3 block">warning</span>
             <h3 className="text-lg font-bold mb-2">حذف أمر الشغل</h3>
-            <p className="text-sm text-slate-500 mb-6">هل أنت متأكد من حذف أمر الشغل؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف أمر الشغل؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={() => setDeleteConfirm(null)}>إلغاء</Button>
               <Button variant="danger" onClick={() => handleDelete(deleteConfirm)}>حذف</Button>
@@ -812,61 +815,61 @@ export const WorkOrders: React.FC = () => {
       {/* Complete Production Modal */}
       {closingWorkOrder && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !closingBusy && setClosingWorkOrder(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-1">إغلاق أمر الشغل</h3>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-[var(--color-text-muted)] mb-4">
               {closingWorkOrder.workOrderNumber} — {shortProductName(closingWorkOrder.productId)}
             </p>
 
             {closingOpenSessions > 0 && (
-              <div className="mb-4 p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-sm font-bold">
+              <div className="mb-4 p-3 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 text-amber-700 text-sm font-bold">
                 يوجد {closingOpenSessions} قطعة ما زالت قيد التشغيل بدون تسجيل خروج.
               </div>
             )}
 
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">الإنتاج الفعلي</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الإنتاج الفعلي</label>
                 <input
                   type="number"
                   min={0}
                   value={closingProduced}
                   onChange={(e) => setClosingProduced(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                   placeholder={`${closingWorkOrder.actualProducedFromScans ?? closingWorkOrder.scanSummary?.completedUnits ?? closingWorkOrder.producedQuantity ?? 0}`}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">لو تركتها فارغة سيتم اعتماد آخر كمية من الاسكان.</p>
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">لو تركتها فارغة سيتم اعتماد آخر كمية من الاسكان.</p>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">العمالة الفعلية</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">العمالة الفعلية</label>
                 <input
                   type="number"
                   min={0}
                   value={closingWorkers}
                   onChange={(e) => setClosingWorkers(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">ساعات العمل الفعلية</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ساعات العمل الفعلية</label>
                 <input
                   type="number"
                   min={0.5}
                   step={0.5}
                   value={closingWorkHours}
                   onChange={(e) => setClosingWorkHours(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                 />
               </div>
             </div>
 
             <div className="mb-5">
-              <label className="block text-xs font-bold text-slate-500 mb-1">ملحوظة الإغلاق</label>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ملحوظة الإغلاق</label>
               <textarea
                 rows={3}
                 value={closingNote}
                 onChange={(e) => setClosingNote(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold resize-none"
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold resize-none"
                 placeholder="أضف ملحوظة للتتبع (اختياري)"
               />
             </div>

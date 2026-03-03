@@ -20,6 +20,7 @@ import { exportAllEmployees } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { PageHeader } from '../../../components/PageHeader';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -593,13 +594,13 @@ export const Employees: React.FC = () => {
       sortKey: (emp) => emp.code || emp.name,
       render: (emp) => (
         <div className="flex items-center gap-2">
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${emp.isActive !== false ? 'bg-primary/10' : 'bg-slate-100 dark:bg-slate-800'}`}>
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${emp.isActive !== false ? 'bg-primary/10' : 'bg-[#f0f2f5]'}`}>
             <span className={`material-icons-round text-base ${emp.isActive !== false ? 'text-primary' : 'text-slate-400'}`}>person</span>
           </div>
           <div className="min-w-0">
-            <span className="font-bold text-slate-800 dark:text-white block truncate">{emp.name}</span>
+            <span className="font-bold text-[var(--color-text)] block truncate">{emp.name}</span>
             {emp.code && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-primary/5 text-primary text-[10px] font-mono font-bold">{emp.code}</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-[10px] font-mono font-bold">{emp.code}</span>
             )}
           </div>
         </div>
@@ -608,12 +609,12 @@ export const Employees: React.FC = () => {
     {
       header: 'القسم',
       sortKey: (emp) => getDepartmentName(emp.departmentId ?? ''),
-      render: (emp) => <span className="text-sm text-slate-600 dark:text-slate-400">{getDepartmentName(emp.departmentId ?? '')}</span>,
+      render: (emp) => <span className="text-sm text-[var(--color-text-muted)]">{getDepartmentName(emp.departmentId ?? '')}</span>,
     },
     {
       header: 'المنصب',
       sortKey: (emp) => getJobPositionTitle(emp.jobPositionId ?? ''),
-      render: (emp) => <span className="text-sm text-slate-600 dark:text-slate-400">{getJobPositionTitle(emp.jobPositionId ?? '')}</span>,
+      render: (emp) => <span className="text-sm text-[var(--color-text-muted)]">{getJobPositionTitle(emp.jobPositionId ?? '')}</span>,
     },
     {
       header: 'المستوى',
@@ -627,7 +628,7 @@ export const Employees: React.FC = () => {
     {
       header: 'المركبة',
       sortKey: (emp) => getVehicleName(emp.vehicleId ?? ''),
-      render: (emp) => <span className="text-sm text-slate-600 dark:text-slate-400">{getVehicleName(emp.vehicleId ?? '')}</span>,
+      render: (emp) => <span className="text-sm text-[var(--color-text-muted)]">{getVehicleName(emp.vehicleId ?? '')}</span>,
     },
     {
       header: 'دخول النظام',
@@ -636,7 +637,7 @@ export const Employees: React.FC = () => {
       render: (emp) => can('employees.edit') ? (
         <button
           onClick={(e) => { e.stopPropagation(); handleSystemAccessToggle(emp.id!); }}
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${emp.hasSystemAccess ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${emp.hasSystemAccess ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'}`}
         >
           <span className="material-icons-round text-xs">{emp.hasSystemAccess ? 'check' : 'close'}</span>
           {emp.hasSystemAccess ? 'نعم' : 'لا'}
@@ -663,7 +664,7 @@ export const Employees: React.FC = () => {
       {can('employees.viewDetails') && (
         <button
           onClick={() => navigate(`/employees/${emp.id}`)}
-          className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/10 rounded-[var(--border-radius-base)] transition-all"
           title="عرض الملف"
         >
           <span className="material-icons-round text-lg">person</span>
@@ -672,7 +673,7 @@ export const Employees: React.FC = () => {
       {can('employees.edit') && (
         <button
           onClick={() => openEdit(emp.id!)}
-          className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/10 rounded-[var(--border-radius-base)] transition-all"
           title="تعديل"
         >
           <span className="material-icons-round text-lg">edit</span>
@@ -681,7 +682,7 @@ export const Employees: React.FC = () => {
       {can('employees.edit') && emp.isActive !== false && (
         <button
           onClick={() => setDeleteConfirmId(emp.id!)}
-          className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-amber-500 hover:bg-amber-500/10 rounded-[var(--border-radius-base)] transition-all"
           title="تعطيل"
         >
           <span className="material-icons-round text-lg">person_off</span>
@@ -690,7 +691,7 @@ export const Employees: React.FC = () => {
       {can('employees.edit') && emp.isActive === false && (
         <button
           onClick={() => setToggleConfirmId(emp.id!)}
-          className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-500/10 rounded-[var(--border-radius-base)] transition-all"
           title="إعادة تفعيل"
         >
           <span className="material-icons-round text-lg">person_add</span>
@@ -699,7 +700,7 @@ export const Employees: React.FC = () => {
       {can('employees.delete') && emp.isActive === false && (
         <button
           onClick={() => setPermanentDeleteId(emp.id!)}
-          className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 rounded-[var(--border-radius-base)] transition-all"
           title="حذف نهائي"
         >
           <span className="material-icons-round text-lg">delete_forever</span>
@@ -781,13 +782,13 @@ export const Employees: React.FC = () => {
   if (dataLoading && departments.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="h-8 w-64 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+        <div className="h-8 w-64 bg-slate-200 rounded-[var(--border-radius-base)] animate-pulse" />
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-24 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
+            <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />
           ))}
         </div>
-        <div className="h-96 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse" />
+        <div className="h-96 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] animate-pulse" />
       </div>
     );
   }
@@ -795,59 +796,60 @@ export const Employees: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">الموظفين</h2>
-          <p className="text-sm text-slate-500 font-medium">إدارة الموظفين والتسلسل الوظيفي والحسابات</p>
-        </div>
-        <div className="flex gap-2 self-start sm:self-auto flex-wrap">
-          {_rawEmployees.length > 0 && canExportFromPage && (
-            <Button variant={pageControl.exportVariant} onClick={() => {
+      <PageHeader
+        title="الموظفين"
+        subtitle="إدارة الموظفين والتسلسل الوظيفي والحسابات"
+        icon="groups"
+        primaryAction={can('employees.create') ? {
+          label: 'إضافة موظف',
+          icon: 'add',
+          onClick: openCreate,
+          dataModalKey: MODAL_KEYS.EMPLOYEES_CREATE,
+        } : undefined}
+        moreActions={[
+          {
+            label: 'تصدير Excel',
+            icon: 'download',
+            group: 'تصدير',
+            hidden: !canExportFromPage || _rawEmployees.length === 0,
+            onClick: () => {
               const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
               const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
               const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
               exportAllEmployees(_rawEmployees, getDeptName, getJobTitle, getShiftName);
-            }} className="shrink-0">
-              <span className="material-icons-round text-sm">download</span>
-              تصدير Excel
-            </Button>
-          )}
-          {canImportFromPage && (
-            <Button variant={pageControl.importVariant} onClick={() => navigate('/employees/import')} className="shrink-0">
-              <span className="material-icons-round text-sm">upload_file</span>
-              استيراد Excel
-            </Button>
-          )}
-          {can('employees.create') && (
-            <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.EMPLOYEES_CREATE} className="shrink-0">
-              <span className="material-icons-round text-sm">add</span>
-              إضافة موظف
-            </Button>
-          )}
-        </div>
-      </div>
+            },
+          },
+          {
+            label: 'استيراد Excel',
+            icon: 'upload_file',
+            group: 'استيراد',
+            hidden: !canImportFromPage,
+            onClick: () => navigate('/employees/import'),
+          },
+        ]}
+      />
 
       {/* 2. Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <Card className={`p-4 cursor-pointer transition-all ${filterStatus === 'all' ? 'ring-2 ring-primary' : ''}`} onClick={() => setFilterStatus('all')}>
-          <p className="text-xs text-slate-500 font-bold mb-1">الإجمالي</p>
-          <p className="text-2xl font-black text-slate-800 dark:text-white">{summaryKpis.total}</p>
+          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الإجمالي</p>
+          <p className="text-2xl font-bold text-[var(--color-text)]">{summaryKpis.total}</p>
         </Card>
         <Card className={`p-4 cursor-pointer transition-all ${filterStatus === 'active' ? 'ring-2 ring-emerald-400' : ''}`} onClick={() => setFilterStatus(filterStatus === 'active' ? 'all' : 'active')}>
-          <p className="text-xs text-slate-500 font-bold mb-1">نشط</p>
-          <p className="text-2xl font-black text-emerald-600">{summaryKpis.active}</p>
+          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نشط</p>
+          <p className="text-2xl font-bold text-emerald-600">{summaryKpis.active}</p>
         </Card>
         <Card className={`p-4 cursor-pointer transition-all ${filterStatus === 'inactive' ? 'ring-2 ring-slate-400' : ''}`} onClick={() => setFilterStatus(filterStatus === 'inactive' ? 'all' : 'inactive')}>
-          <p className="text-xs text-slate-500 font-bold mb-1">غير نشط</p>
-          <p className="text-2xl font-black text-slate-500">{summaryKpis.inactive}</p>
+          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">غير نشط</p>
+          <p className="text-2xl font-bold text-slate-500">{summaryKpis.inactive}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs text-slate-500 font-bold mb-1">لديهم دخول للنظام</p>
-          <p className="text-2xl font-black text-primary">{summaryKpis.withSystemAccess}</p>
+          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">لديهم دخول للنظام</p>
+          <p className="text-2xl font-bold text-primary">{summaryKpis.withSystemAccess}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs text-slate-500 font-bold mb-1">في انتظار الموافقة</p>
-          <p className="text-2xl font-black text-amber-600">{summaryKpis.pending}</p>
+          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">في انتظار الموافقة</p>
+          <p className="text-2xl font-bold text-amber-600">{summaryKpis.pending}</p>
         </Card>
       </div>
 
@@ -859,7 +861,7 @@ export const Employees: React.FC = () => {
             {pendingUsers.map((u) => (
               <li
                 key={u.id}
-                className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0"
+                className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-[var(--color-border)] last:border-0"
               >
                 <span className="font-medium">{u.displayName}</span>
                 <span className="text-sm text-slate-500">{u.email}</span>
@@ -881,19 +883,19 @@ export const Employees: React.FC = () => {
       <Card>
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-end">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-bold text-slate-500 mb-1">بحث (اسم / رمز)</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بحث (اسم / رمز)</label>
             <input
               type="text"
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm"
+              className="erp-filter-select w-full"
               placeholder="بحث..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <div className="w-full sm:w-40">
-            <label className="block text-xs font-bold text-slate-500 mb-1">القسم</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">القسم</label>
             <select
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm"
+              className="erp-filter-select w-full"
               value={filterDepartment}
               onChange={(e) => setFilterDepartment(e.target.value)}
             >
@@ -904,9 +906,9 @@ export const Employees: React.FC = () => {
             </select>
           </div>
           <div className="w-full sm:w-40">
-            <label className="block text-xs font-bold text-slate-500 mb-1">المنصب</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المنصب</label>
             <select
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm"
+              className="erp-filter-select w-full"
               value={filterJobPosition}
               onChange={(e) => setFilterJobPosition(e.target.value)}
             >
@@ -917,9 +919,9 @@ export const Employees: React.FC = () => {
             </select>
           </div>
           <div className="w-full sm:w-40">
-            <label className="block text-xs font-bold text-slate-500 mb-1">نوع التوظيف</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع التوظيف</label>
             <select
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm"
+              className="erp-filter-select w-full"
               value={filterEmploymentType}
               onChange={(e) => setFilterEmploymentType(e.target.value)}
             >
@@ -930,9 +932,9 @@ export const Employees: React.FC = () => {
             </select>
           </div>
           <div className="w-full sm:w-32">
-            <label className="block text-xs font-bold text-slate-500 mb-1">الحالة</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الحالة</label>
             <select
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm"
+              className="erp-filter-select w-full"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
             >
@@ -942,9 +944,9 @@ export const Employees: React.FC = () => {
             </select>
           </div>
           <div className="w-full sm:w-36">
-            <label className="block text-xs font-bold text-slate-500 mb-1">دخول النظام</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">دخول النظام</label>
             <select
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm"
+              className="erp-filter-select w-full"
               value={filterSystemAccess}
               onChange={(e) => setFilterSystemAccess(e.target.value as 'all' | 'yes' | 'no')}
             >
@@ -978,25 +980,25 @@ export const Employees: React.FC = () => {
       {/* 6. Create/Edit Modal — Professional HR Panel */}
       {showModal && (can('employees.create') || can('employees.edit')) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-gradient-to-l from-primary/5 to-transparent">
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0 bg-gradient-to-l from-primary/5 to-transparent">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 flex items-center justify-center">
                   <span className="material-icons-round text-primary">{editId ? 'edit' : 'person_add'}</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-800 dark:text-white">{editId ? 'تعديل موظف' : 'إضافة موظف جديد'}</h3>
+                  <h3 className="text-lg font-bold text-[var(--color-text)]">{editId ? 'تعديل موظف' : 'إضافة موظف جديد'}</h3>
                   <p className="text-xs text-slate-500">ملء البيانات الأساسية والوظيفية</p>
                 </div>
               </div>
-              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all">
+              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="p-2 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-lg)] transition-all">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex border-b border-slate-100 dark:border-slate-800 px-6 shrink-0 sticky top-0 bg-white dark:bg-slate-900 z-10">
+            <div className="flex border-b border-[var(--color-border)] px-6 shrink-0 sticky top-0 bg-[var(--color-card)] z-10">
               {([
                 { id: 'job' as const, label: 'البيانات الوظيفية', icon: 'account_tree' },
                 { id: 'salary' as const, label: 'التوظيف والراتب', icon: 'payments' },
@@ -1008,7 +1010,7 @@ export const Employees: React.FC = () => {
                   className={`flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 transition-all ${
                     formTab === tab.id
                       ? 'border-primary text-primary'
-                      : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                      : 'border-transparent text-[var(--color-text-muted)] hover:text-slate-600 dark:hover:text-[var(--color-text-muted)]'
                   }`}
                 >
                   <span className="material-icons-round text-base">{tab.icon}</span>
@@ -1020,11 +1022,11 @@ export const Employees: React.FC = () => {
             <div className="p-6 overflow-y-auto space-y-6">
               {/* Validation errors */}
               {validationErrors.length > 0 && (
-                <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] bg-amber-50 border border-amber-200">
                   <span className="material-icons-round text-amber-500 text-lg mt-0.5 shrink-0">warning</span>
                   <div className="space-y-1">
                     {validationErrors.map((err, i) => (
-                      <p key={i} className="text-sm font-bold text-amber-700 dark:text-amber-400">{err}</p>
+                      <p key={i} className="text-sm font-bold text-amber-700">{err}</p>
                     ))}
                   </div>
                 </div>
@@ -1035,38 +1037,38 @@ export const Employees: React.FC = () => {
                 <div className="space-y-5 min-h-[360px]">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5 sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">الاسم *</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">الاسم *</label>
                       <input
-                        className={`w-full border rounded-xl text-sm p-3 outline-none font-medium transition-colors ${!form.name.trim() ? 'border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-900/10' : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800'} focus:border-primary focus:ring-1 focus:ring-primary/20`}
+                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium transition-colors ${!form.name.trim() ? 'border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-900/10' : 'border-[var(--color-border)]'} focus:border-primary focus:ring-1 focus:ring-primary/20`}
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="اسم الموظف"
                       />
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">رقم الهاتف</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">رقم الهاتف</label>
                       <input
                         type="tel"
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                        className="erp-filter-select w-full"
                         value={form.phone || ''}
                         onChange={(e) => setForm({ ...form, phone: e.target.value })}
                         placeholder="مثال: 2010xxxxxxx"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">رمز الموظف</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">رمز الموظف</label>
                       <input
-                        className={`w-full border rounded-xl text-sm p-3 outline-none font-medium font-mono transition-colors ${validationErrors.some((e) => e.includes('رمز')) ? 'border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-900/10' : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800'}`}
+                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium font-mono transition-colors ${validationErrors.some((e) => e.includes('رمز')) ? 'border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-900/10' : 'border-[var(--color-border)]'}`}
                         value={form.code}
                         onChange={(e) => setForm({ ...form, code: e.target.value })}
                         placeholder="اختياري — فريد"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">القسم *</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">القسم *</label>
                       <div className="flex gap-2">
                         <select
-                          className={`flex-1 border rounded-xl text-sm p-3 outline-none font-medium ${!form.departmentId ? 'border-rose-300 dark:border-rose-700' : 'border-slate-200 dark:border-slate-700'} dark:bg-slate-800`}
+                          className={`flex-1 border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium ${!form.departmentId ? 'border-rose-300 dark:border-rose-700' : 'border-[var(--color-border)]'}`}
                           value={form.departmentId}
                           onChange={(e) => setForm({ ...form, departmentId: e.target.value, jobPositionId: '' })}
                         >
@@ -1078,7 +1080,7 @@ export const Employees: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => { setQuickAddType('department'); setQuickAddName(''); setQuickAddCode(''); }}
-                          className="px-3 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors shrink-0"
+                          className="px-3 py-2 bg-primary/10 text-primary rounded-[var(--border-radius-lg)] hover:bg-primary/20 transition-colors shrink-0"
                           title="إضافة قسم جديد"
                         >
                           <span className="material-icons-round text-lg">add</span>
@@ -1086,10 +1088,10 @@ export const Employees: React.FC = () => {
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">المنصب</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">المنصب</label>
                       <div className="flex gap-2">
                         <select
-                          className="flex-1 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium"
                           value={form.jobPositionId}
                           onChange={(e) => setForm({ ...form, jobPositionId: e.target.value })}
                         >
@@ -1101,7 +1103,7 @@ export const Employees: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => { setQuickAddType('position'); setQuickAddName(''); }}
-                          className="px-3 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors shrink-0"
+                          className="px-3 py-2 bg-primary/10 text-primary rounded-[var(--border-radius-lg)] hover:bg-primary/20 transition-colors shrink-0"
                           title="إضافة منصب جديد"
                         >
                           <span className="material-icons-round text-lg">add</span>
@@ -1109,11 +1111,11 @@ export const Employees: React.FC = () => {
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">
                         المستوى
                         {selectedPosition && <span className="text-primary mr-1">(تلقائي من المنصب)</span>}
                       </label>
-                      <div className={`w-full border rounded-xl text-sm p-3 font-bold ${selectedPosition ? 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-primary' : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800'}`}>
+                      <div className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 font-bold ${selectedPosition ? 'bg-[#f8f9fa]/80 border-[var(--color-border)] text-primary' : 'border-[var(--color-border)]'}`}>
                         {selectedPosition ? (
                           <div className="flex items-center gap-2">
                             <span className="material-icons-round text-sm text-primary/50">lock</span>
@@ -1133,9 +1135,9 @@ export const Employees: React.FC = () => {
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">المدير المباشر</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">المدير المباشر</label>
                       <select
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                        className="erp-filter-select w-full"
                         value={form.managerId}
                         onChange={(e) => setForm({ ...form, managerId: e.target.value })}
                       >
@@ -1149,9 +1151,9 @@ export const Employees: React.FC = () => {
 
                   {/* Employee Status */}
                   <div className="space-y-3 pt-2">
-                    <h4 className="text-xs font-black text-slate-500 dark:text-slate-400">حالة الموظف</h4>
+                    <h4 className="text-xs font-bold text-[var(--color-text-muted)]">حالة الموظف</h4>
                     <div className="flex gap-3">
-                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-xl border transition-all ${form.isActive ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-200 dark:ring-emerald-800' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border transition-all ${form.isActive ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 ring-1 ring-emerald-200 dark:ring-emerald-800' : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'}`}>
                         <input
                           type="radio"
                           name="isActive"
@@ -1164,7 +1166,7 @@ export const Employees: React.FC = () => {
                           <span className="text-xs text-slate-500">الموظف يعمل حالياً</span>
                         </div>
                       </label>
-                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-xl border transition-all ${!form.isActive ? 'border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20 ring-1 ring-rose-200 dark:ring-rose-800' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border transition-all ${!form.isActive ? 'border-rose-300 dark:border-rose-700 bg-rose-50 ring-1 ring-rose-200 dark:ring-rose-800' : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'}`}>
                         <input
                           type="radio"
                           name="isActive"
@@ -1187,9 +1189,9 @@ export const Employees: React.FC = () => {
                 <div className="space-y-5 min-h-[360px]">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">نوع التوظيف</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">نوع التوظيف</label>
                       <select
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                        className="erp-filter-select w-full"
                         value={form.employmentType}
                         onChange={(e) => setForm({ ...form, employmentType: e.target.value as EmploymentType })}
                       >
@@ -1199,10 +1201,10 @@ export const Employees: React.FC = () => {
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">الوردية</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">الوردية</label>
                       <div className="flex gap-2">
                         <select
-                          className="flex-1 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium"
                           value={form.shiftId}
                           onChange={(e) => setForm({ ...form, shiftId: e.target.value })}
                         >
@@ -1214,7 +1216,7 @@ export const Employees: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => { setQuickAddType('shift'); setQuickAddName(''); }}
-                          className="px-3 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors shrink-0"
+                          className="px-3 py-2 bg-primary/10 text-primary rounded-[var(--border-radius-lg)] hover:bg-primary/20 transition-colors shrink-0"
                           title="إضافة وردية جديدة"
                         >
                           <span className="material-icons-round text-lg">add</span>
@@ -1222,33 +1224,33 @@ export const Employees: React.FC = () => {
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">الراتب الأساسي *</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">الراتب الأساسي *</label>
                       <input
                         type="number"
                         min={0}
                         step={0.01}
-                        className={`w-full border rounded-xl text-sm p-3 outline-none font-medium transition-colors ${form.baseSalary <= 0 && form.employmentType !== 'daily' ? 'border-rose-300 dark:border-rose-700' : 'border-slate-200 dark:border-slate-700'} dark:bg-slate-800`}
+                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium transition-colors ${form.baseSalary <= 0 && form.employmentType !== 'daily' ? 'border-rose-300 dark:border-rose-700' : 'border-[var(--color-border)]'}`}
                         value={form.baseSalary || ''}
                         onChange={(e) => setForm({ ...form, baseSalary: Number(e.target.value) })}
                         placeholder="0.00"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">أجر الساعة</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">أجر الساعة</label>
                       <input
                         type="number"
                         min={0}
                         step={0.01}
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                        className="erp-filter-select w-full"
                         value={form.hourlyRate || ''}
                         onChange={(e) => setForm({ ...form, hourlyRate: Number(e.target.value) })}
                         placeholder="0.00"
                       />
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">المركبة</label>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">المركبة</label>
                       <select
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                        className="erp-filter-select w-full"
                         value={form.vehicleId}
                         onChange={(e) => setForm({ ...form, vehicleId: e.target.value })}
                       >
@@ -1262,36 +1264,36 @@ export const Employees: React.FC = () => {
 
                   {/* Salary change indicator */}
                   {salaryChanged && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] bg-amber-50 border border-amber-200">
                       <span className="material-icons-round text-amber-500">trending_up</span>
                       <div className="flex-1">
-                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400">تغيير في الراتب</p>
-                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                        <p className="text-xs font-bold text-amber-700">تغيير في الراتب</p>
+                        <p className="text-sm text-amber-600">
                           <span className="line-through opacity-60">{originalSalary?.toLocaleString()}</span>
                           <span className="mx-2">←</span>
-                          <span className="font-black">{Number(form.baseSalary).toLocaleString()}</span>
+                          <span className="font-bold">{Number(form.baseSalary).toLocaleString()}</span>
                           <span className="text-xs mr-1">ج.م</span>
                         </p>
                       </div>
                       <span className="material-icons-round text-xs text-amber-500">history</span>
-                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">سيتم تسجيل التغيير</span>
+                      <span className="text-[10px] text-amber-600 font-bold">سيتم تسجيل التغيير</span>
                     </div>
                   )}
 
                   {/* Live Net Salary Preview */}
                   {form.baseSalary > 0 && (
-                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-gradient-to-l from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-900 p-4">
+                    <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-gradient-to-l from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-900 p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="material-icons-round text-emerald-600 text-lg">account_balance_wallet</span>
-                          <span className="text-xs font-black text-emerald-700 dark:text-emerald-400">صافي الراتب التقديري</span>
+                          <span className="text-xs font-bold text-emerald-700">صافي الراتب التقديري</span>
                         </div>
                         <div className="text-left">
-                          <p className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
+                          <p className="text-2xl font-bold text-emerald-700">
                             {Number(form.baseSalary).toLocaleString()}
                             <span className="text-xs font-bold mr-1">ج.م</span>
                           </p>
-                          <p className="text-[10px] text-emerald-600/60 dark:text-emerald-400/60">الراتب الأساسي قبل البدلات والخصومات</p>
+                          <p className="text-[10px] text-emerald-600/60/60">الراتب الأساسي قبل البدلات والخصومات</p>
                         </div>
                       </div>
                     </div>
@@ -1302,12 +1304,12 @@ export const Employees: React.FC = () => {
               {/* ═══ Tab 3: System Access ═══ */}
               {formTab === 'access' && (
                 <div className="space-y-5 min-h-[360px]">
-                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
                     <input
                       type="checkbox"
                       checked={form.hasSystemAccess}
                       onChange={(e) => setForm({ ...form, hasSystemAccess: e.target.checked })}
-                      className="rounded border-slate-300 text-primary focus:ring-primary w-5 h-5"
+                      className="rounded border-[var(--color-border)] text-primary focus:ring-primary w-5 h-5"
                     />
                     <div>
                       <span className="text-sm font-bold block">لديه دخول للنظام</span>
@@ -1320,32 +1322,32 @@ export const Employees: React.FC = () => {
                     if (alreadyHasAccount) {
                       return (
                         <div className="space-y-4">
-                          <div className="border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 space-y-4 bg-emerald-50 dark:bg-emerald-900/20">
+                          <div className="border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-emerald-50">
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                              <div className="flex items-center gap-2 text-emerald-700">
                                 <span className="material-icons-round text-lg">check_circle</span>
                                 <span className="text-sm font-bold">لديه حساب دخول</span>
                               </div>
                             </div>
                             <div className="space-y-1.5">
-                              <label className="block text-xs font-bold text-emerald-600 dark:text-emerald-400">البريد الإلكتروني</label>
+                              <label className="block text-xs font-bold text-emerald-600">البريد الإلكتروني</label>
                               <input
                                 type="email"
-                                className="w-full border border-emerald-200 dark:border-emerald-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                                className="w-full border border-emerald-200 dark:border-emerald-700 rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium"
                                 value={formEmail}
                                 onChange={(e) => setFormEmail(e.target.value)}
                               />
                               {formEmail.trim() !== (editingRaw?.email ?? '') && (
-                                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                <p className="text-xs text-amber-600 flex items-center gap-1">
                                   <span className="material-icons-round text-xs">info</span>
                                   سيتم تحديث البريد في بيانات الموظف. لتغيير بريد تسجيل الدخول يجب إعادة تعيين من Firebase.
                                 </p>
                               )}
                             </div>
                             <div className="space-y-1.5">
-                              <label className="block text-xs font-bold text-emerald-600 dark:text-emerald-400">الدور</label>
+                              <label className="block text-xs font-bold text-emerald-600">الدور</label>
                               <select
-                                className="w-full border border-emerald-200 dark:border-emerald-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                                className="w-full border border-emerald-200 dark:border-emerald-700 rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium"
                                 value={formRoleId}
                                 onChange={(e) => setFormRoleId(e.target.value)}
                               >
@@ -1358,7 +1360,7 @@ export const Employees: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => { setRecreateAccount(true); setFormPassword(''); }}
-                            className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors text-sm font-bold"
+                            className="w-full flex items-center justify-center gap-2 p-3 rounded-[var(--border-radius-lg)] border border-dashed border-amber-300 dark:border-amber-700 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors text-sm font-bold"
                           >
                             <span className="material-icons-round text-base">refresh</span>
                             إعادة إنشاء حساب الدخول (لو تم حذفه من Firebase)
@@ -1367,16 +1369,16 @@ export const Employees: React.FC = () => {
                       );
                     }
                     return (
-                      <div className="border border-blue-200 dark:border-blue-800 rounded-xl p-4 space-y-4 bg-blue-50/50 dark:bg-blue-900/10">
+                      <div className="border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-blue-50/50 dark:bg-blue-900/10">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-bold text-blue-700 dark:text-blue-400">
+                          <p className="text-xs font-bold text-blue-700">
                             {recreateAccount ? 'إعادة إنشاء حساب الدخول' : editId ? 'ربط حساب دخول للموظف' : 'إنشاء حساب دخول'}
                           </p>
                           {recreateAccount && (
                             <button
                               type="button"
                               onClick={() => setRecreateAccount(false)}
-                              className="text-xs text-slate-400 hover:text-slate-600 font-bold flex items-center gap-1"
+                              className="text-xs text-[var(--color-text-muted)] hover:text-slate-600 font-bold flex items-center gap-1"
                             >
                               <span className="material-icons-round text-sm">arrow_back</span>
                               رجوع
@@ -1384,37 +1386,37 @@ export const Employees: React.FC = () => {
                           )}
                         </div>
                         {recreateAccount && (
-                          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                          <div className="flex items-start gap-2 px-3 py-2.5 rounded-[var(--border-radius-base)] bg-amber-50 border border-amber-200">
                             <span className="material-icons-round text-amber-500 text-sm mt-0.5">warning</span>
-                            <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                            <p className="text-xs text-amber-600 font-medium">
                               تأكد أنك حذفت الحساب القديم من Firebase Auth أولاً. سيتم إنشاء حساب جديد وربطه بالموظف.
                             </p>
                           </div>
                         )}
                         <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">البريد الإلكتروني</label>
+                          <label className="block text-xs font-bold text-[var(--color-text-muted)]">البريد الإلكتروني</label>
                           <input
                             type="email"
-                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                            className="erp-filter-select w-full"
                             placeholder="البريد الإلكتروني"
                             value={formEmail}
                             onChange={(e) => setFormEmail(e.target.value)}
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">كلمة المرور</label>
+                          <label className="block text-xs font-bold text-[var(--color-text-muted)]">كلمة المرور</label>
                           <input
                             type="password"
-                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                            className="erp-filter-select w-full"
                             placeholder="كلمة المرور (6 أحرف على الأقل)"
                             value={formPassword}
                             onChange={(e) => setFormPassword(e.target.value)}
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">الدور</label>
+                          <label className="block text-xs font-bold text-[var(--color-text-muted)]">الدور</label>
                           <select
-                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                            className="erp-filter-select w-full"
                             value={formRoleId}
                             onChange={(e) => setFormRoleId(e.target.value)}
                           >
@@ -1432,7 +1434,7 @@ export const Employees: React.FC = () => {
 
             {/* Footer messages & actions */}
             {saveMsg && (
-              <div className={`mx-6 mb-2 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400'}`}>
+              <div className={`mx-6 mb-2 flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                 <span className="material-icons-round text-lg">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
                 {saveMsg.text}
               </div>
@@ -1445,7 +1447,7 @@ export const Employees: React.FC = () => {
                 </Button>
               </div>
             )}
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between gap-3 shrink-0">
               <div className="text-xs text-slate-400">
                 {validationErrors.length > 0 && (
                   <span className="text-rose-500 font-bold">{validationErrors.length} خطأ في البيانات</span>
@@ -1466,20 +1468,20 @@ export const Employees: React.FC = () => {
       {/* Deactivate confirmation (soft delete) */}
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-amber-500 text-3xl">person_off</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تعطيل الموظف</h3>
-            <p className="text-sm text-slate-500 mb-2">
-              سيتم تعطيل <span className="font-bold text-slate-700 dark:text-slate-300">{_rawEmployees.find((e) => e.id === deleteConfirmId)?.name}</span> وإيقاف حساب الدخول المرتبط به.
+            <p className="text-sm text-[var(--color-text-muted)] mb-2">
+              سيتم تعطيل <span className="font-bold text-[var(--color-text)]">{_rawEmployees.find((e) => e.id === deleteConfirmId)?.name}</span> وإيقاف حساب الدخول المرتبط به.
             </p>
-            <p className="text-xs text-slate-400 mb-6">يمكنك إعادة تفعيله لاحقاً. البيانات والتقارير السابقة ستبقى محفوظة.</p>
+            <p className="text-xs text-[var(--color-text-muted)] mb-6">يمكنك إعادة تفعيله لاحقاً. البيانات والتقارير السابقة ستبقى محفوظة.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
               <button
                 onClick={() => handleDeactivate(deleteConfirmId)}
-                className="px-4 py-2.5 rounded-lg font-bold text-sm bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-2"
+                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-2"
               >
                 <span className="material-icons-round text-sm">person_off</span>
                 تعطيل
@@ -1492,16 +1494,16 @@ export const Employees: React.FC = () => {
       {/* Permanent delete confirmation (hard delete - only for inactive employees) */}
       {permanentDeleteId && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPermanentDeleteId(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">حذف نهائي</h3>
-            <p className="text-sm text-slate-500 mb-2">
+            <p className="text-sm text-[var(--color-text-muted)] mb-2">
               سيتم حذف <span className="font-bold text-rose-600">{_rawEmployees.find((e) => e.id === permanentDeleteId)?.name}</span> نهائياً مع بيانات حسابه.
             </p>
-            <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-3 mb-4 text-right">
-              <p className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+            <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 mb-4 text-right">
+              <p className="text-xs font-bold text-rose-600 flex items-center gap-1">
                 <span className="material-icons-round text-sm">warning</span>
                 لا يمكن التراجع عن هذا الإجراء
               </p>
@@ -1513,7 +1515,7 @@ export const Employees: React.FC = () => {
               <Button variant="outline" onClick={() => setPermanentDeleteId(null)}>إلغاء</Button>
               <button
                 onClick={() => handlePermanentDelete(permanentDeleteId)}
-                className="px-4 py-2.5 rounded-lg font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 flex items-center gap-2"
+                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 flex items-center gap-2"
               >
                 <span className="material-icons-round text-sm">delete_forever</span>
                 حذف نهائي
@@ -1526,13 +1528,13 @@ export const Employees: React.FC = () => {
       {/* Reactivate confirmation */}
       {toggleConfirmId && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setToggleConfirmId(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-emerald-500 text-3xl">person_add</span>
             </div>
             <h3 className="text-lg font-bold mb-2">إعادة تفعيل الموظف</h3>
-            <p className="text-sm text-slate-500 mb-6">
-              سيتم إعادة تفعيل <span className="font-bold text-slate-700 dark:text-slate-300">{_rawEmployees.find((e) => e.id === toggleConfirmId)?.name}</span> وتفعيل حساب الدخول المرتبط به.
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">
+              سيتم إعادة تفعيل <span className="font-bold text-[var(--color-text)]">{_rawEmployees.find((e) => e.id === toggleConfirmId)?.name}</span> وتفعيل حساب الدخول المرتبط به.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setToggleConfirmId(null)}>إلغاء</Button>
@@ -1549,26 +1551,26 @@ export const Employees: React.FC = () => {
       {/* Quick-Add Modal (Department / Position / Shift) */}
       {quickAddType && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setQuickAddType(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-base font-bold">
                 {quickAddType === 'department' && 'إضافة قسم جديد'}
                 {quickAddType === 'position' && 'إضافة منصب جديد'}
                 {quickAddType === 'shift' && 'إضافة وردية جديدة'}
               </h3>
-              <button onClick={() => setQuickAddType(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setQuickAddType(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                   {quickAddType === 'department' && 'اسم القسم *'}
                   {quickAddType === 'position' && 'اسم المنصب *'}
                   {quickAddType === 'shift' && 'اسم الوردية *'}
                 </label>
                 <input
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                  className="erp-filter-select w-full"
                   value={quickAddName}
                   onChange={(e) => setQuickAddName(e.target.value)}
                   placeholder={
@@ -1581,9 +1583,9 @@ export const Employees: React.FC = () => {
               </div>
               {quickAddType === 'department' && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">رمز القسم</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">رمز القسم</label>
                   <input
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm p-3 outline-none font-medium"
+                    className="erp-filter-select w-full"
                     value={quickAddCode}
                     onChange={(e) => setQuickAddCode(e.target.value)}
                     placeholder="مثال: ASM"
@@ -1591,13 +1593,13 @@ export const Employees: React.FC = () => {
                 </div>
               )}
               {quickAddType === 'position' && !form.departmentId && (
-                <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400 p-2 rounded-lg">
+                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-[var(--border-radius-base)]">
                   <span className="material-icons-round text-xs align-middle ml-1">info</span>
                   لم تختر قسم بعد — سيتم ربط المنصب بالقسم المختار لاحقاً
                 </p>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setQuickAddType(null)}>إلغاء</Button>
               <Button variant="primary" onClick={handleQuickAdd} disabled={quickAddSaving || !quickAddName.trim()}>
                 {quickAddSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}

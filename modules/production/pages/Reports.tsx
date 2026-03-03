@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
-import { formatNumber, getTodayDateString } from '../../../utils/calculations';
+import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
 import { buildReportsCosts, buildSupervisorHourlyRatesMap, estimateReportCost, formatCost } from '../../../utils/costCalculations';
 import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -34,13 +34,14 @@ import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { PageHeader } from '../../../components/PageHeader';
 
 const emptyForm = {
   employeeId: '',
   productId: '',
   lineId: '',
   workOrderId: '',
-  date: getTodayDateString(),
+  date: getOperationalDateString(8),
   quantityProduced: 0,
   quantityWaste: 0,
   workersCount: 0,
@@ -147,9 +148,10 @@ export const Reports: React.FC = () => {
   const [viewWOReport, setViewWOReport] = useState<ProductionReport | null>(null);
   const [viewQualityReport, setViewQualityReport] = useState<ProductionReport | null>(null);
 
+
   // Date range filter
-  const [startDate, setStartDate] = useState(getTodayDateString());
-  const [endDate, setEndDate] = useState(getTodayDateString());
+  const [startDate, setStartDate] = useState(getOperationalDateString(8));
+  const [endDate, setEndDate] = useState(getOperationalDateString(8));
   const [viewMode, setViewMode] = useState<'today' | 'range'>('today');
 
   // Line & supervisor filters
@@ -354,10 +356,10 @@ export const Reports: React.FC = () => {
   const qualityStatusMeta = useCallback((status?: QualityStatus) => {
     const normalized = status ?? 'pending';
     const map: Record<QualityStatus, { label: string; className: string }> = {
-      pending: { label: 'قيد المراجعة', className: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' },
-      approved: { label: 'معتمد', className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' },
-      rejected: { label: 'مرفوض', className: 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300' },
-      not_required: { label: 'غير مطلوب', className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+      pending: { label: 'قيد المراجعة', className: 'bg-amber-50 text-amber-700' },
+      approved: { label: 'معتمد', className: 'bg-emerald-50 text-emerald-700' },
+      rejected: { label: 'مرفوض', className: 'bg-rose-50 text-rose-700' },
+      not_required: { label: 'غير مطلوب', className: 'bg-[#f0f2f5] text-[var(--color-text)]' },
     };
     return map[normalized];
   }, []);
@@ -492,8 +494,8 @@ export const Reports: React.FC = () => {
 
   const handleShowToday = () => {
     setViewMode('today');
-    setStartDate(getTodayDateString());
-    setEndDate(getTodayDateString());
+    setStartDate(getOperationalDateString(8));
+    setEndDate(getOperationalDateString(8));
     setFilterLineId('');
     setFilterEmployeeId('');
   };
@@ -533,126 +535,104 @@ export const Reports: React.FC = () => {
 
   const activeFilterCount = (filterLineId ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
   const tableToolbarFilters = (
-    <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 lg:w-auto">
-      <Button
-        variant={viewMode === 'today' ? 'primary' : 'outline'}
-        onClick={handleShowToday}
-        className="text-xs py-2"
-      >
-        <span className="material-icons-round text-sm">today</span>
-        اليوم
-      </Button>
-      <Button
-        variant={viewMode === 'range' && startDate === endDate && startDate !== getTodayDateString() ? 'primary' : 'outline'}
-        onClick={handleShowYesterday}
-        className="text-xs py-2"
-      >
-        <span className="material-icons-round text-sm">history</span>
-        أمس
-      </Button>
-      <Button
-        variant={viewMode === 'range' && endDate === getTodayDateString() && (() => {
-          const d = new Date();
-          d.setDate(d.getDate() - 6);
-          return startDate === toDateInputValue(d);
-        })() ? 'primary' : 'outline'}
-        onClick={handleShowWeekly}
-        className="text-xs py-2"
-      >
-        <span className="material-icons-round text-sm">date_range</span>
-        أسبوعي
-      </Button>
-      <Button
-        variant={viewMode === 'range' && endDate === getTodayDateString() && (() => {
-          const now = new Date();
-          return startDate === toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
-        })() ? 'primary' : 'outline'}
-        onClick={handleShowMonthly}
-        className="text-xs py-2"
-      >
-        <span className="material-icons-round text-sm">calendar_month</span>
-        شهري
-      </Button>
+    <>
+      {/* ── Date quick-select (segmented control) ── */}
+      <div className="erp-date-seg">
+        <button
+          className={`erp-date-seg-btn${viewMode === 'today' ? ' active' : ''}`}
+          onClick={handleShowToday}
+        >
+          اليوم
+        </button>
+        <button
+          className={`erp-date-seg-btn${viewMode === 'range' && startDate === endDate && startDate !== getOperationalDateString(8) ? ' active' : ''}`}
+          onClick={handleShowYesterday}
+        >
+          أمس
+        </button>
+        <button
+          className={`erp-date-seg-btn${viewMode === 'range' && endDate === getOperationalDateString(8) && (() => { const d = new Date(); d.setDate(d.getDate() - 6); return startDate === toDateInputValue(d); })() ? ' active' : ''}`}
+          onClick={handleShowWeekly}
+        >
+          أسبوعي
+        </button>
+        <button
+          className={`erp-date-seg-btn${viewMode === 'range' && endDate === getOperationalDateString(8) && (() => { const now = new Date(); return startDate === toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)); })() ? ' active' : ''}`}
+          onClick={handleShowMonthly}
+        >
+          شهري
+        </button>
+      </div>
 
-      <div className="flex items-center gap-2">
-        <label className="text-xs font-bold text-slate-500 whitespace-nowrap">من:</label>
-        <input
-          type="date"
-          className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 w-[130px] sm:w-auto"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-        />
+      {/* ── Date range ── */}
+      <div className="erp-filter-date">
+        <span className="erp-filter-label">من</span>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
       </div>
-      <div className="flex items-center gap-2">
-        <label className="text-xs font-bold text-slate-500 whitespace-nowrap">إلى:</label>
-        <input
-          type="date"
-          className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 w-[130px] sm:w-auto"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-        />
+      <div className="erp-filter-date">
+        <span className="erp-filter-label">إلى</span>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
       </div>
-      <Button variant="outline" onClick={handleFetchRange} className="text-xs py-2">
-        {reportsLoading ? (
-          <span className="material-icons-round animate-spin text-sm">refresh</span>
-        ) : (
-          <span className="material-icons-round text-sm">search</span>
-        )}
+      <button className="erp-filter-apply" onClick={handleFetchRange}>
+        {reportsLoading
+          ? <span className="material-icons-round" style={{ fontSize: 14, animation: 'spin 1s linear infinite' }}>refresh</span>
+          : <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
+        }
         عرض
-      </Button>
+      </button>
 
-      <span className="material-icons-round text-slate-400 text-lg">filter_list</span>
-      <div className="flex items-center gap-2">
-        <label className="text-xs font-bold text-slate-500 whitespace-nowrap">الخط:</label>
-        <select
-          className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 min-w-[140px]"
-          value={filterLineId}
-          onChange={(e) => setFilterLineId(e.target.value)}
-        >
-          <option value="">الكل</option>
-          {_rawLines.map((l) => (
-            <option key={l.id} value={l.id!}>{l.name}</option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <label className="text-xs font-bold text-slate-500 whitespace-nowrap">فئة المنتج:</label>
-        <select
-          className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 min-w-[160px]"
-          value={filterProductCategory}
-          onChange={(e) => setFilterProductCategory(e.target.value)}
-        >
-          <option value="">الكل</option>
-          {productCategoryOptions.map((category) => (
-            <option key={category} value={category}>{category}</option>
-          ))}
-        </select>
-      </div>
+      <div className="erp-filter-sep" />
+
+      {/* ── Dropdown filters ── */}
+      <select
+        className={`erp-filter-select${filterLineId ? ' active' : ''}`}
+        value={filterLineId}
+        onChange={(e) => setFilterLineId(e.target.value)}
+        style={{ minWidth: 130 }}
+      >
+        <option value="">كل الخطوط</option>
+        {_rawLines.map((l) => (
+          <option key={l.id} value={l.id!}>{l.name}</option>
+        ))}
+      </select>
+
+      <select
+        className={`erp-filter-select${filterProductCategory ? ' active' : ''}`}
+        value={filterProductCategory}
+        onChange={(e) => setFilterProductCategory(e.target.value)}
+        style={{ minWidth: 145 }}
+      >
+        <option value="">كل الفئات</option>
+        {productCategoryOptions.map((category) => (
+          <option key={category} value={category}>{category}</option>
+        ))}
+      </select>
+
       {!myEmployeeId && (
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-bold text-slate-500 whitespace-nowrap">المشرف:</label>
-          <select
-            className="border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg py-2 px-2 sm:px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 min-w-[160px]"
-            value={filterEmployeeId}
-            onChange={(e) => setFilterEmployeeId(e.target.value)}
-          >
-            <option value="">الكل</option>
-            {employees.filter((e) => e.level === 2).map((emp) => (
-              <option key={emp.id} value={emp.id}>{emp.name}</option>
-            ))}
-          </select>
-        </div>
+        <select
+          className={`erp-filter-select${filterEmployeeId ? ' active' : ''}`}
+          value={filterEmployeeId}
+          onChange={(e) => setFilterEmployeeId(e.target.value)}
+          style={{ minWidth: 145 }}
+        >
+          <option value="">كل المشرفين</option>
+          {employees.filter((e) => e.level === 2).map((emp) => (
+            <option key={emp.id} value={emp.id}>{emp.name}</option>
+          ))}
+        </select>
       )}
+
+      {/* ── Clear filters ── */}
       {activeFilterCount > 0 && (
         <button
+          className="erp-filter-clear"
           onClick={() => { setFilterLineId(''); setFilterProductCategory(''); setFilterEmployeeId(''); }}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-all"
         >
-          <span className="material-icons-round text-sm">close</span>
-          مسح الفلاتر ({activeFilterCount})
+          <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
+          مسح ({activeFilterCount})
         </button>
       )}
-    </div>
+    </>
   );
 
   const openEdit = (report: ProductionReport) => {
@@ -734,10 +714,29 @@ export const Reports: React.FC = () => {
   const handleDelete = async (id: string) => {
     try {
       await deleteReport(id);
-    } finally {
+      setSaveToastType('success');
+      setSaveToast('تم حذف التقرير بنجاح');
+      setTimeout(() => setSaveToast(null), 3500);
       setDeleteConfirmId(null);
+    } catch (error: any) {
+      setSaveToastType('error');
+      setSaveToast(error?.message || 'تعذر حذف التقرير الآن.');
+      setTimeout(() => setSaveToast(null), 5000);
+      // Keep confirmation open so user can re-try after resolving dependency issue.
     }
   };
+
+  const requestDeleteReport = useCallback((report: ProductionReport) => {
+    const reportId = (report.id || '').trim();
+    if (!reportId) {
+      const code = report.reportCode || 'بدون كود';
+      setSaveToastType('error');
+      setSaveToast(`تعذر حذف السند ${code}: معرف التقرير غير متوفر.`);
+      setTimeout(() => setSaveToast(null), 5000);
+      return;
+    }
+    setDeleteConfirmId(reportId);
+  }, []);
 
   const handleViewWorkers = async (lineId: string, date: string) => {
     setViewWorkersLoading(true);
@@ -1023,7 +1022,7 @@ export const Reports: React.FC = () => {
           const hasQuality = !!wo?.qualitySummary || !!wo?.qualityStatus || !!wo?.qualityReportCode;
           if (!can('quality.reports.view') || !hasQuality) {
             return (
-              <span className="font-mono text-xs font-black text-primary">
+              <span className="font-mono text-xs font-bold text-primary">
                 {r.reportCode || '—'}
               </span>
             );
@@ -1035,7 +1034,7 @@ export const Reports: React.FC = () => {
                 e.stopPropagation();
                 setViewQualityReport(r);
               }}
-              className="font-mono text-xs font-black text-primary hover:underline"
+              className="font-mono text-xs font-bold text-primary hover:underline"
               title="عرض تقرير الجودة المرتبط"
             >
               {r.reportCode || '—'}
@@ -1043,7 +1042,7 @@ export const Reports: React.FC = () => {
           );
         },
       },
-      { header: 'التاريخ', render: (r) => <span className="font-bold text-slate-700 dark:text-slate-300">{r.date}</span> },
+      { header: 'التاريخ', render: (r) => <span className="font-bold text-[var(--color-text)]">{r.date}</span> },
       { header: 'خط الإنتاج', render: (r) => <span className="font-medium">{getLineName(r.lineId)}</span> },
       { header: 'المنتج', render: (r) => <span className="font-medium">{getProductName(r.productId)}</span> },
       { header: 'الموظف', render: (r) => <span className="font-medium">{getEmployeeName(r.employeeId)}</span> },
@@ -1052,7 +1051,7 @@ export const Reports: React.FC = () => {
         headerClassName: 'text-center',
         className: 'text-center',
         render: (r) => (
-          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-sm font-black ring-1 ring-emerald-500/20">
+          <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 text-sm font-bold ring-1 ring-emerald-500/20">
             {formatNumber(r.quantityProduced)}
           </span>
         ),
@@ -1064,7 +1063,7 @@ export const Reports: React.FC = () => {
         hideable: true,
         render: (r) => {
           const note = r.notes?.trim() || '';
-          if (!note) return <span className="text-slate-300">—</span>;
+          if (!note) return <span className="text-[var(--color-text-muted)]">—</span>;
 
           const rowKey = getNoteRowKey(r);
           const isExpanded = expandedNoteRows.has(rowKey);
@@ -1084,7 +1083,7 @@ export const Reports: React.FC = () => {
                   return next;
                 });
               }}
-              className={`text-sm text-right block max-w-[260px] ${shouldTruncate ? 'text-primary hover:underline cursor-pointer' : 'text-slate-600 dark:text-slate-300 cursor-default'}`}
+              className={`text-sm text-right block max-w-[260px] ${shouldTruncate ? 'text-primary hover:underline cursor-pointer' : 'text-slate-600 cursor-default'}`}
               title={shouldTruncate ? (isExpanded ? 'اضغط للإخفاء' : 'اضغط للعرض') : note}
             >
               {isExpanded ? note : preview}
@@ -1100,7 +1099,7 @@ export const Reports: React.FC = () => {
         render: (r) => (
           <button
             onClick={(e) => { e.stopPropagation(); handleViewWorkers(r.lineId, r.date); }}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--border-radius-base)] hover:bg-primary/10 text-primary transition-colors"
             title="عرض العمالة"
           >
             {r.workersCount}
@@ -1114,13 +1113,13 @@ export const Reports: React.FC = () => {
         headerClassName: 'text-center',
         className: 'text-center',
         render: (r) => {
-          if (!r.workOrderId) return <span className="text-sm text-slate-300">—</span>;
+          if (!r.workOrderId) return <span className="text-sm text-[var(--color-text-muted)]">—</span>;
           const wo = woMap.get(r.workOrderId);
-          if (!wo) return <span className="text-sm text-slate-300">—</span>;
+          if (!wo) return <span className="text-sm text-[var(--color-text-muted)]">—</span>;
           return (
             <button
               onClick={(e) => { e.stopPropagation(); setViewWOReport(r); }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-primary/10 text-primary transition-colors text-sm font-bold"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--border-radius-base)] hover:bg-primary/10 text-primary transition-colors text-sm font-bold"
               title="عرض تفاصيل أمر الشغل"
             >
               {wo.workOrderNumber}
@@ -1134,7 +1133,7 @@ export const Reports: React.FC = () => {
         render: (r) => {
           const wo = r.workOrderId ? woMap.get(r.workOrderId) : undefined;
           const hasQuality = !!wo?.qualitySummary || !!wo?.qualityStatus || !!wo?.qualityReportCode;
-          if (!hasQuality) return <span className="text-xs text-slate-300">—</span>;
+          if (!hasQuality) return <span className="text-xs text-[var(--color-text-muted)]">—</span>;
           const qm = qualityStatusMeta(wo.qualityStatus);
           const qualityCode = getQualityReportCode(wo, r.reportCode);
           return (
@@ -1144,17 +1143,17 @@ export const Reports: React.FC = () => {
                 e.stopPropagation();
                 setViewQualityReport(r);
               }}
-              className="text-right space-y-1 hover:bg-primary/5 rounded-lg px-2 py-1 transition-colors"
+              className="text-right space-y-1 hover:bg-primary/5 rounded-[var(--border-radius-base)] px-2 py-1 transition-colors"
               title="عرض تقرير الجودة"
             >
               <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full ${qm.className}`}>
                 {qm.label}
               </span>
-              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="text-[11px] font-bold text-[var(--color-text-muted)]">
                 {qualityCode || '—'}
               </div>
               {wo.qualitySummary && (
-                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                <div className="text-[11px] font-bold text-[var(--color-text-muted)]">
                   فحص: {formatNumber(wo.qualitySummary.inspectedUnits)} | فاشل: {formatNumber(wo.qualitySummary.failedUnits)}
                 </div>
               )}
@@ -1170,9 +1169,9 @@ export const Reports: React.FC = () => {
         className: 'text-center',
         render: (r) =>
           r.id && reportCosts.get(r.id) ? (
-            <span className="text-sm font-black text-primary">{formatCost(reportCosts.get(r.id)!)} ج.م</span>
+            <span className="text-sm font-bold text-primary">{formatCost(reportCosts.get(r.id)!)} ج.م</span>
           ) : (
-            <span className="text-sm text-slate-300">—</span>
+            <span className="text-sm text-[var(--color-text-muted)]">—</span>
           ),
       });
     }
@@ -1189,11 +1188,34 @@ export const Reports: React.FC = () => {
   const handleBulkDeleteConfirmed = useCallback(async () => {
     if (!bulkDeleteItems) return;
     setBulkDeleting(true);
+    let deletedCount = 0;
+    const failedMessages: string[] = [];
     for (const item of bulkDeleteItems) {
-      try { await deleteReport(item.id!); } catch { /* skip */ }
+      if (!item.id) continue;
+      try {
+        await deleteReport(item.id);
+        deletedCount += 1;
+      } catch (error: any) {
+        const code = item.reportCode || item.id;
+        failedMessages.push(`${code}: ${error?.message || 'تعذر الحذف'}`);
+      }
     }
     setBulkDeleting(false);
     setBulkDeleteItems(null);
+    if (failedMessages.length === 0) {
+      setSaveToastType('success');
+      setSaveToast(`تم حذف ${deletedCount} تقرير بنجاح`);
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+
+    setSaveToastType('error');
+    if (deletedCount > 0) {
+      setSaveToast(`تم حذف ${deletedCount} تقرير، وتعذر حذف ${failedMessages.length}.`);
+    } else {
+      setSaveToast(`تعذر حذف ${failedMessages.length} تقرير. ${failedMessages[0]}`);
+    }
+    setTimeout(() => setSaveToast(null), 6000);
   }, [bulkDeleteItems, deleteReport]);
 
   const reportBulkActions = useMemo<TableBulkAction<ProductionReport>[]>(() => {
@@ -1216,21 +1238,21 @@ export const Reports: React.FC = () => {
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
       {can("print") && (
         <>
-          <button onClick={() => triggerSingleShare(report)} className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-lg transition-all" title="مشاركة عبر واتساب" disabled={exporting}>
+          <button onClick={() => triggerSingleShare(report)} className="p-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all" title="مشاركة عبر واتساب" disabled={exporting}>
             <span className="material-icons-round text-lg">share</span>
           </button>
-          <button onClick={() => triggerSinglePrint(report)} className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="طباعة التقرير">
+          <button onClick={() => triggerSinglePrint(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="طباعة التقرير">
             <span className="material-icons-round text-lg">print</span>
           </button>
         </>
       )}
       {can("reports.edit") && (
-        <button onClick={() => openEdit(report)} className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="تعديل التقرير">
+        <button onClick={() => openEdit(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل التقرير">
           <span className="material-icons-round text-lg">edit</span>
         </button>
       )}
       {can("reports.delete") && (
-        <button onClick={() => setDeleteConfirmId(report.id!)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-all" title="حذف التقرير">
+        <button type="button" onClick={() => requestDeleteReport(report)} className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف التقرير">
           <span className="material-icons-round text-lg">delete</span>
         </button>
       )}
@@ -1238,8 +1260,8 @@ export const Reports: React.FC = () => {
   );
 
   const reportTableFooter = (
-    <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-      <span className="text-sm text-slate-500 font-bold">إجمالي <span className="text-primary">{displayedReports.length}</span> تقرير</span>
+    <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between">
+      <span className="text-sm text-[var(--color-text-muted)] font-bold">إجمالي <span className="text-primary">{displayedReports.length}</span> تقرير</span>
       {displayedReports.length > 0 && (
         <div className="flex items-center gap-4 text-xs font-bold">
           <span className="text-emerald-600">إنتاج: {formatNumber(displayedReports.reduce((s, r) => s + r.quantityProduced, 0))}</span>
@@ -1265,93 +1287,87 @@ export const Reports: React.FC = () => {
         onChange={handleFileSelect}
       />
 
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">تقارير الإنتاج</h2>
-          <p className="text-sm text-slate-500 font-medium">إنشاء ومراجعة تقارير الإنتاج اليومية.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {can("quality.reports.view") && (
-            <Button variant="outline" onClick={() => window.location.hash = '#/quality/reports'}>
-              <span className="material-icons-round text-sm">verified</span>
-              <span className="hidden sm:inline">تقارير الجودة</span>
-            </Button>
-          )}
-          {displayedReports.length > 0 && canExportFromPage && (
-            <>
-              <Button
-                variant={pageControl.exportVariant}
-                onClick={() =>
-                  exportReportsByDateRange(displayedReports, startDate, endDate, lookups, canViewCosts ? reportCosts : undefined)
-                }
-              >
-                <span className="material-icons-round text-sm">download</span>
-                <span className="hidden sm:inline">تقارير Excel</span>
-              </Button>
-              {workOrders.length > 0 && can("workOrders.view") && (
-                <Button
-                  variant={pageControl.exportVariant}
-                  onClick={() =>
-                    exportWorkOrders(workOrders, { getProductName, getLineName, getSupervisorName: getEmployeeName })
-                  }
-                >
-                  <span className="material-icons-round text-sm">assignment</span>
-                  <span className="hidden sm:inline">أوامر الشغل Excel</span>
-                </Button>
-              )}
-              <Button variant="outline" disabled={exporting} onClick={() => triggerBulkPrint()}>
-                <span className="material-icons-round text-sm">print</span>
-                <span className="hidden sm:inline">طباعة</span>
-              </Button>
-              <Button variant="outline" disabled={exporting} onClick={handlePDF}>
-                {exporting ? (
-                  <span className="material-icons-round animate-spin text-sm">refresh</span>
-                ) : (
-                  <span className="material-icons-round text-sm">picture_as_pdf</span>
-                )}
-                <span className="hidden sm:inline">PDF</span>
-              </Button>
-              <Button variant="outline" disabled={exporting} onClick={handleWhatsApp}>
-                <span className="material-icons-round text-sm">share</span>
-                <span className="hidden sm:inline">واتساب</span>
-              </Button>
-            </>
-          )}
-          {canImportFromPage && (
-            <>
-              <Button variant={pageControl.importVariant} onClick={() => downloadReportsTemplate(templateLookups)}>
-                <span className="material-icons-round text-sm">file_download</span>
-                <span className="hidden sm:inline">تحميل قالب</span>
-              </Button>
-              <Button
-                variant={pageControl.importVariant}
-                onClick={() => fileInputRef.current?.click()}
-                data-modal-key="reports.import"
-              >
-                <span className="material-icons-round text-sm">upload_file</span>
-                <span className="hidden sm:inline">رفع Excel</span>
-              </Button>
-            </>
-          )}
-          {can("reports.create") && (
-            <>
-              <Button variant="primary" onClick={openCreate} data-modal-key="reports.create">
-                <span className="material-icons-round text-sm">note_add</span>
-                إنشاء تقرير
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      {/* ── Page Header ────────────────────────────────────── */}
+      <PageHeader
+        title="تقارير الإنتاج"
+        subtitle="إنشاء ومراجعة تقارير الإنتاج اليومية"
+        icon="bar_chart"
+        primaryAction={can('reports.create') ? {
+          label: 'إنشاء تقرير',
+          icon: 'add',
+          onClick: openCreate,
+          dataModalKey: 'reports.create',
+        } : undefined}
+        moreActions={[
+          {
+            label: 'تقارير Excel',
+            icon: 'table_chart',
+            group: 'تصدير',
+            hidden: !canExportFromPage || displayedReports.length === 0,
+            onClick: () => exportReportsByDateRange(displayedReports, startDate, endDate, lookups, canViewCosts ? reportCosts : undefined),
+          },
+          {
+            label: 'أوامر الشغل Excel',
+            icon: 'assignment',
+            group: 'تصدير',
+            hidden: !canExportFromPage || !can('workOrders.view') || workOrders.length === 0,
+            onClick: () => exportWorkOrders(workOrders, { getProductName, getLineName, getSupervisorName: getEmployeeName }),
+          },
+          {
+            label: 'طباعة',
+            icon: 'print',
+            group: 'تصدير',
+            hidden: !canExportFromPage || displayedReports.length === 0,
+            disabled: exporting,
+            onClick: triggerBulkPrint,
+          },
+          {
+            label: exporting ? 'جاري التصدير...' : 'تصدير PDF',
+            icon: 'picture_as_pdf',
+            group: 'تصدير',
+            hidden: !canExportFromPage || displayedReports.length === 0,
+            disabled: exporting,
+            onClick: handlePDF,
+          },
+          {
+            label: 'مشاركة واتساب',
+            icon: 'share',
+            group: 'تصدير',
+            hidden: !canExportFromPage || displayedReports.length === 0,
+            disabled: exporting,
+            onClick: handleWhatsApp,
+          },
+          {
+            label: 'تحميل القالب',
+            icon: 'file_download',
+            group: 'استيراد',
+            hidden: !canImportFromPage,
+            onClick: () => downloadReportsTemplate(templateLookups),
+          },
+          {
+            label: 'رفع Excel',
+            icon: 'upload_file',
+            group: 'استيراد',
+            hidden: !canImportFromPage,
+            onClick: () => fileInputRef.current?.click(),
+          },
+          {
+            label: 'تقارير الجودة',
+            icon: 'verified',
+            hidden: !can('quality.reports.view'),
+            onClick: () => { window.location.hash = '#/quality/reports'; },
+          },
+        ]}
+      />
 
-      {/* WhatsApp Share Feedback Toast */}
+
+      {/* WhatsApp Share Feedback */}
       {shareToast && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
-          <span className="material-icons-round text-emerald-500">image</span>
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex-1">{shareToast}</p>
-          <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
-            <span className="material-icons-round text-sm">close</span>
+        <div className="erp-alert erp-alert-success erp-animate-in">
+          <span className="material-icons-round text-[18px] shrink-0">share</span>
+          <p className="flex-1">{shareToast}</p>
+          <button onClick={() => setShareToast(null)} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+            <span className="material-icons-round text-[16px]">close</span>
           </button>
         </div>
       )}
@@ -1364,7 +1380,7 @@ export const Reports: React.FC = () => {
         enableColumnVisibility
         toolbarContent={tableToolbarFilters}
         highlightRowId={highlightReportId}
-        getId={(r) => r.id!}
+        getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
         bulkActions={reportBulkActions}
         renderActions={renderReportActions}
         emptyIcon="bar_chart"
@@ -1377,7 +1393,7 @@ export const Reports: React.FC = () => {
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <ProductionReportPrint
           ref={bulkPrintRef}
-          title={viewMode === 'today' ? `تقارير إنتاج اليوم — ${getTodayDateString()}` : `تقارير الإنتاج — ${startDate} إلى ${endDate}`}
+          title={viewMode === 'today' ? `تقارير إنتاج اليوم — ${getOperationalDateString(8)}` : `تقارير الإنتاج — ${startDate} إلى ${endDate}`}
           subtitle={`${printRows.length} تقرير`}
           rows={printRows}
           totals={printTotals}
@@ -1390,20 +1406,20 @@ export const Reports: React.FC = () => {
       {showModal && (can("reports.create") || can("reports.edit")) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }}>
           <div
-            className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"
+            className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <h3 className="text-lg font-bold">{editId ? 'تعديل تقرير إنتاج' : 'إنشاء تقرير إنتاج'}</h3>
-              <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
               {saveToast && saveToastType === 'success' && (
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center gap-2 animate-in fade-in duration-300">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-2 animate-in fade-in duration-300">
                   <span className="material-icons-round text-emerald-500 text-lg">check_circle</span>
-                  <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex-1">{saveToast}</p>
+                  <p className="text-sm font-bold text-emerald-700 flex-1">{saveToast}</p>
                   <button onClick={() => setSaveToast(null)} className="text-emerald-400 hover:text-emerald-600 transition-colors">
                     <span className="material-icons-round text-sm">close</span>
                   </button>
@@ -1419,12 +1435,12 @@ export const Reports: React.FC = () => {
                 if (activeWOs.length === 0) return null;
                 return (
                   <div className="space-y-2">
-                    <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                       <span className="material-icons-round text-sm align-middle ml-1 text-primary">assignment</span>
                       أمر شغل (اختياري)
                     </label>
                     <select
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
                       value={form.workOrderId}
                       onChange={(e) => {
                         const wo = activeWOs.find((w) => w.id === e.target.value);
@@ -1458,22 +1474,22 @@ export const Reports: React.FC = () => {
               })()}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">التاريخ *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">التاريخ *</label>
                   <input
                     type="date"
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.date}
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المشرف *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">المشرف *</label>
                   {isSupervisorReporter && currentEmployee ? (
                     <input
                       type="text"
                       readOnly
                       value={currentEmployee.name}
-                      className="w-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 rounded-xl text-sm p-3.5 outline-none font-bold text-slate-600 dark:text-slate-300"
+                      className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                     />
                   ) : (
                     <SearchableSelect
@@ -1487,7 +1503,7 @@ export const Reports: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">خط الإنتاج *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج *</label>
                   <SearchableSelect
                     placeholder="اختر الخط"
                     options={_rawLines.map((l) => ({ value: l.id!, label: l.name }))}
@@ -1496,7 +1512,7 @@ export const Reports: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">المنتج *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج *</label>
                   <SearchableSelect
                     placeholder="اختر المنتج"
                     options={_rawProducts.map((p) => ({ value: p.id!, label: p.name }))}
@@ -1507,22 +1523,22 @@ export const Reports: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الكمية المنتجة *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المنتجة *</label>
                   <input
                     type="number"
                     min={0}
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.quantityProduced || ''}
                     onChange={(e) => setForm({ ...form, quantityProduced: Number(e.target.value) })}
                     placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">الهالك</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهالك</label>
                   <input
                     type="number"
                     min={0}
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.quantityWaste || ''}
                     onChange={(e) => setForm({ ...form, quantityWaste: Number(e.target.value) })}
                     placeholder="0"
@@ -1531,11 +1547,11 @@ export const Reports: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">عدد عمال التشغيل (بدون المشرف) *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">عدد عمال التشغيل (بدون المشرف) *</label>
                   <input
                     type="number"
                     min={1}
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.workersCount || ''}
                     onChange={(e) => setForm({ ...form, workersCount: Number(e.target.value) })}
                     placeholder="0"
@@ -1552,12 +1568,12 @@ export const Reports: React.FC = () => {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">ساعات العمل *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
                   <input
                     type="number"
                     min={0}
                     step={0.5}
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.workHours || ''}
                     onChange={(e) => setForm({ ...form, workHours: Number(e.target.value) })}
                     placeholder="0"
@@ -1565,10 +1581,10 @@ export const Reports: React.FC = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-600 dark:text-slate-400">ملحوظة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">ملحوظة</label>
                 <textarea
                   rows={3}
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all resize-y"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all resize-y"
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   placeholder="اكتب أي ملاحظة إضافية للتقرير..."
@@ -1587,14 +1603,14 @@ export const Reports: React.FC = () => {
                   costCenters, costCenterValues, costAllocations
                 );
                 return (
-                  <div className="mx-4 sm:mx-6 mb-2 bg-primary/5 border border-primary/10 rounded-xl p-4 flex flex-wrap items-center gap-4 sm:gap-6">
+                  <div className="mx-4 sm:mx-6 mb-2 bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex flex-wrap items-center gap-4 sm:gap-6">
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-primary text-lg">price_check</span>
                       <span className="text-xs font-bold text-slate-500">تكلفة تقديرية:</span>
                     </div>
                     <div className="flex items-center gap-4 sm:gap-6 text-xs font-bold">
-                      <span className="text-slate-600 dark:text-slate-400">عمالة: <span className="text-slate-800 dark:text-white">{formatCost(est.laborCost)} ج.م</span></span>
-                      <span className="text-slate-600 dark:text-slate-400">غير مباشرة: <span className="text-slate-800 dark:text-white">{formatCost(est.indirectCost)} ج.م</span></span>
+                      <span className="text-[var(--color-text-muted)]">عمالة: <span className="text-[var(--color-text)]">{formatCost(est.laborCost)} ج.م</span></span>
+                      <span className="text-[var(--color-text-muted)]">غير مباشرة: <span className="text-[var(--color-text)]">{formatCost(est.indirectCost)} ج.م</span></span>
                       <span className="text-primary font-black">الوحدة: {formatCost(est.costPerUnit)} ج.م</span>
                     </div>
                   </div>
@@ -1613,10 +1629,10 @@ export const Reports: React.FC = () => {
               return (
                 <>
                   {linked && (
-                    <div className="mx-4 sm:mx-6 mb-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center gap-3">
+                    <div className="mx-4 sm:mx-6 mb-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
                       <span className="material-icons-round text-emerald-600 text-lg">event_available</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">خطة مرتبطة</p>
+                        <p className="text-xs font-bold text-emerald-700">خطة مرتبطة</p>
                         <p className="text-[11px] text-emerald-600 dark:text-emerald-500">
                           {formatNumber(linked.producedQuantity ?? 0)} / {formatNumber(linked.plannedQuantity)} —
                           {' '}{Math.min(Math.round(((linked.producedQuantity ?? 0) / linked.plannedQuantity) * 100), 100)}%
@@ -1625,21 +1641,21 @@ export const Reports: React.FC = () => {
                     </div>
                   )}
                   {blockWithoutPlan && (
-                    <div className="mx-4 sm:mx-6 mb-2 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-3 flex items-center gap-3">
+                    <div className="mx-4 sm:mx-6 mb-2 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
                       <span className="material-icons-round text-rose-500 text-lg">block</span>
-                      <p className="text-xs font-bold text-rose-600 dark:text-rose-400">لا يوجد خطة إنتاج نشطة لهذا الخط والمنتج — التقارير بدون خطة غير مسموحة</p>
+                      <p className="text-xs font-bold text-rose-600">لا يوجد خطة إنتاج نشطة لهذا الخط والمنتج — التقارير بدون خطة غير مسموحة</p>
                     </div>
                   )}
                   {overProduced && (
-                    <div className="mx-4 sm:mx-6 mb-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex items-center gap-3">
+                    <div className="mx-4 sm:mx-6 mb-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
                       <span className="material-icons-round text-amber-500 text-lg">warning</span>
-                      <p className="text-xs font-bold text-amber-600 dark:text-amber-400">تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح</p>
+                      <p className="text-xs font-bold text-amber-600">تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح</p>
                     </div>
                   )}
                 </>
               );
             })()}
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
               <Button variant="outline" onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }}>إلغاء</Button>
               {can('print') && (
                 <Button
@@ -1664,9 +1680,9 @@ export const Reports: React.FC = () => {
             </div>
             {saveToast && saveToastType === 'error' && (
               <div className="absolute inset-0 z-20 bg-black/35 backdrop-blur-[1px] flex items-center justify-center p-6">
-                <div className="w-full max-w-md bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 flex items-start gap-3 shadow-xl">
+                <div className="w-full max-w-md bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-start gap-3">
                   <span className="material-icons-round text-rose-500 text-xl shrink-0">error</span>
-                  <p className="text-sm font-bold text-rose-700 dark:text-rose-300 flex-1 text-center">
+                  <p className="text-sm font-bold text-rose-700 flex-1 text-center">
                     {saveToast}
                   </p>
                   <button onClick={() => setSaveToast(null)} className="text-rose-400 hover:text-rose-600 transition-colors shrink-0">
@@ -1682,17 +1698,18 @@ export const Reports: React.FC = () => {
       {/* ══ Delete Confirmation ══ */}
       {deleteConfirmId && can("reports.delete") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف التقرير</h3>
-            <p className="text-sm text-slate-500 mb-6">هل أنت متأكد من حذف هذا التقرير؟</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا التقرير؟</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
               <button
+                type="button"
                 onClick={() => handleDelete(deleteConfirmId)}
-                className="px-4 py-2.5 rounded-lg font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-500/20 transition-all flex items-center gap-2"
+                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
                 <span className="material-icons-round text-sm">delete</span>
                 نعم، احذف
@@ -1705,24 +1722,24 @@ export const Reports: React.FC = () => {
       {/* ══ Bulk Delete Confirmation ══ */}
       {bulkDeleteItems && can("reports.delete") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-rose-500 text-3xl">delete_sweep</span>
             </div>
             <h3 className="text-lg font-bold mb-2">حذف {bulkDeleteItems.length} تقرير</h3>
-            <p className="text-sm text-slate-500 mb-6">هل أنت متأكد من حذف التقارير المحددة؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف التقارير المحددة؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={() => setBulkDeleteItems(null)}
                 disabled={bulkDeleting}
-                className="px-4 py-2.5 rounded-lg font-bold text-sm bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
+                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] hover:bg-[#f8f9fa] transition-all disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleBulkDeleteConfirmed}
                 disabled={bulkDeleting}
-                className="px-4 py-2.5 rounded-lg font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 {bulkDeleting ? (
                   <span className="material-icons-round animate-spin text-sm">refresh</span>
@@ -1739,12 +1756,12 @@ export const Reports: React.FC = () => {
       {/* ══ Import from Excel Modal ══ */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
-            <div className="px-5 sm:px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+            <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
-                  <span className="material-icons-round text-emerald-600 dark:text-emerald-400">upload_file</span>
+                <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+                  <span className="material-icons-round text-emerald-600">upload_file</span>
                 </div>
                 <div>
                   <div className="flex items-center gap-3">
@@ -1755,12 +1772,12 @@ export const Reports: React.FC = () => {
                     </button>
                   </div>
                   {importMode === 'create' && importResult && (
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                       {importResult.totalRows} صف — {importResult.validCount} صالح — {importResult.errorCount} خطأ
                     </p>
                   )}
                   {importMode === 'updateDate' && importDateUpdateResult && (
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                       وضع تحديث الحقول: {importDateUpdateResult.totalRows} صف — {importDateUpdateResult.validCount} صالح — {importDateUpdateResult.errorCount} خطأ
                     </p>
                   )}
@@ -1768,7 +1785,7 @@ export const Reports: React.FC = () => {
               </div>
                 <button
                   onClick={() => { setShowImportModal(false); resetImportState(); }}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                  className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
                 >
                 <span className="material-icons-round">close</span>
               </button>
@@ -1779,13 +1796,13 @@ export const Reports: React.FC = () => {
               {importParsing ? (
                 <div className="text-center py-12">
                   <span className="material-icons-round text-4xl text-primary animate-spin block mb-3">refresh</span>
-                  <p className="font-bold text-slate-600 dark:text-slate-400">جاري قراءة الملف...</p>
+                  <p className="font-bold text-[var(--color-text-muted)]">جاري قراءة الملف...</p>
                 </div>
               ) : importMode === 'create' && importResult && importResult.rows.length === 0 ? (
                 <div className="text-center py-12">
-                  <span className="material-icons-round text-5xl text-slate-300 block mb-3">warning</span>
-                  <p className="font-bold text-slate-600 dark:text-slate-400">لا توجد بيانات في الملف</p>
-                  <p className="text-sm text-slate-400 mt-1">تأكد أن الملف يحتوي على أعمدة: التاريخ، خط الإنتاج، المنتج، المشرف، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
+                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] block mb-3">warning</span>
+                  <p className="font-bold text-[var(--color-text-muted)]">لا توجد بيانات في الملف</p>
+                  <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد أن الملف يحتوي على أعمدة: التاريخ، خط الإنتاج، المنتج، المشرف، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
                   <button onClick={() => downloadReportsTemplate(templateLookups)} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
                     <span className="material-icons-round text-sm">download</span>
                     تحميل نموذج التقارير
@@ -1793,45 +1810,45 @@ export const Reports: React.FC = () => {
                 </div>
               ) : importMode === 'updateDate' && importDateUpdateResult && importDateUpdateResult.rows.length === 0 ? (
                 <div className="text-center py-12">
-                  <span className="material-icons-round text-5xl text-slate-300 block mb-3">warning</span>
-                  <p className="font-bold text-slate-600 dark:text-slate-400">لا توجد بيانات صالحة للتحديث</p>
-                  <p className="text-sm text-slate-400 mt-1">استخدم ملف يحتوي على كود التقرير + واحد أو أكثر من: تاريخ جديد، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
+                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] block mb-3">warning</span>
+                  <p className="font-bold text-[var(--color-text-muted)]">لا توجد بيانات صالحة للتحديث</p>
+                  <p className="text-sm text-[var(--color-text-muted)] mt-1">استخدم ملف يحتوي على كود التقرير + واحد أو أكثر من: تاريخ جديد، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
                 </div>
               ) : importMode === 'updateDate' && importDateUpdateResult ? (
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-blue-600">
                       <span className="material-icons-round text-sm">description</span>
                       {importDateUpdateResult.totalRows} صف
                     </div>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-[var(--border-radius-base)] text-xs font-bold text-emerald-600">
                       <span className="material-icons-round text-sm">check_circle</span>
                       {importDateUpdateResult.validCount} صالح
                     </div>
                     {importDateUpdateResult.errorCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 dark:bg-rose-900/20 rounded-lg text-xs font-bold text-rose-500">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
                         <span className="material-icons-round text-sm">error</span>
                         {importDateUpdateResult.errorCount} خطأ
                       </div>
                     )}
                   </div>
 
-                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <div className="overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
                     <table className="w-full text-right border-collapse text-sm">
-                      <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">#</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">الحالة</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">كود التقرير</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">التحديثات</th>
+                      <thead className="erp-thead">
+                        <tr>
+                          <th className="erp-th">#</th>
+                          <th className="erp-th">الحالة</th>
+                          <th className="erp-th">كود التقرير</th>
+                          <th className="erp-th">التحديثات</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <tbody className="divide-y divide-[var(--color-border)]">
                         {importDateUpdateResult.rows.map((row) => {
                           const isValid = row.errors.length === 0;
                           return (
                             <tr key={row.rowIndex} className={isValid ? '' : 'bg-rose-50/50 dark:bg-rose-900/5'}>
-                              <td className="px-3 py-2 text-slate-400 font-mono text-xs">{row.rowIndex}</td>
+                              <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.rowIndex}</td>
                               <td className="px-3 py-2">
                                 {isValid ? (
                                   <span className="material-icons-round text-emerald-500 text-sm">check_circle</span>
@@ -1844,10 +1861,10 @@ export const Reports: React.FC = () => {
                                 {row.updatedFieldsCount > 0 ? (
                                   <div className="flex flex-wrap gap-1.5">
                                     {row.date && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 text-xs">تاريخ: {row.date}</span>}
-                                    {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 text-xs">إنتاج: {row.quantityProduced}</span>}
-                                    {row.quantityWaste !== undefined && <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300 text-xs">هالك: {row.quantityWaste}</span>}
+                                    {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs">إنتاج: {row.quantityProduced}</span>}
+                                    {row.quantityWaste !== undefined && <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 text-xs">هالك: {row.quantityWaste}</span>}
                                     {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 text-xs">عمال: {row.workersCount}</span>}
-                                    {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 text-xs">ساعات: {row.workHours}</span>}
+                                    {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-xs">ساعات: {row.workHours}</span>}
                                   </div>
                                 ) : (
                                   '—'
@@ -1861,14 +1878,14 @@ export const Reports: React.FC = () => {
                   </div>
 
                   {importDateUpdateResult.errorCount > 0 && (
-                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-4">
-                      <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mb-2">
+                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-4">
+                      <p className="text-sm font-bold text-rose-600 mb-2">
                         <span className="material-icons-round text-sm align-middle ml-1">error</span>
                         الصفوف التالية تحتاج تعديل ولن يتم تحديثها:
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importDateUpdateResult.rows.filter((r) => r.errors.length > 0).map((row) => (
-                          <p key={row.rowIndex} className="text-xs text-rose-600 dark:text-rose-400">
+                          <p key={row.rowIndex} className="text-xs text-rose-600">
                             صف {row.rowIndex}: {row.errors.join(' · ')}
                           </p>
                         ))}
@@ -1880,28 +1897,28 @@ export const Reports: React.FC = () => {
                 <div className="space-y-4">
                   {/* Summary Badges */}
                   <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-blue-600">
                       <span className="material-icons-round text-sm">description</span>
                       {importResult.totalRows} صف
                     </div>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-[var(--border-radius-base)] text-xs font-bold text-emerald-600">
                       <span className="material-icons-round text-sm">check_circle</span>
                       {importResult.validCount} صالح
                     </div>
                     {importResult.errorCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 dark:bg-rose-900/20 rounded-lg text-xs font-bold text-rose-500">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
                         <span className="material-icons-round text-sm">error</span>
                         {importResult.errorCount} خطأ
                       </div>
                     )}
                     {importResult.warningCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-xs font-bold text-amber-600 dark:text-amber-400">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 rounded-[var(--border-radius-base)] text-xs font-bold text-amber-600">
                         <span className="material-icons-round text-sm">warning</span>
                         {importResult.warningCount} تحذير
                       </div>
                     )}
                     {importResult.duplicateCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-xs font-bold text-orange-600 dark:text-orange-400">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-orange-600 dark:text-orange-400">
                         <span className="material-icons-round text-sm">content_copy</span>
                         {importResult.duplicateCount} مكرر
                       </div>
@@ -1909,24 +1926,24 @@ export const Reports: React.FC = () => {
                   </div>
 
                   {/* Preview Table */}
-                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <div className="overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
                     <table className="w-full text-right border-collapse text-sm">
-                      <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">#</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">الحالة</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">التاريخ</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">خط الإنتاج</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">المنتج</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">المشرف</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500">الكود</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">الكمية</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">الهالك</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">عمال</th>
-                          <th className="px-3 py-2.5 text-xs font-black text-slate-500 text-center">ساعات</th>
+                      <thead className="erp-thead">
+                        <tr>
+                          <th className="erp-th">#</th>
+                          <th className="erp-th">الحالة</th>
+                          <th className="erp-th">التاريخ</th>
+                          <th className="erp-th">خط الإنتاج</th>
+                          <th className="erp-th">المنتج</th>
+                          <th className="erp-th">المشرف</th>
+                          <th className="erp-th">الكود</th>
+                          <th className="erp-th text-center">الكمية</th>
+                          <th className="erp-th text-center">الهالك</th>
+                          <th className="erp-th text-center">عمال</th>
+                          <th className="erp-th text-center">ساعات</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <tbody className="divide-y divide-[var(--color-border)]">
                         {importResult.rows.map((row) => {
                           const isValid = row.errors.length === 0;
                           const hasWarnings = row.warnings.length > 0;
@@ -1939,7 +1956,7 @@ export const Reports: React.FC = () => {
                                 : '';
                           return (
                             <tr key={row.rowIndex} className={rowBg}>
-                              <td className="px-3 py-2 text-slate-400 font-mono text-xs">{row.rowIndex}</td>
+                              <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.rowIndex}</td>
                               <td className="px-3 py-2">
                                 {!isValid ? (
                                   <span className="material-icons-round text-rose-500 text-sm" title={row.errors.join('\n')}>error</span>
@@ -1955,7 +1972,7 @@ export const Reports: React.FC = () => {
                               <td className={`px-3 py-2 ${row.lineId ? '' : 'text-rose-500'}`}>{row.lineName || '—'}</td>
                               <td className={`px-3 py-2 ${row.productId ? '' : 'text-rose-500'}`}>{row.productName || '—'}</td>
                               <td className={`px-3 py-2 ${row.employeeId ? '' : 'text-rose-500'}`}>{row.employeeName || '—'}</td>
-                              <td className="px-3 py-2 text-slate-400 font-mono text-xs">{row.employeeCode || '—'}</td>
+                              <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.employeeCode || '—'}</td>
                               <td className="px-3 py-2 text-center font-bold">{row.quantityProduced}</td>
                               <td className="px-3 py-2 text-center text-rose-500">{row.quantityWaste}</td>
                               <td className="px-3 py-2 text-center">{row.workersCount}</td>
@@ -1969,14 +1986,14 @@ export const Reports: React.FC = () => {
 
                   {/* Error details */}
                   {importResult.errorCount > 0 && (
-                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-4">
-                      <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mb-2">
+                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-4">
+                      <p className="text-sm font-bold text-rose-600 mb-2">
                         <span className="material-icons-round text-sm align-middle ml-1">error</span>
                         الصفوف التالية تحتاج تعديل ولن يتم حفظها:
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importResult.rows.filter((r) => r.errors.length > 0).map((row) => (
-                          <p key={row.rowIndex} className="text-xs text-rose-600 dark:text-rose-400">
+                          <p key={row.rowIndex} className="text-xs text-rose-600">
                             صف {row.rowIndex}: {row.errors.join(' · ')}
                           </p>
                         ))}
@@ -1986,14 +2003,14 @@ export const Reports: React.FC = () => {
 
                   {/* Warning details */}
                   {importResult.warningCount > 0 && (
-                    <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-                      <p className="text-sm font-bold text-amber-600 dark:text-amber-400 mb-2">
+                    <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
+                      <p className="text-sm font-bold text-amber-600 mb-2">
                         <span className="material-icons-round text-sm align-middle ml-1">warning</span>
                         تنبيهات (سيتم الحفظ لكن يرجى المراجعة):
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importResult.rows.filter((r) => r.warnings.length > 0).map((row) => (
-                          <p key={row.rowIndex} className="text-xs text-amber-600 dark:text-amber-400">
+                          <p key={row.rowIndex} className="text-xs text-amber-600">
                             صف {row.rowIndex}: {row.warnings.join(' · ')}
                           </p>
                         ))}
@@ -2006,10 +2023,10 @@ export const Reports: React.FC = () => {
 
             {/* Modal Footer */}
             {hasImportPreview && importValidCount > 0 && (
-              <div className="px-5 sm:px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+              <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between gap-3 shrink-0">
                 {importSaving ? (
                   <div className="flex items-center gap-3 flex-1">
-                    <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0}%` }}
@@ -2039,10 +2056,10 @@ export const Reports: React.FC = () => {
         const wo = woMap.get(viewWOReport.workOrderId!);
         if (!wo) return null;
         const statusLabels: Record<string, { label: string; color: string }> = {
-          pending: { label: 'قيد الانتظار', color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' },
+          pending: { label: 'قيد الانتظار', color: 'text-amber-600 bg-amber-50' },
           in_progress: { label: 'قيد التنفيذ', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' },
-          completed: { label: 'مكتمل', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' },
-          cancelled: { label: 'ملغي', color: 'text-rose-600 bg-rose-50 dark:bg-rose-900/20' },
+          completed: { label: 'مكتمل', color: 'text-emerald-600 bg-emerald-50' },
+          cancelled: { label: 'ملغي', color: 'text-rose-600 bg-rose-50' },
         };
         const st = statusLabels[wo.status] || statusLabels.pending;
         const rows = [
@@ -2057,14 +2074,14 @@ export const Reports: React.FC = () => {
         ];
         return (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewWOReport(null)}>
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="material-icons-round text-primary">assignment</span>
                   <h3 className="font-bold">{wo.workOrderNumber}</h3>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
                 </div>
-                <button onClick={() => setViewWOReport(null)} className="text-slate-400 hover:text-slate-600">
+                <button onClick={() => setViewWOReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                   <span className="material-icons-round">close</span>
                 </button>
               </div>
@@ -2072,27 +2089,27 @@ export const Reports: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   {rows.map((r) => (
                     <div key={r.label} className="text-sm">
-                      <span className="text-slate-400 block text-xs mb-0.5">{r.label}</span>
-                      <span className="font-bold text-slate-700 dark:text-slate-200">{r.value}</span>
+                      <span className="text-[var(--color-text-muted)] block text-xs mb-0.5">{r.label}</span>
+                      <span className="font-bold text-[var(--color-text)]">{r.value}</span>
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <h4 className="text-sm font-bold text-slate-500 mb-3">المخطط vs الفعلي</h4>
+                <div className="border-t border-[var(--color-border)] pt-4">
+                  <h4 className="text-sm font-bold text-[var(--color-text-muted)] mb-3">المخطط vs الفعلي</h4>
                   <div className="space-y-3">
                     {compareRows.map((cr) => (
-                      <div key={cr.label} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                      <div key={cr.label} className="flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/50">
                         <span className="material-icons-round text-primary text-lg">{cr.icon}</span>
-                        <span className="text-sm font-bold text-slate-600 dark:text-slate-300 w-16">{cr.label}</span>
+                        <span className="text-sm font-bold text-[var(--color-text-muted)] w-16">{cr.label}</span>
                         <div className="flex-1 flex items-center gap-2">
                           <div className="flex-1 text-center">
-                            <span className="text-xs text-slate-400 block">مخطط</span>
-                            <span className="text-sm font-black text-slate-700 dark:text-white">{cr.planned}</span>
+                            <span className="text-xs text-[var(--color-text-muted)] block">مخطط</span>
+                            <span className="text-sm font-bold text-[var(--color-text)]">{cr.planned}</span>
                           </div>
-                          <span className="material-icons-round text-slate-300 text-sm">arrow_forward</span>
+                          <span className="material-icons-round text-[var(--color-text-muted)] text-sm">arrow_forward</span>
                           <div className="flex-1 text-center">
-                            <span className="text-xs text-slate-400 block">فعلي</span>
-                            <span className="text-sm font-black text-primary">{cr.actual}</span>
+                            <span className="text-xs text-[var(--color-text-muted)] block">فعلي</span>
+                            <span className="text-sm font-bold text-primary">{cr.actual}</span>
                           </div>
                         </div>
                       </div>
@@ -2101,8 +2118,8 @@ export const Reports: React.FC = () => {
                 </div>
                 {wo.notes && (
                   <div className="text-sm">
-                    <span className="text-slate-400 block text-xs mb-1">ملاحظات</span>
-                    <p className="text-slate-600 dark:text-slate-300 font-medium">{wo.notes}</p>
+                    <span className="text-[var(--color-text-muted)] block text-xs mb-1">ملاحظات</span>
+                    <p className="text-slate-600 font-medium">{wo.notes}</p>
                   </div>
                 )}
               </div>
@@ -2118,10 +2135,10 @@ export const Reports: React.FC = () => {
         if (!wo || (!wo.qualitySummary && !wo.qualityStatus && !wo.qualityReportCode)) {
           return (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 p-5" onClick={(e) => e.stopPropagation()}>
+              <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold">تقرير الجودة المرتبط</h3>
-                  <button onClick={() => setViewQualityReport(null)} className="text-slate-400 hover:text-slate-600">
+                  <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                     <span className="material-icons-round">close</span>
                   </button>
                 </div>
@@ -2134,18 +2151,18 @@ export const Reports: React.FC = () => {
         const qs = wo.qualitySummary;
         return (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
                 <div>
-                  <h3 className="font-black">تقرير الجودة المرتبط</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <h3 className="font-bold">تقرير الجودة المرتبط</h3>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                     {viewQualityReport.reportCode || '—'} — WO: {wo.workOrderNumber}
                   </p>
                   <p className="text-xs text-primary font-bold mt-1">
                     كود تقرير الجودة: {qualityCode || '—'}
                   </p>
                 </div>
-                <button onClick={() => setViewQualityReport(null)} className="text-slate-400 hover:text-slate-600">
+                <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                   <span className="material-icons-round">close</span>
                 </button>
               </div>
@@ -2158,43 +2175,43 @@ export const Reports: React.FC = () => {
                 {qs ? (
                   <>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
                         <p className="text-xs text-slate-500">تم الفحص</p>
-                        <p className="text-lg font-black text-slate-800 dark:text-slate-100">{formatNumber(qs.inspectedUnits)}</p>
+                        <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(qs.inspectedUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
                         <p className="text-xs text-slate-500">ناجح</p>
-                        <p className="text-lg font-black text-emerald-600">{formatNumber(qs.passedUnits)}</p>
+                        <p className="text-lg font-bold text-emerald-600">{formatNumber(qs.passedUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
                         <p className="text-xs text-slate-500">فاشل</p>
-                        <p className="text-lg font-black text-rose-600">{formatNumber(qs.failedUnits)}</p>
+                        <p className="text-lg font-bold text-rose-600">{formatNumber(qs.failedUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
                         <p className="text-xs text-slate-500">Rework</p>
-                        <p className="text-lg font-black text-amber-600">{formatNumber(qs.reworkUnits)}</p>
+                        <p className="text-lg font-bold text-amber-600">{formatNumber(qs.reworkUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
                         <p className="text-xs text-slate-500">FPY</p>
-                        <p className="text-lg font-black text-primary">{qs.firstPassYield}%</p>
+                        <p className="text-lg font-bold text-primary">{qs.firstPassYield}%</p>
                       </div>
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
                         <p className="text-xs text-slate-500">Defect Rate</p>
-                        <p className="text-lg font-black text-violet-600">{qs.defectRate}%</p>
+                        <p className="text-lg font-bold text-violet-600">{qs.defectRate}%</p>
                       </div>
                     </div>
                     <div className="text-sm">
-                      <p className="text-slate-500">أعلى سبب عيب</p>
-                      <p className="font-bold text-slate-800 dark:text-slate-100">{qs.topDefectReason || '—'}</p>
+                      <p className="text-[var(--color-text-muted)]">أعلى سبب عيب</p>
+                      <p className="font-bold text-[var(--color-text)]">{qs.topDefectReason || '—'}</p>
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/20 px-3 py-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                  <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:border-amber-900/40 px-3 py-2 text-sm font-semibold text-amber-700">
                     تم حفظ حالة تقرير الجودة، وسيظهر الملخص التفصيلي بعد اكتمال مزامنة البيانات/الـ indexes.
                   </div>
                 )}
               </div>
-              <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <div className="px-5 py-4 border-t border-[var(--color-border)] flex justify-end">
                 {can('quality.reports.view') && (
                   <Button
                     variant="outline"
@@ -2214,18 +2231,18 @@ export const Reports: React.FC = () => {
       {/* ══ View Workers Modal ══ */}
       {viewWorkersData && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] border border-slate-200 dark:border-slate-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md max-h-[80vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">groups</span>
                 <h3 className="font-bold">عمالة {getLineName(viewWorkersData.lineId)}</h3>
-                <span className="text-xs text-slate-400 font-medium">{viewWorkersData.date}</span>
+                <span className="text-xs text-[var(--color-text-muted)] font-medium">{viewWorkersData.date}</span>
               </div>
-              <button onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-2">
+            <div className="p-4 border-b border-[var(--color-border)] space-y-2">
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <SearchableSelect
@@ -2260,29 +2277,29 @@ export const Reports: React.FC = () => {
                 </div>
               ) : viewWorkersData.workers.length === 0 ? (
                 <div className="text-center py-8">
-                  <span className="material-icons-round text-4xl text-slate-300 dark:text-slate-700 block mb-2">person_off</span>
-                  <p className="text-sm text-slate-500 font-medium">لا يوجد عمالة مسجلة على هذا الخط في هذا اليوم</p>
+                  <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] block mb-2">person_off</span>
+                  <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمالة مسجلة على هذا الخط في هذا اليوم</p>
                 </div>
               ) : (
                 <>
-                  <div className="mb-3 px-3 py-2 bg-primary/5 rounded-xl text-center">
+                  <div className="mb-3 px-3 py-2 bg-primary/5 rounded-[var(--border-radius-lg)] text-center">
                     <span className="text-sm font-bold text-primary">{viewWorkersData.workers.length} عامل</span>
                   </div>
-                  <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                  <div className="divide-y divide-slate-50">
                     {viewWorkersData.workers.map((w, i) => (
                       <div key={w.id || i} className="flex items-center gap-3 py-2.5">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                           <span className="material-icons-round text-primary text-sm">person</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{w.employeeName}</p>
-                          <p className="text-xs text-slate-400 font-mono">{w.employeeCode}</p>
+                          <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
+                          <p className="text-xs text-[var(--color-text-muted)] font-mono">{w.employeeCode}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeWorkerFromLineDate(w.id)}
                           disabled={viewWorkersBusy}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all disabled:opacity-50"
+                          className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50"
                           title="حذف العامل من هذا الخط"
                         >
                           <span className="material-icons-round text-base">delete</span>

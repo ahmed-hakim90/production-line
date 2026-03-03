@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
@@ -247,8 +247,8 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
     }
   };
 
-  const inputCls = 'w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm';
-  const labelCls = 'block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1';
+  const inputCls = 'w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)] text-sm';
+  const labelCls = 'block text-sm font-bold text-[var(--color-text)] mb-1';
 
   return (
     <div className="space-y-6">
@@ -273,21 +273,21 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
           </div>
         }
       >
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
           <table className="w-full text-sm text-right">
-            <thead className="bg-slate-50 dark:bg-slate-800">
+            <thead className="erp-thead">
               <tr>
-                <th className="p-3 font-bold">النوع</th>
-                <th className="p-3 font-bold">المبلغ</th>
-                <th className="p-3 font-bold">التكرار</th>
-                <th className="p-3 font-bold">شهر البدء</th>
-                <th className="p-3 font-bold">الحالة</th>
-                {canEdit && <th className="p-3 font-bold">إجراءات</th>}
+                <th className="erp-th">النوع</th>
+                <th className="erp-th">المبلغ</th>
+                <th className="erp-th">التكرار</th>
+                <th className="erp-th">شهر البدء</th>
+                <th className="erp-th">الحالة</th>
+                {canEdit && <th className="erp-th">إجراءات</th>}
               </tr>
             </thead>
             <tbody>
               {empAllowances.map((a) => (
-                <tr key={a.id} className="border-t border-slate-100 dark:border-slate-800">
+                <tr key={a.id} className="border-t border-[var(--color-border)]">
                   <td className="p-3 font-medium">{a.allowanceTypeName}</td>
                   <td className="p-3 font-bold text-emerald-600">{formatNumber(a.amount)} ج.م</td>
                   <td className="p-3">
@@ -307,7 +307,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                         {a.status === 'active' && a.isRecurring && (
                           <button
                             onClick={() => a.id && handleStopAllowance(a.id)}
-                            className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg"
+                            className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-[var(--border-radius-base)]"
                             title="إيقاف"
                             disabled={financialSaving}
                           >
@@ -316,7 +316,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                         )}
                         <button
                           onClick={() => a.id && handleDeleteAllowance(a.id)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg"
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)]"
                           title="حذف"
                           disabled={financialSaving}
                         >
@@ -378,23 +378,23 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
           </div>
         }
       >
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
           <table className="w-full text-sm text-right">
-            <thead className="bg-slate-50 dark:bg-slate-800">
+            <thead className="erp-thead">
               <tr>
-                <th className="p-3 font-bold">النوع</th>
-                <th className="p-3 font-bold">المبلغ</th>
-                <th className="p-3 font-bold">التكرار</th>
-                <th className="p-3 font-bold">التصنيف</th>
-                <th className="p-3 font-bold">شهر البدء</th>
-                <th className="p-3 font-bold">الحالة</th>
-                <th className="p-3 font-bold">السبب</th>
-                {canEdit && <th className="p-3 font-bold">إجراءات</th>}
+                <th className="erp-th">النوع</th>
+                <th className="erp-th">المبلغ</th>
+                <th className="erp-th">التكرار</th>
+                <th className="erp-th">التصنيف</th>
+                <th className="erp-th">شهر البدء</th>
+                <th className="erp-th">الحالة</th>
+                <th className="erp-th">السبب</th>
+                {canEdit && <th className="erp-th">إجراءات</th>}
               </tr>
             </thead>
             <tbody>
               {empDeductions.map((d) => (
-                <tr key={d.id} className="border-t border-slate-100 dark:border-slate-800">
+                <tr key={d.id} className="border-t border-[var(--color-border)]">
                   <td className="p-3 font-medium">{d.deductionTypeName}</td>
                   <td className="p-3 font-bold text-rose-600">{formatNumber(d.amount)} ج.م</td>
                   <td className="p-3">
@@ -420,7 +420,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                         {d.status === 'active' && d.isRecurring && (
                           <button
                             onClick={() => d.id && handleStopDeduction(d.id)}
-                            className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg"
+                            className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-[var(--border-radius-base)]"
                             title="إيقاف"
                             disabled={financialSaving}
                           >
@@ -429,7 +429,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                         )}
                         <button
                           onClick={() => d.id && handleDeleteDeduction(d.id)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg"
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)]"
                           title="حذف"
                           disabled={financialSaving}
                         >
@@ -455,13 +455,13 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Allowance Modal */}
       {showAllowanceModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl" dir="rtl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" dir="rtl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <span className="material-icons-round text-emerald-500">add_circle</span>
                 إضافة بدل للموظف
               </h3>
-              <button onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+              <button onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)]">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -514,13 +514,13 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Deduction Modal */}
       {showDeductionModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl" dir="rtl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" dir="rtl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <span className="material-icons-round text-rose-500">remove_circle</span>
                 إضافة خصم للموظف
               </h3>
-              <button onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+              <button onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)]">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -849,18 +849,18 @@ export const EmployeeProfile: React.FC = () => {
   if (loading) {
     return (
       <div className="p-6 max-w-5xl mx-auto" dir="rtl">
-        <div className="h-10 w-48 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse mb-6" />
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8">
+        <div className="h-10 w-48 bg-slate-200 rounded-[var(--border-radius-base)] animate-pulse mb-6" />
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-8">
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
+            <div className="w-16 h-16 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />
             <div className="space-y-2 flex-1">
-              <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-1/3 animate-pulse" />
-              <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-1/4 animate-pulse" />
+              <div className="h-6 bg-slate-200 rounded w-1/3 animate-pulse" />
+              <div className="h-4 bg-[#f0f2f5] rounded w-1/4 animate-pulse" />
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-20 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
+              <div key={i} className="h-20 bg-[#f0f2f5] rounded-[var(--border-radius-base)] animate-pulse" />
             ))}
           </div>
         </div>
@@ -872,9 +872,9 @@ export const EmployeeProfile: React.FC = () => {
     return (
       <div className="p-6 max-w-5xl mx-auto text-center" dir="rtl">
         <Card>
-          <span className="material-icons-round text-6xl text-slate-300 dark:text-slate-600">person_off</span>
+          <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-slate-600">person_off</span>
           <h2 className="text-xl font-bold mt-4">الموظف غير موجود</h2>
-          <p className="text-slate-500 mt-2">لم يتم العثور على الموظف المطلوب.</p>
+          <p className="text-[var(--color-text-muted)] mt-2">لم يتم العثور على الموظف المطلوب.</p>
           <Button className="mt-6" onClick={() => navigate('/employees')}>
             <span className="material-icons-round text-lg">arrow_back</span>
             العودة للقائمة
@@ -893,16 +893,16 @@ export const EmployeeProfile: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/employees')}
-          className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-primary font-medium mb-4"
+          className="flex items-center gap-2 text-[var(--color-text-muted)] hover:text-primary font-medium mb-4"
         >
           <span className="material-icons-round">arrow_back</span>
           العودة للموظفين
         </button>
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold">{employee.name}</h1>
             {employee.code && (
-              <span className="font-mono text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+              <span className="font-mono text-sm bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
                 {employee.code}
               </span>
             )}
@@ -939,7 +939,7 @@ export const EmployeeProfile: React.FC = () => {
 
       {/* Net Salary Preview */}
       {salaryPreview && (
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl shadow-blue-600/20 mb-6">
+        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[var(--border-radius-xl)] p-6 text-white shadow-blue-600/20 mb-6">
           <div className="flex items-center gap-3 mb-5">
             <span className="material-icons-round text-2xl opacity-90">calculate</span>
             <div>
@@ -948,19 +948,19 @@ export const EmployeeProfile: React.FC = () => {
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-            <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
+            <div className="bg-[var(--color-card)]/10 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm">
               <p className="text-blue-200 text-xs font-medium mb-1">الراتب الأساسي</p>
               <p className="text-xl font-black">{formatNumber(salaryPreview.baseSalary)}</p>
             </div>
-            <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
+            <div className="bg-[var(--color-card)]/10 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm">
               <p className="text-blue-200 text-xs font-medium mb-1">+ البدلات</p>
-              <p className="text-xl font-black text-emerald-300">+{formatNumber(salaryPreview.totalAllowances)}</p>
+              <p className="text-xl font-bold text-emerald-300">+{formatNumber(salaryPreview.totalAllowances)}</p>
             </div>
-            <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
+            <div className="bg-[var(--color-card)]/10 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm">
               <p className="text-blue-200 text-xs font-medium mb-1">– الخصومات</p>
-              <p className="text-xl font-black text-rose-300">–{formatNumber(salaryPreview.totalDeductions)}</p>
+              <p className="text-xl font-bold text-rose-300">–{formatNumber(salaryPreview.totalDeductions)}</p>
             </div>
-            <div className="bg-white/20 rounded-xl p-3 backdrop-blur-sm border border-white/20">
+            <div className="bg-[var(--color-card)]/20 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm border border-white/20">
               <p className="text-blue-100 text-xs font-medium mb-1">صافي تقديري</p>
               <p className="text-2xl font-black">{formatNumber(salaryPreview.estimatedNet)}</p>
             </div>
@@ -979,10 +979,10 @@ export const EmployeeProfile: React.FC = () => {
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm transition-all ${
               activeTab === tab.id
-                ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                ? 'bg-primary text-white shadow-primary/20'
+                : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa]'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
@@ -992,7 +992,7 @@ export const EmployeeProfile: React.FC = () => {
       </div>
 
       {tabLoading && (
-        <div className="flex items-center gap-2 text-slate-500 mb-4">
+        <div className="flex items-center gap-2 text-[var(--color-text-muted)] mb-4">
           <span className="material-icons-round animate-spin">progress_activity</span>
           جاري التحميل...
         </div>
@@ -1015,7 +1015,7 @@ export const EmployeeProfile: React.FC = () => {
               { label: 'الدخول للنظام', value: employee.hasSystemAccess ? 'نعم' : 'لا' },
             ].map((item) => (
               <Card key={item.label} className="!p-4">
-                <p className="text-slate-500 text-xs font-medium mb-1">{item.label}</p>
+                <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">{item.label}</p>
                 <p className="font-bold">{item.value}</p>
               </Card>
             ))}
@@ -1027,26 +1027,26 @@ export const EmployeeProfile: React.FC = () => {
         <Card title="التسلسل الوظيفي">
           <div className="space-y-0">
             {[...managerChain].reverse().map((m) => (
-              <div key={m.id} className="flex items-center gap-3 py-2 border-r-2 border-slate-200 dark:border-slate-700 pr-4 ml-4">
+              <div key={m.id} className="flex items-center gap-3 py-2 border-r-2 border-[var(--color-border)] pr-4 ml-4">
                 <span className="material-icons-round text-slate-400">person</span>
                 <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/employees/${m.id}`)}>{m.name}</span>
                 <Badge variant="neutral">{getDepartmentName(m.departmentId)}</Badge>
               </div>
             ))}
-            <div className="flex items-center gap-3 py-3 pr-4 ml-4 border-r-2 border-primary bg-primary/5 rounded-lg my-2">
+            <div className="flex items-center gap-3 py-3 pr-4 ml-4 border-r-2 border-primary bg-primary/5 rounded-[var(--border-radius-base)] my-2">
               <span className="material-icons-round text-primary">person</span>
               <span className="font-bold">{employee.name}</span>
               <Badge variant="info">الموظف الحالي</Badge>
             </div>
             {directReports.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 py-2 border-r-2 border-slate-200 dark:border-slate-700 pr-4 ml-4">
+              <div key={r.id} className="flex items-center gap-3 py-2 border-r-2 border-[var(--color-border)] pr-4 ml-4">
                 <span className="material-icons-round text-slate-400">person</span>
                 <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/employees/${r.id}`)}>{r.name}</span>
                 <Badge variant="neutral">{getDepartmentName(r.departmentId)}</Badge>
               </div>
             ))}
             {directReports.length === 0 && (
-              <p className="text-slate-500 text-sm py-2 pr-4 ml-4">لا يوجد مرؤوسون مباشرون</p>
+              <p className="text-[var(--color-text-muted)] text-sm py-2 pr-4 ml-4">لا يوجد مرؤوسون مباشرون</p>
             )}
           </div>
         </Card>
@@ -1057,45 +1057,45 @@ export const EmployeeProfile: React.FC = () => {
           <Card title="ملخص الحضور">
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div>
-                <p className="text-slate-500 text-sm">إجمالي الأيام</p>
+                <p className="text-[var(--color-text-muted)] text-sm">إجمالي الأيام</p>
                 <p className="text-xl font-bold">{formatNumber(attendanceSummary.totalDays)}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-sm">حاضر</p>
+                <p className="text-[var(--color-text-muted)] text-sm">حاضر</p>
                 <p className="text-xl font-bold text-emerald-600">{formatNumber(attendanceSummary.present)}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-sm">غائب</p>
+                <p className="text-[var(--color-text-muted)] text-sm">غائب</p>
                 <p className="text-xl font-bold text-rose-600">{formatNumber(attendanceSummary.absent)}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-sm">متأخر</p>
+                <p className="text-[var(--color-text-muted)] text-sm">متأخر</p>
                 <p className="text-xl font-bold text-amber-600">{formatNumber(attendanceSummary.late)}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-sm">إجمالي الساعات</p>
+                <p className="text-[var(--color-text-muted)] text-sm">إجمالي الساعات</p>
                 <p className="text-xl font-bold">{attendanceSummary.totalHours.toFixed(1)}</p>
               </div>
             </div>
           </Card>
           <Card title="سجلات الحضور">
-            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="w-full text-sm text-right">
-                <thead className="bg-slate-50 dark:bg-slate-800">
+                <thead className="erp-thead">
                   <tr>
-                    <th className="p-3 font-bold">التاريخ</th>
-                    <th className="p-3 font-bold">دخول</th>
-                    <th className="p-3 font-bold">خروج</th>
-                    <th className="p-3 font-bold">الساعات</th>
-                    <th className="p-3 font-bold">تأخر (د)</th>
-                    <th className="p-3 font-bold">الحالة</th>
+                    <th className="erp-th">التاريخ</th>
+                    <th className="erp-th">دخول</th>
+                    <th className="erp-th">خروج</th>
+                    <th className="erp-th">الساعات</th>
+                    <th className="erp-th">تأخر (د)</th>
+                    <th className="erp-th">الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
                   {attendanceLogs.map((log) => {
                     const status = log.isAbsent ? 'غائب' : log.lateMinutes > 0 ? 'متأخر' : 'حاضر';
                     return (
-                      <tr key={log.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <tr key={log.id} className="border-t border-[var(--color-border)]">
                         <td className="p-3">{formatDateAr(log.date)}</td>
                         <td className="p-3">{formatTime(log.checkIn)}</td>
                         <td className="p-3">{formatTime(log.checkOut)}</td>
@@ -1153,19 +1153,19 @@ export const EmployeeProfile: React.FC = () => {
         <Card title="الرواتب">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div>
-              <p className="text-slate-500 text-sm">الراتب الأساسي</p>
+              <p className="text-[var(--color-text-muted)] text-sm">الراتب الأساسي</p>
               <p className="text-xl font-bold">{formatNumber(employee.baseSalary)} ج.م</p>
             </div>
             <div>
-              <p className="text-slate-500 text-sm">نوع التوظيف</p>
+              <p className="text-[var(--color-text-muted)] text-sm">نوع التوظيف</p>
               <p className="text-xl font-bold">{EMPLOYMENT_TYPE_LABELS[employee.employmentType]}</p>
             </div>
             <div>
-              <p className="text-slate-500 text-sm">الأجر بالساعة</p>
+              <p className="text-[var(--color-text-muted)] text-sm">الأجر بالساعة</p>
               <p className="text-xl font-bold">{formatNumber(employee.hourlyRate)} ج.م</p>
             </div>
           </div>
-          <p className="text-slate-600 dark:text-slate-400 mb-2">
+          <p className="text-[var(--color-text-muted)] mb-2">
             يمكنك مراجعة كشف الرواتب التفصيلي من صفحة الرواتب.
           </p>
           <Button variant="outline" onClick={() => navigate('/payroll')}>
@@ -1180,39 +1180,39 @@ export const EmployeeProfile: React.FC = () => {
           <Card title="رصيد الإجازات">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
-                <p className="text-slate-500 text-sm">سنوية</p>
+                <p className="text-[var(--color-text-muted)] text-sm">سنوية</p>
                 <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.annualBalance) : '—'}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-sm">مرضية</p>
+                <p className="text-[var(--color-text-muted)] text-sm">مرضية</p>
                 <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.sickBalance) : '—'}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-sm">طارئة</p>
+                <p className="text-[var(--color-text-muted)] text-sm">طارئة</p>
                 <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.emergencyBalance) : '—'}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-sm">بدون راتب (مأخوذ)</p>
+                <p className="text-[var(--color-text-muted)] text-sm">بدون راتب (مأخوذ)</p>
                 <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.unpaidTaken) : '—'}</p>
               </div>
             </div>
           </Card>
           <Card title="طلبات الإجازة">
-            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="w-full text-sm text-right">
-                <thead className="bg-slate-50 dark:bg-slate-800">
+                <thead className="erp-thead">
                   <tr>
-                    <th className="p-3 font-bold">النوع</th>
-                    <th className="p-3 font-bold">من</th>
-                    <th className="p-3 font-bold">إلى</th>
-                    <th className="p-3 font-bold">الأيام</th>
-                    <th className="p-3 font-bold">الحالة</th>
-                    <th className="p-3 font-bold">السبب</th>
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">من</th>
+                    <th className="erp-th">إلى</th>
+                    <th className="erp-th">الأيام</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">السبب</th>
                   </tr>
                 </thead>
                 <tbody>
                   {leaveRequests.map((req) => (
-                    <tr key={req.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <tr key={req.id} className="border-t border-[var(--color-border)]">
                       <td className="p-3">{LEAVE_TYPE_LABELS[req.leaveType]}</td>
                       <td className="p-3">{formatDateAr(req.startDate)}</td>
                       <td className="p-3">{formatDateAr(req.endDate)}</td>
@@ -1243,42 +1243,42 @@ export const EmployeeProfile: React.FC = () => {
         <div className="space-y-6">
           {activeLoans.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+              <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
                 <span className="material-icons-round text-blue-500 text-2xl mb-1 block">receipt_long</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">إجمالي السلف</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي السلف</p>
                 <p className="text-xl font-black">{loans.length}</p>
               </div>
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+              <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
                 <span className="material-icons-round text-emerald-500 text-2xl mb-1 block">trending_up</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">نشطة</p>
-                <p className="text-xl font-black text-emerald-600">{activeLoans.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نشطة</p>
+                <p className="text-xl font-bold text-emerald-600">{activeLoans.length}</p>
               </div>
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+              <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
                 <span className="material-icons-round text-amber-500 text-2xl mb-1 block">account_balance</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">المتبقي</p>
-                <p className="text-xl font-black text-amber-600">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المتبقي</p>
+                <p className="text-xl font-bold text-amber-600">
                   {formatNumber(activeLoans.reduce((s, l) => s + l.installmentAmount * l.remainingInstallments, 0))} ج.م
                 </p>
               </div>
             </div>
           )}
           <Card title="السُلف">
-            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="w-full text-sm text-right">
-                <thead className="bg-slate-50 dark:bg-slate-800">
+                <thead className="erp-thead">
                   <tr>
-                    <th className="p-3 font-bold">النوع</th>
-                    <th className="p-3 font-bold">المبلغ</th>
-                    <th className="p-3 font-bold">القسط</th>
-                    <th className="p-3 font-bold">الأقساط</th>
-                    <th className="p-3 font-bold">الشهر</th>
-                    <th className="p-3 font-bold">الحالة</th>
-                    <th className="p-3 font-bold">الصرف</th>
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">المبلغ</th>
+                    <th className="erp-th">القسط</th>
+                    <th className="erp-th">الأقساط</th>
+                    <th className="erp-th">الشهر</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">الصرف</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loans.map((loan) => (
-                    <tr key={loan.id} className={`border-t border-slate-100 dark:border-slate-800 ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
+                    <tr key={loan.id} className={`border-t border-[var(--color-border)] ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
                       <td className="p-3">
                         <span className="inline-flex items-center gap-1 text-xs font-bold">
                           <span className="material-icons-round text-sm text-primary">
@@ -1287,7 +1287,7 @@ export const EmployeeProfile: React.FC = () => {
                           {(loan.loanType || 'installment') === 'monthly_advance' ? 'شهرية' : 'مقسطة'}
                         </span>
                       </td>
-                      <td className="p-3 font-bold">{formatNumber(loan.loanAmount)} ج.م</td>
+                      <td className="erp-th">{formatNumber(loan.loanAmount)} ج.م</td>
                       <td className="p-3">{formatNumber(loan.installmentAmount)} ج.م</td>
                       <td className="p-3">
                         {loan.remainingInstallments} / {loan.totalInstallments}

@@ -17,6 +17,7 @@ type GlobalModalManagerValue = {
   hasModalOpener: (modalKey: string) => boolean;
   hasModalTarget: (modalKey: string) => boolean;
   getManagedModalState: (modalKey: string) => ManagedModalState;
+  resetAllModals: () => void;
 };
 
 const GlobalModalManagerContext = createContext<GlobalModalManagerValue | null>(null);
@@ -84,6 +85,10 @@ export const GlobalModalManagerProvider: React.FC<{ children: React.ReactNode }>
     return managedStates[modalKey] || { isOpen: false };
   }, [managedStates]);
 
+  const resetAllModals = useCallback(() => {
+    setManagedStates({});
+  }, []);
+
   const value = useMemo<GlobalModalManagerValue>(() => ({
     registerModalOpener,
     registerManagedModal,
@@ -92,7 +97,8 @@ export const GlobalModalManagerProvider: React.FC<{ children: React.ReactNode }>
     hasModalOpener,
     hasModalTarget,
     getManagedModalState,
-  }), [registerModalOpener, registerManagedModal, openModal, closeModal, hasModalOpener, hasModalTarget, getManagedModalState]);
+    resetAllModals,
+  }), [registerModalOpener, registerManagedModal, openModal, closeModal, hasModalOpener, hasModalTarget, getManagedModalState, resetAllModals]);
 
   return (
     <GlobalModalManagerContext.Provider value={value}>

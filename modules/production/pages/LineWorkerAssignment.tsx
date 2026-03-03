@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Badge, Button } from '../components/UI';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
@@ -294,10 +294,10 @@ export const LineWorkerAssignment: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="erp-page-head">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">ربط العمالة بخطوط الإنتاج</h2>
-          <p className="text-sm text-slate-500 font-medium">تسجيل العمالة اليومية على خطوط الإنتاج بالباركود أو يدوياً</p>
+          <h2 className="page-title">ربط العمالة بخطوط الإنتاج</h2>
+          <p className="page-subtitle">تسجيل العمالة اليومية على خطوط الإنتاج بالباركود أو يدوياً</p>
         </div>
       </div>
 
@@ -305,18 +305,18 @@ export const LineWorkerAssignment: React.FC = () => {
       <Card>
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-end">
           <div className="w-full sm:w-44">
-            <label className="block text-xs font-bold text-slate-500 mb-1">التاريخ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">التاريخ</label>
             <input
               type="date"
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm font-medium"
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm font-medium"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
             />
           </div>
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-bold text-slate-500 mb-1">خط الإنتاج</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</label>
             <select
-              className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2 text-sm font-medium"
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm font-medium"
               value={selectedLineId}
               onChange={(e) => setSelectedLineId(e.target.value)}
             >
@@ -355,7 +355,7 @@ export const LineWorkerAssignment: React.FC = () => {
                 <input
                   ref={inputRef}
                   type="text"
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-4 py-3 text-sm font-medium pr-10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium pr-10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   placeholder="ابحث باسم / كود العامل..."
                   value={scanInput}
                   onChange={(e) => { setScanInput(e.target.value); setShowSuggestions(true); }}
@@ -363,12 +363,12 @@ export const LineWorkerAssignment: React.FC = () => {
                   onKeyDown={handleKeyDown}
                   autoComplete="off"
                 />
-                <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] text-lg">search</span>
 
                 {showSuggestions && scanInput.trim() && searchResults.length > 0 && (
                   <div
                     ref={suggestionsRef}
-                    className="absolute z-50 top-full mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-64 overflow-y-auto"
+                    className="absolute z-50 top-full mt-1 w-full bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] max-h-64 overflow-y-auto"
                   >
                     {searchResults.map((emp) => {
                       const alreadyAssigned = assignedEmployeeIds.has(emp.id!);
@@ -380,15 +380,15 @@ export const LineWorkerAssignment: React.FC = () => {
                           disabled={alreadyAssigned}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-right transition-colors ${
                             alreadyAssigned
-                              ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800/50'
+                              ? 'opacity-50 cursor-not-allowed bg-[#f8f9fa]/50'
                               : 'hover:bg-primary/5 cursor-pointer'
                           }`}
                         >
-                          <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                          <div className="w-8 h-8 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
                             <span className="material-icons-round text-primary text-sm">person</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-slate-800 dark:text-white truncate">{emp.name}</p>
+                            <p className="font-bold text-[var(--color-text)] truncate">{emp.name}</p>
                             <p className="text-xs text-slate-400">{emp.code} — {getPositionTitle(emp.jobPositionId)}</p>
                           </div>
                           {alreadyAssigned && (
@@ -404,17 +404,17 @@ export const LineWorkerAssignment: React.FC = () => {
                 {showSuggestions && scanInput.trim().length >= 2 && searchResults.length === 0 && (
                   <div
                     ref={suggestionsRef}
-                    className="absolute z-50 top-full mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-4 text-center"
+                    className="absolute z-50 top-full mt-1 w-full bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center"
                   >
-                    <span className="material-icons-round text-slate-300 text-2xl block mb-1">search_off</span>
-                    <p className="text-xs text-slate-400 font-medium">لا يوجد عامل إنتاج بهذا الاسم أو الكود</p>
+                    <span className="material-icons-round text-[var(--color-text-muted)] text-2xl block mb-1">search_off</span>
+                    <p className="text-xs text-[var(--color-text-muted)] font-medium">لا يوجد عامل إنتاج بهذا الاسم أو الكود</p>
                   </div>
                 )}
               </div>
               <button
                 onClick={() => handleScan(scanInput)}
                 disabled={!scanInput.trim()}
-                className="px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="px-4 py-3 bg-primary text-white rounded-[var(--border-radius-lg)] hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <span className="material-icons-round text-xl">add_circle</span>
                 <span className="text-sm font-bold hidden sm:inline">إضافة</span>
@@ -423,10 +423,10 @@ export const LineWorkerAssignment: React.FC = () => {
 
             {/* Feedback */}
             {feedback && (
-              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold animate-in fade-in duration-200 ${
-                feedback.type === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' :
-                feedback.type === 'error' ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400' :
-                'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold animate-in fade-in duration-200 ${
+                feedback.type === 'success' ? 'bg-emerald-50 text-emerald-700' :
+                feedback.type === 'error' ? 'bg-rose-50 text-rose-700' :
+                'bg-amber-50 text-amber-700'
               }`}>
                 <span className="material-icons-round text-lg">
                   {feedback.type === 'success' ? 'check_circle' : feedback.type === 'error' ? 'error' : 'warning'}
@@ -454,26 +454,26 @@ export const LineWorkerAssignment: React.FC = () => {
           {loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-12 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
+                <div key={i} className="h-12 bg-[#f0f2f5] rounded-[var(--border-radius-base)] animate-pulse" />
               ))}
             </div>
           ) : assignments.length === 0 ? (
             <div className="text-center py-10">
-              <span className="material-icons-round text-4xl text-slate-300 dark:text-slate-700 mb-2 block">person_add</span>
-              <p className="text-sm text-slate-500 font-medium">لم يتم تسجيل عمالة على هذا الخط بعد</p>
-              <p className="text-xs text-slate-400 mt-1">امسح باركود الموظف أو اكتب الكود يدوياً</p>
+              <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">person_add</span>
+              <p className="page-subtitle">لم يتم تسجيل عمالة على هذا الخط بعد</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">امسح باركود الموظف أو اكتب الكود يدوياً</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800">
-                    <th className="text-right py-2.5 px-3 font-bold text-slate-500 text-xs">الكود</th>
-                    <th className="text-right py-2.5 px-3 font-bold text-slate-500 text-xs">الاسم</th>
-                    <th className="text-right py-2.5 px-3 font-bold text-slate-500 text-xs hidden sm:table-cell">القسم</th>
-                    <th className="text-right py-2.5 px-3 font-bold text-slate-500 text-xs hidden sm:table-cell">المنصب</th>
-                    <th className="text-right py-2.5 px-3 font-bold text-slate-500 text-xs">وقت التسجيل</th>
-                    <th className="w-10"></th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الكود</th>
+                    <th className="erp-th">الاسم</th>
+                    <th className="erp-th hidden sm:table-cell">القسم</th>
+                    <th className="erp-th hidden sm:table-cell">المنصب</th>
+                    <th className="erp-th">وقت التسجيل</th>
+                    <th className="erp-th w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -482,21 +482,21 @@ export const LineWorkerAssignment: React.FC = () => {
                     return (
                       <tr
                         key={a.id}
-                        className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                        className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors"
                       >
                         <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-primary/5 text-primary text-xs font-mono font-bold">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-xs font-mono font-bold">
                             {a.employeeCode}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-800 dark:text-white">{a.employeeName}</td>
-                        <td className="py-2.5 px-3 text-slate-500 hidden sm:table-cell">{emp ? getDeptName(emp.departmentId) : '—'}</td>
-                        <td className="py-2.5 px-3 text-slate-500 hidden sm:table-cell">{emp ? getPositionTitle(emp.jobPositionId) : '—'}</td>
-                        <td className="py-2.5 px-3 text-slate-500 text-xs">{formatTime(a.assignedAt)}</td>
+                        <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{a.employeeName}</td>
+                        <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getDeptName(emp.departmentId) : '—'}</td>
+                        <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getPositionTitle(emp.jobPositionId) : '—'}</td>
+                        <td className="py-2.5 px-3 text-[var(--color-text-muted)] text-xs">{formatTime(a.assignedAt)}</td>
                         <td className="py-2.5 px-1">
                           <button
                             onClick={() => handleRemove(a.id!)}
-                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
+                            className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all"
                             title="إزالة"
                           >
                             <span className="material-icons-round text-base">close</span>
@@ -522,25 +522,25 @@ export const LineWorkerAssignment: React.FC = () => {
 
         {lineGroups.length === 0 ? (
           <div className="text-center py-8">
-            <span className="material-icons-round text-4xl text-slate-300 dark:text-slate-700 mb-2 block">assignment</span>
-            <p className="text-sm text-slate-500 font-medium">لا يوجد تسجيلات لهذا اليوم</p>
+            <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">assignment</span>
+            <p className="page-subtitle">لا يوجد تسجيلات لهذا اليوم</p>
           </div>
         ) : (
           <>
             {/* Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <div className="bg-primary/5 rounded-xl p-3 text-center">
-                <p className="text-2xl font-black text-primary">{allDayAssignments.length}</p>
-                <p className="text-xs text-slate-500 font-bold">إجمالي العمالة</p>
+              <div className="bg-primary/5 rounded-[var(--border-radius-lg)] p-3 text-center">
+                <p className="text-2xl font-bold text-primary">{allDayAssignments.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold">إجمالي العمالة</p>
               </div>
-              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 text-center">
-                <p className="text-2xl font-black text-emerald-600">{lineGroups.length}</p>
-                <p className="text-xs text-slate-500 font-bold">خطوط نشطة</p>
+              <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] p-3 text-center">
+                <p className="text-2xl font-bold text-emerald-600">{lineGroups.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold">خطوط نشطة</p>
               </div>
               {lineGroups.slice(0, 2).map((g) => (
-                <div key={g.lineId} className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-black text-slate-700 dark:text-slate-300">{g.workers.length}</p>
-                  <p className="text-xs text-slate-500 font-bold truncate">{g.lineName}</p>
+                <div key={g.lineId} className="bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] p-3 text-center">
+                  <p className="text-2xl font-bold text-[var(--color-text)]">{g.workers.length}</p>
+                  <p className="text-xs text-[var(--color-text-muted)] font-bold truncate">{g.lineName}</p>
                 </div>
               ))}
             </div>
@@ -548,10 +548,10 @@ export const LineWorkerAssignment: React.FC = () => {
             {/* Expandable per-line */}
             <div className="space-y-2">
               {lineGroups.map((g) => (
-                <div key={g.lineId} className="border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                <div key={g.lineId} className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
                   <button
                     onClick={() => toggleExpand(g.lineId)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f8f9fa] transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-primary text-lg">
@@ -562,19 +562,19 @@ export const LineWorkerAssignment: React.FC = () => {
                     </div>
                   </button>
                   {expandedLines.has(g.lineId) && (
-                    <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-2">
-                      <div className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                    <div className="border-t border-[var(--color-border)] px-4 py-2">
+                      <div className="divide-y divide-slate-50/50">
                         {g.workers.map((w) => {
                           const emp = getEmployeeInfo(w.employeeId);
                           return (
                             <div key={w.id} className="flex items-center justify-between py-2 text-sm">
                               <div className="flex items-center gap-3">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-primary/5 text-primary text-xs font-mono font-bold">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-xs font-mono font-bold">
                                   {w.employeeCode}
                                 </span>
                                 <span className="font-medium">{w.employeeName}</span>
                                 {emp && (
-                                  <span className="text-xs text-slate-400 hidden sm:inline">
+                                  <span className="text-xs text-[var(--color-text-muted)] hidden sm:inline">
                                     {getDeptName(emp.departmentId)}
                                   </span>
                                 )}
@@ -596,12 +596,12 @@ export const LineWorkerAssignment: React.FC = () => {
       {/* Copy Confirm Modal */}
       {showCopyConfirm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCopyConfirm(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="w-14 h-14 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-amber-500 text-2xl">content_copy</span>
             </div>
             <h3 className="text-lg font-bold text-center mb-2">نسخ من آخر يوم</h3>
-            <p className="text-sm text-slate-500 text-center mb-6">
+            <p className="text-sm text-[var(--color-text-muted)] text-center mb-6">
               يوجد عمالة مسجلة بالفعل لهذا اليوم. سيتم إضافة العمالة الناقصة فقط (بدون تكرار).
             </p>
             <div className="flex items-center justify-center gap-3">

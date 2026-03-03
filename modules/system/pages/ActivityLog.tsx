@@ -79,51 +79,54 @@ export const ActivityLogPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">سجل النشاط</h2>
-          <p className="text-sm text-slate-500 font-medium">تتبع جميع الأنشطة والعمليات في النظام.</p>
+      <div className="erp-page-head">
+        <div className="erp-page-title-block">
+          <h1 className="page-title">سجل النشاط</h1>
+          <p className="page-subtitle">تتبع جميع الأنشطة والعمليات في النظام</p>
         </div>
-        <button
-          onClick={fetchLogs}
-          className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
-          title="تحديث"
-        >
-          <span className="material-icons-round">refresh</span>
-        </button>
+        <div className="erp-page-actions">
+          <button
+            className="btn btn-secondary"
+            onClick={fetchLogs}
+            title="تحديث"
+          >
+            <span className="material-icons-round" style={{ fontSize: 16 }}>refresh</span>
+            تحديث
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <LoadingSkeleton rows={8} type="table" />
       ) : (
         <Card>
-          <div className="space-y-0 divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="space-y-0 divide-y divide-[var(--color-border)]">
             {logs.map((log) => {
               const info = getActionInfo(log.action);
               return (
                 <div key={log.id} className="flex items-start gap-4 py-4 px-2">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    info.variant === 'success' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
-                    info.variant === 'warning' ? 'bg-amber-100 dark:bg-amber-900/30' :
-                    info.variant === 'danger' ? 'bg-rose-100 dark:bg-rose-900/30' :
-                    info.variant === 'info' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                    'bg-slate-100 dark:bg-slate-800'
+                  <div className={`w-10 h-10 rounded-[var(--border-radius-lg)] flex items-center justify-center flex-shrink-0 ${
+                    info.variant === 'success' ? 'bg-emerald-100' :
+                    info.variant === 'warning' ? 'bg-amber-100' :
+                    info.variant === 'danger' ? 'bg-rose-100' :
+                    info.variant === 'info' ? 'bg-blue-100' :
+                    'bg-[#f0f2f5]'
                   }`}>
                     <span className={`material-icons-round text-lg ${
-                      info.variant === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
-                      info.variant === 'warning' ? 'text-amber-600 dark:text-amber-400' :
-                      info.variant === 'danger' ? 'text-rose-600 dark:text-rose-400' :
-                      info.variant === 'info' ? 'text-blue-600 dark:text-blue-400' :
+                      info.variant === 'success' ? 'text-emerald-600' :
+                      info.variant === 'warning' ? 'text-amber-600' :
+                      info.variant === 'danger' ? 'text-rose-600' :
+                      info.variant === 'info' ? 'text-blue-600' :
                       'text-slate-500'
                     }`}>{info.icon}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <Badge variant={info.variant}>{info.label}</Badge>
-                      <span className="text-xs text-slate-400 font-mono" dir="ltr">{log.userEmail}</span>
+                      <span className="text-xs text-[var(--color-text-muted)] font-mono" dir="ltr">{log.userEmail}</span>
                     </div>
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{log.description}</p>
-                    <p className="text-xs text-slate-400 mt-1">{formatTimestamp(log.timestamp)}</p>
+                    <p className="text-sm font-medium text-[var(--color-text)]">{log.description}</p>
+                    <p className="text-xs text-[var(--color-text-muted)] mt-1">{formatTimestamp(log.timestamp)}</p>
                   </div>
                 </div>
               );
@@ -138,11 +141,11 @@ export const ActivityLogPage: React.FC = () => {
           </div>
 
           {hasMore && (
-            <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-center">
+            <div className="pt-4 mt-4 border-t border-[var(--color-border)] text-center">
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
+                className="px-6 py-2.5 bg-[#f0f2f5] text-[var(--color-text-muted)] rounded-[var(--border-radius-lg)] text-sm font-bold hover:bg-[#e8eaed] transition-all disabled:opacity-50"
               >
                 {loadingMore ? (
                   <span className="flex items-center gap-2 justify-center">
@@ -162,7 +165,7 @@ export const ActivityLogPage: React.FC = () => {
       )}
 
       {/* Summary */}
-      <div className="text-xs text-slate-400 font-medium text-center">
+      <div className="text-xs text-[var(--color-text-muted)] font-medium text-center">
         عرض {logs.length} نشاط {hasMore ? '(يوجد المزيد)' : '(نهاية السجل)'}
       </div>
     </div>

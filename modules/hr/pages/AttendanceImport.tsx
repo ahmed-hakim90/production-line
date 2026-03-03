@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+﻿import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { getDocs } from 'firebase/firestore';
 import { parseCSV, processBatch } from '../attendanceProcessor';
@@ -196,10 +196,10 @@ export const AttendanceImport: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">
+        <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">
           استيراد بيانات الحضور
         </h2>
-        <p className="text-sm text-slate-500 font-medium">
+        <p className="text-sm text-[var(--color-text-muted)] font-medium">
           استيراد ملف CSV من جهاز البصمة ZKTeco ومعالجته إلى سجلات حضور منظمة.
         </p>
       </div>
@@ -213,7 +213,7 @@ export const AttendanceImport: React.FC = () => {
           const isPast = ['upload', 'preview', 'processing', 'done'].indexOf(step) > i;
           return (
             <React.Fragment key={s}>
-              {i > 0 && <div className={`flex-1 h-0.5 ${isPast ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'}`} />}
+              {i > 0 && <div className={`flex-1 h-0.5 ${isPast ? 'bg-primary' : 'bg-slate-200'}`} />}
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${
                 isActive ? 'bg-primary/10 text-primary' : isPast ? 'text-primary' : 'text-slate-400'
               }`}>
@@ -229,25 +229,25 @@ export const AttendanceImport: React.FC = () => {
       {step === 'upload' && (
         <Card>
           {settingsLoading && (
-            <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm font-medium text-blue-700 dark:text-blue-400">
+            <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] text-sm font-medium text-blue-700">
               <span className="material-icons-round animate-spin text-sm">refresh</span>
               جاري تحميل إعدادات الحضور...
             </div>
           )}
           {!settingsLoading && Object.keys(codeMap).length === 0 && (
-            <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm font-medium text-amber-700 dark:text-amber-400">
+            <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-amber-50 rounded-[var(--border-radius-base)] text-sm font-medium text-amber-700">
               <span className="material-icons-round text-sm">warning</span>
               لا توجد أكواد موظفين مربوطة — تأكد من إضافة كود لكل موظف في صفحة الموظفين
             </div>
           )}
           <div
-            className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-10 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+            className="border-2 border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-10 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
             onClick={() => fileRef.current?.click()}
           >
-            <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">
               cloud_upload
             </span>
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">
+            <p className="text-sm font-bold text-[var(--color-text-muted)] mb-1">
               اسحب ملف CSV هنا أو اضغط للاختيار
             </p>
             <p className="text-xs text-slate-400">
@@ -268,20 +268,20 @@ export const AttendanceImport: React.FC = () => {
       {step === 'preview' && parseResult && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-blue-500 text-3xl mb-2 block">description</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">إجمالي الصفوف</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي الصفوف</p>
               <p className="text-2xl font-black">{parseResult.totalRows.toLocaleString('en-US')}</p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-emerald-500 text-3xl mb-2 block">check_circle</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">صفوف صالحة</p>
-              <p className="text-2xl font-black text-emerald-600">{parseResult.validRows.toLocaleString('en-US')}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">صفوف صالحة</p>
+              <p className="text-2xl font-bold text-emerald-600">{parseResult.validRows.toLocaleString('en-US')}</p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-amber-500 text-3xl mb-2 block">warning</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">صفوف مُتخطاة</p>
-              <p className="text-2xl font-black text-amber-600">{parseResult.skippedRows.toLocaleString('en-US')}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">صفوف مُتخطاة</p>
+              <p className="text-2xl font-bold text-amber-600">{parseResult.skippedRows.toLocaleString('en-US')}</p>
             </div>
           </div>
 
@@ -289,7 +289,7 @@ export const AttendanceImport: React.FC = () => {
             <Card title="أخطاء التحليل">
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {parseResult.errors.map((err, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400">
+                  <div key={i} className="flex items-start gap-2 text-xs text-rose-600">
                     <span className="material-icons-round text-sm mt-0.5 shrink-0">error</span>
                     <span dir="ltr" className="font-mono">{err}</span>
                   </div>
@@ -302,18 +302,18 @@ export const AttendanceImport: React.FC = () => {
           <Card title={`معاينة البيانات (${fileName})`}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                    <th className="text-right py-3 px-3">#</th>
-                    <th className="text-right py-3 px-3">كود الموظف</th>
-                    <th className="text-right py-3 px-3">التاريخ والوقت</th>
-                    <th className="text-right py-3 px-3">الجهاز</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">#</th>
+                    <th className="erp-th">كود الموظف</th>
+                    <th className="erp-th">التاريخ والوقت</th>
+                    <th className="erp-th">الجهاز</th>
                   </tr>
                 </thead>
                 <tbody>
                   {parseResult.punches.slice(0, 20).map((p, i) => (
-                    <tr key={i} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                      <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">{i + 1}</td>
+                    <tr key={i} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                      <td className="py-2.5 px-3 font-mono text-[var(--color-text-muted)] text-xs">{i + 1}</td>
                       <td className="py-2.5 px-3 font-bold">{p.employeeCode}</td>
                       <td className="py-2.5 px-3 font-mono text-xs" dir="ltr">
                         {p.timestamp.toLocaleString('ar-EG', {
@@ -327,7 +327,7 @@ export const AttendanceImport: React.FC = () => {
                 </tbody>
               </table>
               {parseResult.punches.length > 20 && (
-                <p className="text-xs text-slate-400 text-center py-3 font-medium">
+                <p className="text-xs text-[var(--color-text-muted)] text-center py-3 font-medium">
                   ... وعدد {(parseResult.punches.length - 20).toLocaleString('en-US')} صف إضافي
                 </p>
               )}
@@ -352,8 +352,8 @@ export const AttendanceImport: React.FC = () => {
         <Card>
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-primary animate-spin mb-4 block">sync</span>
-            <p className="text-sm font-bold text-slate-600 dark:text-slate-300">جاري معالجة البيانات...</p>
-            <p className="text-xs text-slate-400 mt-1">يرجى الانتظار</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">جاري معالجة البيانات...</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">يرجى الانتظار</p>
           </div>
         </Card>
       )}
@@ -362,25 +362,25 @@ export const AttendanceImport: React.FC = () => {
       {step === 'done' && batchResult && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-primary text-3xl mb-2 block">badge</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">رقم الدفعة</p>
-              <p className="text-sm font-black font-mono" dir="ltr">{batchResult.batchId}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">رقم الدفعة</p>
+              <p className="text-sm font-bold font-mono" dir="ltr">{batchResult.batchId}</p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-emerald-500 text-3xl mb-2 block">done_all</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">تمت معالجتها</p>
-              <p className="text-2xl font-black text-emerald-600">{batchResult.totalProcessed}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">تمت معالجتها</p>
+              <p className="text-2xl font-bold text-emerald-600">{batchResult.totalProcessed}</p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-amber-500 text-3xl mb-2 block">person_off</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">أكواد غير مُطابقة</p>
-              <p className="text-2xl font-black text-amber-600">{batchResult.unmatchedCodes.length}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أكواد غير مُطابقة</p>
+              <p className="text-2xl font-bold text-amber-600">{batchResult.unmatchedCodes.length}</p>
             </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-rose-500 text-3xl mb-2 block">error</span>
-              <p className="text-xs text-slate-400 font-bold mb-1">أخطاء</p>
-              <p className="text-2xl font-black text-rose-600">{batchResult.errors.length}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أخطاء</p>
+              <p className="text-2xl font-bold text-rose-600">{batchResult.errors.length}</p>
             </div>
           </div>
 
@@ -391,7 +391,7 @@ export const AttendanceImport: React.FC = () => {
                   <Badge key={code} variant="warning">{code}</Badge>
                 ))}
               </div>
-              <p className="text-xs text-slate-400 mt-3">
+              <p className="text-xs text-[var(--color-text-muted)] mt-3">
                 هذه الأكواد غير مربوطة بموظفين في النظام. يرجى ربطها ثم إعادة المعالجة.
               </p>
             </Card>
@@ -401,7 +401,7 @@ export const AttendanceImport: React.FC = () => {
             <Card title="أخطاء المعالجة">
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {batchResult.errors.map((err, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400">
+                  <div key={i} className="flex items-start gap-2 text-xs text-rose-600">
                     <span className="material-icons-round text-sm mt-0.5 shrink-0">error</span>
                     <span dir="ltr" className="font-mono">{err}</span>
                   </div>
@@ -415,21 +415,21 @@ export const AttendanceImport: React.FC = () => {
             <Card title="السجلات المعالجة">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                      <th className="text-right py-3 px-2">الكود</th>
-                      <th className="text-right py-3 px-2">التاريخ</th>
-                      <th className="text-right py-3 px-2">الدخول</th>
-                      <th className="text-right py-3 px-2">الخروج</th>
-                      <th className="text-right py-3 px-2">الساعات</th>
-                      <th className="text-right py-3 px-2">تأخير</th>
-                      <th className="text-right py-3 px-2">انصراف مبكر</th>
-                      <th className="text-right py-3 px-2">الحالة</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">الكود</th>
+                      <th className="erp-th">التاريخ</th>
+                      <th className="erp-th">الدخول</th>
+                      <th className="erp-th">الخروج</th>
+                      <th className="erp-th">الساعات</th>
+                      <th className="erp-th">تأخير</th>
+                      <th className="erp-th">انصراف مبكر</th>
+                      <th className="erp-th">الحالة</th>
                     </tr>
                   </thead>
                   <tbody>
                     {batchResult.records.slice(0, 30).map((rec, i) => (
-                      <tr key={i} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                      <tr key={i} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                         <td className="py-2.5 px-2 font-bold text-xs">{rec.employeeCode}</td>
                         <td className="py-2.5 px-2 font-mono text-xs" dir="ltr">{rec.date}</td>
                         <td className="py-2.5 px-2 font-mono text-xs" dir="ltr">
@@ -444,12 +444,12 @@ export const AttendanceImport: React.FC = () => {
                         <td className="py-2.5 px-2">
                           {rec.lateMinutes > 0
                             ? <span className="text-rose-500 font-bold">{rec.lateMinutes} ط¯</span>
-                            : <span className="text-slate-300">—</span>}
+                            : <span className="text-[var(--color-text-muted)]">—</span>}
                         </td>
                         <td className="py-2.5 px-2">
                           {rec.earlyLeaveMinutes > 0
                             ? <span className="text-amber-500 font-bold">{rec.earlyLeaveMinutes} ط¯</span>
-                            : <span className="text-slate-300">—</span>}
+                            : <span className="text-[var(--color-text-muted)]">—</span>}
                         </td>
                         <td className="py-2.5 px-2">
                           {rec.isAbsent ? <Badge variant="danger">غائب</Badge>
@@ -462,7 +462,7 @@ export const AttendanceImport: React.FC = () => {
                   </tbody>
                 </table>
                 {batchResult.records.length > 30 && (
-                  <p className="text-xs text-slate-400 text-center py-3 font-medium">
+                  <p className="text-xs text-[var(--color-text-muted)] text-center py-3 font-medium">
                     ... وعدد {(batchResult.records.length - 30).toLocaleString('en-US')} سجل إضافي
                   </p>
                 )}
@@ -471,16 +471,16 @@ export const AttendanceImport: React.FC = () => {
           )}
 
           {saveError && (
-            <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4 flex items-center gap-3">
+            <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
               <span className="material-icons-round text-rose-500">error</span>
-              <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{saveError}</p>
+              <p className="text-sm font-bold text-rose-700">{saveError}</p>
             </div>
           )}
 
           {savedCount > 0 && (
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
               <span className="material-icons-round text-emerald-500">check_circle</span>
-              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+              <p className="text-sm font-bold text-emerald-700">
                 تم حفظ {savedCount} سجل بنجاح في قاعدة البيانات.
               </p>
             </div>

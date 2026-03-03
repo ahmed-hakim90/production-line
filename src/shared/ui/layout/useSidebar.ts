@@ -1,22 +1,36 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ALL_MENU_ITEMS, MENU_CONFIG, type MenuItem } from '@/config/menu.config';
 
 const SIDEBAR_COLLAPSE_KEY = 'ui.sidebar.collapsed';
 const BADGE_REFRESH_INTERVAL = 60_000;
 
-export function useSidebar() {
+// ─── Shared Sidebar Context ───────────────────────────────────────────────────
+// Single source of truth — all components share the same collapsed state.
+
+interface SidebarContextValue {
+  collapsed: boolean;
+  toggleCollapse: () => void;
+}
+
+const SidebarContext = createContext<SidebarContextValue>({
+  collapsed: true,
+  toggleCollapse: () => {},
+});
+
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === 'true';
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSE_KEY);
+      return stored === null ? true : stored === 'true';
     } catch {
-      return false;
+      return true;
     }
   });
 
   const toggleCollapse = useCallback(() => {
-    setCollapsed((previous) => {
-      const next = !previous;
+    setCollapsed((prev) => {
+      const next = !prev;
       try {
         localStorage.setItem(SIDEBAR_COLLAPSE_KEY, String(next));
       } catch {
@@ -26,8 +40,18 @@ export function useSidebar() {
     });
   }, []);
 
-  return { collapsed, toggleCollapse };
+  return React.createElement(
+    SidebarContext.Provider,
+    { value: { collapsed, toggleCollapse } },
+    children,
+  );
 }
+
+export function useSidebar(): SidebarContextValue {
+  return useContext(SidebarContext);
+}
+
+// ─── Badge Counts ─────────────────────────────────────────────────────────────
 
 export function useSidebarBadges() {
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -35,9 +59,7 @@ export function useSidebarBadges() {
 
   const refresh = useCallback(async () => {
     const itemsWithBadges = ALL_MENU_ITEMS.filter((item) => item.badgeSource);
-    if (!itemsWithBadges.length) {
-      return;
-    }
+    if (!itemsWithBadges.length) return;
 
     const results = await Promise.allSettled(
       itemsWithBadges.map(async (item) => ({
@@ -46,9 +68,7 @@ export function useSidebarBadges() {
       })),
     );
 
-    if (!mountedRef.current) {
-      return;
-    }
+    if (!mountedRef.current) return;
 
     const nextCounts: Record<string, number> = {};
     results.forEach((result) => {
@@ -56,17 +76,13 @@ export function useSidebarBadges() {
         nextCounts[result.value.key] = result.value.count;
       }
     });
-
     setCounts(nextCounts);
   }, []);
 
   useEffect(() => {
     mountedRef.current = true;
     void refresh();
-    const intervalId = window.setInterval(() => {
-      void refresh();
-    }, BADGE_REFRESH_INTERVAL);
-
+    const intervalId = window.setInterval(() => void refresh(), BADGE_REFRESH_INTERVAL);
     return () => {
       mountedRef.current = false;
       window.clearInterval(intervalId);
@@ -76,6 +92,8 @@ export function useSidebarBadges() {
   return counts;
 }
 
+// ─── Active Route ─────────────────────────────────────────────────────────────
+
 export function useSidebarActiveRoute() {
   const { pathname, search } = useLocation();
 
@@ -83,37 +101,25 @@ export function useSidebarActiveRoute() {
     (item: MenuItem) => {
       if (item.path.includes('?')) {
         const [itemPath, itemQuery = ''] = item.path.split('?');
-        if (pathname !== itemPath) {
-          return false;
-        }
+        if (pathname !== itemPath) return false;
         const currentParams = new URLSearchParams(search);
-        const targetParams = new URLSearchParams(itemQuery);
-        return Array.from(targetParams.entries()).every(([key, value]) => currentParams.get(key) === value);
+        const targetParams  = new URLSearchParams(itemQuery);
+        return Array.from(targetParams.entries()).every(([k, v]) => currentParams.get(k) === v);
       }
-      if (pathname === item.path) {
-        return true;
-      }
-      if (item.activePatterns?.some((pattern) => pathname.startsWith(pattern))) {
-        return true;
-      }
+      if (pathname === item.path) return true;
+      if (item.activePatterns?.some((p) => pathname.startsWith(p))) return true;
       return item.path !== '/' && pathname.startsWith(`${item.path}/`);
     },
     [pathname, search],
   );
 
   const activeGroupKey = useMemo(() => {
-    const activeGroup = MENU_CONFIG.find((group) =>
-      group.children.some((item) => isActiveItem(item)),
-    );
-    return activeGroup?.key ?? null;
+    return MENU_CONFIG.find((g) => g.children.some((i) => isActiveItem(i)))?.key ?? null;
   }, [isActiveItem]);
 
   const isActiveGroup = useCallback(
-    (groupKey: string) => {
-      return MENU_CONFIG.some(
-        (group) => group.key === groupKey && group.children.some((item) => isActiveItem(item)),
-      );
-    },
+    (groupKey: string) =>
+      MENU_CONFIG.some((g) => g.key === groupKey && g.children.some((i) => isActiveItem(i))),
     [isActiveItem],
   );
 

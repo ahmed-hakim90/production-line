@@ -241,6 +241,15 @@ function isValidDate(dateStr: string): boolean {
   );
 }
 
+function isFutureDate(dateStr: string): boolean {
+  if (!isValidDate(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const inputDate = new Date(y, m - 1, d);
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return inputDate.getTime() > todayStart.getTime();
+}
+
 // ─── Main parse function ────────────────────────────────────────────────────
 
 export function parseExcelFile(
@@ -307,6 +316,7 @@ export function parseExcelFile(
             const date = normalizeDate(getValue('date'));
             if (!date) errors.push('التاريخ مفقود');
             else if (!isValidDate(date)) errors.push(`تاريخ غير صالح: ${date}`);
+            else if (isFutureDate(date)) errors.push(`تاريخ مستقبلي غير مسموح: ${date}`);
 
             // ── Line
             const lineName = String(getValue('lineName') ?? '').trim();

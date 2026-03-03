@@ -98,6 +98,7 @@ export interface CreateStockMovementInput {
 }
 
 export type TransferRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export type TransferRequestType = 'transfer' | 'production_entry';
 
 export interface TransferRequestLine {
   itemType: InventoryItemType;
@@ -113,19 +114,28 @@ export interface TransferRequestLine {
 
 export interface InventoryTransferRequest {
   id?: string;
+  requestType?: TransferRequestType;
   fromWarehouseId: string;
   fromWarehouseName?: string;
   toWarehouseId: string;
   toWarehouseName?: string;
   referenceNo: string;
   note?: string;
+  sourceReportId?: string;
   lines: TransferRequestLine[];
   status: TransferRequestStatus;
   createdBy: string;
+  createdByUserId?: string;
   createdAt: string;
   approvedBy?: string;
+  approvedByUserId?: string;
   approvedAt?: string;
   rejectedBy?: string;
+  rejectedByUserId?: string;
   rejectedAt?: string;
   rejectionReason?: string;
+  cancelledBy?: string;
+  cancelledByUserId?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
 }

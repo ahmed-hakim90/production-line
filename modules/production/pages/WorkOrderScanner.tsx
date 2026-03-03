@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, KPIBox } from '../components/UI';
 import { useShallowStore } from '../../../store/useAppStore';
@@ -438,11 +438,11 @@ export const WorkOrderScanner: React.FC = () => {
       <Card className="border-primary/20 bg-primary/5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-black text-slate-800 dark:text-white">ماسح أمر الشغل</h2>
+            <h2 className="text-xl font-bold text-[var(--color-text)]">ماسح أمر الشغل</h2>
             <p className="text-sm text-slate-500">
               {workOrder.workOrderNumber} — {productName} — {lineName}
             </p>
-            <p className="text-xs text-slate-400 mt-1">المشرف: {supervisorName}</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">المشرف: {supervisorName}</p>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={workOrder.status === 'completed' ? 'success' : workOrder.status === 'in_progress' ? 'warning' : 'info'}>
@@ -472,19 +472,19 @@ export const WorkOrderScanner: React.FC = () => {
       </Card>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        <KPIBox label="وحدات مكتملة" value={summary.completedUnits} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" />
-        <KPIBox label="وحدات قيد التشغيل" value={summary.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
-        <KPIBox label="عمالة فعالة" value={summary.activeWorkers} icon="groups" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+        <KPIBox label="وحدات مكتملة" value={summary.completedUnits} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600" />
+        <KPIBox label="وحدات قيد التشغيل" value={summary.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 text-amber-600" />
+        <KPIBox label="عمالة فعالة" value={summary.activeWorkers} icon="groups" colorClass="bg-blue-100 text-blue-600" />
         <KPIBox label="متوسط السيكل تايم" value={summary.avgCycleSeconds} icon="timer" unit="ث" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
-        <KPIBox label={breakCountdown.label} value={breakCountdown.value} icon="free_breakfast" colorClass="bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" />
-        <KPIBox label="متبقي على انتهاء العمل" value={workEndCountdown} icon="event_available" colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
+        <KPIBox label={breakCountdown.label} value={breakCountdown.value} icon="free_breakfast" colorClass="bg-rose-100 text-rose-600" />
+        <KPIBox label="متبقي على انتهاء العمل" value={workEndCountdown} icon="event_available" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
       </div>
 
       <Card>
         {workOrder.status !== 'completed' ? (
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
             <div className="flex-1">
-              <label className="block text-xs font-bold text-slate-500 mb-1">باركود القطعة (Serial)</label>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">باركود القطعة (Serial)</label>
               <input
                 ref={inputRef}
                 type="text"
@@ -495,7 +495,7 @@ export const WorkOrderScanner: React.FC = () => {
                     handleScan(serialInput);
                   }
                 }}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 placeholder="امسح أو أدخل السيريال ثم Enter"
                 autoFocus
                 onBlur={() => {
@@ -529,15 +529,15 @@ export const WorkOrderScanner: React.FC = () => {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                <th className="text-right py-3 px-3">المنتج</th>
-                <th className="text-right py-3 px-3">الباركود</th>
-                <th className="text-right py-3 px-3">الحالة</th>
-                <th className="text-right py-3 px-3">دخول</th>
-                <th className="text-right py-3 px-3">خروج</th>
-                <th className="text-right py-3 px-3">السيكل تايم</th>
-                <th className="text-right py-3 px-3">إجراء</th>
+            <thead className="erp-thead">
+              <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
+                <th className="erp-th">المنتج</th>
+                <th className="erp-th">الباركود</th>
+                <th className="erp-th">الحالة</th>
+                <th className="erp-th">دخول</th>
+                <th className="erp-th">خروج</th>
+                <th className="erp-th">السيكل تايم</th>
+                <th className="erp-th">إجراء</th>
               </tr>
             </thead>
             <tbody>
@@ -547,7 +547,7 @@ export const WorkOrderScanner: React.FC = () => {
                 </tr>
               )}
               {sessions.map((session) => (
-                <tr key={session.sessionId} className="border-b border-slate-50 dark:border-slate-800/50">
+                <tr key={session.sessionId} className="border-b border-[var(--color-border)]">
                   <td className="py-3 px-3 font-bold">{productName}</td>
                   <td className="py-3 px-3 font-mono text-xs">{session.serialBarcode}</td>
                   <td className="py-3 px-3">
@@ -555,11 +555,11 @@ export const WorkOrderScanner: React.FC = () => {
                       {session.status === 'closed' ? 'مكتمل' : 'قيد التشغيل'}
                     </Badge>
                   </td>
-                  <td className="py-3 px-3 text-slate-500 font-mono text-xs">{formatTs(session.inAt)}</td>
-                  <td className="py-3 px-3 text-slate-500 font-mono text-xs">{formatTs(session.outAt)}</td>
+                  <td className="py-3 px-3 text-[var(--color-text-muted)] font-mono text-xs">{formatTs(session.inAt)}</td>
+                  <td className="py-3 px-3 text-[var(--color-text-muted)] font-mono text-xs">{formatTs(session.outAt)}</td>
                   <td className="py-3 px-3 font-mono text-xs font-bold">
                     {session.status === 'open' ? (
-                      <span className="text-amber-600 dark:text-amber-400">
+                      <span className="text-amber-600">
                         {formatElapsed(scanEventService.computeEffectiveCycleSeconds({
                           inAt: session.inAt,
                           outAtMs: timerNow,
@@ -581,7 +581,7 @@ export const WorkOrderScanner: React.FC = () => {
                         type="button"
                         onClick={() => handleDeleteSession(session.sessionId)}
                         disabled={deletingSessionId === session.sessionId}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-60 transition-colors"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-60 transition-colors"
                       >
                         {deletingSessionId === session.sessionId ? (
                           <span className="material-icons-round animate-spin text-sm">refresh</span>
@@ -591,7 +591,7 @@ export const WorkOrderScanner: React.FC = () => {
                         إزالة
                       </button>
                     ) : (
-                      <span className="text-xs text-slate-400 font-bold">—</span>
+                      <span className="text-xs text-[var(--color-text-muted)] font-bold">—</span>
                     )}
                   </td>
                 </tr>
@@ -603,52 +603,52 @@ export const WorkOrderScanner: React.FC = () => {
 
       {closeModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !closeBusy && setCloseModalOpen(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-black mb-1">تأكيد إنهاء أمر الشغل</h3>
-            <p className="text-xs text-slate-500 mb-4">{workOrder.workOrderNumber} — {productName}</p>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold mb-1">تأكيد إنهاء أمر الشغل</h3>
+            <p className="text-xs text-[var(--color-text-muted)] mb-4">{workOrder.workOrderNumber} — {productName}</p>
 
             <div className="space-y-3">
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3">
-                <p className="text-xs text-slate-500 font-bold mb-1">كمية الاسكان الحالية (لحظي)</p>
-                <p className="text-xl font-black text-emerald-600">{formatNumber(summary.completedUnits)}</p>
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/50 p-3">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">كمية الاسكان الحالية (لحظي)</p>
+                <p className="text-xl font-bold text-emerald-600">{formatNumber(summary.completedUnits)}</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">الكمية الفعلية (اختياري)</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الكمية الفعلية (اختياري)</label>
                 <input
                   type="number"
                   min={0}
                   value={closeConfirmedQty}
                   onChange={(e) => setCloseConfirmedQty(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                   placeholder={`${summary.completedUnits || 0}`}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">لو تركتها فارغة سيتم اعتماد آخر كمية من الاسكان.</p>
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">لو تركتها فارغة سيتم اعتماد آخر كمية من الاسكان.</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">عدد العمالة الفعلية</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">عدد العمالة الفعلية</label>
                 <input
                   type="number"
                   min={0}
                   value={closeWorkers}
                   onChange={(e) => setCloseWorkers(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
                   المصدر الافتراضي: {closeWorkersSource === 'line_assignment' ? `ربط العمالة على الخط (${scannerDate})` : 'عدد العمالة بأمر الشغل'} — ويمكنك التعديل يدويًا.
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">ساعات العمل الفعلية</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ساعات العمل الفعلية</label>
                 <input
                   type="number"
                   min={0.5}
                   step={0.5}
                   value={closeWorkHours}
                   onChange={(e) => setCloseWorkHours(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                 />
               </div>
             </div>

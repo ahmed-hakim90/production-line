@@ -14,6 +14,7 @@ import type {
   ApprovalStatus,
 } from '../types';
 import { LEAVE_TYPE_LABELS, DEFAULT_LEAVE_BALANCE } from '../types';
+import { PageHeader } from '../../../components/PageHeader';
 
 // ─── Status helpers ─────────────────────────────────────────────────────────
 
@@ -163,10 +164,10 @@ export const LeaveRequests: React.FC = () => {
     return (
       <div className="space-y-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
+          <div className="h-8 bg-slate-200 rounded w-1/3" />
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-slate-200 dark:bg-slate-700 rounded-xl" />
+              <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)]" />
             ))}
           </div>
         </div>
@@ -177,22 +178,26 @@ export const LeaveRequests: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">
-            إدارة الإجازات
-          </h2>
-          <p className="text-sm text-slate-500 font-medium">
-            طلب إجازة ومتابعة الأرصدة وحالات الموافقة
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {requests.length > 0 && canExportFromPage && (
-            <Button variant={pageControl.exportVariant} onClick={() => {
+      <PageHeader
+        title="إدارة الإجازات"
+        subtitle="طلب إجازة ومتابعة الأرصدة وحالات الموافقة"
+        icon="beach_access"
+        primaryAction={{
+          label: showForm ? 'إغلاق' : 'طلب إجازة',
+          icon: showForm ? 'close' : 'add',
+          onClick: () => setShowForm(!showForm),
+        }}
+        moreActions={[
+          {
+            label: 'تصدير Excel',
+            icon: 'download',
+            group: 'تصدير',
+            hidden: !canExportFromPage || requests.length === 0,
+            onClick: () => {
               const rows = requests.map((r) => ({
                 'الموظف': getEmpName(r.employeeId),
                 'النوع': LEAVE_TYPE_LABELS[r.leaveType],
-                '8&8 ': r.startDate,
+                'من': r.startDate,
                 'إلى': r.endDate,
                 'الأيام': r.totalDays,
                 'تؤثر على الراتب': r.affectsSalary ? 'نعم' : 'لا',
@@ -200,43 +205,36 @@ export const LeaveRequests: React.FC = () => {
                 'السبب': r.reason || '',
               }));
               exportHRData(rows, 'الإجازات', 'إجازات');
-            }}>
-              <span className="material-icons-round text-sm">download</span>
-              تصدير Excel
-            </Button>
-          )}
-          <Button variant="primary" onClick={() => setShowForm(!showForm)}>
-            <span className="material-icons-round text-sm">{showForm ? 'close' : 'add'}</span>
-            {showForm ? 'إغلاق' : 'طلب إجازة'}
-          </Button>
-        </div>
-      </div>
+            },
+          },
+        ]}
+      />
 
       {/* Balance Cards */}
       {balance && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
             <span className="material-icons-round text-blue-500 text-3xl mb-2 block">beach_access</span>
-            <p className="text-xs text-slate-400 font-bold mb-1">سنوية</p>
-            <p className="text-2xl font-black text-blue-600">{balance.annualBalance}</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">سنوية</p>
+            <p className="text-2xl font-bold text-blue-600">{balance.annualBalance}</p>
             <p className="text-xs text-slate-400">يوم</p>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
             <span className="material-icons-round text-rose-500 text-3xl mb-2 block">local_hospital</span>
-            <p className="text-xs text-slate-400 font-bold mb-1">مرضية</p>
-            <p className="text-2xl font-black text-rose-600">{balance.sickBalance}</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مرضية</p>
+            <p className="text-2xl font-bold text-rose-600">{balance.sickBalance}</p>
             <p className="text-xs text-slate-400">يوم</p>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
             <span className="material-icons-round text-amber-500 text-3xl mb-2 block">warning</span>
-            <p className="text-xs text-slate-400 font-bold mb-1">طارئة</p>
-            <p className="text-2xl font-black text-amber-600">{balance.emergencyBalance}</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">طارئة</p>
+            <p className="text-2xl font-bold text-amber-600">{balance.emergencyBalance}</p>
             <p className="text-xs text-slate-400">يوم</p>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-            <span className="material-icons-round text-slate-500 text-3xl mb-2 block">money_off</span>
-            <p className="text-xs text-slate-400 font-bold mb-1">بدون راتب (مأخوذة)</p>
-            <p className="text-2xl font-black text-slate-600">{balance.unpaidTaken}</p>
+          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
+            <span className="material-icons-round text-[var(--color-text-muted)] text-3xl mb-2 block">money_off</span>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بدون راتب (مأخوذة)</p>
+            <p className="text-2xl font-bold text-slate-600">{balance.unpaidTaken}</p>
             <p className="text-xs text-slate-400">يوم</p>
           </div>
         </div>
@@ -247,11 +245,11 @@ export const LeaveRequests: React.FC = () => {
         <Card title="طلب إجازة جديد">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                 نوع الإجازة
               </label>
               <select
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={formLeaveType}
                 onChange={(e) => setFormLeaveType(e.target.value as LeaveType)}
               >
@@ -267,33 +265,33 @@ export const LeaveRequests: React.FC = () => {
                   type="checkbox"
                   checked={formAffects}
                   onChange={(e) => setFormAffects(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary"
                 />
-                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                <span className="text-sm font-bold text-[var(--color-text-muted)]">
                   تؤثر على الراتب
                 </span>
               </label>
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                 تاريخ البداية
               </label>
               <input
                 type="date"
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={formStartDate}
                 onChange={(e) => setFormStartDate(e.target.value)}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                 تاريخ النهاية
               </label>
               <input
                 type="date"
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={formEndDate}
                 onChange={(e) => setFormEndDate(e.target.value)}
                 min={formStartDate}
@@ -301,11 +299,11 @@ export const LeaveRequests: React.FC = () => {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                 السبب
               </label>
               <textarea
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none"
                 rows={3}
                 value={formReason}
                 onChange={(e) => setFormReason(e.target.value)}
@@ -315,9 +313,9 @@ export const LeaveRequests: React.FC = () => {
           </div>
 
           {formDays > 0 && (
-            <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-center gap-3">
+            <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
               <span className="material-icons-round text-blue-500">info</span>
-              <p className="text-sm font-bold text-blue-700 dark:text-blue-400">
+              <p className="text-sm font-bold text-blue-700">
                 مدة الإجازة: {formDays} يوم
               </p>
             </div>
@@ -350,7 +348,7 @@ export const LeaveRequests: React.FC = () => {
           />
         )}
         <select
-          className="border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+          className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value as ApprovalStatus | '')}
         >
@@ -365,7 +363,7 @@ export const LeaveRequests: React.FC = () => {
       <Card>
         {filtered.length === 0 ? (
           <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-slate-300 dark:text-slate-600 mb-3 block">
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">
               event_busy
             </span>
             <p className="text-sm font-bold text-slate-500">لا توجد طلبات إجازة</p>
@@ -373,24 +371,24 @@ export const LeaveRequests: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-bold">
-                  {isHR && <th className="text-right py-3 px-3">الموظف</th>}
-                  <th className="text-right py-3 px-3">النوع</th>
-                  <th className="text-right py-3 px-3">8&8 </th>
-                  <th className="text-right py-3 px-3">إلى</th>
-                  <th className="text-right py-3 px-3">الأيام</th>
-                  <th className="text-right py-3 px-3">تؤثر على الراتب</th>
-                  <th className="text-right py-3 px-3">الحالة</th>
-                  <th className="text-right py-3 px-3">مراحل الموافقة</th>
-                  {canDelete && <th className="text-center py-3 px-3">حذف</th>}
+              <thead className="erp-thead">
+                <tr>
+                  {isHR && <th className="erp-th">الموظف</th>}
+                  <th className="erp-th">النوع</th>
+                  <th className="erp-th">8&8 </th>
+                  <th className="erp-th">إلى</th>
+                  <th className="erp-th">الأيام</th>
+                  <th className="erp-th">تؤثر على الراتب</th>
+                  <th className="erp-th">الحالة</th>
+                  <th className="erp-th">مراحل الموافقة</th>
+                  {canDelete && <th className="erp-th text-center">حذف</th>}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((req) => {
                   const statusCfg = STATUS_CONFIG[req.finalStatus];
                   return (
-                    <tr key={req.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       {isHR && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
                       <td className="py-3 px-3">
                         <Badge variant="info">{LEAVE_TYPE_LABELS[req.leaveType]}</Badge>
@@ -401,7 +399,7 @@ export const LeaveRequests: React.FC = () => {
                       <td className="py-3 px-3">
                         {req.affectsSalary
                           ? <span className="text-rose-500 font-bold">نعم</span>
-                          : <span className="text-slate-400">لا</span>}
+                          : <span className="text-[var(--color-text-muted)]">لا</span>}
                       </td>
                       <td className="py-3 px-3">
                         <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
@@ -417,9 +415,9 @@ export const LeaveRequests: React.FC = () => {
                                 <span
                                   key={i}
                                   className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                                    ${step.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                                      step.status === 'rejected' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' :
-                                      'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+                                    ${step.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                      step.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
+                                      'bg-[#f0f2f5] text-[var(--color-text-muted)]'}`}
                                   title={`مستوى ${step.level} — ${stepCfg.label}`}
                                 >
                                   {step.level}
@@ -433,7 +431,7 @@ export const LeaveRequests: React.FC = () => {
                         <td className="py-3 px-3 text-center">
                           <button
                             onClick={() => setDeleteConfirm(req.id!)}
-                            className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
+                            className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
                             title="حذف الطلب"
                           >
                             <span className="material-icons-round text-lg">delete</span>
@@ -452,11 +450,11 @@ export const LeaveRequests: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
               <span className="material-icons-round text-5xl text-rose-500 mb-2">warning</span>
-              <h3 className="text-lg font-black text-slate-800 dark:text-white mb-2">تأكيد الحذف</h3>
-              <p className="text-sm text-slate-500 mb-4">هل تريد حذف طلب الإجازة نهائياً؟</p>
+              <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">تأكيد الحذف</h3>
+              <p className="text-sm text-[var(--color-text-muted)] mb-4">هل تريد حذف طلب الإجازة نهائياً؟</p>
             </div>
             <div className="flex justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleting}>تراجع</Button>

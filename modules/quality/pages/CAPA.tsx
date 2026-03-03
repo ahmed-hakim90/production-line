@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -112,12 +112,12 @@ export const CAPA: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="erp-page-head">
         <div>
-          <h2 className="text-2xl font-black">CAPA</h2>
-          <p className="text-sm text-slate-500">الإجراءات التصحيحية والوقائية</p>
+          <h2 className="page-title">CAPA</h2>
+          <p className="page-subtitle">الإجراءات التصحيحية والوقائية</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="erp-page-actions">
           <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>طباعة التقرير</Button>
           <Button
             variant="outline"
@@ -152,10 +152,10 @@ export const CAPA: React.FC = () => {
 
       <Card title="إنشاء CAPA">
         {message && (
-          <div className={`mb-3 rounded-lg border px-3 py-2 text-sm font-semibold ${
+          <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
             message.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300'
-              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-300'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60'
+              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60'
           }`}>
             {message.text}
           </div>
@@ -164,7 +164,7 @@ export const CAPA: React.FC = () => {
           <select
             value={form.workOrderId}
             onChange={(e) => setForm((s) => ({ ...s, workOrderId: e.target.value }))}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           >
             <option value="">ربط بأمر شغل (اختياري)</option>
             {workOrders.map((wo) => (
@@ -176,13 +176,13 @@ export const CAPA: React.FC = () => {
             value={form.defectId}
             onChange={(e) => setForm((s) => ({ ...s, defectId: e.target.value }))}
             placeholder="Defect ID (اختياري)"
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           />
 
           <select
             value={form.reasonCode}
             onChange={(e) => setForm((s) => ({ ...s, reasonCode: e.target.value }))}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           >
             <option value="">اختر سبب</option>
             {reasons.map((reason) => (
@@ -193,7 +193,7 @@ export const CAPA: React.FC = () => {
           <select
             value={form.ownerId}
             onChange={(e) => setForm((s) => ({ ...s, ownerId: e.target.value }))}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           >
             <option value="">مسؤول التنفيذ</option>
             {_rawEmployees.map((emp) => (
@@ -205,21 +205,21 @@ export const CAPA: React.FC = () => {
             value={form.title}
             onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
             placeholder="عنوان CAPA"
-            className="md:col-span-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           />
 
           <textarea
             value={form.actionPlan}
             onChange={(e) => setForm((s) => ({ ...s, actionPlan: e.target.value }))}
             placeholder="خطة الإجراء"
-            className="md:col-span-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm min-h-[100px]"
+            className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm min-h-[100px]"
           />
 
           <input
             type="date"
             value={form.dueDate}
             onChange={(e) => setForm((s) => ({ ...s, dueDate: e.target.value }))}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+            className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           />
         </div>
         <div className="mt-4 flex justify-end">
@@ -230,19 +230,19 @@ export const CAPA: React.FC = () => {
       <Card title="متابعة CAPA">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500">
-                <th className="text-right py-2 px-2">Title</th>
-                <th className="text-right py-2 px-2">Reason</th>
-                <th className="text-right py-2 px-2">Work Order</th>
-                <th className="text-right py-2 px-2">Line / Product</th>
-                <th className="text-right py-2 px-2">Owner</th>
-                <th className="text-right py-2 px-2">Status</th>
+            <thead className="erp-thead">
+              <tr className="border-b border-[var(--color-border)] text-slate-500">
+                <th className="erp-th">Title</th>
+                <th className="erp-th">Reason</th>
+                <th className="erp-th">Work Order</th>
+                <th className="erp-th">Line / Product</th>
+                <th className="erp-th">Owner</th>
+                <th className="erp-th">Status</th>
               </tr>
             </thead>
             <tbody>
               {rowsWithContext.map((row) => (
-                <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800">
+                <tr key={row.id} className="border-b border-[var(--color-border)]">
                   <td className="py-2 px-2 font-bold">{row.title}</td>
                   <td className="py-2 px-2">{reasons.find((r) => r.code === row.reasonCode)?.labelAr ?? row.reasonCode}</td>
                   <td className="py-2 px-2">{row.workOrderNumber}</td>
@@ -282,7 +282,7 @@ export const CAPA: React.FC = () => {
                         }
                       }}
                       disabled={!canManageCapa}
-                      className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                      className="px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-card)] text-xs"
                     >
                       {STATUS_OPTIONS.map((status) => (
                         <option key={status} value={status}>{status}</option>

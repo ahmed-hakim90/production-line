@@ -12,9 +12,9 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
 }
 
 const sizeClasses: Record<InputSize, string> = {
-  sm: 'h-9 text-xs px-3',
-  md: 'h-11 text-sm px-4',
-  lg: 'h-12 text-base px-4',
+  sm: 'h-8 text-[12px] px-2.5',
+  md: 'h-9 text-[13px] px-3',
+  lg: 'h-10 text-[13.5px] px-3.5',
 };
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -27,14 +27,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5"
+            className="block text-[11.5px] font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-1.5"
           >
             {label}
           </label>
         )}
         <div className="relative">
           {icon && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 material-icons-round text-slate-400 text-lg pointer-events-none">
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 material-icons-round text-[var(--color-text-muted)] text-[16px] pointer-events-none">
               {icon}
             </span>
           )}
@@ -42,13 +42,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={[
-              'w-full rounded-xl border bg-slate-50 dark:bg-slate-800 font-medium transition-all',
-              'outline-none focus:ring-2 focus:bg-white dark:focus:bg-slate-800',
+              'w-full rounded-[var(--border-radius-base)] border font-medium transition-all',
+              'bg-[#f8f9fa] outline-none',
+              'focus:bg-white focus:ring-2',
               hasError
-                ? 'border-rose-300 dark:border-rose-700 focus:border-rose-500 focus:ring-rose-500/20'
-                : 'border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-primary/20 hover:border-slate-300 dark:hover:border-slate-600',
-              'text-slate-700 dark:text-slate-200 placeholder-slate-400',
-              icon ? 'pr-10' : '',
+                ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/15'
+                : 'border-[var(--color-border)] focus:border-primary focus:ring-primary/12 hover:border-primary/40',
+              'text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
+              icon ? 'pr-9' : '',
               sizeClasses[size],
               className,
             ].filter(Boolean).join(' ')}
@@ -56,13 +57,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           />
         </div>
         {(hint || error) && (
-          <p className={`mt-1.5 text-xs font-medium ${hasError ? 'text-rose-500' : 'text-slate-400'}`}>
+          <p className={`mt-1 text-[11.5px] font-medium ${hasError ? 'text-rose-500' : 'text-[var(--color-text-muted)]'}`}>
             {error || hint}
           </p>
         )}
       </div>
     );
-  }
+  },
 );
 
 Input.displayName = 'Input';

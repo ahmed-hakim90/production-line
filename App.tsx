@@ -19,8 +19,10 @@ import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
 import { registerSystemEventListeners } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
-import { GlobalModalManagerProvider } from './components/modal-manager/GlobalModalManager';
+import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
 import { ModalHost } from './components/modal-manager/ModalHost';
+import { ToastContainer } from './components/Toast';
+import { useJobsStore } from './components/background-jobs/useJobsStore';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 
@@ -117,6 +119,23 @@ const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApprov
   );
 };
 
+const AuthUiStateGuard: React.FC = () => {
+  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const isPendingApproval = useAppStore((s) => s.isPendingApproval);
+  const { resetAllModals } = useGlobalModalManager();
+  const resetJobsUiState = useJobsStore((s) => s.resetUiState);
+
+  useEffect(() => {
+    // On any exit from protected app state, clear global overlays/stateful UI.
+    if (!isAuthenticated || isPendingApproval) {
+      resetAllModals();
+      resetJobsUiState();
+    }
+  }, [isAuthenticated, isPendingApproval, resetAllModals, resetJobsUiState]);
+
+  return null;
+};
+
 const App: React.FC = () => {
   useTenantTheme();
 
@@ -164,12 +183,15 @@ const App: React.FC = () => {
 
   if (loading && !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg, #f0f2f5)' }}>
         <div className="text-center">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary/30 mx-auto mb-4 animate-pulse">
+          <div
+            className="w-16 h-16 rounded-[var(--border-radius-xl)] flex items-center justify-center text-white mx-auto mb-4 animate-pulse"
+            style={{ background: 'rgb(var(--color-primary))', boxShadow: '0 8px 24px rgb(var(--color-primary)/0.3)' }}
+          >
             <span className="material-icons-round text-4xl">factory</span>
           </div>
-          <p className="text-sm text-slate-400 font-bold">جاري التحميل...</p>
+          <p className="text-sm text-[var(--color-text-muted)] font-semibold">جاري التحميل...</p>
         </div>
       </div>
     );
@@ -177,6 +199,7 @@ const App: React.FC = () => {
 
   return (
     <GlobalModalManagerProvider>
+      <AuthUiStateGuard />
       <HashRouter>
         <Routes>
           {AUTH_PUBLIC_ROUTES.map((r) => (
@@ -196,6 +219,7 @@ const App: React.FC = () => {
           <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
         </Routes>
         {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
+        <ToastContainer />
       </HashRouter>
     </GlobalModalManagerProvider>
   );

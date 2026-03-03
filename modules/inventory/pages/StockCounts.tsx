@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
@@ -88,13 +88,13 @@ export const StockCounts: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">جرد المخزون</h2>
-        <p className="text-sm text-slate-500 font-medium">إنشاء جلسات جرد واعتماد فروق الكميات كتسويات تلقائية.</p>
+        <h2 className="page-title">جرد المخزون</h2>
+        <p className="page-subtitle">إنشاء جلسات جرد واعتماد فروق الكميات كتسويات تلقائية.</p>
       </div>
 
       <Card title="فتح جلسة جرد جديدة">
         <div className="flex flex-col sm:flex-row gap-3">
-          <select className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+          <select className="flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
             <option value="">اختر المخزن</option>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
@@ -112,10 +112,10 @@ export const StockCounts: React.FC = () => {
         ) : (
           <div className="space-y-3">
             {sessions.map((session) => (
-              <div key={session.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div key={session.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                <div className="erp-page-head">
                   <div>
-                    <p className="text-sm font-black text-slate-700 dark:text-slate-200">{session.warehouseName}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{session.warehouseName}</p>
                     <p className="text-xs text-slate-400">{new Date(session.createdAt).toLocaleString('ar-EG')}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -138,28 +138,28 @@ export const StockCounts: React.FC = () => {
         <Card title={`جلسة جرد: ${activeSession.warehouseName}`}>
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                  <th className="px-3 py-2 text-xs font-black text-slate-500">الصنف</th>
-                  <th className="px-3 py-2 text-xs font-black text-slate-500 text-center">المتوقع</th>
-                  <th className="px-3 py-2 text-xs font-black text-slate-500 text-center">المعدود</th>
-                  <th className="px-3 py-2 text-xs font-black text-slate-500 text-center">الفرق</th>
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">الصنف</th>
+                  <th className="erp-th text-center">المتوقع</th>
+                  <th className="erp-th text-center">المعدود</th>
+                  <th className="erp-th text-center">الفرق</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-[var(--color-border)]">
                 {activeSession.lines.map((line, idx) => {
                   const diff = Number(line.countedQty || 0) - Number(line.expectedQty || 0);
                   return (
                     <tr key={`${line.itemType}_${line.itemId}`}>
                       <td className="px-3 py-2">
                         <p className="text-sm font-bold">{line.itemName}</p>
-                        <p className="text-xs text-slate-400 font-mono">{line.itemCode}</p>
+                        <p className="text-xs text-[var(--color-text-muted)] font-mono">{line.itemCode}</p>
                       </td>
                       <td className="px-3 py-2 text-center font-bold tabular-nums">{formatNumber(line.expectedQty)}</td>
                       <td className="px-3 py-2 text-center">
                         <input
                           type="number"
-                          className="w-28 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 bg-slate-50 dark:bg-slate-800 text-center"
+                          className="w-28 rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-2 py-1.5 bg-[#f8f9fa] text-center"
                           value={line.countedQty}
                           onChange={(e) => {
                             const countedQty = Number(e.target.value);
@@ -173,7 +173,7 @@ export const StockCounts: React.FC = () => {
                           disabled={activeSession.status === 'approved'}
                         />
                       </td>
-                      <td className={`px-3 py-2 text-center font-black tabular-nums ${diff === 0 ? 'text-slate-500' : diff > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      <td className={`px-3 py-2 text-center font-bold tabular-nums ${diff === 0 ? 'text-slate-500' : diff > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                         {diff > 0 ? '+' : ''}{formatNumber(diff)}
                       </td>
                     </tr>

@@ -14,6 +14,17 @@ import { ProductMaterial } from '../../../types';
 const COLLECTION = 'product_materials';
 
 export const productMaterialService = {
+  async getAll(): Promise<ProductMaterial[]> {
+    if (!isConfigured) return [];
+    try {
+      const snap = await getDocs(collection(db, COLLECTION));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductMaterial));
+    } catch (error) {
+      console.error('productMaterialService.getAll error:', error);
+      throw error;
+    }
+  },
+
   async getByProduct(productId: string): Promise<ProductMaterial[]> {
     if (!isConfigured) return [];
     try {

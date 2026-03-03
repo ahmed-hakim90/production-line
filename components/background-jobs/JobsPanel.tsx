@@ -19,12 +19,12 @@ export const TasksNavButton: React.FC = () => {
         setPanelHidden(false);
         setPanelMinimized(false);
       }}
-      className="relative p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+      className="relative p-2 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] rounded-full transition-colors"
       title="Tasks"
     >
       <span className="material-icons-round">task_alt</span>
       {activeCount > 0 && (
-        <span className="absolute top-1 left-1 min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-white text-[10px] font-black rounded-full border-2 border-white dark:border-slate-900 px-1">
+        <span className="absolute top-1 left-1 min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-white text-[10px] font-bold rounded-full border-2 border-[var(--color-card)] px-1">
           {activeCount > 99 ? '99+' : activeCount}
         </span>
       )}
@@ -57,11 +57,11 @@ export const JobsPanel: React.FC = () => {
           setPanelHidden(false);
           setPanelMinimized(false);
         }}
-        className="fixed bottom-5 left-5 z-50 w-14 h-14 rounded-full shadow-xl bg-primary text-white flex items-center justify-center hover:opacity-95 transition-opacity"
+        className="fixed bottom-5 left-5 z-50 w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center hover:opacity-95 transition-opacity"
         title="Background Imports"
       >
         <span className="material-icons-round">upload_file</span>
-        <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-slate-900">
+        <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-[var(--color-card)]">
           {floatingCount}
         </span>
       </button>
@@ -69,31 +69,34 @@ export const JobsPanel: React.FC = () => {
   }
 
   return (
-    <div className="fixed bottom-5 left-5 z-50 w-[340px] sm:w-[380px] max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
-      <div className="px-3.5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+    <div className="fixed bottom-5 left-5 z-50 w-[340px] sm:w-[380px] max-w-[calc(100vw-1.5rem)] erp-jobs-panel">
+      {/* Panel header */}
+      <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between bg-[#f8f9fa]">
         <div>
-          <p className="text-sm font-black text-slate-800 dark:text-white">Background Imports</p>
-          <p className="text-[11px] font-medium text-slate-400">{activeCount} running jobs</p>
+          <p className="text-[13px] font-bold text-[var(--color-text)]">العمليات الجارية</p>
+          <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+            {activeCount > 0 ? `${activeCount} عملية نشطة` : 'جميع العمليات منتهية'}
+          </p>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={togglePanelMinimized}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            title="Minimize"
+            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors"
+            title="تصغير"
           >
-            <span className="material-icons-round text-base">remove</span>
+            <span className="material-icons-round text-[18px]">remove</span>
           </button>
           <button
             onClick={() => setPanelHidden(true)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            title="Close"
+            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors"
+            title="إغلاق"
           >
-            <span className="material-icons-round text-base">close</span>
+            <span className="material-icons-round text-[18px]">close</span>
           </button>
         </div>
       </div>
 
-      <div className="max-h-[55vh] overflow-y-auto p-3 space-y-2.5">
+      <div className="max-h-[55vh] overflow-y-auto p-3 space-y-2">
         {jobs.map((job) => (
           <JobCard
             key={job.id}

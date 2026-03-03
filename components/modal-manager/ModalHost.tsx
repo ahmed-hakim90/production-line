@@ -8,6 +8,7 @@ import { GlobalCreateLineModal } from './modals/GlobalCreateLineModal';
 import { GlobalCreateWarehouseModal } from './modals/GlobalCreateWarehouseModal';
 import { GlobalCreateRawMaterialModal } from './modals/GlobalCreateRawMaterialModal';
 import { GlobalImportInventoryInByCodeModal } from './modals/GlobalImportInventoryInByCodeModal';
+import { GlobalImportProductionPlansModal } from './modals/GlobalImportProductionPlansModal';
 
 /**
  * Central host for modal UX layer.
@@ -24,6 +25,7 @@ export const ModalHost: React.FC = () => {
       <GlobalCreateProductModal />
       <GlobalCreateLineModal />
       <GlobalImportInventoryInByCodeModal />
+      <GlobalImportProductionPlansModal />
       <GlobalCreateWarehouseModal />
       <GlobalCreateRawMaterialModal />
     </>

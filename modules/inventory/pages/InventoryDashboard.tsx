@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, KPIBox, Button, Badge } from '../components/UI';
 import { stockService } from '../services/stockService';
@@ -43,10 +43,10 @@ export const InventoryDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="erp-page-head">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">لوحة المخازن</h2>
-          <p className="text-sm text-slate-500 font-medium">متابعة فورية للأرصدة والحركات والجرد.</p>
+          <h2 className="page-title">لوحة المخازن</h2>
+          <p className="page-subtitle">متابعة فورية للأرصدة والحركات والجرد.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Link to="/inventory/movements"><Button variant="primary"><span className="material-icons-round text-sm">add</span>حركة مخزون</Button></Link>
@@ -70,16 +70,16 @@ export const InventoryDashboard: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {transactions.map((tx) => (
-                <div key={tx.id} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2">
+                <div key={tx.id} className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                   <div>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{tx.itemName}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{tx.itemName}</p>
                     <p className="text-xs text-slate-400">{new Date(tx.createdAt).toLocaleString('ar-EG')}</p>
                   </div>
                   <div className="text-left">
                     <Badge variant={tx.quantity >= 0 ? 'success' : 'danger'}>
                       {tx.quantity >= 0 ? `+${formatNumber(tx.quantity)}` : formatNumber(tx.quantity)}
                     </Badge>
-                    <p className="text-xs text-slate-400 mt-1">{tx.movementType}</p>
+                    <p className="text-xs text-[var(--color-text-muted)] mt-1">{tx.movementType}</p>
                   </div>
                 </div>
               ))}
@@ -93,12 +93,12 @@ export const InventoryDashboard: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {lowItems.slice(0, 12).map((row) => (
-                <div key={row.id} className="flex items-center justify-between rounded-xl bg-amber-50 dark:bg-amber-900/10 px-3 py-2 border border-amber-100 dark:border-amber-800">
+                <div key={row.id} className="flex items-center justify-between rounded-[var(--border-radius-lg)] bg-amber-50 dark:bg-amber-900/10 px-3 py-2 border border-amber-100">
                   <div>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{row.itemName}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{row.itemName}</p>
                     <p className="text-xs text-slate-500">{row.itemType === 'finished_good' ? 'منتج نهائي' : 'مادة خام'}</p>
                   </div>
-                  <div className="text-left text-sm font-bold text-amber-700 dark:text-amber-300">
+                  <div className="text-left text-sm font-bold text-amber-700">
                     {formatNumber(row.quantity)} / {formatNumber(row.minStock)}
                   </div>
                 </div>

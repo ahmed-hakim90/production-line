@@ -37,11 +37,19 @@ const ALL_COLLECTIONS = [
   // Work orders & notifications
   'work_orders',
   'notifications',
+  'scan_events',
   // Product cost & materials
   'product_materials',
   'monthly_production_costs',
   // Line worker assignments
   'line_worker_assignments',
+  // Inventory collections
+  'warehouses',
+  'raw_materials',
+  'stock_items',
+  'stock_transactions',
+  'stock_counts',
+  'inventory_transfer_requests',
   // Cost management
   'cost_centers',
   'cost_center_values',
@@ -52,6 +60,7 @@ const ALL_COLLECTIONS = [
   'users',
   'system_settings',
   'activity_logs',
+  'audit_logs',
   // HR collections
   'departments',
   'job_positions',

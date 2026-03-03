@@ -1,4 +1,4 @@
-
+﻿
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
@@ -549,12 +549,12 @@ export const LineDetails: React.FC = () => {
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-3 text-sm" dir="rtl">
-        <p className="font-bold text-slate-600 dark:text-slate-300 mb-1">{label}</p>
+      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm" dir="rtl">
+        <p className="font-bold text-[var(--color-text-muted)] mb-1">{label}</p>
         {payload.map((entry: any, i: number) => (
           <div key={i} className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
-            <span className="text-slate-500">{entry.name}:</span>
+            <span className="text-[var(--color-text-muted)]">{entry.name}:</span>
             <span className="font-bold">{typeof entry.value === 'number' && entry.value > 100 ? formatNumber(entry.value) : entry.value}</span>
           </div>
         ))}
@@ -598,10 +598,10 @@ export const LineDetails: React.FC = () => {
           {alerts.filter((a) => a.type !== 'info').map((alert, i) => (
             <div
               key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400'
-                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
+                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
+                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
               }`}
             >
               <span className="material-icons-round text-lg">{alert.icon}</span>
@@ -616,13 +616,13 @@ export const LineDetails: React.FC = () => {
         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
           <button
             onClick={() => navigate('/lines')}
-            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all shrink-0 mt-1 sm:mt-0"
+            className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all shrink-0 mt-1 sm:mt-0"
           >
             <span className="material-icons-round">arrow_forward</span>
           </button>
           <div className="min-w-0">
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white truncate">
+              <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] truncate">
                 {line?.name}
               </h2>
               <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
@@ -630,13 +630,13 @@ export const LineDetails: React.FC = () => {
               </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-              <span className="text-xs sm:text-sm text-slate-400 font-medium flex items-center gap-1">
+              <span className="text-xs sm:text-sm text-[var(--color-text-muted)] font-medium flex items-center gap-1">
                 <span className="material-icons-round text-xs">person</span>
-                الموظف: <strong className="text-slate-600 dark:text-slate-300">{line?.employeeName}</strong>
+                الموظف: <strong className="text-slate-600">{line?.employeeName}</strong>
               </span>
               {rawLine && (
                 <>
-                  <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
+                  <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
                   <span className="text-xs sm:text-sm text-slate-400">
                     {rawLine.dailyWorkingHours} ساعة · {rawLine.maxWorkers} عامل
                   </span>
@@ -644,8 +644,8 @@ export const LineDetails: React.FC = () => {
               )}
               {activePlanProduct && (
                 <>
-                  <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
-                  <span className="text-xs sm:text-sm text-slate-400 flex items-center gap-1">
+                  <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
+                  <span className="text-xs sm:text-sm text-[var(--color-text-muted)] flex items-center gap-1">
                     <span className="material-icons-round text-xs">event_note</span>
                     الخطة: <strong className="text-primary">{activePlanProduct}</strong>
                   </span>
@@ -655,14 +655,14 @@ export const LineDetails: React.FC = () => {
             {activePlan && (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
                 {plannedEndDate && (
-                  <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                  <span className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1">
                     <span className="material-icons-round text-xs">event</span>
-                    الانتهاء المتوقع: <strong className="text-slate-600 dark:text-slate-300">{plannedEndDate}</strong>
+                    الانتهاء المتوقع: <strong className="text-slate-600">{plannedEndDate}</strong>
                   </span>
                 )}
-                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                <span className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1">
                   <span className="material-icons-round text-xs">inventory</span>
-                  المتبقي: <strong className="text-slate-600 dark:text-slate-300">{formatNumber(remainingQty)}</strong> وحدة
+                  المتبقي: <strong className="text-slate-600">{formatNumber(remainingQty)}</strong> وحدة
                 </span>
               </div>
             )}
@@ -671,16 +671,14 @@ export const LineDetails: React.FC = () => {
       </div>
 
       <div className="flex items-center justify-end">
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+        <div className="erp-date-seg">
           {PERIOD_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => setPeriod(opt.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              className={`erp-date-seg-btn${
                 period === opt.value
-                  ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+                  ? ' active' : ''}`}
             >
               {opt.label}
             </button>
@@ -695,7 +693,7 @@ export const LineDetails: React.FC = () => {
           value={formatNumber(totalProduced)}
           unit={activePlan ? `/ ${formatNumber(activePlan.plannedQuantity)}` : 'وحدة'}
           icon="inventory"
-          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
+          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20"
           trend={activePlan ? `${planProgress}% من الهدف` : undefined}
           trendUp={planProgress >= 50}
         />
@@ -705,10 +703,10 @@ export const LineDetails: React.FC = () => {
           icon="fact_check"
           colorClass={
             planProgress >= 80
-              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
+              ? 'bg-emerald-50 text-emerald-600'
               : planProgress >= 50
-              ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              ? 'bg-amber-50 text-amber-600'
+              : 'bg-[#f0f2f5] text-[var(--color-text-muted)]'
           }
           trend={activePlan ? `${formatNumber(planActualProduced)} من ${formatNumber(activePlan.plannedQuantity)}` : 'لا توجد خطة'}
           trendUp={planProgress >= 50}
@@ -719,10 +717,10 @@ export const LineDetails: React.FC = () => {
           icon="bolt"
           colorClass={
             efficiency >= 90
-              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
+              ? 'bg-emerald-50 text-emerald-600'
               : efficiency >= 70
-              ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-              : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'
+              ? 'bg-amber-50 text-amber-600'
+              : 'bg-rose-50 text-rose-600'
           }
           trend={efficiency >= 90 ? 'ممتاز' : efficiency >= 70 ? 'جيد' : standardTime > 0 ? 'يحتاج تحسين' : undefined}
           trendUp={efficiency >= 70}
@@ -741,7 +739,7 @@ export const LineDetails: React.FC = () => {
           value={formatNumber(totalHours)}
           unit="ساعة"
           icon="schedule"
-          colorClass="bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400"
+          colorClass="bg-amber-50 text-amber-600"
           trend={`${uniqueDays} يوم عمل`}
           trendUp
         />
@@ -751,10 +749,10 @@ export const LineDetails: React.FC = () => {
           icon="delete_sweep"
           colorClass={
             wasteRatio <= 2
-              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
+              ? 'bg-emerald-50 text-emerald-600'
               : wasteRatio <= 5
-              ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-              : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'
+              ? 'bg-amber-50 text-amber-600'
+              : 'bg-rose-50 text-rose-600'
           }
           trend={`${formatNumber(totalWaste)} وحدة هالك`}
           trendUp={wasteRatio <= alertCfg.wasteThreshold}
@@ -765,10 +763,10 @@ export const LineDetails: React.FC = () => {
           icon="speed"
           colorClass={
             utilization >= 80
-              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
+              ? 'bg-emerald-50 text-emerald-600'
               : utilization >= 50
-              ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              ? 'bg-amber-50 text-amber-600'
+              : 'bg-[#f0f2f5] text-[var(--color-text-muted)]'
           }
           trend="ساعات فعلية / متاحة"
           trendUp={utilization >= 50}
@@ -795,51 +793,51 @@ export const LineDetails: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
+            <div className="rounded-[var(--border-radius-lg)] border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
               <p className="text-xs text-slate-500">إجمالي شهري موزع</p>
-              <p className="text-xl font-black text-violet-700 dark:text-violet-300">
+              <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
                 {lineAllocatedCosts.totalMonthlyAllocated > 0 ? formatCost(lineAllocatedCosts.totalMonthlyAllocated) : '—'}
               </p>
             </div>
-            <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
+            <div className="rounded-[var(--border-radius-lg)] border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
               <p className="text-xs text-slate-500">موزع يومي</p>
-              <p className="text-xl font-black text-violet-700 dark:text-violet-300">
+              <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
                 {lineAllocatedCosts.totalDailyAllocated > 0 ? formatCost(lineAllocatedCosts.totalDailyAllocated) : '—'}
               </p>
             </div>
-            <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
+            <div className="rounded-[var(--border-radius-lg)] border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
               <p className="text-xs text-slate-500">عدد مراكز التكلفة</p>
-              <p className="text-xl font-black text-violet-700 dark:text-violet-300">
+              <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
                 {lineAllocatedCosts.centers.length}
               </p>
             </div>
           </div>
 
           {lineAllocatedCosts.centers.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
               <table className="w-full text-right text-sm">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500">مركز التكلفة</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500 text-center">نسبة التوزيع</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500 text-center">المبلغ الشهري</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500 text-center">المبلغ اليومي</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">مركز التكلفة</th>
+                    <th className="erp-th text-center">نسبة التوزيع</th>
+                    <th className="erp-th text-center">المبلغ الشهري</th>
+                    <th className="erp-th text-center">المبلغ اليومي</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-[var(--color-border)]">
                   {lineAllocatedCosts.centers.map((center) => (
                     <tr key={center.costCenterId}>
-                      <td className="px-4 py-2.5 font-bold text-slate-700 dark:text-slate-200">{center.costCenterName}</td>
+                      <td className="px-4 py-2.5 font-bold text-[var(--color-text)]">{center.costCenterName}</td>
                       <td className="px-4 py-2.5 text-center font-bold text-violet-600">{formatNumber(center.percentage)}%</td>
                       <td className="px-4 py-2.5 text-center font-bold">{formatCost(center.monthlyAllocated)}</td>
-                      <td className="px-4 py-2.5 text-center font-bold text-slate-600 dark:text-slate-300">{formatCost(center.dailyAllocated)}</td>
+                      <td className="px-4 py-2.5 text-center font-bold text-[var(--color-text-muted)]">{formatCost(center.dailyAllocated)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 px-4 py-5 text-center text-sm font-medium text-slate-500">
+            <div className="rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] px-4 py-5 text-center text-sm font-medium text-slate-500">
               لا توجد توزيعات تكلفة غير مباشرة على هذا الخط خلال الشهر الحالي.
             </div>
           )}
@@ -853,33 +851,33 @@ export const LineDetails: React.FC = () => {
               <span className="material-icons-round text-emerald-500">manage_accounts</span>
               <h3 className="text-lg font-bold">تكلفة المشرف اليومية</h3>
             </div>
-            <span className="text-xs text-slate-500 font-bold">
+            <span className="text-xs text-[var(--color-text-muted)] font-bold">
               المعادلة: ساعات المشرف × أجر الساعة
             </span>
           </div>
 
           {dailySupervisorCostRows.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
               <table className="w-full text-right text-sm">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500">التاريخ</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500">المشرف</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500 text-center">ساعات الإشراف</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500 text-center">إنتاج اليوم</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500 text-center">تكلفة المشرف</th>
-                    <th className="px-4 py-2.5 text-xs font-black text-slate-500 text-center">تكلفة مشرف/وحدة</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">التاريخ</th>
+                    <th className="erp-th">المشرف</th>
+                    <th className="erp-th text-center">ساعات الإشراف</th>
+                    <th className="erp-th text-center">إنتاج اليوم</th>
+                    <th className="erp-th text-center">تكلفة المشرف</th>
+                    <th className="erp-th text-center">تكلفة مشرف/وحدة</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-[var(--color-border)]">
                   {dailySupervisorCostRows.map((row) => (
                     <tr key={row.date}>
-                      <td className="px-4 py-2.5 font-bold text-slate-700 dark:text-slate-200">{row.date}</td>
-                      <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">{row.supervisorsText}</td>
+                      <td className="px-4 py-2.5 font-bold text-[var(--color-text)]">{row.date}</td>
+                      <td className="px-4 py-2.5 text-[var(--color-text-muted)]">{row.supervisorsText}</td>
                       <td className="px-4 py-2.5 text-center font-bold">{formatNumber(row.totalHours)}</td>
                       <td className="px-4 py-2.5 text-center font-bold">{formatNumber(row.produced)}</td>
-                      <td className="px-4 py-2.5 text-center font-black text-emerald-600">{formatCost(row.totalCost)}</td>
-                      <td className="px-4 py-2.5 text-center font-bold text-slate-700 dark:text-slate-200">
+                      <td className="px-4 py-2.5 text-center font-bold text-emerald-600">{formatCost(row.totalCost)}</td>
+                      <td className="px-4 py-2.5 text-center font-bold text-[var(--color-text)]">
                         {row.supervisorCostPerUnit > 0 ? formatCost(row.supervisorCostPerUnit) : '—'}
                       </td>
                     </tr>
@@ -888,7 +886,7 @@ export const LineDetails: React.FC = () => {
               </table>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 px-4 py-5 text-center text-sm font-medium text-slate-500">
+            <div className="rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] px-4 py-5 text-center text-sm font-medium text-slate-500">
               لا توجد تقارير كافية لحساب تكلفة المشرف على هذا الخط.
             </div>
           )}
@@ -908,22 +906,22 @@ export const LineDetails: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {/* Elapsed time ratio */}
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-2">نسبة الوقت المنقضي</p>
-              <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-1.5">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">نسبة الوقت المنقضي</p>
+              <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden mb-1.5">
                 <div
                   className="h-full bg-blue-500 rounded-full transition-all"
                   style={{ width: `${planHealth.elapsedRatio}%` }}
                 ></div>
               </div>
-              <p className="text-lg font-black text-slate-700 dark:text-slate-200">{planHealth.elapsedRatio}%</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+              <p className="text-lg font-bold text-[var(--color-text)]">{planHealth.elapsedRatio}%</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
                 {planHealth.elapsedDays} من {planHealth.estimatedTotalDays} يوم
               </p>
             </div>
             {/* Completion ratio */}
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-2">نسبة الإنجاز</p>
-              <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-1.5">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">نسبة الإنجاز</p>
+              <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden mb-1.5">
                 <div
                   className={`h-full rounded-full transition-all ${
                     planHealth.completionRatio >= planHealth.elapsedRatio ? 'bg-emerald-500' : 'bg-amber-500'
@@ -931,26 +929,26 @@ export const LineDetails: React.FC = () => {
                   style={{ width: `${planHealth.completionRatio}%` }}
                 ></div>
               </div>
-              <p className="text-lg font-black text-slate-700 dark:text-slate-200">{planHealth.completionRatio}%</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+              <p className="text-lg font-bold text-[var(--color-text)]">{planHealth.completionRatio}%</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
                 {formatNumber(planActualProduced)} من {formatNumber(activePlan.plannedQuantity)}
               </p>
             </div>
             {/* Delay days */}
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-2">أيام التأخير</p>
-              <p className={`text-3xl font-black mt-1 ${planHealth.delayDays > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">أيام التأخير</p>
+              <p className={`text-3xl font-bold mt-1 ${planHealth.delayDays > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                 {planHealth.delayDays}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">
+              <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
                 {planHealth.delayDays > 0 ? 'يوم تأخير عن الموعد' : 'في الموعد المحدد'}
               </p>
             </div>
             {/* Health status */}
             <div>
-              <p className="text-xs text-slate-400 font-bold mb-2">الحالة الصحية</p>
-              <p className={`text-xl font-black mt-1 ${healthCfg.color}`}>{healthCfg.label}</p>
-              <p className="text-[10px] text-slate-400 mt-1">{healthCfg.desc}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">الحالة الصحية</p>
+              <p className={`text-xl font-bold mt-1 ${healthCfg.color}`}>{healthCfg.label}</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{healthCfg.desc}</p>
             </div>
           </div>
         </Card>
@@ -968,10 +966,10 @@ export const LineDetails: React.FC = () => {
               <button
                 key={tab.key}
                 onClick={() => setChartTab(tab.key)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
                   chartTab === tab.key
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    ? 'bg-primary text-white shadow-primary/20'
+                    : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
                 }`}
               >
                 <span className="material-icons-round text-sm">{tab.icon}</span>
@@ -1052,45 +1050,45 @@ export const LineDetails: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div className="text-center">
-            <p className="text-xs text-slate-400 font-bold mb-1">الطاقة اليومية</p>
-            <p className="text-2xl font-black text-primary">
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الطاقة اليومية</p>
+            <p className="text-2xl font-bold text-primary">
               {dailyCapacity > 0 ? formatNumber(dailyCapacity) : '—'}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">وحدة/يوم</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">وحدة/يوم</p>
           </div>
           <div className="text-center">
-            <p className="text-xs text-slate-400 font-bold mb-1">الحمل الحالي</p>
-            <p className={`text-2xl font-black ${
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الحمل الحالي</p>
+            <p className={`text-2xl font-bold ${
               currentLoadPercent >= 80 ? 'text-emerald-500' : currentLoadPercent >= 40 ? 'text-amber-500' : 'text-slate-400'
             }`}>
               {dailyCapacity > 0 ? `${currentLoadPercent}%` : '—'}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">{formatNumber(todayProduced)} وحدة اليوم</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{formatNumber(todayProduced)} وحدة اليوم</p>
           </div>
           <div className="text-center">
-            <p className="text-xs text-slate-400 font-bold mb-1">نسبة الاستخدام</p>
-            <p className={`text-2xl font-black ${
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نسبة الاستخدام</p>
+            <p className={`text-2xl font-bold ${
               utilization >= 80 ? 'text-emerald-500' : utilization >= 50 ? 'text-amber-500' : 'text-slate-400'
             }`}>
               {utilization}%
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">ساعات فعلية / متاحة</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">ساعات فعلية / متاحة</p>
           </div>
           <div className="text-center">
-            <p className="text-xs text-slate-400 font-bold mb-1">الأيام المتبقية</p>
-            <p className="text-2xl font-black text-violet-500">
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الأيام المتبقية</p>
+            <p className="text-2xl font-bold text-violet-500">
               {activePlan && remainingDays > 0 ? remainingDays : '—'}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
               {activePlan ? 'لإنهاء الخطة الحالية' : 'لا توجد خطة نشطة'}
             </p>
           </div>
         </div>
         {dailyCapacity > 0 && (
-          <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
             <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-400 font-bold shrink-0">حمل اليوم</span>
-              <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+              <span className="text-xs text-[var(--color-text-muted)] font-bold shrink-0">حمل اليوم</span>
+              <div className="flex-1 h-3 bg-[#f0f2f5] rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${
                     currentLoadPercent >= 80 ? 'bg-emerald-500' : currentLoadPercent >= 40 ? 'bg-amber-500' : 'bg-slate-300'
@@ -1098,7 +1096,7 @@ export const LineDetails: React.FC = () => {
                   style={{ width: `${Math.min(currentLoadPercent, 100)}%` }}
                 ></div>
               </div>
-              <span className="text-xs font-black text-slate-600 dark:text-slate-300 w-12 text-left">
+              <span className="text-xs font-bold text-[var(--color-text-muted)] w-12 text-left">
                 {currentLoadPercent}%
               </span>
             </div>
@@ -1116,12 +1114,12 @@ export const LineDetails: React.FC = () => {
           {alerts.map((alert, i) => (
             <div
               key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400'
+                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
                   : alert.type === 'warning'
-                  ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
-                  : 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400'
+                  ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
+                  : 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 text-blue-700'
               }`}
             >
               <span className="material-icons-round text-lg">{alert.icon}</span>
@@ -1133,13 +1131,13 @@ export const LineDetails: React.FC = () => {
 
       {/* ── Active Work Orders ──────────────────────────────────────────── */}
       {can('workOrders.view') && lineWorkOrders.length > 0 && (
-        <Card className="!p-0 border-none overflow-hidden shadow-xl shadow-slate-200/50" title="">
-          <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+        <Card className="!p-0 border-none overflow-hidden " title="">
+          <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
             <span className="material-icons-round text-primary">assignment</span>
             <h3 className="text-lg font-bold">أوامر الشغل النشطة</h3>
             <Badge variant="info">{lineWorkOrders.length}</Badge>
           </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="divide-y divide-[var(--color-border)]">
             {lineWorkOrders.map((wo) => {
               const product = _rawProducts.find((p) => p.id === wo.productId);
               const supervisor = employees.find((e) => e.id === wo.supervisorId);
@@ -1153,22 +1151,22 @@ export const LineDetails: React.FC = () => {
                         {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'}
                       </Badge>
                     </div>
-                    <p className="text-sm font-bold text-slate-800 dark:text-white">{product?.name ?? '—'}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
                     <p className="text-xs text-slate-500">المشرف: {supervisor?.name ?? '—'} · الحد الأقصى: {wo.maxWorkers} عامل · التسليم: {wo.targetDate}</p>
                   </div>
                   <div className="sm:w-48 space-y-1">
                     <div className="flex justify-between text-xs font-bold">
-                      <span className="text-slate-500">{formatNumber(wo.producedQuantity)} / {formatNumber(wo.quantity)}</span>
+                      <span className="text-[var(--color-text-muted)]">{formatNumber(wo.producedQuantity)} / {formatNumber(wo.quantity)}</span>
                       <span className="text-primary">{prog.toFixed(0)}%</span>
                     </div>
-                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${prog >= 100 ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${prog}%` }} />
                     </div>
                   </div>
                   {can('workOrders.viewCost') && (
                     <div className="sm:w-32 text-left">
-                      <p className="text-[10px] text-slate-400 font-bold">التكلفة</p>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{formatCost(wo.actualCost)}</p>
+                      <p className="text-[10px] text-[var(--color-text-muted)] font-bold">التكلفة</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{formatCost(wo.actualCost)}</p>
                       <p className="text-[10px] text-slate-400">مقدرة: {formatCost(wo.estimatedCost)}</p>
                     </div>
                   )}
@@ -1180,23 +1178,23 @@ export const LineDetails: React.FC = () => {
       )}
 
       {/* ── Reports Table ─────────────────────────────────────────────────── */}
-      <Card className="!p-0 border-none overflow-hidden shadow-xl shadow-slate-200/50" title="">
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+      <Card className="!p-0 border-none overflow-hidden " title="">
+        <div className="px-6 py-4 border-b border-[var(--color-border)]">
           <h3 className="text-lg font-bold">سجل التقارير</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-right border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">التاريخ</th>
-                <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em]">المنتج</th>
-                <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الكمية</th>
-                <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">الهالك</th>
-                <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">عمال</th>
-                <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-[0.15em] text-center">ساعات</th>
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th">التاريخ</th>
+                <th className="erp-th">المنتج</th>
+                <th className="erp-th text-center">الكمية</th>
+                <th className="erp-th text-center">الهالك</th>
+                <th className="erp-th text-center">عمال</th>
+                <th className="erp-th text-center">ساعات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-[var(--color-border)]">
               {periodReports.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
@@ -1208,10 +1206,10 @@ export const LineDetails: React.FC = () => {
                 const productName = _rawProducts.find((p) => p.id === r.productId)?.name ?? '—';
                 return (
                   <tr key={r.id}>
-                    <td className="px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-300">{r.date}</td>
+                    <td className="px-5 py-3 text-sm font-bold text-[var(--color-text)]">{r.date}</td>
                     <td className="px-5 py-3 text-sm font-medium">{productName}</td>
                     <td className="px-5 py-3 text-center">
-                      <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-sm font-black ring-1 ring-emerald-500/20">
+                      <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 text-sm font-bold ring-1 ring-emerald-500/20">
                         {formatNumber(r.quantityProduced)}
                       </span>
                     </td>
@@ -1219,7 +1217,7 @@ export const LineDetails: React.FC = () => {
                     <td className="px-5 py-3 text-center text-sm font-bold">
                       <button
                         onClick={() => handleViewWorkers(r.date)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--border-radius-base)] hover:bg-primary/10 text-primary transition-colors"
                         title="عرض العمالة"
                       >
                         {r.workersCount}
@@ -1234,8 +1232,8 @@ export const LineDetails: React.FC = () => {
           </table>
         </div>
         {periodReports.length > 0 && (
-          <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800">
-            <span className="text-sm text-slate-500 font-bold">
+          <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)]">
+            <span className="text-sm text-[var(--color-text-muted)] font-bold">
               إجمالي <span className="text-primary">{periodReports.length}</span> تقرير
             </span>
           </div>
@@ -1245,14 +1243,14 @@ export const LineDetails: React.FC = () => {
       {/* View Workers Modal */}
       {viewWorkersData && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewWorkersData(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] border border-slate-200 dark:border-slate-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-md max-h-[90dvh] flex flex-col border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">groups</span>
                 <h3 className="font-bold">عمالة {line?.name ?? ''}</h3>
-                <span className="text-xs text-slate-400 font-medium">{viewWorkersData.date}</span>
+                <span className="text-xs text-[var(--color-text-muted)] font-medium">{viewWorkersData.date}</span>
               </div>
-              <button onClick={() => setViewWorkersData(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setViewWorkersData(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -1264,23 +1262,23 @@ export const LineDetails: React.FC = () => {
                 </div>
               ) : viewWorkersData.workers.length === 0 ? (
                 <div className="text-center py-8">
-                  <span className="material-icons-round text-4xl text-slate-300 dark:text-slate-700 block mb-2">person_off</span>
-                  <p className="text-sm text-slate-500 font-medium">لا يوجد عمالة مسجلة على هذا الخط في هذا اليوم</p>
+                  <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] block mb-2">person_off</span>
+                  <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمالة مسجلة على هذا الخط في هذا اليوم</p>
                 </div>
               ) : (
                 <>
-                  <div className="mb-3 px-3 py-2 bg-primary/5 rounded-xl text-center">
+                  <div className="mb-3 px-3 py-2 bg-primary/5 rounded-[var(--border-radius-lg)] text-center">
                     <span className="text-sm font-bold text-primary">{viewWorkersData.workers.length} عامل</span>
                   </div>
-                  <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                  <div className="divide-y divide-slate-50">
                     {viewWorkersData.workers.map((w, i) => (
                       <div key={w.id || i} className="flex items-center gap-3 py-2.5">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                           <span className="material-icons-round text-primary text-sm">person</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{w.employeeName}</p>
-                          <p className="text-xs text-slate-400 font-mono">{w.employeeCode}</p>
+                          <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
+                          <p className="text-xs text-[var(--color-text-muted)] font-mono">{w.employeeCode}</p>
                         </div>
                       </div>
                     ))}

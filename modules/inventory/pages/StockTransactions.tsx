@@ -12,6 +12,7 @@ import { useManagedPrint } from '../../../utils/printManager';
 import { useAppStore } from '../../../store/useAppStore';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
+import { PageHeader } from '../../../components/PageHeader';
 
 const movementLabel: Record<string, string> = {
   IN: 'وارد',
@@ -456,34 +457,34 @@ export const StockTransactions: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">سجل حركات المخزون</h2>
-          <p className="text-sm text-slate-500 font-medium">تتبع كامل لكل حركة على المنتجات والخامات.</p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => exportExcel(effectiveExportRows)}
-          disabled={!can('inventory.transactions.export') || effectiveExportRows.length === 0}
-        >
-          <span className="material-icons-round text-sm">download</span>
-          تصدير Excel
-        </Button>
-      </div>
+      <PageHeader
+        title="سجل حركات المخزون"
+        subtitle="تتبع كامل لكل حركة على المنتجات والخامات"
+        icon="swap_horiz"
+        moreActions={[
+          {
+            label: 'تصدير Excel',
+            icon: 'download',
+            group: 'تصدير',
+            hidden: !can('inventory.transactions.export') || effectiveExportRows.length === 0,
+            onClick: () => exportExcel(effectiveExportRows),
+          },
+        ]}
+      />
 
       <Card className="!p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
-            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
+            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
             placeholder="بحث بالاسم أو الكود"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800" value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
+          <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
             <option value="">كل المخازن</option>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
-          <select className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800" value={movementFilter} onChange={(e) => setMovementFilter(e.target.value)}>
+          <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={movementFilter} onChange={(e) => setMovementFilter(e.target.value)}>
             <option value="">كل أنواع الحركة</option>
             <option value="IN">وارد</option>
             <option value="OUT">منصرف</option>
@@ -492,7 +493,7 @@ export const StockTransactions: React.FC = () => {
           </select>
           <div className="flex gap-2">
             <select
-              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
+              className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
               value={bulkAction}
               onChange={(e) => setBulkAction(e.target.value as 'export' | 'delete' | '')}
               disabled={selectedRows.length === 0}
@@ -515,9 +516,9 @@ export const StockTransactions: React.FC = () => {
       <Card className="!p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th text-center">
                   <input
                     type="checkbox"
                     checked={allFilteredSelected}
@@ -525,16 +526,16 @@ export const StockTransactions: React.FC = () => {
                     aria-label="select all"
                   />
                 </th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">التاريخ</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">الصنف</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">الحركة</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500 text-center">الكمية</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">المخزن</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">المنفذ</th>
-                <th className="px-4 py-3 text-xs font-black text-slate-500">إجراءات</th>
+                <th className="erp-th">التاريخ</th>
+                <th className="erp-th">الصنف</th>
+                <th className="erp-th">الحركة</th>
+                <th className="erp-th text-center">الكمية</th>
+                <th className="erp-th">المخزن</th>
+                <th className="erp-th">المنفذ</th>
+                <th className="erp-th">إجراءات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-[var(--color-border)]">
               {combinedRows.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">لا توجد حركات مطابقة.</td></tr>}
               {combinedRows.map((entry) => {
                 if (entry.kind === 'transaction') {
@@ -551,13 +552,13 @@ export const StockTransactions: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500">{new Date(tx.createdAt).toLocaleString('ar-EG')}</td>
                       <td className="px-4 py-3">
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{tx.itemName}</p>
-                        <p className="text-xs text-slate-400 font-mono">{tx.itemCode}</p>
+                        <p className="text-sm font-bold text-[var(--color-text)]">{tx.itemName}</p>
+                        <p className="text-xs text-[var(--color-text-muted)] font-mono">{tx.itemCode}</p>
                       </td>
                       <td className="px-4 py-3"><Badge variant="info">{movementLabel[tx.movementType] ?? tx.movementType}</Badge></td>
                       <td className="px-4 py-3 text-center">
                         {tx.movementType === 'TRANSFER' ? (
-                          <span className="font-black tabular-nums text-emerald-600">
+                          <span className="font-bold tabular-nums text-emerald-600">
                             {(() => {
                               const display = getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit);
                               return `${formatNumber(display.quantity)} ${display.unitLabel}`;
@@ -579,7 +580,7 @@ export const StockTransactions: React.FC = () => {
                               onClick={() => exportExcel([tx])}
                               title="Excel"
                               aria-label="Excel"
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors"
                             >
                               <span className="material-icons-round text-sm">download</span>
                             </button>
@@ -591,7 +592,7 @@ export const StockTransactions: React.FC = () => {
                               disabled={processing}
                               title="طباعة"
                               aria-label="طباعة"
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">print</span>
                             </button>
@@ -603,7 +604,7 @@ export const StockTransactions: React.FC = () => {
                               disabled={processing}
                               title="واتساب"
                               aria-label="واتساب"
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">share</span>
                             </button>
@@ -615,7 +616,7 @@ export const StockTransactions: React.FC = () => {
                               disabled={processing}
                               title="تعديل"
                               aria-label="تعديل"
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">edit</span>
                             </button>
@@ -627,7 +628,7 @@ export const StockTransactions: React.FC = () => {
                               disabled={processing}
                               title="حذف"
                               aria-label="حذف"
-                              className="p-2 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">delete</span>
                             </button>
@@ -651,10 +652,10 @@ export const StockTransactions: React.FC = () => {
                   const toName = warehouseMap.get(group.toWarehouseId) ?? group.toWarehouseId;
                   return (
                     <tr key={`approved-transfer-${group.referenceNo}`} className="bg-emerald-50/30 dark:bg-emerald-900/10">
-                      <td className="px-4 py-3 text-center text-slate-300">—</td>
+                      <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">—</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{new Date(group.createdAt).toLocaleString('ar-EG')}</td>
                       <td className="px-4 py-3">
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">تحويلة #{group.referenceNo}</p>
+                        <p className="text-sm font-bold text-[var(--color-text)]">تحويلة #{group.referenceNo}</p>
                         <p className="text-xs text-slate-500">{group.lines.length} صنف</p>
                       </td>
                       <td className="px-4 py-3">
@@ -664,7 +665,7 @@ export const StockTransactions: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="font-black tabular-nums text-emerald-700 dark:text-emerald-300">
+                        <span className="font-bold tabular-nums text-emerald-700">
                           {qtySummary}
                           {group.lines.length > 2 ? ' ...' : ''}
                         </span>
@@ -679,7 +680,7 @@ export const StockTransactions: React.FC = () => {
                             disabled={processing}
                             title="فتح"
                             aria-label="فتح"
-                            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <span className="material-icons-round text-sm">visibility</span>
                           </button>
@@ -690,7 +691,7 @@ export const StockTransactions: React.FC = () => {
                               disabled={processing}
                               title="طباعة"
                               aria-label="طباعة"
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">print</span>
                             </button>
@@ -702,7 +703,7 @@ export const StockTransactions: React.FC = () => {
                               disabled={processing}
                               title="واتساب"
                               aria-label="واتساب"
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">share</span>
                             </button>
@@ -713,7 +714,7 @@ export const StockTransactions: React.FC = () => {
                               onClick={() => exportExcel(group.lines)}
                               title="Excel"
                               aria-label="Excel"
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors"
                             >
                               <span className="material-icons-round text-sm">download</span>
                             </button>
@@ -725,7 +726,7 @@ export const StockTransactions: React.FC = () => {
                               disabled={processing}
                               title="حذف"
                               aria-label="حذف"
-                              className="p-2 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">delete</span>
                             </button>
@@ -750,10 +751,10 @@ export const StockTransactions: React.FC = () => {
                 const toName = warehouseMap.get(row.toWarehouseId) ?? row.toWarehouseId;
                 return (
                   <tr key={`pending-${row.id}`} className="bg-amber-50/40 dark:bg-amber-900/10">
-                    <td className="px-4 py-3 text-center text-slate-300">—</td>
+                    <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">—</td>
                     <td className="px-4 py-3 text-xs text-slate-500">{new Date(row.createdAt).toLocaleString('ar-EG')}</td>
                     <td className="px-4 py-3">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">تحويلة معلقة #{row.referenceNo}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">تحويلة معلقة #{row.referenceNo}</p>
                       <p className="text-xs text-slate-500">{row.lines.length} صنف</p>
                     </td>
                     <td className="px-4 py-3">
@@ -763,7 +764,7 @@ export const StockTransactions: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="font-black tabular-nums text-amber-700 dark:text-amber-300">
+                      <span className="font-bold tabular-nums text-amber-700">
                         {qtySummary}
                         {row.lines.length > 2 ? ' ...' : ''}
                       </span>
@@ -778,7 +779,7 @@ export const StockTransactions: React.FC = () => {
                           disabled={processing}
                           title="فتح"
                           aria-label="فتح"
-                          className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <span className="material-icons-round text-sm">visibility</span>
                         </button>
@@ -788,7 +789,7 @@ export const StockTransactions: React.FC = () => {
                           disabled={processing}
                           title="طباعة"
                           aria-label="طباعة"
-                          className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <span className="material-icons-round text-sm">print</span>
                         </button>
@@ -799,7 +800,7 @@ export const StockTransactions: React.FC = () => {
                             disabled={processing}
                             title="واتساب"
                             aria-label="واتساب"
-                            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <span className="material-icons-round text-sm">share</span>
                           </button>
@@ -811,7 +812,7 @@ export const StockTransactions: React.FC = () => {
                             disabled={processing}
                             title="تعديل"
                             aria-label="تعديل"
-                            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <span className="material-icons-round text-sm">edit</span>
                           </button>
@@ -829,9 +830,9 @@ export const StockTransactions: React.FC = () => {
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
       {shareToast && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3 animate-in fade-in duration-300">
           <span className="material-icons-round text-emerald-500">image</span>
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex-1">{shareToast}</p>
+          <p className="text-sm font-medium text-emerald-700 flex-1">{shareToast}</p>
           <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
             <span className="material-icons-round text-sm">close</span>
           </button>
@@ -839,34 +840,34 @@ export const StockTransactions: React.FC = () => {
       )}
       {selectedPending && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedPending(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">طلب تحويلة معلقة #{selectedPending.referenceNo}</h3>
-              <button onClick={() => setSelectedPending(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setSelectedPending(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 overflow-auto flex-1 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                   <p className="text-xs text-slate-500">من</p>
                   <p className="font-bold">{warehouseMap.get(selectedPending.fromWarehouseId) ?? selectedPending.fromWarehouseId}</p>
                 </div>
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                   <p className="text-xs text-slate-500">إلى</p>
                   <p className="font-bold">{warehouseMap.get(selectedPending.toWarehouseId) ?? selectedPending.toWarehouseId}</p>
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">الصنف</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">النوع</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500 text-center">الكمية</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">الصنف</th>
+                      <th className="erp-th">النوع</th>
+                      <th className="erp-th text-center">الكمية</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[var(--color-border)]">
                     {selectedPending.lines.map((line) => (
                       <tr key={`${line.itemType}-${line.itemId}`}>
                         <td className="px-3 py-2 text-sm font-bold">{line.itemName} <span className="text-xs text-slate-400">({line.itemCode})</span></td>
@@ -883,7 +884,7 @@ export const StockTransactions: React.FC = () => {
                 </table>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
               <Button variant="outline" onClick={() => setSelectedPending(null)}>إغلاق</Button>
               <Button variant="primary" onClick={() => void printPendingTransfer(selectedPending)}>
                 <span className="material-icons-round text-sm">print</span>
@@ -895,34 +896,34 @@ export const StockTransactions: React.FC = () => {
       )}
       {selectedApprovedTransfer && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedApprovedTransfer(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">تفاصيل التحويلة #{selectedApprovedTransfer.referenceNo}</h3>
-              <button onClick={() => setSelectedApprovedTransfer(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setSelectedApprovedTransfer(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 overflow-auto flex-1 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                   <p className="text-xs text-slate-500">من</p>
                   <p className="font-bold">{warehouseMap.get(selectedApprovedTransfer.fromWarehouseId) ?? selectedApprovedTransfer.fromWarehouseId}</p>
                 </div>
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                   <p className="text-xs text-slate-500">إلى</p>
                   <p className="font-bold">{warehouseMap.get(selectedApprovedTransfer.toWarehouseId) ?? selectedApprovedTransfer.toWarehouseId}</p>
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">الصنف</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500">النوع</th>
-                      <th className="px-3 py-2 text-xs font-black text-slate-500 text-center">الكمية</th>
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">الصنف</th>
+                      <th className="erp-th">النوع</th>
+                      <th className="erp-th text-center">الكمية</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[var(--color-border)]">
                     {selectedApprovedTransfer.lines.map((line) => (
                       <tr key={`${line.id || ''}-${line.itemType}-${line.itemId}`}>
                         <td className="px-3 py-2 text-sm font-bold">{line.itemName} <span className="text-xs text-slate-400">({line.itemCode})</span></td>
@@ -939,7 +940,7 @@ export const StockTransactions: React.FC = () => {
                 </table>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
               <Button variant="outline" onClick={() => setSelectedApprovedTransfer(null)}>إغلاق</Button>
               {can('inventory.transactions.print') && selectedApprovedTransfer.lines[0] && (
                 <Button variant="primary" onClick={() => void printTransferFromRow(selectedApprovedTransfer.lines[0])}>
@@ -953,25 +954,25 @@ export const StockTransactions: React.FC = () => {
       )}
       {editPending && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !processing && setEditPending(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">تعديل التحويلة المعلقة #{editPending.referenceNo}</h3>
-              <button onClick={() => !processing && setEditPending(null)} className="text-slate-400 hover:text-slate-600" disabled={processing}>
+              <button onClick={() => !processing && setEditPending(null)} className="text-[var(--color-text-muted)] hover:text-slate-600" disabled={processing}>
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 overflow-auto flex-1 space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-600 dark:text-slate-300">ملاحظة</label>
+                <label className="text-sm font-bold text-[var(--color-text-muted)]">ملاحظة</label>
                 <input
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
+                  className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
                   value={editNote}
                   onChange={(e) => setEditNote(e.target.value)}
                 />
               </div>
               <div className="space-y-3">
                 {editLines.map((line, idx) => (
-                  <div key={`${line.itemType}-${line.itemId}-${idx}`} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <div key={`${line.itemType}-${line.itemId}-${idx}`} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 grid grid-cols-1 md:grid-cols-12 gap-3">
                     <div className="md:col-span-7">
                       <p className="text-sm font-bold">{line.itemName}</p>
                       <p className="text-xs text-slate-400">{line.itemCode}</p>
@@ -984,7 +985,7 @@ export const StockTransactions: React.FC = () => {
                         type="number"
                         step="any"
                         min={0}
-                        className="w-full rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800"
+                        className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
                         value={Number(line.requestQuantity ?? line.quantity ?? 0)}
                         onChange={(e) =>
                           setEditLines((prev) =>
@@ -997,7 +998,7 @@ export const StockTransactions: React.FC = () => {
                 ))}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
               <Button variant="outline" onClick={() => setEditPending(null)} disabled={processing}>إلغاء</Button>
               <Button variant="primary" onClick={() => void savePendingEdit()} disabled={processing}>
                 <span className="material-icons-round text-sm">{processing ? 'hourglass_top' : 'save'}</span>

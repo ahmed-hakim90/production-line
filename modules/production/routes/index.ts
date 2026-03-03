@@ -13,9 +13,11 @@ import { ProductionWorkerDetails } from '../pages/ProductionWorkerDetails';
 import { Reports } from '../pages/Reports';
 import { QuickAction } from '../pages/QuickAction';
 import { LineWorkerAssignment } from '../pages/LineWorkerAssignment';
+import { RawMaterials } from '../pages/RawMaterials';
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/products', permission: 'products.view', component: Products },
+  { path: '/products/raw-materials', permission: 'products.rawMaterials.view', component: RawMaterials },
   { path: '/products/:id', permission: 'products.view', component: ProductDetails },
   { path: '/lines', permission: 'lines.view', component: Lines },
   { path: '/lines/:id', permission: 'lines.view', component: LineDetails },

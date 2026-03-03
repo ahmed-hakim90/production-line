@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useCurrentRole } from '@/utils/permissions';
 import { NotificationBell } from '@/components/NotificationBell';
 import { TasksNavButton } from '@/components/background-jobs/JobsPanel';
-import { useSidebar } from './useSidebar';
+import { useSidebar, useSidebarActiveRoute } from './useSidebar';
+import { MENU_CONFIG } from '@/config/menu.config';
+import { CommandPalette } from '@/components/CommandPalette';
+import { useCommandPalette } from '@/components/useCommandPalette';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -15,117 +18,212 @@ export interface TopbarProps {
   onSidebarCollapseToggle: () => void;
 }
 
+function useScrolled(threshold = 4): boolean {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > threshold);
+    window.addEventListener('scroll', fn, { passive: true });
+    return () => window.removeEventListener('scroll', fn);
+  }, [threshold]);
+  return scrolled;
+}
+
 export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseToggle }) => {
-  const navigate = useNavigate();
   const { isReadOnly } = useCurrentRole();
-  const { collapsed } = useSidebar();
+  const { collapsed }  = useSidebar();
+  const navigate       = useNavigate();
+  const location       = useLocation();
+  const scrolled       = useScrolled();
+
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [isInstalled,    setIsInstalled]    = useState(false);
+  const [refreshing,     setRefreshing]     = useState(false);
+
+  const { isActiveItem } = useSidebarActiveRoute();
+  const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+
+  /* Resolve breadcrumb from location */
+  const breadcrumb = useMemo(() => {
+    for (const group of MENU_CONFIG) {
+      for (const item of group.children) {
+        if (isActiveItem(item)) {
+          return { group: group.label, groupIcon: group.icon, page: item.label, pageIcon: item.icon };
+        }
+      }
+    }
+    return null;
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const isStandalone = () =>
       window.matchMedia('(display-mode: standalone)').matches ||
       ((window.navigator as Navigator & { standalone?: boolean }).standalone === true);
-
     setIsInstalled(isStandalone());
 
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
-    };
-    const onAppInstalled = () => {
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-    window.addEventListener('appinstalled', onAppInstalled);
-
+    const onBefore = (e: Event) => { e.preventDefault(); setDeferredPrompt(e as BeforeInstallPromptEvent); };
+    const onInstalled = () => { setIsInstalled(true); setDeferredPrompt(null); };
+    window.addEventListener('beforeinstallprompt', onBefore);
+    window.addEventListener('appinstalled', onInstalled);
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', onAppInstalled);
+      window.removeEventListener('beforeinstallprompt', onBefore);
+      window.removeEventListener('appinstalled', onInstalled);
     };
   }, []);
 
-  const handleInstallClick = async () => {
+  useEffect(() => {
+    // Keep palette from persisting as an invisible full-screen blocker across route changes.
+    setCmdOpen(false);
+  }, [location.pathname, location.search, setCmdOpen]);
+
+  const handleInstall = useCallback(async () => {
     if (!deferredPrompt) return;
     await deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice;
-    if (choice.outcome === 'accepted') setIsInstalled(true);
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setIsInstalled(true);
     setDeferredPrompt(null);
-  };
+  }, [deferredPrompt]);
 
-  const handleRefreshClick = useCallback(() => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
     window.location.reload();
   }, []);
 
   return (
-    <header className="h-16 sm:h-20 bg-[var(--color-card)]/90 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between gap-3 border-b border-[var(--color-border)]">
-      <button
-        onClick={onMenuToggle}
-        className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors lg:hidden shrink-0"
+    <>
+      <header
+        className={[
+          'h-[52px] sticky top-0 z-30 shrink-0',
+          'bg-[var(--color-card)]',
+          'border-b border-[var(--color-border)]',
+          'px-3 sm:px-4 flex items-center gap-2',
+          scrolled ? 'shadow-sm' : '',
+        ].join(' ')}
       >
-        <span className="material-icons-round text-2xl">menu</span>
-      </button>
+        {/* ── LEFT: toggle + breadcrumb ── */}
+        <div className="flex items-center gap-1 min-w-0 flex-1">
 
-      <button
-        onClick={onSidebarCollapseToggle}
-        className="hidden lg:inline-flex p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors shrink-0"
-        title={collapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'}
-      >
-        <span className={`material-icons-round text-xl transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}>
-          keyboard_double_arrow_right
-        </span>
-      </button>
-
-      <div className="min-w-0 cursor-pointer" onClick={() => navigate('/')}>
-        <h1 className="font-bold text-xl tracking-tight text-primary hover:opacity-80 transition-opacity">
-          مؤسسة المغربي
-        </h1>
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">نظام إدارة الإنتاج</p>
-      </div>
-
-      <div className="flex items-center gap-2 sm:gap-5 shrink-0">
-        {!isInstalled && deferredPrompt && (
+          {/* Mobile hamburger */}
           <button
-            onClick={handleInstallClick}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 transition-colors"
-            title="تثبيت التطبيق"
+            onClick={onMenuToggle}
+            className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
+            aria-label="فتح القائمة"
           >
-            <span className="material-icons-round text-sm">download</span>
-            <span className="hidden sm:inline">Install App</span>
-            <span className="sm:hidden">تثبيت</span>
+            <span className="material-icons-round text-[18px]">menu</span>
           </button>
-        )}
-        {isReadOnly && (
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-            <span className="material-icons-round text-sm">lock</span>
-            قراءة فقط
-          </span>
-        )}
-        <button
-          onClick={handleRefreshClick}
-          disabled={refreshing}
-          className="inline-flex items-center justify-center p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          title="تحديث كامل للمتصفح"
-        >
-          <span className={`material-icons-round ${refreshing ? 'animate-spin text-primary' : ''}`}>
-            refresh
-          </span>
-        </button>
-        <TasksNavButton />
-        <NotificationBell />
-        <div className="hidden md:block h-8 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1" />
-        <div className="hidden md:flex flex-col items-end">
-          <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">التاريخ</span>
-          <div className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">
-            <span>{new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-            <span className="material-icons-round text-primary text-sm">calendar_today</span>
+
+          {/* Desktop sidebar collapse toggle */}
+          <button
+            onClick={onSidebarCollapseToggle}
+            className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
+            title={collapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'}
+          >
+            <span className={`material-icons-round text-[18px] transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}>
+              keyboard_double_arrow_right
+            </span>
+          </button>
+
+          {/* Breadcrumb */}
+          {breadcrumb ? (
+            <nav className="hidden sm:flex items-center gap-1 text-[12.5px] min-w-0">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+              >
+                <span className="material-icons-round text-[13px]">{breadcrumb.groupIcon}</span>
+                <span className="truncate max-w-[80px]">{breadcrumb.group}</span>
+              </button>
+              <span className="material-icons-round text-[12px] text-[var(--color-border)] shrink-0">chevron_left</span>
+              <span className="font-semibold text-[var(--color-text)] truncate flex items-center gap-1">
+                <span className="material-icons-round text-[13px] text-primary shrink-0">{breadcrumb.pageIcon}</span>
+                <span>{breadcrumb.page}</span>
+              </span>
+            </nav>
+          ) : (
+            <button
+              onClick={() => navigate('/')}
+              className="hidden sm:flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--color-text)] hover:text-primary transition-colors"
+            >
+              <span className="material-icons-round text-[15px]">home</span>
+              <span>الرئيسية</span>
+            </button>
+          )}
+        </div>
+
+        {/* ── CENTER: Awesomebar / Global Search ── */}
+        <div className="flex-1 max-w-[320px] hidden md:flex">
+          <button
+            onClick={() => setCmdOpen(true)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-[#f0f2f5] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group"
+          >
+            <span className="material-icons-round text-[15px] group-hover:text-primary transition-colors">search</span>
+            <span className="flex-1 text-start">البحث في النظام...</span>
+            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
+              Ctrl K
+            </kbd>
+          </button>
+        </div>
+
+        {/* ── RIGHT: actions ── */}
+        <div className="flex items-center gap-0.5 shrink-0">
+
+          {/* Mobile search icon */}
+          <button
+            onClick={() => setCmdOpen(true)}
+            className="md:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors"
+            title="بحث"
+          >
+            <span className="material-icons-round text-[18px]">search</span>
+          </button>
+
+          {/* Install PWA */}
+          {!isInstalled && deferredPrompt && (
+            <button
+              onClick={handleInstall}
+              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[11.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+            >
+              <span className="material-icons-round text-[14px]">download</span>
+              تثبيت
+            </button>
+          )}
+
+          {/* Read-only badge */}
+          {isReadOnly && (
+            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-sm)] text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="material-icons-round text-[13px]">lock</span>
+              قراءة فقط
+            </span>
+          )}
+
+          {/* Refresh */}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors disabled:opacity-50"
+            title="تحديث"
+          >
+            <span className={`material-icons-round text-[18px] ${refreshing ? 'animate-spin text-primary' : ''}`}>
+              refresh
+            </span>
+          </button>
+
+          {/* Background tasks */}
+          <TasksNavButton />
+
+          {/* Notifications */}
+          <NotificationBell />
+
+          {/* Date chip — desktop only */}
+          <div className="hidden xl:flex flex-col items-end px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-[#f0f2f5] border border-[var(--color-border)]">
+            <span className="text-[9px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider leading-none">اليوم</span>
+            <span className="text-[11px] font-bold text-[var(--color-text)] leading-tight mt-0.5">
+              {new Date().toLocaleDateString('ar-EG', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Global Command Palette */}
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+    </>
   );
 };

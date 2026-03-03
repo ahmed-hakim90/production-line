@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage, isConfigured } from '../../../services/firebase';
@@ -41,7 +41,7 @@ import type {
   SystemSettings, WidgetConfig, AlertSettings, KPIThreshold, PrintTemplateSettings,
   PaperSize, PaperOrientation, PlanSettings, BrandingSettings, ThemeSettings,
   DashboardDisplaySettings, AlertToggleSettings, ThemeMode, UIDensity, QuickActionItem, QuickActionColor,
-  CustomWidgetConfig, CustomWidgetType, ExportImportSettings,
+  CustomWidgetConfig, CustomWidgetType, ExportImportSettings, SidebarIconStyle,
 } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
 import type { ReportPrintRow } from '../../production/components/ProductionReportPrint';
@@ -100,11 +100,11 @@ const QUICK_ACTION_ICONS = Array.from(new Set([
 
 const QUICK_ACTION_COLORS: { value: QuickActionColor; label: string; classes: string }[] = [
   { value: 'primary', label: 'أزرق رئيسي', classes: 'bg-primary/10 text-primary border-primary/20' },
-  { value: 'emerald', label: 'أخضر', classes: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 dark:border-emerald-800' },
-  { value: 'amber', label: 'أصفر', classes: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 dark:border-amber-800' },
-  { value: 'rose', label: 'وردي', classes: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200 dark:border-rose-800' },
+  { value: 'emerald', label: 'أخضر', classes: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200' },
+  { value: 'amber', label: 'أصفر', classes: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200' },
+  { value: 'rose', label: 'وردي', classes: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200' },
   { value: 'violet', label: 'بنفسجي', classes: 'bg-violet-50 dark:bg-violet-900/10 text-violet-600 border-violet-200 dark:border-violet-800' },
-  { value: 'slate', label: 'رمادي', classes: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
+  { value: 'slate', label: 'رمادي', classes: 'bg-[#f0f2f5] text-[var(--color-text-muted)] border-[var(--color-border)]' },
 ];
 
 const FONT_FAMILIES = [
@@ -114,6 +114,105 @@ const FONT_FAMILIES = [
   { value: 'Rubik', label: 'Rubik' },
   { value: 'IBM Plex Sans Arabic', label: 'IBM Plex Sans Arabic' },
   { value: 'Noto Sans Arabic', label: 'Noto Sans Arabic' },
+];
+
+// ── Ready-made theme presets ─────────────────────────────────────────────────
+interface ThemePreset {
+  id: string;
+  name: string;
+  description: string;
+  colors: { primary: string; bg: string; card: string };
+  partialTheme: Partial<ThemeSettings>;
+}
+
+const THEME_PRESETS: ThemePreset[] = [
+  /* ── ERPNext Espresso (مقترح كثيم افتراضي) ── */
+  {
+    id: 'erpnext_espresso',
+    name: 'ERPNext Espresso ⭐',
+    description: 'أزرق نقي — النمط الرسمي',
+    colors: { primary: '#2490EF', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#2490EF', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
+  },
+  {
+    id: 'erpnext_indigo',
+    name: 'Indigo Pro',
+    description: 'نيلي داكن محترف',
+    colors: { primary: '#4361ee', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#4361ee', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
+  },
+  /* ── ثيمات مخصصة (خلفية Espresso موحدة) ── */
+  {
+    id: 'classic_red',
+    name: 'كلاسيك أحمر',
+    description: 'هوية المؤسسة',
+    colors: { primary: '#a80008', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#a80008', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
+  },
+  {
+    id: 'royal_blue',
+    name: 'أزرق ملكي',
+    description: 'أنيق ومحترف',
+    colors: { primary: '#1e40af', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#1e40af', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
+  },
+  {
+    id: 'emerald_pro',
+    name: 'أخضر زمردي',
+    description: 'مناسب للمصانع',
+    colors: { primary: '#047857', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#047857', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
+  },
+  {
+    id: 'violet_modern',
+    name: 'بنفسجي عصري',
+    description: 'تصميم حديث',
+    colors: { primary: '#6d28d9', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#6d28d9', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
+  },
+  {
+    id: 'amber_gold',
+    name: 'ذهبي احترافي',
+    description: 'دافئ ومميز',
+    colors: { primary: '#b45309', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#b45309', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
+  },
+  {
+    id: 'sky_blue',
+    name: 'سماوي نقي',
+    description: 'هادئ ومريح',
+    colors: { primary: '#0284c7', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#0284c7', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
+  },
+  {
+    id: 'teal_factory',
+    name: 'تيل صناعي',
+    description: 'ثيم المصنع',
+    colors: { primary: '#0f766e', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#0f766e', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
+  },
+  {
+    id: 'rose_elegant',
+    name: 'وردي أنيق',
+    description: 'راقٍ وعصري',
+    colors: { primary: '#be185d', bg: '#f0f2f5', card: '#ffffff' },
+    partialTheme: { primaryColor: '#be185d', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
+  },
+  /* ── داكن ── */
+  {
+    id: 'dark_navy',
+    name: 'داكن ليلي',
+    description: 'للعمل الليلي',
+    colors: { primary: '#60a5fa', bg: '#020617', card: '#0f172a' },
+    partialTheme: { primaryColor: '#60a5fa', darkMode: 'dark', backgroundColor: '#020617', sidebarIconStyle: 'primary' },
+  },
+  {
+    id: 'dark_emerald',
+    name: 'داكن أخضر',
+    description: 'داكن مميز',
+    colors: { primary: '#34d399', bg: '#020617', card: '#0f172a' },
+    partialTheme: { primaryColor: '#34d399', darkMode: 'dark', backgroundColor: '#020617', sidebarIconStyle: 'muted' },
+  },
 ];
 
 const RESTORE_MODES: { value: RestoreMode; label: string; icon: string; description: string; color: string }[] = [
@@ -779,20 +878,20 @@ export const Settings: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">الإعدادات</h2>
-        <p className="text-sm text-slate-500 font-medium">إعدادات النظام وحالة الاتصال والصلاحيات.</p>
+        <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">الإعدادات</h2>
+        <p className="page-subtitle">إعدادات النظام وحالة الاتصال والصلاحيات.</p>
       </div>
 
       {/* ── Tab Bar ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+      <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] pb-2">
         {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
               activeTab === tab.key
-                ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-primary text-white shadow-primary/20'
+                : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
@@ -803,10 +902,10 @@ export const Settings: React.FC = () => {
 
       {/* ── Save feedback ─────────────────────────────────────────────────── */}
       {saveMessage && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
           saveMessage.includes('نجاح')
-            ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-            : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
+            ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
+            : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
         }`}>
           <span className="material-icons-round text-lg">{saveMessage.includes('نجاح') ? 'check_circle' : 'error'}</span>
           {saveMessage}
@@ -823,7 +922,7 @@ export const Settings: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold">الإعدادات العامة</h3>
-                <p className="text-sm text-slate-500">هوية المصنع، المظهر، سلوك النظام، لوحة التحكم، والتنبيهات.</p>
+                <p className="page-subtitle">هوية المصنع، المظهر، سلوك النظام، لوحة التحكم، والتنبيهات.</p>
               </div>
               <Button onClick={() => handleSave('general')} disabled={saving}>
                 {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -838,50 +937,50 @@ export const Settings: React.FC = () => {
             <Card title="هوية المصنع">
               <div className="space-y-5">
                 {/* Factory Name */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">factory</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">اسم المصنع</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">اسم المصنع</p>
                       <p className="text-xs text-slate-400">يظهر في التقارير والواجهة</p>
                     </div>
                   </div>
                   <input
                     type="text"
-                    className="w-full sm:w-72 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="w-full sm:w-72 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={localBranding.factoryName}
                     onChange={(e) => setLocalBranding((p) => ({ ...p, factoryName: e.target.value }))}
                   />
                 </div>
 
                 {/* Logo */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">image</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">شعار المصنع</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">شعار المصنع</p>
                       <p className="text-xs text-slate-400">PNG أو JPG — يظهر في الواجهة والتقارير</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {localBranding.logoUrl && (
-                      <img src={localBranding.logoUrl} alt="logo" className="w-12 h-12 rounded-lg object-contain border border-slate-200 dark:border-slate-700 bg-white" />
+                      <img src={localBranding.logoUrl} alt="logo" className="w-12 h-12 rounded-[var(--border-radius-base)] object-contain border border-[var(--color-border)] bg-[var(--color-card)]" />
                     )}
                     <input ref={brandingLogoRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleBrandingLogoUpload} />
                     <button
                       onClick={() => brandingLogoRef.current?.click()}
                       disabled={uploadingLogo}
-                      className="px-4 py-2.5 rounded-xl text-sm font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-50 flex items-center gap-2"
                     >
                       {uploadingLogo ? <span className="material-icons-round animate-spin text-sm">refresh</span> : <span className="material-icons-round text-sm">upload</span>}
                       {localBranding.logoUrl ? 'تغيير' : 'رفع'}
                     </button>
                     {localBranding.logoUrl && (
-                      <button onClick={() => setLocalBranding((p) => ({ ...p, logoUrl: '' }))} className="px-3 py-2.5 rounded-xl text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all">
+                      <button onClick={() => setLocalBranding((p) => ({ ...p, logoUrl: '' }))} className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all">
                         <span className="material-icons-round text-sm">delete</span>
                       </button>
                     )}
@@ -889,18 +988,18 @@ export const Settings: React.FC = () => {
                 </div>
 
                 {/* Currency */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">payments</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">العملة</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">العملة</p>
                       <p className="text-xs text-slate-400">العملة المستخدمة في التكاليف والتقارير</p>
                     </div>
                   </div>
                   <select
-                    className="w-full sm:w-64 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="w-full sm:w-64 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={localBranding.currency}
                     onChange={(e) => setLocalBranding((p) => ({ ...p, currency: e.target.value }))}
                   >
@@ -909,18 +1008,18 @@ export const Settings: React.FC = () => {
                 </div>
 
                 {/* Timezone */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">schedule</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">المنطقة الزمنية</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">المنطقة الزمنية</p>
                       <p className="text-xs text-slate-400">تحدد توقيت التقارير والعمليات</p>
                     </div>
                   </div>
                   <select
-                    className="w-full sm:w-64 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="w-full sm:w-64 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={localBranding.timezone}
                     onChange={(e) => setLocalBranding((p) => ({ ...p, timezone: e.target.value }))}
                   >
@@ -935,9 +1034,72 @@ export const Settings: React.FC = () => {
           {isAdmin && (
             <Card title="محرك المظهر">
               <div className="space-y-6">
+
+                {/* ── Preset Themes ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-icons-round text-primary text-lg">auto_awesome</span>
+                    <p className="text-sm font-bold text-[var(--color-text)]">ثيمات جاهزة</p>
+                    <span className="text-xs text-[var(--color-text-muted)] font-medium">— اختر واحدة وعدّل عليها</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {THEME_PRESETS.map((preset) => {
+                      const isActive =
+                        localTheme.primaryColor === preset.partialTheme.primaryColor &&
+                        localTheme.darkMode    === preset.partialTheme.darkMode;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => setLocalTheme((p) => ({ ...p, ...preset.partialTheme }))}
+                          className={[
+                            'relative flex flex-col items-center gap-2.5 p-3 rounded-[var(--border-radius-lg)] border-2 transition-all duration-150 text-center group',
+                            isActive
+                              ? 'border-primary bg-primary/5 shadow-md shadow-primary/10'
+                              : 'border-[var(--color-border)] hover:border-primary/40 hover:bg-[#f8f9fa]/60',
+                          ].join(' ')}
+                        >
+                          {/* Active check */}
+                          {isActive && (
+                            <span className="absolute top-1.5 left-1.5 w-4 h-4 bg-primary rounded-full flex items-center justify-center shadow">
+                              <span className="material-icons-round text-white" style={{ fontSize: '10px' }}>check</span>
+                            </span>
+                          )}
+                          {/* Color swatches mini preview */}
+                          <div className="flex gap-1 items-center">
+                            <div
+                              className="w-7 h-7 rounded-[var(--border-radius-base)] shadow-inner border border-black/10"
+                              style={{ backgroundColor: preset.colors.primary }}
+                            />
+                            <div
+                              className="w-5 h-5 rounded-[var(--border-radius-sm)] shadow-inner border border-black/10"
+                              style={{ backgroundColor: preset.colors.bg }}
+                            />
+                            <div
+                              className="w-5 h-5 rounded-[var(--border-radius-sm)] shadow-inner border border-black/10"
+                              style={{ backgroundColor: preset.colors.card }}
+                            />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-[var(--color-text)] leading-tight">{preset.name}</p>
+                            <p className="text-[10px] text-[var(--color-text-muted)] leading-tight mt-0.5">{preset.description}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <span className="text-xs text-[var(--color-text-muted)] font-bold">أو خصّص بنفسك</span>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
+
                 {/* Color Grid */}
                 <div>
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">الألوان</p>
+                  <p className="text-sm font-bold text-[var(--color-text)] mb-3">الألوان</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {([
                       { key: 'primaryColor' as const, label: 'اللون الرئيسي', icon: 'palette' },
@@ -947,18 +1109,18 @@ export const Settings: React.FC = () => {
                       { key: 'dangerColor' as const, label: 'لون الخطر', icon: 'error' },
                       { key: 'backgroundColor' as const, label: 'لون الخلفية', icon: 'format_paint' },
                     ]).map((color) => (
-                      <div key={color.key} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                      <div key={color.key} className="flex items-center gap-3 p-3 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                         <input
                           type="color"
-                          className="w-10 h-10 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer shrink-0"
+                          className="w-10 h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] cursor-pointer shrink-0"
                           value={localTheme[color.key]}
                           onChange={(e) => setLocalTheme((p) => ({ ...p, [color.key]: e.target.value }))}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-600 dark:text-slate-400">{color.label}</p>
+                          <p className="text-xs font-bold text-[var(--color-text-muted)]">{color.label}</p>
                           <input
                             type="text"
-                            className="w-full border-0 bg-transparent text-xs font-mono font-bold text-slate-800 dark:text-white outline-none p-0 mt-0.5"
+                            className="w-full border-0 bg-transparent text-xs font-mono font-bold text-[var(--color-text)] outline-none p-0 mt-0.5"
                             value={localTheme[color.key]}
                             onChange={(e) => setLocalTheme((p) => ({ ...p, [color.key]: e.target.value }))}
                           />
@@ -969,13 +1131,13 @@ export const Settings: React.FC = () => {
                 </div>
 
                 {/* Dark Mode */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">dark_mode</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">الوضع</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">الوضع</p>
                       <p className="text-xs text-slate-400">فاتح، داكن، أو تلقائي حسب النظام</p>
                     </div>
                   </div>
@@ -988,10 +1150,10 @@ export const Settings: React.FC = () => {
                       <button
                         key={mode.value}
                         onClick={() => setLocalTheme((p) => ({ ...p, darkMode: mode.value }))}
-                        className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                        className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center gap-2 ${
                           localTheme.darkMode === mode.value
-                            ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-primary/30'
+                            ? 'bg-primary text-white shadow-primary/20'
+                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
                         }`}
                       >
                         <span className="material-icons-round text-sm">{mode.icon}</span>
@@ -1002,18 +1164,18 @@ export const Settings: React.FC = () => {
                 </div>
 
                 {/* Font Family */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">text_fields</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">نوع الخط</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">نوع الخط</p>
                       <p className="text-xs text-slate-400">الخط المستخدم في جميع أنحاء التطبيق</p>
                     </div>
                   </div>
                   <select
-                    className="w-full sm:w-56 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="w-full sm:w-56 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={localTheme.baseFontFamily}
                     onChange={(e) => setLocalTheme((p) => ({ ...p, baseFontFamily: e.target.value }))}
                   >
@@ -1023,13 +1185,13 @@ export const Settings: React.FC = () => {
 
                 {/* Font Size + Border Radius */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">format_size</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">حجم الخط الأساسي</p>
-                      <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">حجم الخط الأساسي</p>
+                      <div className="erp-page-actions">
                         <input
                           type="range"
                           min={11}
@@ -1039,40 +1201,131 @@ export const Settings: React.FC = () => {
                           value={localTheme.baseFontSize}
                           onChange={(e) => setLocalTheme((p) => ({ ...p, baseFontSize: Number(e.target.value) }))}
                         />
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300 w-12 text-center">{localTheme.baseFontSize}px</span>
+                        <span className="text-sm font-bold text-[var(--color-text)] w-12 text-center">{localTheme.baseFontSize}px</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">rounded_corner</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">استدارة الحواف</p>
-                      <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">استدارة الحواف</p>
+                      {/* Quick presets */}
+                      <div className="flex items-center gap-2 mb-2">
+                        {[
+                          { label: 'حاد', value: 0 },
+                          { label: 'عادي', value: 6 },
+                          { label: 'مستدير', value: 12 },
+                          { label: 'دائري', value: 20 },
+                        ].map((p) => (
+                          <button
+                            key={p.value}
+                            type="button"
+                            onClick={() => setLocalTheme((prev) => ({ ...prev, borderRadius: p.value }))}
+                            className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition-all ${
+                              localTheme.borderRadius === p.value
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-white text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                        <span className="text-[11px] text-[var(--color-text-muted)] mr-auto">{localTheme.borderRadius}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={20}
+                        step={2}
+                        className="w-full accent-primary"
+                        value={localTheme.borderRadius}
+                        onChange={(e) => setLocalTheme((p) => ({ ...p, borderRadius: Number(e.target.value) }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Text Colors */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Main text color */}
+                  <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="material-icons-round text-primary">title</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">لون النص الرئيسي</p>
+                      <p className="text-[10px] text-slate-400 mb-2">نص العناوين والبيانات الأساسية</p>
+                      <div className="flex items-center gap-3">
                         <input
-                          type="range"
-                          min={0}
-                          max={24}
-                          step={2}
-                          className="flex-1 accent-primary"
-                          value={localTheme.borderRadius}
-                          onChange={(e) => setLocalTheme((p) => ({ ...p, borderRadius: Number(e.target.value) }))}
+                          type="color"
+                          value={localTheme.textColor || '#1a1a1a'}
+                          onChange={(e) => setLocalTheme((p) => ({ ...p, textColor: e.target.value }))}
+                          className="w-10 h-8 rounded cursor-pointer border border-[var(--color-border)] p-0.5 bg-white"
                         />
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300 w-12 text-center">{localTheme.borderRadius}px</span>
+                        <input
+                          type="text"
+                          value={localTheme.textColor || '#1a1a1a'}
+                          onChange={(e) => setLocalTheme((p) => ({ ...p, textColor: e.target.value }))}
+                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-xs font-mono py-1.5 px-2 outline-none focus:border-primary"
+                          maxLength={7}
+                          placeholder="#1a1a1a"
+                        />
+                        <button
+                          onClick={() => setLocalTheme((p) => ({ ...p, textColor: '#1a1a1a' }))}
+                          className="text-[var(--color-text-muted)] hover:text-primary transition-colors"
+                          title="إعادة تعيين"
+                        >
+                          <span className="material-icons-round text-sm">restart_alt</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Muted text color */}
+                  <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="material-icons-round text-primary">subtitles</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">لون النص الثانوي</p>
+                      <p className="text-[10px] text-slate-400 mb-2">التسميات والتفاصيل الرمادية</p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={localTheme.mutedTextColor || '#8d99a6'}
+                          onChange={(e) => setLocalTheme((p) => ({ ...p, mutedTextColor: e.target.value }))}
+                          className="w-10 h-8 rounded cursor-pointer border border-[var(--color-border)] p-0.5 bg-white"
+                        />
+                        <input
+                          type="text"
+                          value={localTheme.mutedTextColor || '#8d99a6'}
+                          onChange={(e) => setLocalTheme((p) => ({ ...p, mutedTextColor: e.target.value }))}
+                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-xs font-mono py-1.5 px-2 outline-none focus:border-primary"
+                          maxLength={7}
+                          placeholder="#8d99a6"
+                        />
+                        <button
+                          onClick={() => setLocalTheme((p) => ({ ...p, mutedTextColor: '#8d99a6' }))}
+                          className="text-[var(--color-text-muted)] hover:text-primary transition-colors"
+                          title="إعادة تعيين"
+                        >
+                          <span className="material-icons-round text-sm">restart_alt</span>
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Density */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">density_medium</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">كثافة العرض</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">كثافة العرض</p>
                       <p className="text-xs text-slate-400">مريح يعطي مساحة أكبر، مضغوط يعرض محتوى أكثر</p>
                     </div>
                   </div>
@@ -1084,10 +1337,10 @@ export const Settings: React.FC = () => {
                       <button
                         key={d.value}
                         onClick={() => setLocalTheme((p) => ({ ...p, density: d.value }))}
-                        className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                        className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center gap-2 ${
                           localTheme.density === d.value
-                            ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-primary/30'
+                            ? 'bg-primary text-white shadow-primary/20'
+                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
                         }`}
                       >
                         <span className="material-icons-round text-sm">{d.icon}</span>
@@ -1097,24 +1350,122 @@ export const Settings: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Theme Preview Swatches */}
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                  <p className="text-xs font-bold text-slate-500 mb-3">معاينة الألوان</p>
-                  <div className="flex flex-wrap gap-3">
+                {/* Sidebar Icon Style */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="material-icons-round text-primary">interests</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[var(--color-text)]">ألوان أيقونات القائمة</p>
+                      <p className="text-xs text-slate-400">ملوّن يعطي كل قسم لونه، رئيسي يوحّد اللون، محايد رمادي هادئ</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0 flex-wrap">
                     {([
-                      { label: 'رئيسي', color: localTheme.primaryColor },
-                      { label: 'ثانوي', color: localTheme.secondaryColor },
-                      { label: 'نجاح', color: localTheme.successColor },
-                      { label: 'تحذير', color: localTheme.warningColor },
-                      { label: 'خطر', color: localTheme.dangerColor },
-                      { label: 'خلفية', color: localTheme.backgroundColor },
-                    ]).map((swatch) => (
-                      <div key={swatch.label} className="flex flex-col items-center gap-1">
-                        <div className="w-12 h-12 rounded-xl shadow-inner border border-white/20" style={{ backgroundColor: swatch.color }} />
-                        <span className="text-[10px] font-bold text-slate-500">{swatch.label}</span>
-                      </div>
+                      { value: 'colorful' as SidebarIconStyle, label: 'ملوّن', icon: 'palette' },
+                      { value: 'primary' as SidebarIconStyle, label: 'رئيسي', icon: 'circle' },
+                      { value: 'muted'   as SidebarIconStyle, label: 'محايد', icon: 'tonality' },
+                    ]).map((s) => (
+                      <button
+                        key={s.value}
+                        onClick={() => setLocalTheme((p) => ({ ...p, sidebarIconStyle: s.value }))}
+                        className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center gap-2 ${
+                          (localTheme.sidebarIconStyle ?? 'colorful') === s.value
+                            ? 'bg-primary text-white shadow-primary/20'
+                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
+                        }`}
+                      >
+                        <span className="material-icons-round text-sm">{s.icon}</span>
+                        {s.label}
+                      </button>
                     ))}
                   </div>
+                </div>
+
+                {/* ── Live UI Preview ── */}
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)] px-4 py-2.5 bg-[#f8f9fa] border-b border-[var(--color-border)]">
+                    معاينة مباشرة
+                  </p>
+                  {/* Mini app mockup */}
+                  <div className="p-4" style={{ backgroundColor: localTheme.backgroundColor }}>
+                    {/* Topbar mock */}
+                    <div className="rounded-[var(--border-radius-lg)] mb-3 px-4 py-2.5 flex items-center justify-between"
+                      style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
+                      <div className="erp-page-actions">
+                        <div className="w-6 h-6 rounded-[var(--border-radius-base)] flex items-center justify-center text-white text-[10px] font-bold"
+                          style={{ backgroundColor: localTheme.primaryColor }}>م</div>
+                        <span className="text-xs font-bold" style={{ color: '#0f172a' }}>مؤسسة المغربي</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <div className="w-6 h-6 rounded-full bg-[#f0f2f5] flex items-center justify-center">
+                          <span className="material-icons-round text-slate-400" style={{ fontSize: 13 }}>notifications</span>
+                        </div>
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
+                          style={{ backgroundColor: localTheme.primaryColor }}>م</div>
+                      </div>
+                    </div>
+                    {/* KPI cards mock */}
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {[
+                        { label: 'الإنتاج', value: '١٢٤', icon: 'factory' },
+                        { label: 'الجودة', value: '٩٨٪', icon: 'verified' },
+                        { label: 'المهام', value: '٣٧', icon: 'assignment' },
+                      ].map((kpi) => (
+                        <div key={kpi.label} className="rounded-[var(--border-radius-lg)] p-2.5 flex items-center gap-2"
+                          style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
+                          <div className="w-7 h-7 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: `${localTheme.primaryColor}18` }}>
+                            <span className="material-icons-round text-[14px]" style={{ color: localTheme.primaryColor }}>{kpi.icon}</span>
+                          </div>
+                          <div>
+                            <p className="text-[8px] text-[var(--color-text-muted)] font-medium">{kpi.label}</p>
+                            <p className="text-xs font-black" style={{ color: '#0f172a' }}>{kpi.value}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Buttons mock */}
+                    <div className="erp-page-actions">
+                      <button className="px-3 py-1.5 rounded-[var(--border-radius-base)] text-white text-[10px] font-bold"
+                        style={{ backgroundColor: localTheme.primaryColor }}>
+                        + إضافة جديد
+                      </button>
+                      <button className="px-3 py-1.5 rounded-[var(--border-radius-base)] text-[10px] font-bold border"
+                        style={{ color: localTheme.primaryColor, borderColor: `${localTheme.primaryColor}40`, backgroundColor: `${localTheme.primaryColor}08` }}>
+                        تصدير
+                      </button>
+                      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] text-[9px] font-bold"
+                        style={{ backgroundColor: localTheme.successColor + '15', color: localTheme.successColor }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: localTheme.successColor }} />
+                        نشط
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] text-[9px] font-bold"
+                        style={{ backgroundColor: localTheme.dangerColor + '15', color: localTheme.dangerColor }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: localTheme.dangerColor }} />
+                        خطر
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Color swatches row */}
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { label: 'رئيسي', color: localTheme.primaryColor },
+                    { label: 'ثانوي', color: localTheme.secondaryColor },
+                    { label: 'نجاح', color: localTheme.successColor },
+                    { label: 'تحذير', color: localTheme.warningColor },
+                    { label: 'خطر', color: localTheme.dangerColor },
+                    { label: 'خلفية', color: localTheme.backgroundColor },
+                  ]).map((swatch) => (
+                    <div key={swatch.label} className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)]">
+                      <div className="w-4 h-4 rounded shadow-inner border border-black/10" style={{ backgroundColor: swatch.color }} />
+                      <span className="text-[10px] font-bold text-slate-500">{swatch.label}</span>
+                      <span className="text-[9px] font-mono text-slate-400">{swatch.color}</span>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Reset */}
@@ -1139,22 +1490,23 @@ export const Settings: React.FC = () => {
                   { key: 'allowReportWithoutPlan' as keyof PlanSettings, label: 'السماح بالتقارير بدون خطة', icon: 'assignment', desc: 'عند التعطيل، لن يتمكن المشرفون من إنشاء تقارير إنتاج بدون خطة نشطة.' },
                   { key: 'allowOverProduction' as keyof PlanSettings, label: 'السماح بالإنتاج الزائد', icon: 'trending_up', desc: 'عند التعطيل، لن يُسمح بإضافة تقارير بعد الوصول إلى الكمية المخططة.' },
                   { key: 'autoClosePlan' as keyof PlanSettings, label: 'إغلاق الخطة تلقائياً عند الاكتمال', icon: 'event_available', desc: 'عند التفعيل، يتم تغيير حالة الخطة إلى "مكتملة" تلقائياً عند الوصول للكمية المخططة.' },
+                  { key: 'requireFinishedStockApprovalForReports' as keyof PlanSettings, label: 'اعتماد دخول تم الصنع من التقارير', icon: 'approval', desc: 'عند التفعيل، لا تتم إضافة المنتج التام تلقائياً للمخزن بعد التقرير، بل يظهر طلب اعتماد للمستخدم المخول.' },
                   { key: 'allowNegativeDecomposedStock' as keyof PlanSettings, label: 'السماح بالسالب في مخزن المفكك', icon: 'remove_circle_outline', desc: 'عند التفعيل، يمكن خصم مواد خام من مخزن المفكك حتى لو الرصيد الحالي غير كافٍ.' },
                   { key: 'allowNegativeFinishedTransferStock' as keyof PlanSettings, label: 'السماح بتحويل تم الصنع بالسالب', icon: 'swap_horiz', desc: 'عند التفعيل، يمكن اعتماد تحويلات مخزن "تم الصنع" حتى لو الرصيد الحالي أقل من الكمية المطلوبة.' },
                 ]).map((setting) => (
-                  <div key={setting.key} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                  <div key={setting.key} className="flex items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">{setting.icon}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{setting.label}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{setting.desc}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{setting.label}</p>
+                      <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{setting.desc}</p>
                     </div>
                     <button
                       onClick={() => setLocalPlanSettings((prev) => ({ ...prev, [setting.key]: !prev[setting.key] }))}
                       className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${(localPlanSettings as any)[setting.key] ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
                     >
-                      <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-all ${(localPlanSettings as any)[setting.key] ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
+                      <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${(localPlanSettings as any)[setting.key] ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
                     </button>
                   </div>
                 ))}
@@ -1162,18 +1514,18 @@ export const Settings: React.FC = () => {
                 {/* Numeric & Select Settings */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Max Waste Threshold */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="material-icons-round text-primary text-lg">delete_sweep</span>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">حد الهدر الأقصى</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">حد الهدر الأقصى</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="erp-page-actions">
                       <input
                         type="number"
                         min={0}
                         max={100}
                         step={0.5}
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                         value={localPlanSettings.maxWasteThreshold}
                         onChange={(e) => setLocalPlanSettings((p) => ({ ...p, maxWasteThreshold: Number(e.target.value) }))}
                       />
@@ -1182,13 +1534,13 @@ export const Settings: React.FC = () => {
                   </div>
 
                   {/* Efficiency Calculation Mode */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="material-icons-round text-primary text-lg">speed</span>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">حساب الكفاءة</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">حساب الكفاءة</p>
                     </div>
                     <select
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.efficiencyCalculationMode}
                       onChange={(e) => setLocalPlanSettings((p) => ({ ...p, efficiencyCalculationMode: e.target.value as 'standard' | 'weighted' }))}
                     >
@@ -1198,13 +1550,13 @@ export const Settings: React.FC = () => {
                   </div>
 
                   {/* Average Production Mode */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="material-icons-round text-primary text-lg">equalizer</span>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">متوسط الإنتاج</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">متوسط الإنتاج</p>
                     </div>
                     <select
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.averageProductionMode}
                       onChange={(e) => setLocalPlanSettings((p) => ({ ...p, averageProductionMode: e.target.value as 'daily' | 'weekly' | 'monthly' }))}
                     >
@@ -1215,16 +1567,16 @@ export const Settings: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="material-icons-round text-primary text-lg">warehouse</span>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن استقبال الإنتاج</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">مخزن استقبال الإنتاج</p>
                   </div>
-                  <p className="text-xs text-slate-400 mb-3">
+                  <p className="text-xs text-[var(--color-text-muted)] mb-3">
                     أي تقرير إنتاج جديد أو إغلاق أمر شغل سيتم ترحيل الكمية المنتجة تلقائياً إلى هذا المخزن.
                   </p>
                   <select
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={localPlanSettings.defaultProductionWarehouseId ?? ''}
                     onChange={(e) => setLocalPlanSettings((p) => ({ ...p, defaultProductionWarehouseId: e.target.value }))}
                   >
@@ -1236,16 +1588,36 @@ export const Settings: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-2">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="material-icons-round text-primary text-lg">science</span>
+                      <p className="text-sm font-bold text-[var(--color-text)]">مخزن المواد الخام</p>
+                    </div>
+                    <p className="text-xs text-[var(--color-text-muted)] mb-3">
+                      المنتجات التي لها رصيد في هذا المخزن يتم اعتبارها "خامات" ولن تظهر في الإنتاج أو التكاليف أو قوائم اختيار المنتج.
+                    </p>
+                    <select
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={localPlanSettings.rawMaterialWarehouseId ?? ''}
+                      onChange={(e) => setLocalPlanSettings((p) => ({ ...p, rawMaterialWarehouseId: e.target.value }))}
+                    >
+                      <option value="">غير محدد</option>
+                      {inventoryWarehouses.map((w) => (
+                        <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="material-icons-round text-primary text-lg">call_split</span>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن المفكك (خصم الخامات)</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">مخزن المفكك (خصم الخامات)</p>
                     </div>
-                    <p className="text-xs text-slate-400 mb-3">
+                    <p className="text-xs text-[var(--color-text-muted)] mb-3">
                       عند تسجيل تقرير إنتاج، النظام يخصم مكونات المنتج (الخامات) من هذا المخزن.
                     </p>
                     <select
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.decomposedSourceWarehouseId ?? ''}
                       onChange={(e) => setLocalPlanSettings((p) => ({ ...p, decomposedSourceWarehouseId: e.target.value }))}
                     >
@@ -1256,16 +1628,16 @@ export const Settings: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="material-icons-round text-primary text-lg">inventory_2</span>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن تم الصنع</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">مخزن تم الصنع</p>
                     </div>
-                    <p className="text-xs text-slate-400 mb-3">
+                    <p className="text-xs text-[var(--color-text-muted)] mb-3">
                       الكمية المنتجة (تم الصنع) تُضاف تلقائيًا إلى هذا المخزن من تقرير الإنتاج.
                     </p>
                     <select
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.finishedReceiveWarehouseId ?? ''}
                       onChange={(e) => setLocalPlanSettings((p) => ({ ...p, finishedReceiveWarehouseId: e.target.value }))}
                     >
@@ -1276,16 +1648,16 @@ export const Settings: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="material-icons-round text-primary text-lg">delete_sweep</span>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن الهالك</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">مخزن الهالك</p>
                     </div>
-                    <p className="text-xs text-slate-400 mb-3">
+                    <p className="text-xs text-[var(--color-text-muted)] mb-3">
                       كمية الهالك في تقرير الإنتاج تُرحَّل تلقائيًا إلى هذا المخزن.
                     </p>
                     <select
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.wasteReceiveWarehouseId ?? ''}
                       onChange={(e) => setLocalPlanSettings((p) => ({ ...p, wasteReceiveWarehouseId: e.target.value }))}
                     >
@@ -1296,16 +1668,16 @@ export const Settings: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="material-icons-round text-primary text-lg">inventory</span>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">مخزن المنتج التام</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">مخزن المنتج التام</p>
                     </div>
-                    <p className="text-xs text-slate-400 mb-3">
+                    <p className="text-xs text-[var(--color-text-muted)] mb-3">
                       يستخدم للعرض في مؤشرات "منتج تام". لا يتم إضافة حركة إنتاج تلقائية عليه حاليًا.
                     </p>
                     <select
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localPlanSettings.finalProductWarehouseId ?? ''}
                       onChange={(e) => setLocalPlanSettings((p) => ({ ...p, finalProductWarehouseId: e.target.value }))}
                     >
@@ -1317,16 +1689,16 @@ export const Settings: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="material-icons-round text-primary text-lg">verified_user</span>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">صلاحية معتمد تحويلات المخازن</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">صلاحية معتمد تحويلات المخازن</p>
                   </div>
-                  <p className="text-xs text-slate-400 mb-3">
+                  <p className="text-xs text-[var(--color-text-muted)] mb-3">
                     أي مستخدم يملك هذه الصلاحية يمكنه قبول/رفض التحويلات المعلقة.
                   </p>
                   <select
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={localPlanSettings.transferApprovalPermission ?? ''}
                     onChange={(e) => setLocalPlanSettings((p) => ({ ...p, transferApprovalPermission: e.target.value }))}
                   >
@@ -1335,16 +1707,16 @@ export const Settings: React.FC = () => {
                     ))}
                   </select>
                 </div>
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="material-icons-round text-primary text-lg">straighten</span>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">وحدة عرض تحويلات المنتج النهائي</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">وحدة عرض تحويلات المنتج النهائي</p>
                   </div>
-                  <p className="text-xs text-slate-400 mb-3">
+                  <p className="text-xs text-[var(--color-text-muted)] mb-3">
                     يحدد طريقة عرض كميات تحويلات المنتج النهائي في الشاشات والطباعة: قطعة أو كرتونة.
                   </p>
                   <select
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={localPlanSettings.transferDisplayUnit ?? 'piece'}
                     onChange={(e) => setLocalPlanSettings((p) => ({ ...p, transferDisplayUnit: e.target.value as 'piece' | 'carton' }))}
                   >
@@ -1365,31 +1737,31 @@ export const Settings: React.FC = () => {
                   { key: 'showAlertsWidget' as keyof DashboardDisplaySettings, label: 'عرض عنصر التنبيهات', icon: 'notifications_active', desc: 'إظهار قسم التنبيهات النشطة في لوحات التحكم' },
                   { key: 'enableDragReorder' as keyof DashboardDisplaySettings, label: 'تفعيل السحب لإعادة الترتيب', icon: 'drag_indicator', desc: 'السماح بإعادة ترتيب العناصر في لوحات التحكم بالسحب والإفلات' },
                 ]).map((setting) => (
-                  <div key={setting.key} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                  <div key={setting.key} className="flex items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">{setting.icon}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{setting.label}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{setting.desc}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{setting.label}</p>
+                      <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{setting.desc}</p>
                     </div>
                     <button
                       onClick={() => setLocalDashboardDisplay((prev) => ({ ...prev, [setting.key]: !prev[setting.key] }))}
                       className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${(localDashboardDisplay as any)[setting.key] ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
                     >
-                      <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-all ${(localDashboardDisplay as any)[setting.key] ? 'right-0.5' : 'right-[22px]'}`} />
+                      <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${(localDashboardDisplay as any)[setting.key] ? 'right-0.5' : 'right-[22px]'}`} />
                     </button>
                   </div>
                 ))}
 
                 {/* Widgets Per Row */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">view_column</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">عدد العناصر في الصف</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">عدد العناصر في الصف</p>
                       <p className="text-xs text-slate-400">عدد الأعمدة في شبكة لوحة التحكم</p>
                     </div>
                   </div>
@@ -1398,10 +1770,10 @@ export const Settings: React.FC = () => {
                       <button
                         key={n}
                         onClick={() => setLocalDashboardDisplay((p) => ({ ...p, widgetsPerRow: n }))}
-                        className={`w-12 h-10 rounded-xl text-sm font-bold transition-all ${
+                        className={`w-12 h-10 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all ${
                           localDashboardDisplay.widgetsPerRow === n
-                            ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-primary/30'
+                            ? 'bg-primary text-white shadow-primary/20'
+                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
                         }`}
                       >
                         {n}
@@ -1422,19 +1794,19 @@ export const Settings: React.FC = () => {
                   { key: 'enableCapacityAlert' as keyof AlertToggleSettings, label: 'تنبيه السعة الإنتاجية', icon: 'production_quantity_limits', desc: 'تنبيه عند اقتراب خط الإنتاج من الحد الأقصى للسعة' },
                   { key: 'enableCostVarianceAlert' as keyof AlertToggleSettings, label: 'تنبيه انحراف التكلفة', icon: 'compare_arrows', desc: 'تنبيه عند تجاوز التكلفة الفعلية للتكلفة المعيارية' },
                 ]).map((alert) => (
-                  <div key={alert.key} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                  <div key={alert.key} className="flex items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">{alert.icon}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{alert.label}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{alert.desc}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{alert.label}</p>
+                      <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{alert.desc}</p>
                     </div>
                     <button
                       onClick={() => setLocalAlertToggles((prev) => ({ ...prev, [alert.key]: !prev[alert.key] }))}
                       className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${localAlertToggles[alert.key] ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
                     >
-                      <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-all ${localAlertToggles[alert.key] ? 'right-0.5' : 'right-[22px]'}`} />
+                      <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${localAlertToggles[alert.key] ? 'right-0.5' : 'right-[22px]'}`} />
                     </button>
                   </div>
                 ))}
@@ -1445,27 +1817,27 @@ export const Settings: React.FC = () => {
           {/* ── System Status (for all users) ─────────────────────────────── */}
           <Card title="حالة النظام">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-5 text-center">
+              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">cloud_done</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">اتصال Firebase</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">اتصال Firebase</p>
                 <Badge variant={isAuthenticated ? 'success' : 'danger'}>
                   {isAuthenticated ? 'متصل' : 'غير متصل'}
                 </Badge>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-5 text-center">
+              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">inventory_2</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">المنتجات</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{products.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المنتجات</p>
+                <p className="text-2xl font-bold text-[var(--color-text)]">{products.length}</p>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-5 text-center">
+              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">precision_manufacturing</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">خطوط الإنتاج</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{productionLines.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">خطوط الإنتاج</p>
+                <p className="text-2xl font-bold text-[var(--color-text)]">{productionLines.length}</p>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-5 text-center">
+              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">groups</span>
-                <p className="text-xs text-slate-400 font-bold mb-1">المشرفين</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{employees.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المشرفين</p>
+                <p className="text-2xl font-bold text-[var(--color-text)]">{employees.length}</p>
               </div>
             </div>
           </Card>
@@ -1477,12 +1849,12 @@ export const Settings: React.FC = () => {
                 <span className="material-icons-round text-primary text-2xl">shield</span>
               </div>
               <div>
-                <p className="text-xs text-slate-400 font-bold mb-1">الدور الحالي</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الدور الحالي</p>
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold ${roleColor}`}>
                   {roleName}
                 </span>
               </div>
-              <div className="mr-auto text-xs text-slate-400 font-bold">
+              <div className="mr-auto text-xs text-[var(--color-text-muted)] font-bold">
                 {enabledCount} / {ALL_PERMISSIONS.length} صلاحية مفعلة
               </div>
             </div>
@@ -1498,7 +1870,7 @@ export const Settings: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold">الإجراءات السريعة — لوحة مدير النظام</h3>
-              <p className="text-sm text-slate-500">أنشئ أزرار تنقل أو تصدير بسرعة، وخصص الاسم والأيقونة واللون.</p>
+              <p className="page-subtitle">أنشئ أزرار تنقل أو تصدير بسرعة، وخصص الاسم والأيقونة واللون.</p>
             </div>
             <Button onClick={() => handleSave('quickActions')} disabled={saving}>
               {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -1510,8 +1882,8 @@ export const Settings: React.FC = () => {
           <Card title="قائمة الأزرار السريعة" subtitle="الترتيب هنا هو نفس ترتيب الظهور في لوحة مدير النظام">
             <div className="space-y-3">
               {localQuickActions.length === 0 && (
-                <div className="text-center py-10 bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-                  <span className="material-icons-round text-3xl text-slate-300 dark:text-slate-600">bolt</span>
+                <div className="text-center py-10 bg-[#f8f9fa]/50 border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
+                  <span className="material-icons-round text-3xl text-[var(--color-text-muted)] dark:text-slate-600">bolt</span>
                   <p className="mt-2 text-sm font-bold text-slate-500">لا توجد إجراءات سريعة حتى الآن</p>
                 </div>
               )}
@@ -1519,20 +1891,20 @@ export const Settings: React.FC = () => {
               {localQuickActions.map((item, index) => {
                 const selectedColor = QUICK_ACTION_COLORS.find((c) => c.value === item.color) ?? QUICK_ACTION_COLORS[0];
                 return (
-                  <div key={item.id} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-4 bg-white dark:bg-slate-900">
+                  <div key={item.id} className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-[var(--color-card)]">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${selectedColor.classes}`}>
+                      <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] border ${selectedColor.classes}`}>
                         <span className="material-icons-round text-base">{item.icon}</span>
                         <span className="text-sm font-bold">{item.label || 'بدون اسم'}</span>
                       </div>
-                      <span className="text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full sm:mr-auto">
+                      <span className="text-[11px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-1 rounded-full sm:mr-auto">
                         ترتيب #{index + 1}
                       </span>
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => moveQuickAction(item.id, 'up')}
                           disabled={index === 0}
-                          className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          className="w-8 h-8 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                           title="تحريك لأعلى"
                         >
                           <span className="material-icons-round text-sm">keyboard_arrow_up</span>
@@ -1540,21 +1912,21 @@ export const Settings: React.FC = () => {
                         <button
                           onClick={() => moveQuickAction(item.id, 'down')}
                           disabled={index === localQuickActions.length - 1}
-                          className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          className="w-8 h-8 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                           title="تحريك لأسفل"
                         >
                           <span className="material-icons-round text-sm">keyboard_arrow_down</span>
                         </button>
                         <button
                           onClick={() => setEditingQuickActionId((prev) => prev === item.id ? null : item.id)}
-                          className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary hover:border-primary/30 transition-all"
+                          className="w-8 h-8 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 transition-all"
                           title="تعديل"
                         >
                           <span className="material-icons-round text-sm">edit</span>
                         </button>
                         <button
                           onClick={() => removeQuickAction(item.id)}
-                          className="w-8 h-8 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-all"
+                          className="w-8 h-8 rounded-[var(--border-radius-base)] border border-rose-200 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-all"
                           title="حذف"
                         >
                           <span className="material-icons-round text-sm">delete</span>
@@ -1563,14 +1935,14 @@ export const Settings: React.FC = () => {
                     </div>
 
                     {editingQuickActionId === item.id && (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/40 border border-[var(--color-border)]">
                         <div className="space-y-2">
                           <label className="text-xs font-bold text-slate-500">اسم الزر</label>
                           <input
                             type="text"
                             value={item.label}
                             onChange={(e) => updateQuickAction(item.id, { label: e.target.value })}
-                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                             placeholder="مثال: إدخال سريع"
                           />
                         </div>
@@ -1590,7 +1962,7 @@ export const Settings: React.FC = () => {
                                 color: selected.color,
                               });
                             }}
-                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                           >
                             <option value="custom">مخصص (تعديل يدوي)</option>
                             {AVAILABLE_QUICK_ACTIONS.map((def) => (
@@ -1604,7 +1976,7 @@ export const Settings: React.FC = () => {
                           <select
                             value={item.icon}
                             onChange={(e) => updateQuickAction(item.id, { icon: e.target.value })}
-                            className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                           >
                             {QUICK_ACTION_ICONS.map((icon) => (
                               <option key={icon} value={icon}>{icon}</option>
@@ -1619,7 +1991,7 @@ export const Settings: React.FC = () => {
                               <button
                                 key={color.value}
                                 onClick={() => updateQuickAction(item.id, { color: color.value })}
-                                className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${color.classes} ${item.color === color.value ? 'ring-2 ring-primary/30' : ''}`}
+                                className={`px-3 py-1.5 rounded-[var(--border-radius-base)] border text-xs font-bold transition-all ${color.classes} ${item.color === color.value ? 'ring-2 ring-primary/30' : ''}`}
                               >
                                 {color.label}
                               </button>
@@ -1627,8 +1999,8 @@ export const Settings: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="lg:col-span-2 text-[11px] font-medium text-slate-400 flex flex-wrap items-center gap-3">
-                          <span>النوع: <span className="font-bold text-slate-600 dark:text-slate-300">{item.actionType}</span></span>
+                        <div className="lg:col-span-2 text-[11px] font-medium text-[var(--color-text-muted)] flex flex-wrap items-center gap-3">
+                          <span>النوع: <span className="font-bold text-[var(--color-text-muted)]">{item.actionType}</span></span>
                           {item.target && <span>المسار: <span className="font-mono">{item.target}</span></span>}
                           {item.permission && <span>الصلاحية: <span className="font-mono">{item.permission}</span></span>}
                         </div>
@@ -1639,7 +2011,7 @@ export const Settings: React.FC = () => {
               })}
             </div>
 
-            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
               <Button variant="outline" onClick={addQuickAction}>
                 <span className="material-icons-round text-sm">add</span>
                 إضافة زر سريع
@@ -1657,7 +2029,7 @@ export const Settings: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold">إعدادات عناصر لوحات التحكم</h3>
-              <p className="text-sm text-slate-500">تحكم في ترتيب وظهور العناصر من مكان واحد، مع إمكانية إضافة Widget جديد.</p>
+              <p className="page-subtitle">تحكم في ترتيب وظهور العناصر من مكان واحد، مع إمكانية إضافة Widget جديد.</p>
             </div>
             <Button onClick={() => handleSave('widgets')} disabled={saving}>
               {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -1672,10 +2044,10 @@ export const Settings: React.FC = () => {
                 <button
                   key={dashboardKey}
                   onClick={() => handleSelectDashboard(dashboardKey)}
-                  className={`text-sm font-bold rounded-xl px-4 py-3 border transition-all ${
+                  className={`text-sm font-bold rounded-[var(--border-radius-lg)] px-4 py-3 border transition-all ${
                     selectedDashboardKey === dashboardKey
                       ? 'bg-primary/10 text-primary border-primary/30'
-                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-primary/20'
+                      : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/20'
                   }`}
                 >
                   {dashboardLabel}
@@ -1700,34 +2072,34 @@ export const Settings: React.FC = () => {
                     onDragEnter={() => handleDragEnter(selectedDashboardKey, index)}
                     onDragEnd={() => handleDragEnd(selectedDashboardKey)}
                     onDragOver={(e) => e.preventDefault()}
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-grab active:cursor-grabbing group ${
+                    className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border transition-all cursor-grab active:cursor-grabbing group ${
                       widget.visible
-                        ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary/30'
-                        : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 opacity-60'
+                        ? 'bg-[var(--color-card)] border-[var(--color-border)] hover:border-primary/30'
+                        : 'bg-[#f8f9fa]/50 border-[var(--color-border)] opacity-60'
                     }`}
                   >
-                    <span className="material-icons-round text-slate-300 dark:text-slate-600 text-lg group-hover:text-primary transition-colors">
+                    <span className="material-icons-round text-[var(--color-text-muted)] dark:text-slate-600 text-lg group-hover:text-primary transition-colors">
                       drag_indicator
                     </span>
-                    <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <span className="w-8 h-8 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary text-sm">{def.icon}</span>
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{def.label}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">{widget.id}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)] truncate">{def.label}</p>
+                      <p className="text-[10px] text-[var(--color-text-muted)] font-mono">{widget.id}</p>
                     </div>
                     {isCustom && (
                       <span className="text-[10px] font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded-full">
                         مخصص
                       </span>
                     )}
-                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-0.5 rounded-full">
                       #{index + 1}
                     </span>
                     {isCustom && (
                       <button
                         onClick={() => removeCustomWidget(selectedDashboardKey, widget.id)}
-                        className="w-8 h-8 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-all"
+                        className="w-8 h-8 rounded-[var(--border-radius-base)] border border-rose-200 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-all"
                         title="حذف الـ Widget"
                       >
                         <span className="material-icons-round text-sm">delete</span>
@@ -1742,7 +2114,7 @@ export const Settings: React.FC = () => {
                       }`}
                     >
                       <span
-                        className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
+                        className={`absolute top-0.5 w-5 h-5 bg-[var(--color-card)] rounded-full shadow transition-all ${
                           widget.visible ? 'right-0.5' : 'right-[18px]'
                         }`}
                       />
@@ -1760,7 +2132,7 @@ export const Settings: React.FC = () => {
                 <select
                   value={widgetForm.dashboardKey}
                   onChange={(e) => setWidgetForm((prev) => ({ ...prev, dashboardKey: e.target.value }))}
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 >
                   {Object.entries(DASHBOARD_LABELS).map(([dashboardKey, label]) => (
                     <option key={dashboardKey} value={dashboardKey}>{label}</option>
@@ -1772,7 +2144,7 @@ export const Settings: React.FC = () => {
                 <select
                   value={widgetForm.type}
                   onChange={(e) => setWidgetForm((prev) => ({ ...prev, type: e.target.value as CustomWidgetType }))}
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 >
                   {CUSTOM_WIDGET_TYPES.map((typeDef) => (
                     <option key={typeDef.type} value={typeDef.type}>{typeDef.label}</option>
@@ -1786,7 +2158,7 @@ export const Settings: React.FC = () => {
                   value={widgetForm.label}
                   onChange={(e) => setWidgetForm((prev) => ({ ...prev, label: e.target.value }))}
                   placeholder="اسم الـ Widget"
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 />
               </div>
               <div className="space-y-1">
@@ -1796,7 +2168,7 @@ export const Settings: React.FC = () => {
                   value={widgetForm.icon}
                   onChange={(e) => setWidgetForm((prev) => ({ ...prev, icon: e.target.value }))}
                   placeholder="widgets"
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 />
               </div>
               <div className="space-y-1">
@@ -1806,7 +2178,7 @@ export const Settings: React.FC = () => {
                   value={widgetForm.permission}
                   onChange={(e) => setWidgetForm((prev) => ({ ...prev, permission: e.target.value }))}
                   placeholder="مثال: reports.view"
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 />
               </div>
               <div className="space-y-1">
@@ -1816,7 +2188,7 @@ export const Settings: React.FC = () => {
                   value={widgetForm.description}
                   onChange={(e) => setWidgetForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="وصف قصير"
-                  className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                 />
               </div>
               {widgetForm.type === 'kpi' && (
@@ -1828,7 +2200,7 @@ export const Settings: React.FC = () => {
                       value={widgetForm.value}
                       onChange={(e) => setWidgetForm((prev) => ({ ...prev, value: e.target.value }))}
                       placeholder="مثال: 1250"
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1838,7 +2210,7 @@ export const Settings: React.FC = () => {
                       value={widgetForm.unit}
                       onChange={(e) => setWidgetForm((prev) => ({ ...prev, unit: e.target.value }))}
                       placeholder="وحدة"
-                      className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                     />
                   </div>
                 </>
@@ -1851,12 +2223,12 @@ export const Settings: React.FC = () => {
                     value={widgetForm.target}
                     onChange={(e) => setWidgetForm((prev) => ({ ...prev, target: e.target.value }))}
                     placeholder="/reports"
-                    className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                   />
                 </div>
               )}
             </div>
-            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
               <Button variant="outline" onClick={addCustomWidget}>
                 <span className="material-icons-round text-sm">add</span>
                 إضافة Widget
@@ -1874,7 +2246,7 @@ export const Settings: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold">قواعد التنبيهات</h3>
-              <p className="text-sm text-slate-500">حدد الحدود التي يتم عندها إنشاء تنبيهات في لوحات التحكم.</p>
+              <p className="page-subtitle">حدد الحدود التي يتم عندها إنشاء تنبيهات في لوحات التحكم.</p>
             </div>
             <Button onClick={() => handleSave('alerts')} disabled={saving}>
               {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -1886,14 +2258,14 @@ export const Settings: React.FC = () => {
           <Card>
             <div className="space-y-6">
               {ALERT_FIELDS.map((field) => (
-                <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary">{field.icon}</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{field.label}</p>
-                      <p className="text-xs text-slate-400 truncate">{field.description}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{field.label}</p>
+                      <p className="text-xs text-[var(--color-text-muted)] truncate">{field.description}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -1901,13 +2273,13 @@ export const Settings: React.FC = () => {
                       type="number"
                       min={0}
                       step={field.key === 'planDelayDays' ? 1 : 0.5}
-                      className="w-24 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      className="w-24 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       value={localAlerts[field.key]}
                       onChange={(e) =>
                         setLocalAlerts((prev) => ({ ...prev, [field.key]: Number(e.target.value) }))
                       }
                     />
-                    <span className="text-sm font-bold text-slate-400 w-10">{field.unit}</span>
+                    <span className="text-sm font-bold text-[var(--color-text-muted)] w-10">{field.unit}</span>
                   </div>
                 </div>
               ))}
@@ -1917,9 +2289,9 @@ export const Settings: React.FC = () => {
           <Card title="القيم الافتراضية">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               {ALERT_FIELDS.map((field) => (
-                <div key={field.key} className="text-center p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                  <p className="text-xs font-bold text-slate-400 mb-1">{field.label}</p>
-                  <p className="text-lg font-black text-slate-600 dark:text-slate-300">
+                <div key={field.key} className="text-center p-3 bg-[#f8f9fa] rounded-[var(--border-radius-lg)]">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">{field.label}</p>
+                  <p className="text-lg font-bold text-[var(--color-text-muted)]">
                     {DEFAULT_ALERT_SETTINGS[field.key]} {field.unit}
                   </p>
                 </div>
@@ -1944,7 +2316,7 @@ export const Settings: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold">حدود مؤشرات الأداء</h3>
-              <p className="text-sm text-slate-500">حدد قيم "جيد" و"تحذير" لكل مؤشر. تُستخدم لتلوين المؤشرات في لوحات التحكم.</p>
+              <p className="page-subtitle">حدد قيم "جيد" و"تحذير" لكل مؤشر. تُستخدم لتلوين المؤشرات في لوحات التحكم.</p>
             </div>
             <Button onClick={() => handleSave('kpis')} disabled={saving}>
               {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -1956,38 +2328,38 @@ export const Settings: React.FC = () => {
           <Card>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-right py-3 px-4 font-bold text-slate-500 text-xs uppercase">المؤشر</th>
-                    <th className="text-center py-3 px-4 font-bold text-slate-500 text-xs uppercase">الوحدة</th>
-                    <th className="text-center py-3 px-4 font-bold text-slate-500 text-xs uppercase">المقياس</th>
-                    <th className="text-center py-3 px-4 font-bold text-xs uppercase">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">المؤشر</th>
+                    <th className="erp-th text-center">الوحدة</th>
+                    <th className="erp-th text-center">المقياس</th>
+                    <th className="erp-th text-center">
                       <span className="text-emerald-600">جيد</span>
                     </th>
-                    <th className="text-center py-3 px-4 font-bold text-xs uppercase">
+                    <th className="erp-th text-center">
                       <span className="text-amber-600">تحذير</span>
                     </th>
-                    <th className="text-center py-3 px-4 font-bold text-xs uppercase">
+                    <th className="erp-th text-center">
                       <span className="text-rose-600">خطر</span>
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-[var(--color-border)]">
                   {KPI_DEFINITIONS.map((kpi) => {
                     const threshold = localKPIs[kpi.key] || DEFAULT_KPI_THRESHOLDS[kpi.key];
                     return (
-                      <tr key={kpi.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <tr key={kpi.key} className="hover:bg-[#f8f9fa] transition-colors">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
                             <span className="material-icons-round text-primary">{kpi.icon}</span>
-                            <span className="font-bold text-slate-700 dark:text-slate-300">{kpi.label}</span>
+                            <span className="font-bold text-[var(--color-text)]">{kpi.label}</span>
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-center text-slate-500 font-bold">{kpi.unit}</td>
+                        <td className="py-4 px-4 text-center text-[var(--color-text-muted)] font-bold">{kpi.unit}</td>
                         <td className="py-4 px-4 text-center">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                             kpi.invertedScale
-                              ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+                              ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700'
                               : 'bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400'
                           }`}>
                             {kpi.invertedScale ? 'أقل = أفضل' : 'أعلى = أفضل'}
@@ -1998,7 +2370,7 @@ export const Settings: React.FC = () => {
                             type="number"
                             min={0}
                             step={0.5}
-                            className="w-20 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                            className="w-20 border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
                             value={threshold.good}
                             onChange={(e) =>
                               setLocalKPIs((prev) => ({
@@ -2013,7 +2385,7 @@ export const Settings: React.FC = () => {
                             type="number"
                             min={0}
                             step={0.5}
-                            className="w-20 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 rounded-lg text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
+                            className="w-20 border border-amber-200 bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
                             value={threshold.warning}
                             onChange={(e) =>
                               setLocalKPIs((prev) => ({
@@ -2045,25 +2417,25 @@ export const Settings: React.FC = () => {
                 const threshold = localKPIs[kpi.key] || DEFAULT_KPI_THRESHOLDS[kpi.key];
                 return (
                   <div key={kpi.key} className="space-y-2">
-                    <p className="text-xs font-bold text-slate-500 text-center">{kpi.label}</p>
+                    <p className="text-xs font-bold text-[var(--color-text-muted)] text-center">{kpi.label}</p>
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200">
                         <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                        <span className="text-xs font-bold text-emerald-700">
                           {kpi.invertedScale ? `≤ ${threshold.good}${kpi.unit}` : `≥ ${threshold.good}${kpi.unit}`}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-amber-50 dark:bg-amber-900/10 border border-amber-200">
                         <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                        <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                        <span className="text-xs font-bold text-amber-700">
                           {kpi.invertedScale
                             ? `${threshold.good} — ${threshold.warning}${kpi.unit}`
                             : `${threshold.warning} — ${threshold.good}${kpi.unit}`}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-rose-50 dark:bg-rose-900/10 border border-rose-200">
                         <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                        <span className="text-xs font-bold text-rose-700 dark:text-rose-400">
+                        <span className="text-xs font-bold text-rose-700">
                           {kpi.invertedScale ? `> ${threshold.warning}${kpi.unit}` : `< ${threshold.warning}${kpi.unit}`}
                         </span>
                       </div>
@@ -2091,12 +2463,12 @@ export const Settings: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold">إعدادات قالب الطباعة</h3>
-              <p className="text-sm text-slate-500">تخصيص مظهر التقارير المطبوعة — الشعار، الألوان، حجم الورق والمزيد.</p>
+              <p className="page-subtitle">تخصيص مظهر التقارير المطبوعة — الشعار، الألوان، حجم الورق والمزيد.</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="erp-page-actions">
               <Button
                 onClick={() => setShowPreview(true)}
-                className="!bg-slate-100 dark:!bg-slate-800 !text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700"
+                className="!bg-[#f0f2f5] dark:!bg-slate-800 !text-[var(--color-text)] dark:!text-[var(--color-text-muted)] hover:!bg-slate-200 dark:hover:!bg-slate-700"
               >
                 <span className="material-icons-round text-sm">visibility</span>
                 معاينة
@@ -2113,13 +2485,13 @@ export const Settings: React.FC = () => {
           <Card title="الشعار والعنوان">
             <div className="space-y-6">
               {/* Logo Upload */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">image</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">شعار الشركة</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">شعار الشركة</p>
                     <p className="text-xs text-slate-400">يظهر أعلى التقرير المطبوع — PNG أو JPG</p>
                   </div>
                 </div>
@@ -2128,14 +2500,14 @@ export const Settings: React.FC = () => {
                     <img
                       src={localPrint.logoUrl}
                       alt="logo"
-                      className="w-12 h-12 rounded-lg object-contain border border-slate-200 dark:border-slate-700 bg-white"
+                      className="w-12 h-12 rounded-[var(--border-radius-base)] object-contain border border-[var(--color-border)] bg-[var(--color-card)]"
                     />
                   )}
                   <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleLogoUpload} />
                   <button
                     onClick={() => logoInputRef.current?.click()}
                     disabled={uploadingLogo}
-                    className="px-4 py-2.5 rounded-xl text-sm font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                    className="px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {uploadingLogo ? (
                       <span className="material-icons-round animate-spin text-sm">refresh</span>
@@ -2147,7 +2519,7 @@ export const Settings: React.FC = () => {
                   {localPrint.logoUrl && (
                     <button
                       onClick={() => setLocalPrint((p) => ({ ...p, logoUrl: '' }))}
-                      className="px-3 py-2.5 rounded-xl text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all"
+                      className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all"
                     >
                       <span className="material-icons-round text-sm">delete</span>
                     </button>
@@ -2156,64 +2528,64 @@ export const Settings: React.FC = () => {
               </div>
 
               {/* Header Text */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">title</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">عنوان الرأس</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">عنوان الرأس</p>
                     <p className="text-xs text-slate-400">اسم الشركة / المؤسسة في أعلى التقرير</p>
                   </div>
                 </div>
                 <input
                   type="text"
-                  className="w-full sm:w-72 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                  className="w-full sm:w-72 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                   value={localPrint.headerText}
                   onChange={(e) => setLocalPrint((p) => ({ ...p, headerText: e.target.value }))}
                 />
               </div>
 
               {/* Footer Text */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">short_text</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">نص التذييل</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">نص التذييل</p>
                     <p className="text-xs text-slate-400">يظهر أسفل التقرير المطبوع</p>
                   </div>
                 </div>
                 <input
                   type="text"
-                  className="w-full sm:w-72 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                  className="w-full sm:w-72 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                   value={localPrint.footerText}
                   onChange={(e) => setLocalPrint((p) => ({ ...p, footerText: e.target.value }))}
                 />
               </div>
 
               {/* Primary Color */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">palette</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">اللون الرئيسي</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">اللون الرئيسي</p>
                     <p className="text-xs text-slate-400">لون العناوين والحدود في التقرير</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <input
                     type="color"
-                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer"
+                    className="w-10 h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] cursor-pointer"
                     value={localPrint.primaryColor}
                     onChange={(e) => setLocalPrint((p) => ({ ...p, primaryColor: e.target.value }))}
                   />
                   <input
                     type="text"
-                    className="w-28 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-mono font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-center"
+                    className="w-28 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-mono font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-center"
                     value={localPrint.primaryColor}
                     onChange={(e) => setLocalPrint((p) => ({ ...p, primaryColor: e.target.value }))}
                   />
@@ -2226,13 +2598,13 @@ export const Settings: React.FC = () => {
           <Card title="الورق والطباعة">
             <div className="space-y-6">
               {/* Paper Size */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">description</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">حجم الورق</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">حجم الورق</p>
                     <p className="text-xs text-slate-400">A4 / A5 / حراري</p>
                   </div>
                 </div>
@@ -2241,10 +2613,10 @@ export const Settings: React.FC = () => {
                     <button
                       key={val}
                       onClick={() => setLocalPrint((p) => ({ ...p, paperSize: val }))}
-                      className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                      className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all ${
                         localPrint.paperSize === val
-                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-primary/30'
+                          ? 'bg-primary text-white shadow-primary/20'
+                          : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
                       }`}
                     >
                       {label}
@@ -2254,13 +2626,13 @@ export const Settings: React.FC = () => {
               </div>
 
               {/* Orientation */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">crop_rotate</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">اتجاه الورق</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">اتجاه الورق</p>
                     <p className="text-xs text-slate-400">عمودي أو أفقي</p>
                   </div>
                 </div>
@@ -2269,10 +2641,10 @@ export const Settings: React.FC = () => {
                     <button
                       key={val}
                       onClick={() => setLocalPrint((p) => ({ ...p, orientation: val }))}
-                      className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                      className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center gap-2 ${
                         localPrint.orientation === val
-                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-primary/30'
+                          ? 'bg-primary text-white shadow-primary/20'
+                          : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
                       }`}
                     >
                       <span className="material-icons-round text-sm">{val === 'portrait' ? 'stay_current_portrait' : 'stay_current_landscape'}</span>
@@ -2283,13 +2655,13 @@ export const Settings: React.FC = () => {
               </div>
 
               {/* Copies */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">content_copy</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">عدد النسخ</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">عدد النسخ</p>
                     <p className="text-xs text-slate-400">عدد النسخ الافتراضي عند الطباعة</p>
                   </div>
                 </div>
@@ -2297,20 +2669,20 @@ export const Settings: React.FC = () => {
                   type="number"
                   min={1}
                   max={10}
-                  className="w-24 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                  className="w-24 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                   value={localPrint.copies}
                   onChange={(e) => setLocalPrint((p) => ({ ...p, copies: Math.max(1, Math.min(10, Number(e.target.value))) }))}
                 />
               </div>
 
               {/* Page Margins */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 space-y-4">
+              <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">border_outer</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">هوامش الصفحة (mm)</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">هوامش الصفحة (mm)</p>
                     <p className="text-xs text-slate-400">تُطبَّق تلقائيًا على كل صفحات الطباعة في النظام</p>
                   </div>
                 </div>
@@ -2327,7 +2699,7 @@ export const Settings: React.FC = () => {
                         type="number"
                         min={0}
                         max={30}
-                        className="w-full border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold text-center py-2.5 px-2 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-center py-2.5 px-2 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                         value={localPrint[field.key]}
                         onChange={(e) => {
                           const next = Number(e.target.value);
@@ -2341,13 +2713,13 @@ export const Settings: React.FC = () => {
               </div>
 
               {/* Decimal Places */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">decimal_increase</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">المنازل العشرية</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">المنازل العشرية</p>
                     <p className="text-xs text-slate-400">عدد الخانات بعد الفاصلة في الأرقام</p>
                   </div>
                 </div>
@@ -2355,7 +2727,7 @@ export const Settings: React.FC = () => {
                   type="number"
                   min={0}
                   max={4}
-                  className="w-24 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                  className="w-24 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                   value={localPrint.decimalPlaces}
                   onChange={(e) => setLocalPrint((p) => ({ ...p, decimalPlaces: Math.max(0, Math.min(4, Number(e.target.value))) }))}
                 />
@@ -2377,17 +2749,17 @@ export const Settings: React.FC = () => {
               ]).map((toggle) => (
                 <div
                   key={toggle.key}
-                  className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
+                  className={`flex items-center gap-3 p-4 rounded-[var(--border-radius-lg)] border transition-all ${
                     localPrint[toggle.key]
-                      ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 opacity-60'
+                      ? 'bg-[var(--color-card)] border-[var(--color-border)]'
+                      : 'bg-[#f8f9fa]/50 border-[var(--color-border)] opacity-60'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary">{toggle.icon}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{toggle.label}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{toggle.label}</p>
                     <p className="text-xs text-slate-400">{toggle.desc}</p>
                   </div>
                   <button
@@ -2397,7 +2769,7 @@ export const Settings: React.FC = () => {
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${
+                      className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full shadow transition-all ${
                         localPrint[toggle.key] ? 'right-0.5' : 'right-[22px]'
                       }`}
                     />
@@ -2421,20 +2793,20 @@ export const Settings: React.FC = () => {
           {/* ── Preview Modal ── */}
           {showPreview && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
-                <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+                  <h3 className="text-lg font-bold text-[var(--color-text)] flex items-center gap-2">
                     <span className="material-icons-round text-primary">visibility</span>
                     معاينة التقرير المطبوع
                   </h3>
                   <button
                     onClick={() => setShowPreview(false)}
-                    className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                    className="w-9 h-9 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center hover:bg-[#e8eaed] transition-all"
                   >
                     <span className="material-icons-round text-slate-500">close</span>
                   </button>
                 </div>
-                <div className="flex-1 overflow-auto p-6 bg-slate-100 dark:bg-slate-950 flex justify-center">
+                <div className="flex-1 overflow-auto p-6 bg-[#f0f2f5] dark:bg-slate-950 flex justify-center">
                   <div className="shadow-2xl">
                     <ProductionReportPrint
                       title="تقرير الإنتاج اليومي — معاينة"
@@ -2456,10 +2828,10 @@ export const Settings: React.FC = () => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'exportImport' && isAdmin && (
         <>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="erp-page-head">
             <div>
               <h3 className="text-lg font-bold">التصدير والاستيراد</h3>
-              <p className="text-sm text-slate-500">تحكم مركزي في إظهار/إخفاء أزرار الاستيراد والتصدير وشكلها لكل صفحة.</p>
+              <p className="page-subtitle">تحكم مركزي في إظهار/إخفاء أزرار الاستيراد والتصدير وشكلها لكل صفحة.</p>
             </div>
             <Button onClick={() => handleSave('exportImport')} disabled={saving}>
               {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -2475,18 +2847,18 @@ export const Settings: React.FC = () => {
                 return (
                   <div
                     key={page.key}
-                    className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/30"
+                    className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60/30"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                       <div>
-                        <h4 className="text-sm font-black text-slate-700 dark:text-white">{page.label}</h4>
-                        <p className="text-xs text-slate-400 font-mono">{page.path}</p>
+                        <h4 className="text-sm font-bold text-[var(--color-text)]">{page.label}</h4>
+                        <p className="text-xs text-[var(--color-text-muted)] font-mono">{page.path}</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-3">
+                      <div className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] space-y-3">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">زر التصدير</p>
+                          <p className="text-sm font-bold text-[var(--color-text)]">زر التصدير</p>
                           <button
                             onClick={() => updateExportImportControl(page.key, { exportEnabled: !control.exportEnabled })}
                             className={`w-12 h-7 rounded-full transition-all relative shrink-0 ${
@@ -2494,7 +2866,7 @@ export const Settings: React.FC = () => {
                             }`}
                           >
                             <span
-                              className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${
+                              className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full shadow transition-all ${
                                 control.exportEnabled ? 'right-0.5' : 'right-[22px]'
                               }`}
                             />
@@ -2503,7 +2875,7 @@ export const Settings: React.FC = () => {
                         <select
                           value={control.exportVariant}
                           onChange={(e) => updateExportImportControl(page.key, { exportVariant: e.target.value as 'primary' | 'secondary' | 'outline' })}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm font-bold outline-none"
+                          className="w-full bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] py-2.5 px-3 text-sm font-bold outline-none"
                         >
                           <option value="primary">شكل رئيسي</option>
                           <option value="secondary">شكل ثانوي</option>
@@ -2511,9 +2883,9 @@ export const Settings: React.FC = () => {
                         </select>
                       </div>
 
-                      <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-3">
+                      <div className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] space-y-3">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">زر الاستيراد</p>
+                          <p className="text-sm font-bold text-[var(--color-text)]">زر الاستيراد</p>
                           <button
                             onClick={() => updateExportImportControl(page.key, { importEnabled: !control.importEnabled })}
                             className={`w-12 h-7 rounded-full transition-all relative shrink-0 ${
@@ -2521,7 +2893,7 @@ export const Settings: React.FC = () => {
                             }`}
                           >
                             <span
-                              className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${
+                              className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full shadow transition-all ${
                                 control.importEnabled ? 'right-0.5' : 'right-[22px]'
                               }`}
                             />
@@ -2530,7 +2902,7 @@ export const Settings: React.FC = () => {
                         <select
                           value={control.importVariant}
                           onChange={(e) => updateExportImportControl(page.key, { importVariant: e.target.value as 'primary' | 'secondary' | 'outline' })}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm font-bold outline-none"
+                          className="w-full bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] py-2.5 px-3 text-sm font-bold outline-none"
                         >
                           <option value="primary">شكل رئيسي</option>
                           <option value="secondary">شكل ثانوي</option>
@@ -2557,19 +2929,19 @@ export const Settings: React.FC = () => {
                 { section: 'ملخص المنتجات', page: 'لوحة تحكم المصنع', path: '/factory-dashboard', icon: 'summarize', color: 'text-indigo-500', features: ['اسم المنتج والكود والكمية', 'متوسط تكلفة الوحدة (حسب الصلاحية)'] },
                 { section: 'بيانات الموارد البشرية', page: 'وحدة HR', path: '/hr', icon: 'badge', color: 'text-rose-500', features: ['كشوف المرتبات والحضور', 'الإجازات والقروض', 'تصدير عام لأي بيانات HR'] },
               ].map((item) => (
-                <div key={item.section} className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all">
+                <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-all">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
                       <span className={`material-icons-round ${item.color}`}>{item.icon}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="text-sm font-black text-slate-700 dark:text-white">{item.section}</h4>
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{item.page}</span>
+                        <h4 className="text-sm font-bold text-[var(--color-text)]">{item.section}</h4>
+                        <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-0.5 rounded-full">{item.page}</span>
                       </div>
                       <ul className="space-y-0.5">
                         {item.features.map((f, i) => (
-                          <li key={i} className="text-xs text-slate-500 flex items-center gap-1.5">
+                          <li key={i} className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
                             <span className="material-icons-round text-[10px] text-emerald-400">check</span>
                             {f}
                           </li>
@@ -2590,19 +2962,19 @@ export const Settings: React.FC = () => {
                 { section: 'استيراد المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['رفع ملف Excel بأسماء وأكواد المنتجات', 'تكاليف التعبئة والتغليف', 'سعر البيع', 'كشف التكرار بالاسم والكود', 'معاينة وتحقق قبل الحفظ'] },
                 { section: 'استيراد الموظفين', page: 'وحدة HR', path: '/hr/import', icon: 'person_add', color: 'text-purple-500', features: ['رفع بيانات الموظفين من Excel', 'مطابقة الأقسام والوظائف والورديات', 'بيانات الراتب ونوع التوظيف'] },
               ].map((item) => (
-                <div key={item.section} className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all">
+                <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-all">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
                       <span className={`material-icons-round ${item.color}`}>{item.icon}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="text-sm font-black text-slate-700 dark:text-white">{item.section}</h4>
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{item.page}</span>
+                        <h4 className="text-sm font-bold text-[var(--color-text)]">{item.section}</h4>
+                        <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-0.5 rounded-full">{item.page}</span>
                       </div>
                       <ul className="space-y-0.5">
                         {item.features.map((f, i) => (
-                          <li key={i} className="text-xs text-slate-500 flex items-center gap-1.5">
+                          <li key={i} className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
                             <span className="material-icons-round text-[10px] text-emerald-400">check</span>
                             {f}
                           </li>
@@ -2617,19 +2989,19 @@ export const Settings: React.FC = () => {
 
           {/* ─── Templates Section ─── */}
           <Card title="القوالب (Templates)">
-            <p className="text-sm text-slate-500 mb-4">يمكنك تحميل نماذج Excel فارغة مع أسماء الأعمدة الصحيحة وقوائم الاختيار لتسهيل عملية الاستيراد.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-4">يمكنك تحميل نماذج Excel فارغة مع أسماء الأعمدة الصحيحة وقوائم الاختيار لتسهيل عملية الاستيراد.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
                 { label: 'قالب تقارير الإنتاج', desc: 'يتضمن أسماء الخطوط والمنتجات والموظفين', icon: 'description', page: 'صفحة التقارير → تحميل قالب' },
                 { label: 'قالب المنتجات', desc: 'يتضمن أعمدة التكلفة وسعر البيع', icon: 'inventory_2', page: 'صفحة المنتجات → تحميل نموذج' },
                 { label: 'قالب الموظفين', desc: 'يتضمن الأقسام والوظائف والورديات', icon: 'person_add', page: 'HR → استيراد الموظفين' },
               ].map((t) => (
-                <div key={t.label} className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+                <div key={t.label} className="p-4 rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] bg-[#f8f9fa]/50/30">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="material-icons-round text-primary text-base">{t.icon}</span>
-                    <h4 className="text-sm font-bold text-slate-700 dark:text-white">{t.label}</h4>
+                    <h4 className="text-sm font-bold text-[var(--color-text)]">{t.label}</h4>
                   </div>
-                  <p className="text-xs text-slate-400 mb-2">{t.desc}</p>
+                  <p className="text-xs text-[var(--color-text-muted)] mb-2">{t.desc}</p>
                   <p className="text-[10px] font-bold text-primary">{t.page}</p>
                 </div>
               ))}
@@ -2637,11 +3009,11 @@ export const Settings: React.FC = () => {
           </Card>
 
           {/* ─── Notes ─── */}
-          <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
+          <div className="p-4 rounded-[var(--border-radius-lg)] bg-amber-50 dark:bg-amber-900/10 border border-amber-200 flex items-start gap-3">
             <span className="material-icons-round text-amber-500 mt-0.5">info</span>
-            <div className="text-sm text-amber-700 dark:text-amber-300">
+            <div className="text-sm text-amber-700">
               <p className="font-bold mb-1">ملاحظات هامة</p>
-              <ul className="space-y-1 text-xs text-amber-600 dark:text-amber-400">
+              <ul className="space-y-1 text-xs text-amber-600">
                 <li>• التكاليف تظهر في التصدير فقط للمستخدمين الذين لديهم صلاحية عرض التكاليف</li>
                 <li>• عمليات الاستيراد تعرض معاينة للبيانات قبل الحفظ مع إظهار الأخطاء والتحذيرات</li>
                 <li>• يتم كشف البيانات المكررة تلقائياً عند الاستيراد</li>
@@ -2659,10 +3031,10 @@ export const Settings: React.FC = () => {
         <>
           {/* Backup status message */}
           {backupMessage && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${
+            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
               backupMessage.type === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
+                ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
+                : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
             }`}>
               <span className="material-icons-round text-lg">
                 {backupMessage.type === 'success' ? 'check_circle' : 'error'}
@@ -2676,15 +3048,15 @@ export const Settings: React.FC = () => {
 
           {/* Progress bar */}
           {backupProgress && (
-            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-bold text-blue-700 dark:text-blue-400 flex items-center gap-2">
+                <span className="text-sm font-bold text-blue-700 flex items-center gap-2">
                   <span className="material-icons-round animate-spin text-sm">refresh</span>
                   {backupProgress.step}
                 </span>
-                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{backupProgress.percent}%</span>
+                <span className="text-sm font-bold text-blue-600">{backupProgress.percent}%</span>
               </div>
-              <div className="w-full bg-blue-200 dark:bg-blue-900/30 rounded-full h-2.5">
+              <div className="w-full bg-blue-200 rounded-full h-2.5">
                 <div
                   className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
                   style={{ width: `${backupProgress.percent}%` }}
@@ -2720,7 +3092,7 @@ export const Settings: React.FC = () => {
               </div>
 
               {firebaseUsageError && (
-                <div className="px-4 py-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-400 text-sm font-bold">
+                <div className="px-4 py-3 rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 text-rose-700 text-sm font-bold">
                   {firebaseUsageError}
                 </div>
               )}
@@ -2728,31 +3100,31 @@ export const Settings: React.FC = () => {
               {firebaseUsage && (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                    <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60">
                       <p className="text-[11px] text-slate-400">إجمالي المستندات</p>
-                      <p className="text-lg font-black text-slate-700 dark:text-slate-200">{firebaseUsage.totalDocuments.toLocaleString('ar-EG')}</p>
+                      <p className="text-lg font-bold text-[var(--color-text)]">{firebaseUsage.totalDocuments.toLocaleString('ar-EG')}</p>
                     </div>
-                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                    <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60">
                       <p className="text-[11px] text-slate-400">الحجم التقديري الحالي</p>
-                      <p className="text-lg font-black text-slate-700 dark:text-slate-200">{formatBytes(firebaseUsage.estimatedBytes)}</p>
+                      <p className="text-lg font-bold text-[var(--color-text)]">{formatBytes(firebaseUsage.estimatedBytes)}</p>
                     </div>
-                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                    <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60">
                       <p className="text-[11px] text-slate-400">المتبقي من Firestore المجاني</p>
-                      <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatBytes(firestoreRemainingBytes)}</p>
+                      <p className="text-lg font-bold text-emerald-600">{formatBytes(firestoreRemainingBytes)}</p>
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                  <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-xs font-bold text-slate-500">استهلاك مساحة Firestore المجانية (1 GiB)</p>
-                      <p className="text-xs font-black text-slate-600 dark:text-slate-300">{firestoreUsagePercent.toFixed(1)}%</p>
+                      <p className="text-xs font-bold text-[var(--color-text-muted)]">{firestoreUsagePercent.toFixed(1)}%</p>
                     </div>
-                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="w-full h-2.5 bg-[#f0f2f5] rounded-full overflow-hidden">
                       <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${firestoreUsagePercent}%` }} />
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                  <div className="p-3 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 text-xs text-amber-700 space-y-1">
                     <p className="font-bold">حدود Spark اليومية (Firestore)</p>
                     <p>Reads: {FIRESTORE_SPARK_DAILY.reads.toLocaleString('ar-EG')} / اليوم</p>
                     <p>Writes: {FIRESTORE_SPARK_DAILY.writes.toLocaleString('ar-EG')} / اليوم</p>
@@ -2768,13 +3140,13 @@ export const Settings: React.FC = () => {
           <Card title="تصدير نسخة احتياطية">
             <div className="space-y-4">
               {/* Full Backup */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-primary text-xl">cloud_download</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">نسخة احتياطية كاملة</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">نسخة احتياطية كاملة</p>
                     <p className="text-xs text-slate-400">تصدير جميع البيانات — المنتجات، الخطوط، التقارير، أوامر الشغل، الإشعارات، التكاليف، الخامات، تعيينات العمال، الموارد البشرية، المركبات، والإعدادات</p>
                   </div>
                 </div>
@@ -2786,20 +3158,20 @@ export const Settings: React.FC = () => {
               </div>
 
               {/* Monthly Backup */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-amber-500/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-amber-600 text-xl">date_range</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">نسخة شهرية</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">نسخة شهرية</p>
                     <p className="text-xs text-slate-400">تصدير تقارير الإنتاج، أوامر الشغل، تعيينات العمال، تكاليف الإنتاج الشهرية، الحضور، والإجازات لشهر محدد</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <input
                     type="month"
-                    className="border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded-xl text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(e.target.value)}
                   />
@@ -2812,13 +3184,13 @@ export const Settings: React.FC = () => {
               </div>
 
               {/* Settings Only */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
+                  <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-violet-500/10 flex items-center justify-center shrink-0">
                     <span className="material-icons-round text-violet-600 text-xl">tune</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">الإعدادات فقط</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">الإعدادات فقط</p>
                     <p className="text-xs text-slate-400">تصدير إعدادات النظام، الأدوار، إعدادات العمالة، خامات المنتجات، وإعدادات الموارد البشرية</p>
                   </div>
                 </div>
@@ -2836,21 +3208,24 @@ export const Settings: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
                 { title: 'الإنتاج', icon: 'factory', color: 'text-primary', items: ['المنتجات', 'خطوط الإنتاج', 'تقارير الإنتاج', 'خطط الإنتاج', 'حالة الخطوط', 'إعدادات خط المنتج'] },
-                { title: 'أوامر الشغل والإشعارات', icon: 'assignment', color: 'text-amber-600', items: ['أوامر الشغل', 'الإشعارات', 'تعيينات العمال على الخطوط'] },
+                { title: 'أوامر الشغل والإشعارات', icon: 'assignment', color: 'text-amber-600', items: ['أوامر الشغل', 'الإشعارات', 'تعيينات العمال على الخطوط', 'أحداث المسح'] },
+                { title: 'المخزون والمستودعات', icon: 'inventory_2', color: 'text-cyan-600', items: ['المستودعات', 'الخامات', 'أرصدة المخزون', 'حركات المخزون', 'جرد المخزون', 'طلبات تحويل المخزون'] },
                 { title: 'التكاليف والخامات', icon: 'payments', color: 'text-emerald-600', items: ['خامات المنتجات', 'تكاليف الإنتاج الشهرية', 'مراكز التكلفة', 'قيم مراكز التكلفة', 'توزيعات التكلفة', 'إعدادات العمالة'] },
                 { title: 'النظام', icon: 'settings', color: 'text-blue-600', items: ['إعدادات النظام', 'الأدوار والصلاحيات', 'المستخدمين', 'سجل النشاط'] },
                 { title: 'الموارد البشرية', icon: 'groups', color: 'text-violet-600', items: ['الموظفين', 'الأقسام', 'المسميات الوظيفية', 'الورديات', 'إعدادات HR', 'الحضور والانصراف', 'الإجازات', 'القروض', 'البدلات', 'الاستقطاعات', 'المركبات', 'قواعد الجزاءات', 'قواعد التأخير', 'أنواع البدلات'] },
                 { title: 'الرواتب والموافقات', icon: 'account_balance', color: 'text-rose-600', items: ['أشهر الرواتب', 'سجلات الرواتب', 'تدقيق الرواتب', 'ملخص تكلفة الرواتب', 'طلبات الموافقة', 'إعدادات الموافقة', 'التفويضات', 'تدقيق الموافقات'] },
+                { title: 'الجودة', icon: 'verified', color: 'text-fuchsia-600', items: ['إعدادات الجودة', 'قاموس أسباب الجودة', 'تعيينات الجودة', 'فحوصات الجودة', 'عيوب الجودة', 'أوامر إعادة العمل', 'إجراءات CAPA', 'سجلات طباعة الجودة'] },
+                { title: 'التدقيق', icon: 'history', color: 'text-slate-600', items: ['سجل تدقيق النظام'] },
               ].map((group) => (
-                <div key={group.title} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div key={group.title} className="p-3 bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`material-icons-round text-sm ${group.color}`}>{group.icon}</span>
-                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">{group.title}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 mr-auto">{group.items.length}</span>
+                    <span className="text-xs font-bold text-[var(--color-text)]">{group.title}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-[var(--color-text-muted)] mr-auto">{group.items.length}</span>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {group.items.map((item) => (
-                      <span key={item} className="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-700">{item}</span>
+                      <span key={item} className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)]">{item}</span>
                     ))}
                   </div>
                 </div>
@@ -2863,13 +3238,13 @@ export const Settings: React.FC = () => {
             <div className="space-y-6">
               {/* File Upload */}
               <div className="flex flex-col gap-4">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                    <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-blue-500/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-blue-600 text-xl">upload_file</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                      <p className="text-sm font-bold text-[var(--color-text)]">
                         {importFileName || 'اختر ملف النسخة الاحتياطية'}
                       </p>
                       <p className="text-xs text-slate-400">ملف JSON تم تصديره من النظام</p>
@@ -2886,7 +3261,7 @@ export const Settings: React.FC = () => {
                     <button
                       onClick={() => importInputRef.current?.click()}
                       disabled={backupLoading}
-                      className="px-4 py-2.5 rounded-xl text-sm font-bold bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
                     >
                       <span className="material-icons-round text-sm">folder_open</span>
                       اختيار ملف
@@ -2898,7 +3273,7 @@ export const Settings: React.FC = () => {
                           setImportFileName('');
                           setImportValidation(null);
                         }}
-                        className="px-3 py-2.5 rounded-xl text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all"
+                        className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all"
                       >
                         <span className="material-icons-round text-sm">close</span>
                       </button>
@@ -2908,10 +3283,10 @@ export const Settings: React.FC = () => {
 
                 {/* Validation result */}
                 {importValidation && (
-                  <div className={`flex items-start gap-3 px-4 py-3 rounded-xl text-sm font-bold ${
+                  <div className={`flex items-start gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
                     importValidation.valid
-                      ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                      : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
+                      ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
+                      : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
                   }`}>
                     <span className="material-icons-round text-lg mt-0.5">
                       {importValidation.valid ? 'verified' : 'error'}
@@ -2920,28 +3295,28 @@ export const Settings: React.FC = () => {
                       <div className="flex-1">
                         <p className="mb-2">ملف صالح — جاهز للاستعادة</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div className="bg-white/50 dark:bg-slate-800/50 rounded-lg p-2 text-center">
+                          <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
                             <p className="text-[10px] text-emerald-600/70 mb-0.5">النوع</p>
                             <p className="text-xs font-black">
                               {importFile.metadata.type === 'full' ? 'كاملة' : importFile.metadata.type === 'monthly' ? 'شهرية' : 'إعدادات'}
                             </p>
                           </div>
-                          <div className="bg-white/50 dark:bg-slate-800/50 rounded-lg p-2 text-center">
+                          <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
                             <p className="text-[10px] text-emerald-600/70 mb-0.5">المستندات</p>
                             <p className="text-xs font-black">{importFile.metadata.totalDocuments}</p>
                           </div>
-                          <div className="bg-white/50 dark:bg-slate-800/50 rounded-lg p-2 text-center">
+                          <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
                             <p className="text-[10px] text-emerald-600/70 mb-0.5">الإصدار</p>
                             <p className="text-xs font-black">{importFile.metadata.version}</p>
                           </div>
-                          <div className="bg-white/50 dark:bg-slate-800/50 rounded-lg p-2 text-center">
+                          <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
                             <p className="text-[10px] text-emerald-600/70 mb-0.5">التاريخ</p>
                             <p className="text-xs font-black">{new Date(importFile.metadata.createdAt).toLocaleDateString('ar-EG')}</p>
                           </div>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1">
                           {importFile.metadata.collectionsIncluded.map((c) => (
-                            <span key={c} className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/50 dark:bg-slate-800/50">
+                            <span key={c} className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/50/50">
                               {c}
                             </span>
                           ))}
@@ -2957,7 +3332,7 @@ export const Settings: React.FC = () => {
               {/* Restore Mode Selection */}
               {importFile && (
                 <div className="space-y-3">
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">وضع الاستعادة</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">وضع الاستعادة</p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {RESTORE_MODES.map((mode) => {
                       const selected = restoreMode === mode.value;
@@ -2972,18 +3347,18 @@ export const Settings: React.FC = () => {
                         rose: 'text-rose-600',
                       };
                       const labelStyles: Record<string, string> = {
-                        emerald: 'text-emerald-700 dark:text-emerald-400',
-                        amber: 'text-amber-700 dark:text-amber-400',
-                        rose: 'text-rose-700 dark:text-rose-400',
+                        emerald: 'text-emerald-700',
+                        amber: 'text-amber-700',
+                        rose: 'text-rose-700',
                       };
                       return (
                         <button
                           key={mode.value}
                           onClick={() => setRestoreMode(mode.value)}
-                          className={`p-4 rounded-xl border-2 text-right transition-all ${
+                          className={`p-4 rounded-[var(--border-radius-lg)] border-2 text-right transition-all ${
                             selected
                               ? activeStyles[mode.color]
-                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                              : 'border-[var(--color-border)] hover:border-[var(--color-border)]'
                           }`}
                         >
                           <div className="flex items-center gap-2 mb-2">
@@ -2993,7 +3368,7 @@ export const Settings: React.FC = () => {
                               {mode.icon}
                             </span>
                             <span className={`text-sm font-bold ${
-                              selected ? labelStyles[mode.color] : 'text-slate-700 dark:text-slate-300'
+                              selected ? labelStyles[mode.color] : 'text-[var(--color-text)]'
                             }`}>
                               {mode.label}
                             </span>
@@ -3009,10 +3384,10 @@ export const Settings: React.FC = () => {
 
                   {/* Warning for destructive modes */}
                   {restoreMode !== 'merge' && (
-                    <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${
+                    <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
                       restoreMode === 'full_reset'
-                        ? 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                        : 'bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                        ? 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
+                        : 'bg-amber-50 dark:bg-amber-900/10 text-amber-700 border border-amber-200'
                     }`}>
                       <span className="material-icons-round text-lg">warning</span>
                       {restoreMode === 'full_reset'
@@ -3040,21 +3415,21 @@ export const Settings: React.FC = () => {
           {/* ── Safety Info ──────────────────────────────────────────────────── */}
           <Card title="قواعد الأمان">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] border border-emerald-200">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-icons-round text-emerald-600">shield</span>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">نسخ تلقائي</span>
+                  <span className="text-sm font-bold text-emerald-700">نسخ تلقائي</span>
                 </div>
                 <p className="text-xs text-emerald-600/80">يتم إنشاء نسخة احتياطية كاملة تلقائياً قبل أي عملية استعادة</p>
               </div>
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-200 dark:border-blue-800">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-icons-round text-blue-600">verified</span>
-                  <span className="text-sm font-bold text-blue-700 dark:text-blue-400">فحص الملف</span>
+                  <span className="text-sm font-bold text-blue-700">فحص الملف</span>
                 </div>
                 <p className="text-xs text-blue-600/80">يتم التحقق من صحة الملف والإصدار قبل السماح بالاستعادة</p>
               </div>
-              <div className="p-4 bg-violet-50 dark:bg-violet-900/10 rounded-xl border border-violet-200 dark:border-violet-800">
+              <div className="p-4 bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] border border-violet-200 dark:border-violet-800">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-icons-round text-violet-600">sync</span>
                   <span className="text-sm font-bold text-violet-700 dark:text-violet-400">إعادة بناء تلقائي</span>
@@ -3081,11 +3456,11 @@ export const Settings: React.FC = () => {
                 {backupHistory.map((entry, idx) => (
                   <div
                     key={entry.id || idx}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700"
+                    className="flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa] border border-[var(--color-border)]"
                   >
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                    <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0 ${
                       entry.action === 'export'
-                        ? 'bg-emerald-100 dark:bg-emerald-900/20'
+                        ? 'bg-emerald-100'
                         : 'bg-blue-100 dark:bg-blue-900/20'
                     }`}>
                       <span className={`material-icons-round ${
@@ -3097,21 +3472,21 @@ export const Settings: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">
+                      <p className="text-sm font-bold text-[var(--color-text)] truncate">
                         {entry.action === 'export' ? 'تصدير' : 'استعادة'}
                         {' — '}
                         {entry.type === 'full' ? 'كاملة' : entry.type === 'monthly' ? `شهرية (${entry.month})` : 'إعدادات'}
                         {entry.mode && ` — ${entry.mode === 'merge' ? 'دمج' : entry.mode === 'replace' ? 'استبدال' : 'إعادة تعيين'}`}
                       </p>
-                      <p className="text-xs text-slate-400 truncate">
+                      <p className="text-xs text-[var(--color-text-muted)] truncate">
                         {entry.totalDocuments} مستند · {entry.createdBy}
                         {entry.createdAt?.toDate && ` · ${entry.createdAt.toDate().toLocaleString('ar-EG')}`}
                       </p>
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                       entry.action === 'export'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-blue-100 text-blue-700'
                     }`}>
                       {entry.action === 'export' ? 'تصدير' : 'استيراد'}
                     </span>
@@ -3124,14 +3499,14 @@ export const Settings: React.FC = () => {
           {/* ── Confirm Restore Modal ── */}
           {showConfirmRestore && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md">
                 <div className="p-6 text-center">
                   <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${
                     restoreMode === 'full_reset'
-                      ? 'bg-rose-100 dark:bg-rose-900/20'
+                      ? 'bg-rose-100'
                       : restoreMode === 'replace'
-                      ? 'bg-amber-100 dark:bg-amber-900/20'
-                      : 'bg-emerald-100 dark:bg-emerald-900/20'
+                      ? 'bg-amber-100'
+                      : 'bg-emerald-100'
                   }`}>
                     <span className={`material-icons-round text-3xl ${
                       restoreMode === 'full_reset'
@@ -3143,28 +3518,28 @@ export const Settings: React.FC = () => {
                       {restoreMode === 'full_reset' ? 'warning' : 'restore'}
                     </span>
                   </div>
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">
+                  <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">
                     تأكيد الاستعادة
                   </h3>
-                  <p className="text-sm text-slate-500 mb-4">
+                  <p className="text-sm text-[var(--color-text-muted)] mb-4">
                     {restoreMode === 'merge' && 'سيتم دمج البيانات من النسخة الاحتياطية مع البيانات الحالية.'}
                     {restoreMode === 'replace' && 'سيتم استبدال المجموعات المشمولة في النسخة الاحتياطية. البيانات الحالية في هذه المجموعات ستُحذف.'}
                     {restoreMode === 'full_reset' && 'سيتم حذف جميع البيانات الحالية واستبدالها بالنسخة الاحتياطية. هذه العملية لا يمكن التراجع عنها.'}
                   </p>
-                  <p className="text-xs text-slate-400 mb-6 flex items-center justify-center gap-1">
+                  <p className="text-xs text-[var(--color-text-muted)] mb-6 flex items-center justify-center gap-1">
                     <span className="material-icons-round text-xs">info</span>
                     سيتم إنشاء نسخة احتياطية تلقائية قبل البدء
                   </p>
                   <div className="flex items-center gap-3 justify-center">
                     <button
                       onClick={() => setShowConfirmRestore(false)}
-                      className="px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                      className="px-5 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed] transition-all"
                     >
                       إلغاء
                     </button>
                     <button
                       onClick={handleRestore}
-                      className={`px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all flex items-center gap-2 ${
+                      className={`px-5 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold text-white transition-all flex items-center gap-2 ${
                         restoreMode === 'full_reset'
                           ? 'bg-rose-600 hover:bg-rose-700'
                           : 'bg-primary hover:bg-primary/90'

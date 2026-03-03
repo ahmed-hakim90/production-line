@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -379,12 +379,12 @@ export const FactoryManagerDashboard: React.FC = () => {
   const ChartTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-3 text-sm" dir="rtl">
-        <p className="font-bold text-slate-600 dark:text-slate-300 mb-1">{label}</p>
+      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm" dir="rtl">
+        <p className="font-bold text-[var(--color-text-muted)] mb-1">{label}</p>
         {payload.map((entry: any, i: number) => (
           <div key={i} className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
-            <span className="text-slate-500">{entry.name}:</span>
+            <span className="text-[var(--color-text-muted)]">{entry.name}:</span>
             <span className="font-bold">{formatNumber(entry.value)}</span>
           </div>
         ))}
@@ -396,9 +396,9 @@ export const FactoryManagerDashboard: React.FC = () => {
     if (!active || !payload?.length) return null;
     const d = payload[0];
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-3 text-sm" dir="rtl">
+      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm" dir="rtl">
         <p className="font-bold">{d.name}</p>
-        <p className="text-slate-500">{formatCost(d.value)} ج.م</p>
+        <p className="text-[var(--color-text-muted)]">{formatCost(d.value)} ج.م</p>
       </div>
     );
   };
@@ -407,8 +407,8 @@ export const FactoryManagerDashboard: React.FC = () => {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-            <span className="material-icons-round text-blue-600 dark:text-blue-400 text-2xl">analytics</span>
+          <div className="w-12 h-12 bg-blue-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
+            <span className="material-icons-round text-blue-600 text-2xl">analytics</span>
           </div>
           <div>
             <h2 className="text-2xl font-bold">لوحة مدير المصنع</h2>
@@ -425,8 +425,8 @@ export const FactoryManagerDashboard: React.FC = () => {
       {/* ── Header ─────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         {/* <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-            <span className="material-icons-round text-blue-600 dark:text-blue-400 text-2xl">analytics</span>
+          <div className="w-12 h-12 bg-blue-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
+            <span className="material-icons-round text-blue-600 text-2xl">analytics</span>
           </div>
           <div>
             <h2 className="text-2xl font-bold">لوحة مدير المصنع</h2>
@@ -434,7 +434,7 @@ export const FactoryManagerDashboard: React.FC = () => {
           </div>
         </div> */}
         {loading && (
-          <span className="text-xs text-slate-400 flex items-center gap-1">
+          <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
             <span className="material-icons-round text-sm animate-spin">sync</span>
             جاري التحديث...
           </span>
@@ -444,49 +444,41 @@ export const FactoryManagerDashboard: React.FC = () => {
       <CustomDashboardWidgets dashboardKey="factoryDashboard" systemSettings={systemSettings} />
 
       {/* ── Period Filter ──────────────────────────────────────────────────────── */}
-      <Card>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="material-icons-round text-primary">date_range</span>
-            <span className="text-sm font-bold text-slate-600 dark:text-slate-300">الفترة:</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => (
-              <button
-                key={key}
-                onClick={() => setPreset(key)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                  preset === key
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                {PRESET_LABELS[key]}
-              </button>
-            ))}
-          </div>
-          {preset === 'custom' && (
-            <div className="flex items-center gap-2">
+      <div className="erp-filter-bar">
+        <div className="erp-date-seg">
+          {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => (
+            <button
+              key={key}
+              onClick={() => setPreset(key)}
+              className={`erp-date-seg-btn${preset === key ? ' active' : ''}`}
+            >
+              {PRESET_LABELS[key]}
+            </button>
+          ))}
+        </div>
+        {preset === 'custom' && (
+          <>
+            <div className="erp-filter-date">
+              <span className="erp-filter-label">من</span>
               <input
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800"
               />
-              <span className="text-slate-400">—</span>
+            </div>
+            <div className="erp-filter-date">
+              <span className="erp-filter-label">إلى</span>
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800"
               />
             </div>
-          )}
-          <div className="mr-auto text-xs text-slate-400 font-medium">
-            {dateRange.start} → {dateRange.end}
-          </div>
-        </div>
-      </Card>
+          </>
+        )}
+        <div className="erp-filter-sep" />
+        <span className="text-xs text-[var(--color-text-muted)] font-medium">{dateRange.start} ← {dateRange.end}</span>
+      </div>
 
       {/* ── KPI Section ────────────────────────────────────────────────────────── */}
       {isVisible('kpis') && (
@@ -504,7 +496,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             value={formatCost(kpis.avgCostPerUnit)}
             icon="payments"
             unit="ج.م"
-            colorClass="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+            colorClass="bg-amber-100 text-amber-600"
           />
         )}
         {canViewCosts && (() => {
@@ -564,12 +556,12 @@ export const FactoryManagerDashboard: React.FC = () => {
           {alerts.map((alert, i) => (
             <div
               key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400'
+                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
                   : alert.type === 'warning'
-                  ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
-                  : 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400'
+                  ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
+                  : 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 text-blue-700'
               }`}
             >
               <span className="material-icons-round text-lg">{alert.icon}</span>
@@ -592,8 +584,8 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-amber-500">assignment</span>
-                <h3 className="text-base font-black text-slate-800 dark:text-white">أوامر الشغل النشطة</h3>
-                <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-black px-2 py-0.5 rounded-full">{activeWOs.length}</span>
+                <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
+                <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalQty)}</span>
@@ -610,11 +602,11 @@ export const FactoryManagerDashboard: React.FC = () => {
                 const estCostPerUnit = wo.quantity > 0 ? wo.estimatedCost / wo.quantity : 0;
 
                 return (
-                  <div key={wo.id} onClick={() => navigate('/work-orders')} className={`rounded-2xl border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${wo.status === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/40' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}>
+                  <div key={wo.id} onClick={() => navigate('/work-orders')} className={`rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${wo.status === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40' : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'}`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="material-icons-round text-amber-500 text-lg">assignment</span>
-                        <span className="text-sm font-black text-amber-700 dark:text-amber-400">أمر شغل #{wo.workOrderNumber}</span>
+                        <span className="text-sm font-bold text-amber-700">أمر شغل #{wo.workOrderNumber}</span>
                       </div>
                       <Badge variant={wo.status === 'in_progress' ? 'warning' : 'neutral'}>
                         {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
@@ -622,46 +614,46 @@ export const FactoryManagerDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-slate-400 text-base">inventory_2</span>
-                      <p className="text-base font-bold text-slate-700 dark:text-slate-200 truncate">{product?.name ?? '—'}</p>
+                      <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
+                      <p className="text-base font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <span className="material-icons-round text-indigo-400 text-base">person</span>
-                        <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{supervisor?.name ?? '—'}</span>
+                        <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
                       </div>
                       {canViewCosts && estCostPerUnit > 0 && (
-                        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 rounded-lg px-3 py-1">
+                        <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
                           <span className="material-icons-round text-emerald-500 text-sm">payments</span>
                           <span className="text-[10px] text-slate-400">التكلفة المتوقعة</span>
-                          <span className="text-sm font-black text-emerald-600">{formatCost(estCostPerUnit)}</span>
+                          <span className="text-sm font-bold text-emerald-600">{formatCost(estCostPerUnit)}</span>
                           <span className="text-[10px] text-slate-400">/قطعة</span>
                         </div>
                       )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">المطلوب</p>
-                        <p className="text-lg font-black text-slate-700 dark:text-white">{formatNumber(wo.quantity)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المطلوب</p>
+                        <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">تم إنتاجه</p>
-                        <p className="text-lg font-black text-emerald-600">{formatNumber(wo.producedQuantity ?? 0)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">تم إنتاجه</p>
+                        <p className="text-lg font-bold text-emerald-600">{formatNumber(wo.producedQuantity ?? 0)}</p>
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">المتبقي</p>
-                        <p className="text-lg font-black text-rose-500">{formatNumber(remaining)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
+                        <p className="text-lg font-bold text-rose-500">{formatNumber(remaining)}</p>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-500">التقدم</span>
+                        <span className="text-[var(--color-text-muted)]">التقدم</span>
                         <span className={progress >= 80 ? 'text-emerald-600' : progress >= 50 ? 'text-amber-600' : 'text-slate-500'}>{progress}%</span>
                       </div>
-                      <div className="w-full h-2.5 bg-white dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 bg-[var(--color-card)] rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-1000 ${progress >= 80 ? 'bg-emerald-500' : progress >= 50 ? 'bg-amber-500' : 'bg-primary'}`}
                           style={{ width: `${Math.min(progress, 100)}%` }}
@@ -669,7 +661,7 @@ export const FactoryManagerDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-5 text-xs text-slate-500 pt-1">
+                    <div className="flex items-center gap-5 text-xs text-[var(--color-text-muted)] pt-1">
                       <div className="flex items-center gap-1">
                         <span className="material-icons-round text-sm">precision_manufacturing</span>
                         <span className="font-bold">{lineName}</span>
@@ -697,10 +689,10 @@ export const FactoryManagerDashboard: React.FC = () => {
         if (activePlans.length === 0) return null;
 
         const priorityCfg: Record<PlanPriority, { label: string; color: string; bg: string }> = {
-          low: { label: 'منخفضة', color: 'text-slate-500', bg: 'bg-slate-100 dark:bg-slate-800' },
+          low: { label: 'منخفضة', color: 'text-slate-500', bg: 'bg-[#f0f2f5]' },
           medium: { label: 'متوسطة', color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          high: { label: 'عالية', color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-          urgent: { label: 'عاجلة', color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-900/20' },
+          high: { label: 'عالية', color: 'text-amber-600', bg: 'bg-amber-50' },
+          urgent: { label: 'عاجلة', color: 'text-rose-600', bg: 'bg-rose-50' },
         };
         const smartCfg: Record<SmartStatus, { label: string; color: string }> = {
           on_track: { label: 'في المسار', color: 'text-emerald-600' },
@@ -719,8 +711,8 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-indigo-500">event_note</span>
-                <h3 className="text-base font-black text-slate-800 dark:text-white">خطط الإنتاج النشطة</h3>
-                <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-xs font-black px-2 py-0.5 rounded-full">{activePlans.length}</span>
+                <h3 className="text-base font-bold text-[var(--color-text)]">خطط الإنتاج النشطة</h3>
+                <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-xs font-bold px-2 py-0.5 rounded-full">{activePlans.length}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalPlanned)}</span>
@@ -742,54 +734,54 @@ export const FactoryManagerDashboard: React.FC = () => {
                 const estCostPerUnit = plan.plannedQuantity > 0 ? plan.estimatedCost / plan.plannedQuantity : 0;
 
                 return (
-                  <div key={plan.id} onClick={() => navigate('/production-plans')} className="rounded-2xl border bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800/40 p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-indigo-200 dark:hover:ring-indigo-800">
+                  <div key={plan.id} onClick={() => navigate('/production-plans')} className="rounded-[var(--border-radius-xl)] border bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800/40 p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-indigo-200 dark:hover:ring-indigo-800">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="material-icons-round text-indigo-500 text-lg">event_note</span>
-                        <span className={`text-xs font-black ${smart.color}`}>{smart.label}</span>
+                        <span className={`text-xs font-bold ${smart.color}`}>{smart.label}</span>
                       </div>
                       <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${pri.bg} ${pri.color}`}>{pri.label}</span>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-slate-400 text-base">inventory_2</span>
-                      <p className="text-base font-bold text-slate-700 dark:text-slate-200 truncate">{product?.name ?? '—'}</p>
+                      <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
+                      <p className="text-base font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-slate-400 text-base">precision_manufacturing</span>
-                      <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{line?.name ?? '—'}</span>
+                      <span className="material-icons-round text-[var(--color-text-muted)] text-base">precision_manufacturing</span>
+                      <span className="text-sm font-bold text-[var(--color-text-muted)]">{line?.name ?? '—'}</span>
                       {canViewCosts && estCostPerUnit > 0 && (
-                        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 rounded-lg px-3 py-1 mr-auto">
+                        <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1 mr-auto">
                           <span className="material-icons-round text-emerald-500 text-sm">payments</span>
                           <span className="text-[10px] text-slate-400">التكلفة المتوقعة</span>
-                          <span className="text-sm font-black text-emerald-600">{formatCost(estCostPerUnit)}</span>
+                          <span className="text-sm font-bold text-emerald-600">{formatCost(estCostPerUnit)}</span>
                           <span className="text-[10px] text-slate-400">/قطعة</span>
                         </div>
                       )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">المخطط</p>
-                        <p className="text-lg font-black text-slate-700 dark:text-white">{formatNumber(plan.plannedQuantity)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المخطط</p>
+                        <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(plan.plannedQuantity)}</p>
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">تم إنتاجه</p>
-                        <p className="text-lg font-black text-emerald-600">{formatNumber(produced)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">تم إنتاجه</p>
+                        <p className="text-lg font-bold text-emerald-600">{formatNumber(produced)}</p>
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-xl p-3">
-                        <p className="text-xs text-slate-400 font-medium mb-1">المتبقي</p>
-                        <p className="text-lg font-black text-rose-500">{formatNumber(remaining)}</p>
+                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
+                        <p className="text-lg font-bold text-rose-500">{formatNumber(remaining)}</p>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-500">التقدم</span>
+                        <span className="text-[var(--color-text-muted)]">التقدم</span>
                         <span className={progress >= 80 ? 'text-emerald-600' : progress >= 50 ? 'text-amber-600' : 'text-slate-500'}>{progress}%</span>
                       </div>
-                      <div className="w-full h-2.5 bg-white dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 bg-[var(--color-card)] rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-1000 ${progress >= 80 ? 'bg-emerald-500' : progress >= 50 ? 'bg-amber-500' : 'bg-primary'}`}
                           style={{ width: `${Math.min(progress, 100)}%` }}
@@ -797,7 +789,7 @@ export const FactoryManagerDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-5 text-xs text-slate-500 pt-1">
+                    <div className="flex items-center gap-5 text-xs text-[var(--color-text-muted)] pt-1">
                       <div className="flex items-center gap-1">
                         <span className="material-icons-round text-sm">event</span>
                         <span className="font-bold">{plan.plannedStartDate || plan.startDate}</span>
@@ -848,7 +840,7 @@ export const FactoryManagerDashboard: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-72 flex items-center justify-center text-slate-400 text-sm">
+              <div className="h-72 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
                 <span className="material-icons-round ml-2">bar_chart</span>
                 لا توجد بيانات للفترة المحددة
               </div>
@@ -886,7 +878,7 @@ export const FactoryManagerDashboard: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+              <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
                 لا توجد بيانات تكاليف
               </div>
             )}
@@ -895,7 +887,7 @@ export const FactoryManagerDashboard: React.FC = () => {
                 {costPieData.map((d, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }}></span>
-                    <span className="text-slate-600 dark:text-slate-300">{d.name}: <strong>{formatCost(d.value)}</strong> ج.م</span>
+                    <span className="text-slate-600">{d.name}: <strong>{formatCost(d.value)}</strong> ج.م</span>
                   </div>
                 ))}
               </div>
@@ -922,7 +914,7 @@ export const FactoryManagerDashboard: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
               لا توجد بيانات
             </div>
           )}
@@ -947,7 +939,7 @@ export const FactoryManagerDashboard: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
               لا توجد بيانات
             </div>
           )}
@@ -962,27 +954,27 @@ export const FactoryManagerDashboard: React.FC = () => {
           {topProducts.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-right py-3 px-4 font-bold text-slate-500">المنتج</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-500">الإنتاج</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-500">الحصة %</th>
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">المنتج</th>
+                    <th className="erp-th">الإنتاج</th>
+                    <th className="erp-th">الحصة %</th>
                   </tr>
                 </thead>
                 <tbody>
                   {topProducts.map((p, i) => (
-                    <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
+                    <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
                       <td className="py-3 px-4 font-bold text-primary">{p.name}</td>
                       <td className="py-3 px-4">{formatNumber(p.production)}</td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 max-w-[120px] h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <div className="flex-1 max-w-[120px] h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
                             <div
                               className="h-full bg-violet-500 rounded-full transition-all"
                               style={{ width: `${kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0}%` }}
                             ></div>
                           </div>
-                          <span className="text-slate-500 text-xs font-bold">
+                          <span className="text-[var(--color-text-muted)] text-xs font-bold">
                             {kpis.totalProduction > 0 ? ((p.production / kpis.totalProduction) * 100).toFixed(1) : 0}%
                           </span>
                         </div>
@@ -993,7 +985,7 @@ export const FactoryManagerDashboard: React.FC = () => {
               </table>
             </div>
           ) : (
-            <div className="py-8 text-center text-slate-400 text-sm">لا توجد بيانات</div>
+            <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
           )}
         </Card>}
       </div>
