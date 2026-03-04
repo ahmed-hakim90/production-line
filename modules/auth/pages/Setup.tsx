@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmail, signOut, isConfigured } from '../../../services/firebase';
 import { userService } from '../../../services/userService';
-import { roleService } from '../../../services/roleService';
+import { roleService } from '../../system/services/roleService';
 
 type Step = 'name' | 'email' | 'password';
 

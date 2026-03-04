@@ -17,6 +17,11 @@ export interface ReportPrintRow {
   quantityProduced: number;
   quantityWaste: number;
   workersCount: number;
+  workersProductionCount?: number;
+  workersPackagingCount?: number;
+  workersQualityCount?: number;
+  workersMaintenanceCount?: number;
+  workersExternalCount?: number;
   workHours: number;
   notes?: string;
   costPerUnit?: number;
@@ -64,6 +69,11 @@ export const mapReportsToPrintRows = (
       quantityProduced: r.quantityProduced || 0,
       quantityWaste: r.quantityWaste || 0,
       workersCount: r.workersCount || 0,
+      workersProductionCount: r.workersProductionCount || 0,
+      workersPackagingCount: r.workersPackagingCount || 0,
+      workersQualityCount: r.workersQualityCount || 0,
+      workersMaintenanceCount: r.workersMaintenanceCount || 0,
+      workersExternalCount: r.workersExternalCount || 0,
       workHours: r.workHours || 0,
       notes: r.notes,
       costPerUnit: r.id && costMap ? costMap.get(r.id) : undefined,
@@ -196,6 +206,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               <Th align="center">الكمية المنتجة</Th>
               {showWaste    && <Th align="center">الهالك</Th>}
               <Th align="center">عدد العمال</Th>
+              <Th>تفصيل العمالة</Th>
               <Th align="center">ساعات العمل</Th>
               {showCosts    && <Th align="center">تكلفة الوحدة</Th>}
             </tr>
@@ -213,6 +224,9 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
                 <Td align="center" bold color="#059669">{fmtNum(row.quantityProduced, dp)}</Td>
                 {showWaste    && <Td align="center" bold>{fmtNum(row.quantityWaste, dp)}</Td>}
                 <Td align="center">{row.workersCount}</Td>
+                <Td>
+                  إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
+                </Td>
                 <Td align="center">{fmtNum(row.workHours, dp)}</Td>
                 {showCosts    && (
                   <Td align="center" bold color={ps.primaryColor}>
@@ -228,6 +242,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               <Td align="center" bold color="#059669">{fmtNum(t.totalProduced, dp)}</Td>
               {showWaste && <Td align="center" bold color="#f43f5e">{fmtNum(t.totalWaste, dp)}</Td>}
               <Td align="center">{fmtNum(t.totalWorkers, dp)}</Td>
+              <Td>—</Td>
               <Td align="center">{fmtNum(t.totalHours, dp)}</Td>
               {showCosts && (() => {
                 const costsArr = rows.filter((r) => r.costPerUnit != null && r.costPerUnit > 0).map((r) => r.costPerUnit!);
@@ -356,7 +371,12 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
               </>
             )}
             <DetailRow label="عدد العمال"         value={String(report.workersCount)} />
-            <DetailRow label="ساعات العمل"        value={fmtNum(report.workHours, dp)}               even />
+            <DetailRow
+              label="تفاصيل العمالة"
+              value={`إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`}
+              even
+            />
+            <DetailRow label="ساعات العمل"        value={fmtNum(report.workHours, dp)} />
             {ps.showCosts && report.costPerUnit != null && report.costPerUnit > 0 && (
               <DetailRow label="تكلفة الوحدة"     value={`${fmtNum(report.costPerUnit, 2)} ج.م`}     highlight={ps.primaryColor} />
             )}

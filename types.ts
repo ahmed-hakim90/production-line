@@ -192,6 +192,11 @@ export interface ProductionReport {
   quantityProduced: number;
   quantityWaste: number;
   workersCount: number;
+  workersProductionCount?: number;
+  workersPackagingCount?: number;
+  workersQualityCount?: number;
+  workersMaintenanceCount?: number;
+  workersExternalCount?: number;
   workHours: number;
   supervisorHourlyRateApplied?: number;
   supervisorIndirectCost?: number;

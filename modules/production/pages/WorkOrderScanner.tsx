@@ -1,8 +1,8 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, KPIBox } from '../components/UI';
 import { useShallowStore } from '../../../store/useAppStore';
-import { scanEventService } from '../../../services/scanEventService';
+import { scanEventService } from '../services/scanEventService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { formatNumber, getTodayDateString } from '../../../utils/calculations';
 import { qualitySettingsService } from '../../quality/services/qualitySettingsService';

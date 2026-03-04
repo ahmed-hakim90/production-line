@@ -9,6 +9,21 @@ Rebuild project structure and engineering workflow in controlled phases to:
 - improve delivery speed and code quality,
 - preserve production stability during migration.
 
+## Execution Status (Live)
+
+- Phase 0: **started and active**
+  - Added architecture/deprecation/decision docs.
+  - Added legacy-import guard script and npm command.
+  - Migrated first wave of legacy imports to canonical module services.
+- Phase 1: **started**
+  - Added unsaved-changes guard in Settings tab navigation and before unload.
+  - Added unsaved-change indicators on tabs.
+  - Began extracting `Settings.tsx` into reusable components:
+    - `GeneralSettingsHeader`
+    - `GeneralBrandingSection`
+- Phase 2+: **pending**
+  - Planned and sequenced, implementation continues in incremental waves.
+
 ---
 
 ## Current Pain Points (Observed)
@@ -306,3 +321,196 @@ Start with **Phase 0** by creating:
 - ESLint/path import boundary rules
 
 Then begin **Phase 1** extraction of settings tabs with no behavior change.
+
+---
+
+## Detailed Work Packages
+
+## Phase 0 Work Packages
+
+- P0-WP1: Lock architecture references
+  - Keep `ARCHITECTURE_MAP.md` updated on each migration PR.
+- P0-WP2: Maintain deprecation mapping
+  - Keep `DEPRECATION_MAP.md` aligned with import migrations.
+- P0-WP3: CI architecture guard
+  - Add `npm run arch:check:legacy-imports` to CI pipeline.
+- P0-WP4: Decision trail discipline
+  - Record each architectural decision in `MIGRATION_DECISIONS_LOG.md`.
+
+## Phase 1 Work Packages
+
+- P1-WP1: Split `Settings.tsx` by section components.
+- P1-WP2: Introduce `useSettingsDraft` abstraction.
+- P1-WP3: Validate all settings payloads before save.
+- P1-WP4: Add user-facing unsaved-changes indicators and tab-level dirty markers.
+- P1-WP5: Preserve exact behavior parity (no product logic changes).
+
+## Phase 2 Work Packages
+
+- P2-WP1: Remove all legacy `services/*` imports from runtime paths.
+- P2-WP2: Add temporary adapters only when migration cannot be completed in one slice.
+- P2-WP3: Remove adapter files once usage reaches zero.
+
+## Phase 3 Work Packages
+
+- P3-WP1: Centralize report creation/update/delete business rules in usecases.
+- P3-WP2: Standardize duplicate and conflict error contracts.
+- P3-WP3: Ensure all entry paths use same usecase contract:
+  - Reports page
+  - Quick Action
+  - Global modal
+  - Import flows
+
+## Phase 4 Work Packages
+
+- P4-WP1: Split global store into domain stores.
+- P4-WP2: Add selectors as compatibility bridge.
+- P4-WP3: Move heavy business logic out of store into usecases.
+
+## Phase 5 Work Packages
+
+- P5-WP1: Build reusable form sections and save/error feedback components.
+- P5-WP2: Standardize confirmation modal patterns.
+- P5-WP3: Remove repeated table/action code blocks.
+
+## Phase 6 Work Packages
+
+- P6-WP1: Add E2E smoke suite for critical flows.
+- P6-WP2: Add integration tests for usecases.
+- P6-WP3: Add CI quality gates and failure triage workflow.
+- P6-WP4: Add settings change audit tracking.
+
+## Phase 7 Work Packages
+
+- P7-WP1: Remove all temporary migration bridges.
+- P7-WP2: Final architecture compliance pass.
+- P7-WP3: Update onboarding and engineering docs.
+
+---
+
+## Sprint Cadence Plan (Proposed)
+
+## Sprint 1 (1-2 weeks)
+
+- Finish Phase 0 governance and CI enforcement.
+- Continue Phase 1 extraction:
+  - complete `General` and `Print` sections split.
+- Target outcome:
+  - settings file reduced materially in complexity.
+
+## Sprint 2
+
+- Complete remaining Settings tab extraction.
+- Introduce `useSettingsDraft` and save validation layer.
+- Target outcome:
+  - feature parity and cleaner ownership boundaries.
+
+## Sprint 3
+
+- Execute Phase 2 service unification remaining slices.
+- Remove deprecated runtime imports fully.
+- Target outcome:
+  - single source of truth per service domain.
+
+## Sprint 4
+
+- Start Phase 3 report usecase hardening.
+- Unify report error contracts and all entry points.
+- Target outcome:
+  - deterministic behavior and no duplicate inconsistencies.
+
+## Sprint 5-6
+
+- Begin store decomposition (Phase 4).
+- Introduce domain stores and compatibility selectors.
+
+## Sprint 7+
+
+- UI standardization, tests, observability, and final cleanup.
+
+---
+
+## Metrics and Success Criteria
+
+Track these metrics weekly:
+
+- M1: Legacy import violations count (target: 0 sustained).
+- M2: `Settings.tsx` line count and complexity trend (target: down each sprint).
+- M3: Number of shared reusable components replacing duplicated blocks.
+- M4: E2E pass rate on critical flows.
+- M5: Regression incidents per release.
+- M6: Lead time for change on settings/report features.
+
+---
+
+## Risk Register
+
+- R1: Hidden coupling in monolithic files.
+  - Mitigation: slice-by-slice extraction, runtime smoke checks each PR.
+- R2: Behavior regression during service migration.
+  - Mitigation: contract tests + staged rollout + rollback-ready PRs.
+- R3: Team reintroducing deprecated imports.
+  - Mitigation: architecture guard in CI + code review checklist.
+- R4: Scope creep during refactor.
+  - Mitigation: behavior parity rule for refactor PRs.
+
+---
+
+## Release and Rollback Strategy
+
+- Use small PRs with one architectural objective each.
+- For each merged slice:
+  - run `arch:check:legacy-imports`
+  - run typecheck/lint
+  - execute smoke flow list
+- Rollback protocol:
+  - revert only last migration slice PR when regression appears.
+  - log root cause in decision log before retry.
+
+---
+
+## PR Template (Refactor Slices)
+
+Each refactor PR must include:
+
+- Scope:
+- Architectural objective:
+- Files moved/updated:
+- Behavior parity statement:
+- Test evidence:
+- Migration impact:
+- Rollback notes:
+
+---
+
+## Definition of Done (Per Phase)
+
+A phase is considered done only when:
+
+- Deliverables are completed.
+- Exit criteria are verified with evidence.
+- Regression checks are green.
+- Docs are updated.
+- Decision log is updated.
+
+---
+
+## Operating Rules During Migration
+
+- No silent behavior changes in refactor-only PRs.
+- No new feature code in deprecated folders.
+- Prefer moving code without rewriting unless required for safety.
+- Keep user-facing Arabic messages consistent across migrated paths.
+
+---
+
+## Current Next Steps (Updated)
+
+1. Continue Phase 1 extraction of remaining Settings sections:
+   - Theme
+   - System behavior
+   - Dashboard display
+   - Alert toggles
+2. Introduce `useSettingsDraft` abstraction.
+3. Add CI integration for `arch:check:legacy-imports`.
+4. Start Phase 3 usecase hardening plan for production reports after Settings split stabilizes.

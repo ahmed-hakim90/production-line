@@ -427,6 +427,16 @@ export const EmployeeDashboard: React.FC = () => {
             ربط العمالة بالخط
           </button>
         )}
+        {can(transferApprovalPermission as any) && (
+          <button
+            type="button"
+            onClick={() => navigate('/inventory/transfer-approvals')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-amber-600/20 transition-all"
+          >
+            <span className="material-icons-round text-base">verified_user</span>
+            اعتماد التحويلات
+          </button>
+        )}
       </div>
 
       {/* ── Alerts ── */}

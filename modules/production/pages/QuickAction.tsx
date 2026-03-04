@@ -29,7 +29,11 @@ export const QuickAction: React.FC = () => {
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [waste, setWaste] = useState('');
-  const [workers, setWorkers] = useState('');
+  const [workersProduction, setWorkersProduction] = useState('');
+  const [workersPackaging, setWorkersPackaging] = useState('');
+  const [workersQuality, setWorkersQuality] = useState('');
+  const [workersMaintenance, setWorkersMaintenance] = useState('');
+  const [workersExternal, setWorkersExternal] = useState('');
   const [hours, setHours] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -62,14 +66,12 @@ export const QuickAction: React.FC = () => {
   const fetchWorkersFromLineAssignments = useCallback(async () => {
     if (!lineId) {
       setLineWorkers([]);
-      setWorkers('');
       return;
     }
     setLoadingWorkersCount(true);
     try {
       const list = await lineAssignmentService.getByLineAndDate(lineId, today);
       setLineWorkers(list);
-      setWorkers(String(list.length));
     } catch {
       // Keep current manual value if fetch fails.
     } finally {
@@ -80,6 +82,14 @@ export const QuickAction: React.FC = () => {
   useEffect(() => {
     fetchWorkersFromLineAssignments();
   }, [fetchWorkersFromLineAssignments]);
+
+  const workersTotal = useMemo(() => (
+    (Number(workersProduction) || 0)
+    + (Number(workersPackaging) || 0)
+    + (Number(workersQuality) || 0)
+    + (Number(workersMaintenance) || 0)
+    + (Number(workersExternal) || 0)
+  ), [workersProduction, workersPackaging, workersQuality, workersMaintenance, workersExternal]);
 
   const getLineName = useCallback(
     (id: string) => _rawLines.find((l) => l.id === id)?.name ?? '—',
@@ -171,7 +181,7 @@ export const QuickAction: React.FC = () => {
   }, [fetchWorkersFromLineAssignments]);
 
   const handleSave = async () => {
-    if (!lineId || !productId || !employeeId || !quantity || !workers || !hours) return;
+    if (!lineId || !productId || !employeeId || !quantity || workersTotal <= 0 || !hours) return;
     setSaving(true);
     setSaveError(null);
 
@@ -182,7 +192,12 @@ export const QuickAction: React.FC = () => {
       date: today,
       quantityProduced: Number(quantity),
       quantityWaste: Number(waste) || 0,
-      workersCount: Number(workers),
+      workersCount: workersTotal,
+      workersProductionCount: Number(workersProduction) || 0,
+      workersPackagingCount: Number(workersPackaging) || 0,
+      workersQualityCount: Number(workersQuality) || 0,
+      workersMaintenanceCount: Number(workersMaintenance) || 0,
+      workersExternalCount: Number(workersExternal) || 0,
       workHours: Number(hours),
       notes: notes.trim(),
     };
@@ -198,6 +213,11 @@ export const QuickAction: React.FC = () => {
         quantityProduced: data.quantityProduced,
         quantityWaste: data.quantityWaste,
         workersCount: data.workersCount,
+        workersProductionCount: data.workersProductionCount,
+        workersPackagingCount: data.workersPackagingCount,
+        workersQualityCount: data.workersQualityCount,
+        workersMaintenanceCount: data.workersMaintenanceCount,
+        workersExternalCount: data.workersExternalCount,
         workHours: data.workHours,
         notes: data.notes,
       };
@@ -216,7 +236,11 @@ export const QuickAction: React.FC = () => {
     setProductId('');
     setQuantity('');
     setWaste('');
-    setWorkers('');
+    setWorkersProduction('');
+    setWorkersPackaging('');
+    setWorkersQuality('');
+    setWorkersMaintenance('');
+    setWorkersExternal('');
     setHours('');
     setNotes('');
     setSaved(false);
@@ -289,8 +313,17 @@ export const QuickAction: React.FC = () => {
   const { can } = usePermission();
   const activeEmployees = employees.filter((s) => s.isActive && s.level === 2);
   const activeWOs = useMemo(
-    () => workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress'),
-    [workOrders],
+    () => {
+      const activeOnly = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
+      if (!isSupervisorReporter || !currentEmployee?.id) return activeOnly;
+
+      const currentName = (currentEmployee.name || '').trim().toLowerCase();
+      return activeOnly.filter((w) => {
+        if (w.supervisorId === currentEmployee.id) return true;
+        return (w.supervisorId || '').trim().toLowerCase() === currentName;
+      });
+    },
+    [workOrders, isSupervisorReporter, currentEmployee?.id, currentEmployee?.name],
   );
 
   const handleSelectWO = useCallback((woId: string) => {
@@ -417,8 +450,20 @@ export const QuickAction: React.FC = () => {
               />
             </div>
             <div>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <label className="text-sm font-bold text-[var(--color-text-muted)] block">عدد العمال *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ساعات العمل *</label>
+              <input
+                type="number"
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                placeholder="0"
+                min="0"
+                step="0.5"
+              />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-bold text-[var(--color-text-muted)] block">تفصيل العمالة </label>
                 <button
                   type="button"
                   onClick={fetchWorkersFromLineAssignments}
@@ -428,17 +473,76 @@ export const QuickAction: React.FC = () => {
                   <span className={`material-icons-round text-sm ${loadingWorkersCount ? 'animate-spin' : ''}`}>
                     {loadingWorkersCount ? 'refresh' : 'sync'}
                   </span>
-                  استدعاء من ربط الخطوط
+                  عرض عمالة الخط
                 </button>
               </div>
-              <input
-                type="number"
-                value={workers}
-                onChange={(e) => setWorkers(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
-                placeholder="0"
-                min="1"
-              />
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">الإجمالي *</label>
+                  <input
+                    type="number"
+                    readOnly
+                    value={workersTotal || ''}
+                    className="w-full px-3 py-2.5 bg-[#f0f2f5]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-black text-primary"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">إنتاج</label>
+                  <input
+                    type="number"
+                    value={workersProduction}
+                    onChange={(e) => setWorkersProduction(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">تغليف</label>
+                  <input
+                    type="number"
+                    value={workersPackaging}
+                    onChange={(e) => setWorkersPackaging(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">جودة</label>
+                  <input
+                    type="number"
+                    value={workersQuality}
+                    onChange={(e) => setWorkersQuality(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">صيانة</label>
+                  <input
+                    type="number"
+                    value={workersMaintenance}
+                    onChange={(e) => setWorkersMaintenance(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">خارجية</label>
+                  <input
+                    type="number"
+                    value={workersExternal}
+                    onChange={(e) => setWorkersExternal(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              </div>
               {lineWorkers.length > 0 && (
                 <button
                   type="button"
@@ -452,18 +556,6 @@ export const QuickAction: React.FC = () => {
               {lineId && lineWorkers.length === 0 && (
                 <p className="mt-1.5 text-[11px] text-slate-400">لا توجد عمالة مسجلة على هذا الخط اليوم.</p>
               )}
-            </div>
-            <div>
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ساعات العمل *</label>
-              <input
-                type="number"
-                value={hours}
-                onChange={(e) => setHours(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
-                placeholder="0"
-                min="0"
-                step="0.5"
-              />
             </div>
             <div className="md:col-span-2">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ملحوظة</label>
@@ -480,7 +572,7 @@ export const QuickAction: React.FC = () => {
           <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-[var(--color-border)]">
             <Button
               onClick={handleSave}
-              disabled={saving || !lineId || !productId || !employeeId || !quantity || !workers || !hours || !canCreateReport}
+              disabled={saving || !lineId || !productId || !employeeId || !quantity || workersTotal <= 0 || !hours || !canCreateReport}
             >
               {saving ? (
                 <>
@@ -580,6 +672,28 @@ export const QuickAction: React.FC = () => {
                   <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ساعات العمل</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workHours}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إنتاج</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersProductionCount || 0}</p>
+                  </div>
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">تغليف</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersPackagingCount || 0}</p>
+                  </div>
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">جودة</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersQualityCount || 0}</p>
+                  </div>
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">صيانة</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersMaintenanceCount || 0}</p>
+                  </div>
+                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">خارجية</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersExternalCount || 0}</p>
                   </div>
                 </div>
                 {printReport.notes?.trim() && (

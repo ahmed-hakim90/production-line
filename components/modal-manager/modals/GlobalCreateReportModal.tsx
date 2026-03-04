@@ -16,6 +16,11 @@ type ReportFormState = {
   quantityProduced: number;
   quantityWaste: number;
   workersCount: number;
+  workersProductionCount: number;
+  workersPackagingCount: number;
+  workersQualityCount: number;
+  workersMaintenanceCount: number;
+  workersExternalCount: number;
   workHours: number;
   notes: string;
 };
@@ -34,6 +39,11 @@ const emptyForm = (): ReportFormState => ({
   quantityProduced: 0,
   quantityWaste: 0,
   workersCount: 0,
+  workersProductionCount: 0,
+  workersPackagingCount: 0,
+  workersQualityCount: 0,
+  workersMaintenanceCount: 0,
+  workersExternalCount: 0,
   workHours: 0,
   notes: '',
 });
@@ -69,6 +79,20 @@ export const GlobalCreateReportModal: React.FC = () => {
     [workOrders, isSupervisorReporter, currentEmployee?.id],
   );
 
+  const workersTotal = useMemo(() => (
+    (form.workersProductionCount || 0)
+    + (form.workersPackagingCount || 0)
+    + (form.workersQualityCount || 0)
+    + (form.workersMaintenanceCount || 0)
+    + (form.workersExternalCount || 0)
+  ), [
+    form.workersProductionCount,
+    form.workersPackagingCount,
+    form.workersQualityCount,
+    form.workersMaintenanceCount,
+    form.workersExternalCount,
+  ]);
+
   useEffect(() => {
     if (!isOpen || !isSupervisorReporter || !currentEmployee?.id) return;
     setForm((prev) => (
@@ -103,7 +127,7 @@ export const GlobalCreateReportModal: React.FC = () => {
 
   const handleSave = async () => {
     if (saving) return;
-    if (!form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workersCount || !form.workHours) {
+    if (!form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || workersTotal <= 0 || !form.workHours) {
       openErrorOverlay('أكمل الحقول المطلوبة أولاً');
       return;
     }
@@ -111,7 +135,7 @@ export const GlobalCreateReportModal: React.FC = () => {
     setFeedback(null);
     setShowErrorOverlay(false);
     try {
-      const created = await createReport(form);
+      const created = await createReport({ ...form, workersCount: workersTotal });
       if (!created) {
         const storeError = useAppStore.getState().error;
         openErrorOverlay(getReportDuplicateMessage(storeError, 'تعذر حفظ التقرير'));
@@ -293,13 +317,67 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">عدد عمال التشغيل *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">إجمالي العمالة *</label>
               <input
                 type="number"
-                min={1}
+                readOnly
+                className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-black text-primary"
+                value={workersTotal || ''}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة إنتاج</label>
+              <input
+                type="number"
+                min={0}
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                value={form.workersCount || ''}
-                onChange={(e) => setForm((prev) => ({ ...prev, workersCount: Number(e.target.value) }))}
+                value={form.workersProductionCount || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, workersProductionCount: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة تغليف</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                value={form.workersPackagingCount || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, workersPackagingCount: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة جودة</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                value={form.workersQualityCount || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, workersQualityCount: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة صيانة</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                value={form.workersMaintenanceCount || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, workersMaintenanceCount: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة خارجية</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                value={form.workersExternalCount || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, workersExternalCount: Number(e.target.value) }))}
                 placeholder="0"
               />
             </div>
@@ -334,7 +412,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           <Button
             variant="primary"
             onClick={handleSave}
-            disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workersCount || !form.workHours}
+            disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || workersTotal <= 0 || !form.workHours}
           >
             {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
             <span className="material-icons-round text-sm">add</span>

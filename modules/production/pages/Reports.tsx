@@ -46,6 +46,11 @@ const emptyForm = {
   quantityProduced: 0,
   quantityWaste: 0,
   workersCount: 0,
+  workersProductionCount: 0,
+  workersPackagingCount: 0,
+  workersQualityCount: 0,
+  workersMaintenanceCount: 0,
+  workersExternalCount: 0,
   workHours: 0,
   notes: '',
 };
@@ -105,6 +110,19 @@ export const Reports: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const formWorkersTotal = useMemo(() => (
+    (form.workersProductionCount || 0)
+    + (form.workersPackagingCount || 0)
+    + (form.workersQualityCount || 0)
+    + (form.workersMaintenanceCount || 0)
+    + (form.workersExternalCount || 0)
+  ), [
+    form.workersProductionCount,
+    form.workersPackagingCount,
+    form.workersQualityCount,
+    form.workersMaintenanceCount,
+    form.workersExternalCount,
+  ]);
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -141,7 +159,22 @@ export const Reports: React.FC = () => {
 
   // Line workers for auto-fill and viewing
   const [formLineWorkers, setFormLineWorkers] = useState<LineWorkerAssignment[]>([]);
-  const [viewWorkersData, setViewWorkersData] = useState<{ lineId: string; date: string; workers: LineWorkerAssignment[] } | null>(null);
+  const [viewWorkersData, setViewWorkersData] = useState<{
+    lineId: string;
+    date: string;
+    workers: LineWorkerAssignment[];
+    report?: Pick<
+      ProductionReport,
+      | 'id'
+      | 'workersCount'
+      | 'workersProductionCount'
+      | 'workersPackagingCount'
+      | 'workersQualityCount'
+      | 'workersMaintenanceCount'
+      | 'workersExternalCount'
+      | 'workHours'
+    >;
+  } | null>(null);
   const [viewWorkersLoading, setViewWorkersLoading] = useState(false);
   const [viewWorkersPickerId, setViewWorkersPickerId] = useState('');
   const [viewWorkersBusy, setViewWorkersBusy] = useState(false);
@@ -197,11 +230,8 @@ export const Reports: React.FC = () => {
     if (!showModal || !form.lineId || !form.date) { setFormLineWorkers([]); return; }
     lineAssignmentService.getByLineAndDate(form.lineId, form.date).then((list) => {
       setFormLineWorkers(list);
-      if (list.length > 0 && !editId && form.workersCount === 0) {
-        setForm((prev) => ({ ...prev, workersCount: getOperatorsCount(list, prev.employeeId) }));
-      }
     }).catch(() => setFormLineWorkers([]));
-  }, [showModal, form.lineId, form.date, editId, form.workersCount, getOperatorsCount]);
+  }, [showModal, form.lineId, form.date, editId]);
 
   useEffect(() => {
     if (!showModal || !isSupervisorReporter || !currentEmployee?.id) return;
@@ -445,6 +475,11 @@ export const Reports: React.FC = () => {
         quantityProduced: report.quantityProduced || 0,
         quantityWaste: report.quantityWaste || 0,
         workersCount: report.workersCount || 0,
+        workersProductionCount: report.workersProductionCount || 0,
+        workersPackagingCount: report.workersPackagingCount || 0,
+        workersQualityCount: report.workersQualityCount || 0,
+        workersMaintenanceCount: report.workersMaintenanceCount || 0,
+        workersExternalCount: report.workersExternalCount || 0,
         workHours: report.workHours || 0,
         notes: report.notes,
         costPerUnit: rid && canViewCosts ? reportCosts.get(rid) : undefined,
@@ -699,6 +734,11 @@ export const Reports: React.FC = () => {
       quantityProduced: report.quantityProduced,
       quantityWaste: report.quantityWaste,
       workersCount: report.workersCount,
+      workersProductionCount: report.workersProductionCount || 0,
+      workersPackagingCount: report.workersPackagingCount || 0,
+      workersQualityCount: report.workersQualityCount || 0,
+      workersMaintenanceCount: report.workersMaintenanceCount || 0,
+      workersExternalCount: report.workersExternalCount || 0,
       workHours: report.workHours,
       notes: report.notes ?? '',
     });
@@ -724,8 +764,9 @@ export const Reports: React.FC = () => {
 
   const handleSave = async (printAfterSave = false) => {
     if (!form.lineId || !form.productId || !form.employeeId) return;
+    const payload = { ...form, workersCount: formWorkersTotal };
     const duplicated = await hasDuplicateLineSupervisorReport(
-      { date: form.date, lineId: form.lineId, employeeId: form.employeeId, productId: form.productId },
+      { date: payload.date, lineId: payload.lineId, employeeId: payload.employeeId, productId: payload.productId },
       editId,
     );
     if (duplicated) {
@@ -739,16 +780,16 @@ export const Reports: React.FC = () => {
     setSaveToast(null);
 
     if (editId) {
-      await updateReport(editId, form);
+      await updateReport(editId, payload);
       setSaving(false);
       setSaveToastType('success');
       setSaveToast('تم حفظ التعديلات بنجاح');
       setTimeout(() => setSaveToast(null), 3000);
       if (printAfterSave && can('print')) {
-        await triggerSinglePrint({ ...form, id: editId });
+        await triggerSinglePrint({ ...payload, id: editId });
       }
     } else {
-      const createdId = await createReport(form);
+      const createdId = await createReport(payload);
       if (!createdId) {
         setSaving(false);
         setSaveToastType('error');
@@ -763,7 +804,7 @@ export const Reports: React.FC = () => {
       setTimeout(() => setSaveToast(null), 3000);
       if (printAfterSave && can('print')) {
         await triggerSinglePrint({
-          ...form,
+          ...payload,
           id: typeof createdId === 'string' ? createdId : undefined,
         });
       }
@@ -804,14 +845,33 @@ export const Reports: React.FC = () => {
     setDeleteConfirmId(reportId);
   }, []);
 
-  const handleViewWorkers = async (lineId: string, date: string) => {
+  const handleViewWorkers = async (report: ProductionReport) => {
+    const { lineId, date } = report;
     setViewWorkersLoading(true);
     setViewWorkersError(null);
     setViewWorkersPickerId('');
-    setViewWorkersData({ lineId, date, workers: [] });
+    setViewWorkersData({
+      lineId,
+      date,
+      workers: [],
+      report: {
+        id: report.id,
+        workersCount: report.workersCount || 0,
+        workersProductionCount: report.workersProductionCount || 0,
+        workersPackagingCount: report.workersPackagingCount || 0,
+        workersQualityCount: report.workersQualityCount || 0,
+        workersMaintenanceCount: report.workersMaintenanceCount || 0,
+        workersExternalCount: report.workersExternalCount || 0,
+        workHours: report.workHours || 0,
+      },
+    });
     try {
       const workers = await lineAssignmentService.getByLineAndDate(lineId, date);
-      setViewWorkersData({ lineId, date, workers });
+      setViewWorkersData((prev) => (
+        prev
+          ? { ...prev, lineId, date, workers }
+          : null
+      ));
     } catch {
       setViewWorkersData(null);
     } finally {
@@ -821,12 +881,15 @@ export const Reports: React.FC = () => {
 
   const refreshWorkersForLineDate = useCallback(async (lineId: string, date: string) => {
     const workers = await lineAssignmentService.getByLineAndDate(lineId, date);
-    setViewWorkersData({ lineId, date, workers });
+    setViewWorkersData((prev) => (
+      prev
+        ? { ...prev, lineId, date, workers }
+        : { lineId, date, workers }
+    ));
     if (showModal && form.lineId === lineId && form.date === date) {
       setFormLineWorkers(workers);
-      setForm((prev) => ({ ...prev, workersCount: getOperatorsCount(workers, prev.employeeId) }));
     }
-  }, [showModal, form.lineId, form.date, getOperatorsCount]);
+  }, [showModal, form.lineId, form.date]);
 
   const addWorkerToLineDate = useCallback(async () => {
     if (!viewWorkersData || !viewWorkersPickerId) return;
@@ -1184,13 +1247,21 @@ export const Reports: React.FC = () => {
         className: 'text-center font-bold',
         render: (r) => (
           <button
-            onClick={(e) => { e.stopPropagation(); handleViewWorkers(r.lineId, r.date); }}
+            onClick={(e) => { e.stopPropagation(); handleViewWorkers(r); }}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--border-radius-base)] hover:bg-primary/10 text-primary transition-colors"
             title="عرض العمالة"
           >
             {r.workersCount}
             <span className="material-icons-round text-xs">groups</span>
           </button>
+        ),
+      },
+      {
+        header: 'تفصيل العمالة',
+        render: (r) => (
+          <span className="text-xs font-bold text-[var(--color-text-muted)]">
+            إ:{r.workersProductionCount ?? 0} | ت:{r.workersPackagingCount ?? 0} | ج:{r.workersQualityCount ?? 0} | ص:{r.workersMaintenanceCount ?? 0} | خ:{r.workersExternalCount ?? 0}
+          </span>
         ),
       },
       { header: 'ساعات', headerClassName: 'text-center', className: 'text-center font-bold', render: (r) => <>{r.workHours}</> },
@@ -1697,19 +1768,24 @@ export const Reports: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">عدد عمال التشغيل (بدون المشرف) *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">إجمالي العمالة (محسوب) *</label>
                   <input
                     type="number"
-                    min={1}
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    value={form.workersCount || ''}
-                    onChange={(e) => setForm({ ...form, workersCount: Number(e.target.value) })}
+                    readOnly
+                    className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-black text-primary"
+                    value={formWorkersTotal || ''}
                     placeholder="0"
                   />
                   {formLineWorkers.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => handleViewWorkers(form.lineId, form.date)}
+                      onClick={() =>
+                        handleViewWorkers({
+                          ...form,
+                          workersCount: formWorkersTotal,
+                          id: editId || undefined,
+                        } as ProductionReport)
+                      }
                       className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
                     >
                       <span className="material-icons-round text-xs">groups</span>
@@ -1730,6 +1806,63 @@ export const Reports: React.FC = () => {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة إنتاج</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    value={form.workersProductionCount || ''}
+                    onChange={(e) => setForm({ ...form, workersProductionCount: Number(e.target.value) })}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة تغليف</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    value={form.workersPackagingCount || ''}
+                    onChange={(e) => setForm({ ...form, workersPackagingCount: Number(e.target.value) })}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة جودة</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    value={form.workersQualityCount || ''}
+                    onChange={(e) => setForm({ ...form, workersQualityCount: Number(e.target.value) })}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة صيانة</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    value={form.workersMaintenanceCount || ''}
+                    onChange={(e) => setForm({ ...form, workersMaintenanceCount: Number(e.target.value) })}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة خارجية</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                    value={form.workersExternalCount || ''}
+                    onChange={(e) => setForm({ ...form, workersExternalCount: Number(e.target.value) })}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">ملحوظة</label>
                 <textarea
@@ -1741,11 +1874,11 @@ export const Reports: React.FC = () => {
                 />
               </div>
             </div>
-            {canViewCosts && form.workersCount > 0 && form.workHours > 0 && form.quantityProduced > 0 && form.lineId && (
+            {canViewCosts && formWorkersTotal > 0 && form.workHours > 0 && form.quantityProduced > 0 && form.lineId && (
               (() => {
                 const selectedSupervisorRate = supervisorHourlyRates.get(form.employeeId) ?? 0;
                 const est = estimateReportCost(
-                  form.workersCount, form.workHours, form.quantityProduced,
+                  formWorkersTotal, form.workHours, form.quantityProduced,
                   laborSettings?.hourlyRate ?? 0,
                   selectedSupervisorRate > 0 ? selectedSupervisorRate : (laborSettings?.hourlyRate ?? 0),
                   form.lineId,
@@ -1811,7 +1944,7 @@ export const Reports: React.FC = () => {
                 <Button
                   variant="outline"
                   onClick={() => handleSave(true)}
-                  disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workersCount || !form.workHours}
+                  disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || formWorkersTotal <= 0 || !form.workHours}
                 >
                   {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
                   <span className="material-icons-round text-sm">print</span>
@@ -1821,7 +1954,7 @@ export const Reports: React.FC = () => {
               <Button
                 variant="primary"
                 onClick={() => handleSave(false)}
-                disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workersCount || !form.workHours}
+                disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || formWorkersTotal <= 0 || !form.workHours}
               >
                 {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
                 <span className="material-icons-round text-sm">{editId ? 'save' : 'add'}</span>
@@ -2429,6 +2562,40 @@ export const Reports: React.FC = () => {
                 <p className="text-xs font-bold text-rose-500">{viewWorkersError}</p>
               )}
             </div>
+            {viewWorkersData.report && (
+              <div className="px-4 pb-4 border-b border-[var(--color-border)]">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-[var(--border-radius-base)] bg-primary/5 px-2.5 py-2 text-center">
+                    <p className="text-[var(--color-text-muted)] font-bold">إجمالي العمالة</p>
+                    <p className="text-primary font-black text-sm">{viewWorkersData.report.workersCount}</p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                    <p className="text-[var(--color-text-muted)] font-bold">ساعات العمل</p>
+                    <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workHours}</p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                    <p className="text-[var(--color-text-muted)] font-bold">إنتاج</p>
+                    <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersProductionCount || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                    <p className="text-[var(--color-text-muted)] font-bold">تغليف</p>
+                    <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersPackagingCount || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                    <p className="text-[var(--color-text-muted)] font-bold">جودة</p>
+                    <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersQualityCount || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                    <p className="text-[var(--color-text-muted)] font-bold">صيانة</p>
+                    <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersMaintenanceCount || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center col-span-2">
+                    <p className="text-[var(--color-text-muted)] font-bold">خارجية</p>
+                    <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersExternalCount || 0}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="p-4 overflow-y-auto flex-1">
               {viewWorkersLoading ? (
                 <div className="text-center py-8">

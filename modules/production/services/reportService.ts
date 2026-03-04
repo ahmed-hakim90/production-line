@@ -24,6 +24,17 @@ const COLLECTION = 'production_reports';
 const UNIQUE_COLLECTION = 'production_report_uniques';
 const MAX_PAGE_SIZE = 100;
 
+function isMissingIndexError(error: unknown): boolean {
+  const code = String((error as { code?: string })?.code || '').toLowerCase();
+  const message = String((error as { message?: string })?.message || '').toLowerCase();
+  return (
+    code.includes('failed-precondition')
+    || message.includes('requires an index')
+    || message.includes('create it here')
+    || message.includes('failed precondition')
+  );
+}
+
 const normalizeKeyPart = (value: string) =>
   encodeURIComponent(String(value || '').trim().toLowerCase());
 
@@ -205,6 +216,11 @@ export const reportService = {
           ...data,
           reportCode,
           quantityWaste: data.quantityWaste ?? 0,
+          workersProductionCount: data.workersProductionCount ?? 0,
+          workersPackagingCount: data.workersPackagingCount ?? 0,
+          workersQualityCount: data.workersQualityCount ?? 0,
+          workersMaintenanceCount: data.workersMaintenanceCount ?? 0,
+          workersExternalCount: data.workersExternalCount ?? 0,
           createdAt: serverTimestamp(),
         });
         tx.set(uniqueRef, {
@@ -330,9 +346,7 @@ export const reportService = {
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
-      const code = (error as { code?: string })?.code || '';
-      const message = String((error as { message?: string })?.message || '');
-      const requiresIndex = code === 'failed-precondition' || message.includes('requires an index');
+      const requiresIndex = isMissingIndexError(error);
       if (!requiresIndex) {
         console.error('reportService.getByLineAndProduct error:', error);
         throw error;
@@ -366,9 +380,7 @@ export const reportService = {
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
-      const code = (error as { code?: string })?.code || '';
-      const message = String((error as { message?: string })?.message || '');
-      const requiresIndex = code === 'failed-precondition' || message.includes('requires an index');
+      const requiresIndex = isMissingIndexError(error);
       if (!requiresIndex) {
         console.error('reportService.getByProduct error:', error);
         throw error;

@@ -6,7 +6,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
-import { workOrderService } from '../../../services/workOrderService';
+import { workOrderService } from '../services/workOrderService';
 import type { LineWorkerAssignment, WorkOrder } from '../../../types';
 import {
   formatNumber,

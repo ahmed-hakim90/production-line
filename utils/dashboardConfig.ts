@@ -78,6 +78,7 @@ export interface QuickActionDefinition {
 
 export const AVAILABLE_QUICK_ACTIONS: QuickActionDefinition[] = [
   { key: 'quick_action', label: 'إدخال سريع', icon: 'bolt', color: 'amber', actionType: 'navigate', target: '/quick-action', permission: 'quickAction.view' },
+  { key: 'transfer_approvals', label: 'اعتماد التحويلات', icon: 'verified_user', color: 'amber', actionType: 'navigate', target: '/inventory/transfer-approvals', permission: 'inventory.view' },
   { key: 'reports', label: 'التقارير', icon: 'bar_chart', color: 'primary', actionType: 'navigate', target: '/reports', permission: 'reports.view' },
   { key: 'quality_final', label: 'الفحص النهائي', icon: 'task_alt', color: 'emerald', actionType: 'navigate', target: '/quality/final-inspection', permission: 'quality.finalInspection.view' },
   { key: 'quality_ipqc', label: 'IPQC', icon: 'rule', color: 'violet', actionType: 'navigate', target: '/quality/ipqc', permission: 'quality.ipqc.view' },

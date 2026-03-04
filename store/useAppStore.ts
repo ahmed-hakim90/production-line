@@ -51,21 +51,21 @@ import { lineProductConfigService } from '../modules/production/services/linePro
 import { productionPlanService } from '../modules/production/services/productionPlanService';
 import { workOrderService } from '../modules/production/services/workOrderService';
 import { notificationService } from '../services/notificationService';
-import { costCenterService } from '../services/costCenterService';
-import { costCenterValueService } from '../services/costCenterValueService';
-import { costAllocationService } from '../services/costAllocationService';
-import { laborSettingsService } from '../services/laborSettingsService';
-import { roleService } from '../services/roleService';
+import { costCenterService } from '../modules/costs/services/costCenterService';
+import { costCenterValueService } from '../modules/costs/services/costCenterValueService';
+import { costAllocationService } from '../modules/costs/services/costAllocationService';
+import { laborSettingsService } from '../modules/costs/services/laborSettingsService';
+import { roleService } from '../modules/system/services/roleService';
 import { userService } from '../services/userService';
-import { activityLogService } from '../services/activityLogService';
-import { systemSettingsService } from '../services/systemSettingsService';
+import { activityLogService } from '../modules/system/services/activityLogService';
+import { systemSettingsService } from '../modules/system/services/systemSettingsService';
 import { scanEventService } from '../modules/production/services/scanEventService';
 import { stockService } from '../modules/inventory/services/stockService';
 import { transferApprovalService } from '../modules/inventory/services/transferApprovalService';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { rawMaterialService } from '../modules/inventory/services/rawMaterialService';
 import type { StockItemBalance } from '../modules/inventory/types';
-import { productMaterialService } from '../services/productMaterialService';
+import { productMaterialService } from '../modules/production/services/productMaterialService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -1226,6 +1226,11 @@ export const useAppStore = create<AppState>((set, get) => ({
               updatedWorkOrder.maxWorkers ??
               0,
             ),
+            workersProductionCount: 0,
+            workersPackagingCount: 0,
+            workersQualityCount: 0,
+            workersMaintenanceCount: 0,
+            workersExternalCount: 0,
             workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
             notes: updatedWorkOrder.notes ?? '',
             workOrderId: id,

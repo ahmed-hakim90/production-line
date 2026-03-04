@@ -13,7 +13,7 @@ import { exportAllProducts, PRODUCT_EXPORT_DEFAULTS } from '../../../utils/expor
 import type { ProductExportOptions } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import type { ProductMaterial } from '../../../types';
-import { productMaterialService } from '../../../services/productMaterialService';
+import { productMaterialService } from '../services/productMaterialService';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';

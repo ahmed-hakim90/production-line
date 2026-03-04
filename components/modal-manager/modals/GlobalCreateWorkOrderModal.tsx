@@ -3,8 +3,8 @@ import { Button, SearchableSelect } from '../../../modules/production/components
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { estimateReportCost } from '../../../utils/costCalculations';
-import { getTodayDateString } from '../../../utils/calculations';
-import { workOrderService } from '../../../services/workOrderService';
+import { formatNumber, getTodayDateString } from '../../../utils/calculations';
+import { workOrderService } from '../../../modules/production/services/workOrderService';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 
@@ -80,10 +80,24 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       { value: '', label: 'بدون خطة' },
       ...activePlans.map((p) => ({
         value: p.id!,
-        label: `${productNameById.get(p.productId) || 'منتج غير معروف'}${p.plannedEndDate ? ` - ${p.plannedEndDate}` : ''}`,
+        label: `${productNameById.get(p.productId) || 'منتج غير معروف'} — المتبقي: ${formatNumber(Math.max((p.plannedQuantity || 0) - (p.producedQuantity || 0), 0))}${p.plannedEndDate ? ` - ${p.plannedEndDate}` : ''}`,
       })),
     ],
     [activePlans, productNameById],
+  );
+
+  const selectedPlan = useMemo(
+    () => activePlans.find((p) => p.id === form.planId) ?? null,
+    [activePlans, form.planId],
+  );
+
+  const selectedPlanRemaining = useMemo(
+    () => (
+      selectedPlan
+        ? Math.max((selectedPlan.plannedQuantity || 0) - (selectedPlan.producedQuantity || 0), 0)
+        : 0
+    ),
+    [selectedPlan],
   );
 
   if (!isOpen) return null;
@@ -186,6 +200,16 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
               }}
               placeholder="ابحث باسم المنتج أو اختر بدون خطة"
             />
+            {selectedPlan && (
+              <div className="mt-2 rounded-[var(--border-radius-base)] border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+                المتبقي في الخطة: {formatNumber(selectedPlanRemaining)} وحدة
+                <span className="text-blue-500"> (من {formatNumber(selectedPlan.plannedQuantity || 0)} مخطط)</span>
+                <span className="mx-1 text-blue-400">—</span>
+                {productNameById.get(selectedPlan.productId) || 'منتج غير معروف'}
+                <span className="mx-1 text-blue-400">/</span>
+                {lines.find((l) => l.id === selectedPlan.lineId)?.name || 'خط غير معروف'}
+              </div>
+            )}
           </div>
 
           <div>

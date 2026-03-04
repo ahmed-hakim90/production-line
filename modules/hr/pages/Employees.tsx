@@ -7,7 +7,7 @@ import type { FirestoreEmployee, FirestoreUser, EmploymentType } from '../../../
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { userService } from '../../../services/userService';
-import { activityLogService } from '../../../services/activityLogService';
+import { activityLogService } from '../../system/services/activityLogService';
 import { employeeService } from '../employeeService';
 import { JOB_LEVEL_LABELS } from '../types';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, FirestoreVehicle } from '../types';

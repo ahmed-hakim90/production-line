@@ -6,10 +6,16 @@ import { WorkOrderPrint } from '../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../components/ProductionReportPrint';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
-import { formatCurrency, formatNumber, getTodayDateString } from '../../../utils/calculations';
+import {
+  calculateWorkOrderExecutionMetrics,
+  formatCurrency,
+  formatNumber,
+  getExecutionDeviationTone,
+  getTodayDateString,
+} from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
-import { workOrderService } from '../../../services/workOrderService';
-import { scanEventService } from '../../../services/scanEventService';
+import { workOrderService } from '../services/workOrderService';
+import { scanEventService } from '../services/scanEventService';
 import { estimateReportCost, formatCost } from '../../../utils/costCalculations';
 import type { WorkOrder, WorkOrderStatus } from '../../../types';
 import { qualitySettingsService } from '../../quality/services/qualitySettingsService';
@@ -104,24 +110,26 @@ export const WorkOrders: React.FC = () => {
   const highlightId = searchParams.get('highlight');
   const highlightRef = useRef<HTMLTableRowElement>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
-  const [workOrdersCursor, setWorkOrdersCursor] = useState<any>(null);
+  const [, setWorkOrdersCursor] = useState<any>(null);
   const [workOrdersHasMore, setWorkOrdersHasMore] = useState(false);
   const [workOrdersLoading, setWorkOrdersLoading] = useState(false);
+  const workOrdersCursorRef = useRef<any>(null);
 
   const loadWorkOrders = useCallback(async (append = false) => {
     setWorkOrdersLoading(true);
     try {
       const res = await workOrderService.listPaged({
         limit: 50,
-        cursor: append ? workOrdersCursor : null,
+        cursor: append ? workOrdersCursorRef.current : null,
       });
       setWorkOrders((prev) => append ? [...prev, ...res.items] : res.items);
       setWorkOrdersCursor(res.nextCursor);
+      workOrdersCursorRef.current = res.nextCursor ?? null;
       setWorkOrdersHasMore(Boolean(res.hasMore && res.nextCursor));
     } finally {
       setWorkOrdersLoading(false);
     }
-  }, [workOrdersCursor]);
+  }, []);
 
   useEffect(() => {
     void loadWorkOrders(false);
@@ -422,6 +430,20 @@ export const WorkOrders: React.FC = () => {
     return ((wo.actualCost - wo.estimatedCost) / wo.estimatedCost) * 100;
   };
 
+  const todayDate = getTodayDateString();
+
+  const getExecutionMetrics = useCallback((wo: WorkOrder) => (
+    calculateWorkOrderExecutionMetrics({
+      quantity: wo.quantity,
+      producedQuantity: wo.producedQuantity ?? 0,
+      targetDate: wo.targetDate,
+      createdAt: wo.createdAt,
+      startDate: (wo as any).startedAt,
+      status: wo.status,
+      today: todayDate,
+    })
+  ), [todayDate]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -510,6 +532,9 @@ export const WorkOrders: React.FC = () => {
                   <th className="erp-th">التقدم</th>
                   <th className="erp-th">الحد الأقصى</th>
                   <th className="erp-th">التاريخ</th>
+                  <th className="erp-th">متوسط/يوم</th>
+                  <th className="erp-th">انتهاء متوقع</th>
+                  <th className="erp-th">انحراف المعدل</th>
                   {can('workOrders.viewCost') && (
                     <>
                       <th className="erp-th">تكلفة مقدرة</th>
@@ -524,6 +549,7 @@ export const WorkOrders: React.FC = () => {
                 {filtered.map((wo) => {
                   const prog = progress(wo);
                   const variance = costVariance(wo);
+                  const execution = getExecutionMetrics(wo);
                   return (
                     <tr
                       key={wo.id}
@@ -553,6 +579,35 @@ export const WorkOrders: React.FC = () => {
                       </td>
                       <td className="py-3 px-3 font-mono text-slate-500">{wo.maxWorkers} عامل</td>
                       <td className="py-3 px-3 font-mono text-xs text-slate-500">{wo.targetDate}</td>
+                      <td className="py-3 px-3 font-mono text-xs">
+                        {formatNumber(Number(execution.avgDailyActual.toFixed(1)))} وحدة/يوم
+                      </td>
+                      <td className="py-3 px-3 font-mono text-xs">
+                        {wo.status === 'completed' ? (
+                          <span className="text-emerald-600">مكتمل</span>
+                        ) : (
+                          <span className={execution.forecastEndDate !== '—' && execution.forecastEndDate > wo.targetDate ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}>
+                            {execution.forecastEndDate}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-xs font-bold">
+                        {wo.status === 'completed' ? (
+                          <span className="text-emerald-600">—</span>
+                        ) : execution.deviationPct === null ? (
+                          <span className="text-[var(--color-text-muted)]">—</span>
+                        ) : (
+                          <span className={
+                            getExecutionDeviationTone(execution.deviationPct) === 'good'
+                              ? 'text-emerald-600'
+                              : getExecutionDeviationTone(execution.deviationPct) === 'danger'
+                                ? 'text-rose-600'
+                                : 'text-amber-600'
+                          }>
+                            {execution.deviationPct > 0 ? '+' : ''}{execution.deviationPct}%
+                          </span>
+                        )}
+                      </td>
                       {can('workOrders.viewCost') && (
                         <>
                           <td className="py-3 px-3 font-mono text-xs">{formatCurrency(wo.estimatedCost)}</td>

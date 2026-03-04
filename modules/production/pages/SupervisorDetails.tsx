@@ -5,16 +5,20 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
+import { workOrderService } from '@/modules/production/services/workOrderService';
 import { employeeService } from '../../hr/employeeService';
 import {
+  calculateWorkOrderExecutionMetrics,
+  getExecutionDeviationTone,
   formatNumber,
   calculateWasteRatio,
   getTodayDateString,
+  normalizeDateInputToYmd,
   sumMaxWorkHoursByDate,
 } from '../../../utils/calculations';
 import { JOB_LEVEL_LABELS, type JobLevel } from '../../hr/types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
-import type { ProductionReport, FirestoreEmployee } from '../../../types';
+import type { ProductionReport, FirestoreEmployee, WorkOrder } from '../../../types';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift } from '../../hr/types';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef, shiftsRef } from '../../hr/collections';
@@ -95,6 +99,7 @@ export const SupervisorDetails: React.FC = () => {
   const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
   const [shifts, setShifts] = useState<FirestoreShift[]>([]);
   const [reports, setReports] = useState<ProductionReport[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DetailTab>('production');
   const [chartTab, setChartTab] = useState<ChartTab>('production');
@@ -109,12 +114,13 @@ export const SupervisorDetails: React.FC = () => {
     setLoading(true);
     (async () => {
       try {
-        const [emp, deptSnap, posSnap, shiftSnap, empReports] = await Promise.all([
+        const [emp, deptSnap, posSnap, shiftSnap, empReports, supervisorOrders] = await Promise.all([
           employeeService.getById(id),
           getDocs(departmentsRef()),
           getDocs(jobPositionsRef()),
           getDocs(shiftsRef()),
           reportService.getByEmployee(id),
+          workOrderService.getBySupervisor(id),
         ]);
         if (cancelled) return;
         setEmployee(emp ?? null);
@@ -122,6 +128,7 @@ export const SupervisorDetails: React.FC = () => {
         setJobPositions(posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)));
         setShifts(shiftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift)));
         setReports(empReports);
+        setWorkOrders(supervisorOrders);
       } catch (e) {
         console.error('SupervisorDetails load error:', e);
         if (!cancelled) setEmployee(null);
@@ -186,6 +193,16 @@ export const SupervisorDetails: React.FC = () => {
   const totalWaste = useMemo(() => periodReports.reduce((s, r) => s + (r.quantityWaste ?? 0), 0), [periodReports]);
   const wasteRatio = useMemo(() => calculateWasteRatio(totalWaste, totalProduced + totalWaste), [totalProduced, totalWaste]);
   const totalWorkerHours = useMemo(() => periodReports.reduce((s, r) => s + (r.workersCount ?? 0) * (r.workHours ?? 0), 0), [periodReports]);
+  const laborBreakdownTotals = useMemo(() => (
+    periodReports.reduce((acc, r) => {
+      acc.production += r.workersProductionCount ?? 0;
+      acc.packaging += r.workersPackagingCount ?? 0;
+      acc.quality += r.workersQualityCount ?? 0;
+      acc.maintenance += r.workersMaintenanceCount ?? 0;
+      acc.external += r.workersExternalCount ?? 0;
+      return acc;
+    }, { production: 0, packaging: 0, quality: 0, maintenance: 0, external: 0 })
+  ), [periodReports]);
   const totalHours = useMemo(() => sumMaxWorkHoursByDate(periodReports), [periodReports]);
   const avgPerReport = useMemo(() => periodReports.length > 0 ? Math.round(totalProduced / periodReports.length) : 0, [totalProduced, periodReports.length]);
   const uniqueDays = useMemo(() => new Set(periodReports.map((r) => r.date)).size, [periodReports]);
@@ -214,6 +231,88 @@ export const SupervisorDetails: React.FC = () => {
     if (periodReports.length === 0) return 0;
     return Math.round(periodReports.reduce((s, r) => s + (r.workersCount ?? 0), 0) / periodReports.length);
   }, [periodReports]);
+
+  const periodRange = useMemo(() => {
+    if (period === 'daily') return { start: today, end: today };
+    if (period === 'yesterday') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const y = yesterday.getFullYear();
+      const m = String(yesterday.getMonth() + 1).padStart(2, '0');
+      const d = String(yesterday.getDate()).padStart(2, '0');
+      const day = `${y}-${m}-${d}`;
+      return { start: day, end: day };
+    }
+    if (period === 'weekly') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 6);
+      const y = weekAgo.getFullYear();
+      const m = String(weekAgo.getMonth() + 1).padStart(2, '0');
+      const d = String(weekAgo.getDate()).padStart(2, '0');
+      return { start: `${y}-${m}-${d}`, end: today };
+    }
+    const monthStart = `${today.slice(0, 7)}-01`;
+    return { start: monthStart, end: today };
+  }, [period, today]);
+
+  const periodWorkOrders = useMemo(() => (
+    workOrders.filter((wo) => {
+      const createdDate = normalizeDateInputToYmd(wo.createdAt);
+      const baseDate = createdDate || wo.targetDate || today;
+      return baseDate >= periodRange.start && baseDate <= periodRange.end;
+    })
+  ), [workOrders, periodRange.start, periodRange.end, today]);
+
+  const activePeriodWorkOrders = useMemo(() => (
+    periodWorkOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress')
+  ), [periodWorkOrders]);
+
+  const activeExecutionRows = useMemo(() => (
+    activePeriodWorkOrders.map((wo) => {
+      const producedNow = wo.actualProducedFromScans ?? wo.producedQuantity ?? 0;
+      const execution = calculateWorkOrderExecutionMetrics({
+        quantity: wo.quantity,
+        producedQuantity: producedNow,
+        targetDate: wo.targetDate,
+        createdAt: wo.createdAt,
+        today,
+      });
+      const deviationTone = getExecutionDeviationTone(execution.deviationPct);
+      const isLateForecast = execution.forecastEndDate !== '—' && execution.forecastEndDate > wo.targetDate;
+      return { wo, execution, deviationTone, producedNow, isLateForecast };
+    })
+  ), [activePeriodWorkOrders, today]);
+
+  const executionSummary = useMemo(() => {
+    if (activeExecutionRows.length === 0) {
+      return {
+        avgDailyActual: 0,
+        weightedDeviation: null as number | null,
+        delayedCount: 0,
+        latestForecast: '—',
+      };
+    }
+    const delayedCount = activeExecutionRows.filter((row) => row.isLateForecast).length;
+    const totalAvgDaily = activeExecutionRows.reduce((sum, row) => sum + row.execution.avgDailyActual, 0);
+    const weightedBase = activeExecutionRows.reduce((sum, row) => sum + row.execution.remainingQty, 0);
+    const weightedDeviationRaw = weightedBase > 0
+      ? activeExecutionRows.reduce((sum, row) => (
+        sum + ((row.execution.deviationPct ?? 0) * row.execution.remainingQty)
+      ), 0) / weightedBase
+      : null;
+    const validForecasts = activeExecutionRows
+      .map((row) => row.execution.forecastEndDate)
+      .filter((d) => d !== '—');
+    const latestForecast = validForecasts.length > 0
+      ? [...validForecasts].sort().at(-1) || '—'
+      : '—';
+    return {
+      avgDailyActual: totalAvgDaily / activeExecutionRows.length,
+      weightedDeviation: weightedDeviationRaw !== null ? Number(weightedDeviationRaw.toFixed(1)) : null,
+      delayedCount,
+      latestForecast,
+    };
+  }, [activeExecutionRows]);
 
   // ── Alerts ──────────────────────────────────────────────────────────────────
 
@@ -485,7 +584,62 @@ export const SupervisorDetails: React.FC = () => {
           trend={scoreBadge.label}
           trendUp={performanceScore >= 70}
         />
+        <KPIBox
+          label="متوسط الإنتاج/يوم (أوامر)"
+          value={formatNumber(Number(executionSummary.avgDailyActual.toFixed(1)))}
+          unit="وحدة"
+          icon="trending_up"
+          colorClass="bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400"
+        />
+        <KPIBox
+          label="الانتهاء المتوقع"
+          value={executionSummary.latestForecast}
+          icon="event_available"
+          colorClass={executionSummary.latestForecast !== '—' && executionSummary.latestForecast > periodRange.end
+            ? 'bg-amber-50 text-amber-600'
+            : 'bg-emerald-50 text-emerald-600'}
+        />
+        <KPIBox
+          label="انحراف التنفيذ"
+          value={executionSummary.weightedDeviation === null
+            ? '—'
+            : `${executionSummary.weightedDeviation > 0 ? '+' : ''}${executionSummary.weightedDeviation}%`}
+          icon="compare_arrows"
+          colorClass={executionSummary.weightedDeviation === null
+            ? 'bg-[#f0f2f5] text-[var(--color-text-muted)]'
+            : executionSummary.weightedDeviation >= 0
+              ? 'bg-emerald-50 text-emerald-600'
+              : executionSummary.weightedDeviation <= -20
+                ? 'bg-rose-50 text-rose-600'
+                : 'bg-amber-50 text-amber-600'}
+          trend={`أوامر متأخرة: ${executionSummary.delayedCount}`}
+          trendUp={executionSummary.weightedDeviation !== null && executionSummary.weightedDeviation >= 0}
+        />
       </div>
+      <Card title="تفصيل العمالة">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">إنتاج</p>
+            <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.production)}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">تغليف</p>
+            <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.packaging)}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">جودة</p>
+            <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.quality)}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">صيانة</p>
+            <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.maintenance)}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">خارجية</p>
+            <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.external)}</p>
+          </div>
+        </div>
+      </Card>
 
       {/* ── Detail Tabs ────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-1">
@@ -508,6 +662,65 @@ export const SupervisorDetails: React.FC = () => {
       {/* ── Tab: Production ─────────────────────────────────────────────────── */}
       {activeTab === 'production' && (
         <div className="space-y-6">
+          <Card title="انضباط تنفيذ أوامر الشغل">
+            {activeExecutionRows.length === 0 ? (
+              <div className="text-center py-8 text-[var(--color-text-muted)]">
+                <span className="material-icons-round text-4xl mb-2 block opacity-40">assignment</span>
+                لا توجد أوامر شغل نشطة في الفترة المختارة.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">رقم الأمر</th>
+                      <th className="erp-th">الخط</th>
+                      <th className="erp-th">المنتج</th>
+                      <th className="erp-th">المتبقي</th>
+                      <th className="erp-th">متوسط/يوم</th>
+                      <th className="erp-th">انتهاء متوقع</th>
+                      <th className="erp-th">الانحراف</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeExecutionRows.map((row) => (
+                      <tr key={row.wo.id} className="border-b border-[var(--color-border)]">
+                        <td className="px-4 py-3 font-mono font-bold text-primary">{row.wo.workOrderNumber}</td>
+                        <td className="px-4 py-3">{getLineName(row.wo.lineId)}</td>
+                        <td className="px-4 py-3">{getProductName(row.wo.productId)}</td>
+                        <td className="px-4 py-3 font-bold text-[var(--color-text-muted)]">
+                          {formatNumber(row.execution.remainingQty)}
+                        </td>
+                        <td className="px-4 py-3 font-bold">
+                          {formatNumber(Number(row.execution.avgDailyActual.toFixed(1)))}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={row.isLateForecast ? 'text-rose-600 font-bold' : 'text-[var(--color-text-muted)] font-bold'}>
+                            {row.execution.forecastEndDate}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-bold">
+                          {row.execution.deviationPct === null ? (
+                            <span className="text-[var(--color-text-muted)]">—</span>
+                          ) : (
+                            <span className={
+                              row.deviationTone === 'good'
+                                ? 'text-emerald-600'
+                                : row.deviationTone === 'danger'
+                                  ? 'text-rose-600'
+                                  : 'text-amber-600'
+                            }>
+                              {row.execution.deviationPct > 0 ? '+' : ''}{row.execution.deviationPct}%
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
           {/* Charts with tab switcher */}
           <Card>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
@@ -619,13 +832,14 @@ export const SupervisorDetails: React.FC = () => {
                     <th className="erp-th text-center">الكمية</th>
                     <th className="erp-th text-center">الهالك</th>
                     <th className="erp-th text-center">عمال</th>
+                    <th className="erp-th text-center">تفصيل العمالة</th>
                     <th className="erp-th text-center">ساعات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {periodReports.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                         <span className="material-icons-round text-5xl mb-3 block opacity-30">description</span>
                         <p className="font-bold">لا توجد تقارير</p>
                       </td>
@@ -643,6 +857,9 @@ export const SupervisorDetails: React.FC = () => {
                       </td>
                       <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(r.quantityWaste)}</td>
                       <td className="px-5 py-3 text-center text-sm font-bold">{r.workersCount}</td>
+                      <td className="px-5 py-3 text-center text-xs font-bold text-[var(--color-text-muted)]">
+                        إ:{r.workersProductionCount ?? 0} | ت:{r.workersPackagingCount ?? 0} | ج:{r.workersQualityCount ?? 0} | ص:{r.workersMaintenanceCount ?? 0} | خ:{r.workersExternalCount ?? 0}
+                      </td>
                       <td className="px-5 py-3 text-center text-sm font-bold">{r.workHours}</td>
                     </tr>
                   ))}

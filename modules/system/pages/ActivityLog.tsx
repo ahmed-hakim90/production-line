@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { activityLogService, type PaginatedLogs } from '../../../services/activityLogService';
+import { activityLogService, type PaginatedLogs } from '../services/activityLogService';
 import { Card, Badge, LoadingSkeleton } from '../components/UI';
 import type { ActivityLog as ActivityLogType, ActivityAction } from '../../../types';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';

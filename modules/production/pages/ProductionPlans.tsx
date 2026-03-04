@@ -19,7 +19,7 @@ import {
 } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
-import { productionPlanService } from '../../../services/productionPlanService';
+import { productionPlanService } from '../services/productionPlanService';
 import { exportProductionPlans } from '../../../utils/exportExcel';
 import type { ProductionPlan, ProductionReport, PlanPriority, PlanStatus, SmartStatus } from '../../../types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
@@ -52,6 +52,8 @@ const PRIORITY_CONFIG: Record<PlanPriority, { label: string; color: string; bg: 
 };
 
 type ViewMode = 'table' | 'kanban' | 'timeline';
+type PlanSortField = '' | 'product' | 'line' | 'priority' | 'plannedQuantity' | 'progress' | 'startDate';
+type SortDirection = 'asc' | 'desc';
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -101,6 +103,8 @@ export const ProductionPlans: React.FC = () => {
   const [filterPriority, setFilterPriority] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [sortField, setSortField] = useState<PlanSortField>('');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // ── Form state ──
   const [formProductId, setFormProductId] = useState(searchParams.get('productId') || '');
@@ -244,6 +248,59 @@ export const ProductionPlans: React.FC = () => {
     });
   }, [enrichedPlans, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo]);
 
+  const sortedPlans = useMemo(() => {
+    if (!sortField) return filteredPlans;
+
+    const priorityRank: Record<PlanPriority, number> = {
+      low: 1,
+      medium: 2,
+      high: 3,
+      urgent: 4,
+    };
+
+    const sorted = [...filteredPlans].sort((a, b) => {
+      let left: string | number = 0;
+      let right: string | number = 0;
+
+      switch (sortField) {
+        case 'product':
+          left = (_rawProducts.find((p) => p.id === a.productId)?.name ?? '').toLowerCase();
+          right = (_rawProducts.find((p) => p.id === b.productId)?.name ?? '').toLowerCase();
+          break;
+        case 'line':
+          left = (_rawLines.find((l) => l.id === a.lineId)?.name ?? '').toLowerCase();
+          right = (_rawLines.find((l) => l.id === b.lineId)?.name ?? '').toLowerCase();
+          break;
+        case 'priority':
+          left = priorityRank[a.priority || 'medium'];
+          right = priorityRank[b.priority || 'medium'];
+          break;
+        case 'plannedQuantity':
+          left = a.plannedQuantity || 0;
+          right = b.plannedQuantity || 0;
+          break;
+        case 'progress':
+          left = a.progressRatio || 0;
+          right = b.progressRatio || 0;
+          break;
+        case 'startDate':
+          left = a.plannedStartDate || a.startDate || '';
+          right = b.plannedStartDate || b.startDate || '';
+          break;
+        default:
+          left = 0;
+          right = 0;
+      }
+
+      if (typeof left === 'string' && typeof right === 'string') {
+        return left.localeCompare(right, 'ar');
+      }
+      return Number(left) - Number(right);
+    });
+
+    return sortDirection === 'asc' ? sorted : sorted.reverse();
+  }, [filteredPlans, sortField, sortDirection, _rawProducts, _rawLines]);
+
   // ── KPIs ──
   const kpis = useMemo(() => {
     const active = enrichedPlans.filter((p) => p.status === 'in_progress' || p.status === 'planned');
@@ -341,7 +398,7 @@ export const ProductionPlans: React.FC = () => {
   const hasActiveFilters = filterStatus || filterLine || filterProduct || filterPriority || filterDateFrom || filterDateTo;
 
   const handleExportPlans = () => {
-    exportProductionPlans(filteredPlans as ProductionPlan[], {
+    exportProductionPlans(sortedPlans as ProductionPlan[], {
       getProductName: (id) => _rawProducts.find((p) => p.id === id)?.name ?? '—',
       getProductCode: (id) => _rawProducts.find((p) => p.id === id)?.code ?? '—',
       getLineName: (id) => _rawLines.find((l) => l.id === id)?.name ?? '—',
@@ -618,6 +675,28 @@ export const ProductionPlans: React.FC = () => {
           ))}
         </select>
         <div className="erp-filter-sep" />
+        <select
+          className={`erp-filter-select${sortField ? ' active' : ''}`}
+          value={sortField}
+          onChange={(e) => setSortField(e.target.value as PlanSortField)}
+        >
+          <option value="">ترتيب حسب</option>
+          <option value="product">المنتج</option>
+          <option value="line">الخط</option>
+          <option value="priority">الأولوية</option>
+          <option value="plannedQuantity">الكمية</option>
+          <option value="progress">التقدم</option>
+          <option value="startDate">تاريخ البدء</option>
+        </select>
+        <select
+          className={`erp-filter-select${sortField ? ' active' : ''}`}
+          value={sortDirection}
+          onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+          disabled={!sortField}
+        >
+          <option value="asc">تصاعدي</option>
+          <option value="desc">تنازلي</option>
+        </select>
         <div className="erp-filter-date">
           <span className="erp-filter-label">من</span>
           <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} />
@@ -638,9 +717,9 @@ export const ProductionPlans: React.FC = () => {
       </div>
 
       {/* Content Area */}
-      {viewMode === 'table' && <TableView plans={filteredPlans} />}
-      {viewMode === 'kanban' && <KanbanView plans={filteredPlans} />}
-      {viewMode === 'timeline' && <TimelineView plans={filteredPlans} />}
+      {viewMode === 'table' && <TableView plans={sortedPlans} />}
+      {viewMode === 'kanban' && <KanbanView plans={sortedPlans} />}
+      {viewMode === 'timeline' && <TimelineView plans={sortedPlans} />}
 
       {/* Edit Modal */}
       {editPlan && canEdit && (

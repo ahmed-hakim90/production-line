@@ -7,8 +7,15 @@ import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
 import { reportService } from '@/modules/production/services/reportService';
 import { dashboardStatsService } from '../../../services/dashboardStatsService';
-import { adminService, type SystemUsers } from '../../../services/adminService';
-import { formatNumber, calculateWasteRatio } from '../../../utils/calculations';
+import { adminService, type SystemUsers } from '../services/adminService';
+import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
+import {
+  calculateWasteRatio,
+  calculateWorkOrderExecutionMetrics,
+  formatNumber,
+  getExecutionDeviationTone,
+  getTodayDateString,
+} from '../../../utils/calculations';
 import { exportProductSummary } from '../../../utils/exportExcel';
 import {
   formatCost,
@@ -266,6 +273,10 @@ export const AdminDashboard: React.FC = () => {
   const [rolesDistribution, setRolesDistribution] = useState<{ roleName: string; color: string; count: number }[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([]);
   const [systemLoading, setSystemLoading] = useState(true);
+  const [reportCompliance, setReportCompliance] = useState<ReportComplianceSnapshot | null>(null);
+  const [complianceLoading, setComplianceLoading] = useState(true);
+  const [complianceError, setComplianceError] = useState<string | null>(null);
+  const [clockNow, setClockNow] = useState(() => Date.now());
 
   const dateRange = useMemo(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -273,6 +284,15 @@ export const AdminDashboard: React.FC = () => {
     }
     return getPresetRange(preset);
   }, [preset, customStart, customEnd]);
+  const isAfterComplianceCutoff = useMemo(
+    () => new Date(clockNow).getHours() >= 16,
+    [clockNow],
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Fetch production reports by date range
   useEffect(() => {
@@ -318,6 +338,32 @@ export const AdminDashboard: React.FC = () => {
     });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCompliance = async () => {
+      setComplianceLoading(true);
+      setComplianceError(null);
+      try {
+        const snapshot = await reportComplianceService.getTodaySnapshot(_rawEmployees, _rawLines);
+        if (!cancelled) setReportCompliance(snapshot);
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'تعذر تحميل متابعة التزام التقارير.';
+          setComplianceError(message);
+          setReportCompliance(null);
+        }
+      } finally {
+        if (!cancelled) setComplianceLoading(false);
+      }
+    };
+    loadCompliance();
+    const refreshTimer = window.setInterval(loadCompliance, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+    };
+  }, [_rawEmployees, _rawLines]);
 
   const hourlyRate = laborSettings?.hourlyRate ?? 0;
 
@@ -623,6 +669,61 @@ export const AdminDashboard: React.FC = () => {
       hotLineProduct: hottest ? `${hottest.line} — ${hottest.product}` : '—',
     };
   }, [liveProduction, workOrders, _rawLines, _rawProducts]);
+
+  const supervisorExecutionDiscipline = useMemo(() => {
+    const today = getTodayDateString();
+    const activeWOs = workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress');
+    if (activeWOs.length === 0) {
+      return {
+        delayedCount: 0,
+        avgDeviation: null as number | null,
+        worstSupervisors: [] as { supervisorId: string; name: string; deviation: number; delayed: number }[],
+      };
+    }
+
+    const rows = activeWOs.map((wo) => {
+      const producedNow = liveProduction[wo.id ?? '']?.completedUnits ?? wo.actualProducedFromScans ?? wo.producedQuantity ?? 0;
+      const execution = calculateWorkOrderExecutionMetrics({
+        quantity: wo.quantity,
+        producedQuantity: producedNow,
+        targetDate: wo.targetDate,
+        createdAt: wo.createdAt,
+        today,
+      });
+      const delayed = execution.forecastEndDate !== '—' && execution.forecastEndDate > wo.targetDate;
+      return { wo, execution, delayed };
+    });
+
+    const weightedBase = rows.reduce((sum, r) => sum + r.execution.remainingQty, 0);
+    const weightedDeviation = weightedBase > 0
+      ? rows.reduce((sum, r) => sum + ((r.execution.deviationPct ?? 0) * r.execution.remainingQty), 0) / weightedBase
+      : null;
+
+    const bySupervisor = new Map<string, { weightedSum: number; weight: number; delayed: number }>();
+    rows.forEach((row) => {
+      const key = row.wo.supervisorId || 'unknown';
+      const prev = bySupervisor.get(key) ?? { weightedSum: 0, weight: 0, delayed: 0 };
+      prev.weightedSum += (row.execution.deviationPct ?? 0) * row.execution.remainingQty;
+      prev.weight += row.execution.remainingQty;
+      if (row.delayed) prev.delayed += 1;
+      bySupervisor.set(key, prev);
+    });
+
+    const worstSupervisors = Array.from(bySupervisor.entries())
+      .map(([supervisorId, agg]) => {
+        const deviation = agg.weight > 0 ? Number((agg.weightedSum / agg.weight).toFixed(1)) : 0;
+        const name = _rawEmployees.find((e) => e.id === supervisorId)?.name ?? 'غير معروف';
+        return { supervisorId, name, deviation, delayed: agg.delayed };
+      })
+      .sort((a, b) => a.deviation - b.deviation)
+      .slice(0, 3);
+
+    return {
+      delayedCount: rows.filter((r) => r.delayed).length,
+      avgDeviation: weightedDeviation !== null ? Number(weightedDeviation.toFixed(1)) : null,
+      worstSupervisors,
+    };
+  }, [workOrders, liveProduction, _rawEmployees]);
 
   const qualityKpis = useMemo(() => {
     const active = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed');
@@ -986,6 +1087,103 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      <Card>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-icons-round text-indigo-500">task_alt</span>
+          <h3 className="text-sm font-bold text-[var(--color-text)]">متابعة التزام تقارير الإنتاج اليومية</h3>
+          {reportCompliance?.operationalDate && (
+            <Badge variant="info">{reportCompliance.operationalDate}</Badge>
+          )}
+          {complianceLoading && (
+            <span className="text-xs text-[var(--color-text-muted)] ms-auto">جاري التحديث...</span>
+          )}
+        </div>
+
+        {!isAfterComplianceCutoff ? (
+          <div className="erp-alert erp-alert-info">
+            <span className="material-icons-round text-[18px] shrink-0">schedule</span>
+            <span>تبدأ متابعة الالتزام اليومية بعد الساعة 16:00.</span>
+          </div>
+        ) : complianceError ? (
+          <div className="erp-alert erp-alert-warning">
+            <span className="material-icons-round text-[18px] shrink-0">warning</span>
+            <span>{complianceError}</span>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
+                <p className="text-xs text-emerald-700 font-bold mb-1">قدّم تقرير</p>
+                <p className="text-2xl font-black text-emerald-600">{reportCompliance?.submittedCount ?? 0}</p>
+              </div>
+              <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
+                <p className="text-xs text-rose-700 font-bold mb-1">لم يقدّم تقرير</p>
+                <p className="text-2xl font-black text-rose-600">{reportCompliance?.missingCount ?? 0}</p>
+              </div>
+              <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] dark:bg-slate-900/20 p-3">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">غير مكلّف/غير موجود اليوم</p>
+                <p className="text-2xl font-black text-[var(--color-text)]">{reportCompliance?.unassignedCount ?? 0}</p>
+              </div>
+            </div>
+
+            {(reportCompliance?.assignedSupervisorsCount ?? 0) === 0 ? (
+              <div className="erp-alert erp-alert-info">
+                <span className="material-icons-round text-[18px] shrink-0">info</span>
+                <span>لا يوجد مشرفون مكلّفون اليوم في تعيينات الخطوط.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-[var(--border-radius-lg)] border border-emerald-200/70 p-3">
+                  <p className="text-xs font-bold text-emerald-700 mb-2">قائمة المرسلين</p>
+                  <div className="space-y-1.5">
+                    {(reportCompliance?.submitted ?? []).slice(0, 8).map((row) => (
+                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
+                        <span className="font-bold">{row.name}</span>
+                        {row.lineNames.length > 0 && (
+                          <span className="text-[var(--color-text-muted)]"> — {row.lineNames.join('، ')}</span>
+                        )}
+                      </div>
+                    ))}
+                    {(reportCompliance?.submittedCount ?? 0) > 8 && (
+                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-[var(--border-radius-lg)] border border-rose-200/70 p-3">
+                  <p className="text-xs font-bold text-rose-700 mb-2">قائمة غير المرسلين</p>
+                  <div className="space-y-1.5">
+                    {(reportCompliance?.missing ?? []).slice(0, 8).map((row) => (
+                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
+                        <span className="font-bold">{row.name}</span>
+                        {row.lineNames.length > 0 && (
+                          <span className="text-[var(--color-text-muted)]"> — {row.lineNames.join('، ')}</span>
+                        )}
+                      </div>
+                    ))}
+                    {(reportCompliance?.missingCount ?? 0) > 8 && (
+                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-[var(--border-radius-lg)] border border-slate-200 p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2">غير مكلّف/غير موجود</p>
+                  <div className="space-y-1.5">
+                    {(reportCompliance?.unassigned ?? []).slice(0, 8).map((row) => (
+                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
+                        <span className="font-bold">{row.name}</span>
+                      </div>
+                    ))}
+                    {(reportCompliance?.unassignedCount ?? 0) > 8 && (
+                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+
       {quickActions.length > 0 && (
         <Card>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -1228,6 +1426,56 @@ export const AdminDashboard: React.FC = () => {
           </div>
         );
       })()}
+      <Card>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-icons-round text-rose-500">insights</span>
+          <h3 className="text-sm font-bold text-[var(--color-text)]">انضباط تنفيذ أوامر الشغل (المشرفين)</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
+            <p className="text-xs text-rose-700 font-bold mb-1">أوامر متأخرة</p>
+            <p className="text-2xl font-black text-rose-600">{supervisorExecutionDiscipline.delayedCount}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">متوسط الانحراف</p>
+            <p className="text-2xl font-black text-[var(--color-text)]">
+              {supervisorExecutionDiscipline.avgDeviation === null
+                ? '—'
+                : `${supervisorExecutionDiscipline.avgDeviation > 0 ? '+' : ''}${supervisorExecutionDiscipline.avgDeviation}%`}
+            </p>
+          </div>
+          <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 dark:bg-blue-900/10 p-3">
+            <p className="text-xs text-blue-700 font-bold mb-1">أسوأ 3 مشرفين</p>
+            <p className="text-2xl font-black text-blue-600">{supervisorExecutionDiscipline.worstSupervisors.length}</p>
+          </div>
+        </div>
+        {supervisorExecutionDiscipline.worstSupervisors.length === 0 ? (
+          <p className="text-xs text-[var(--color-text-muted)]">لا توجد بيانات كافية للعرض.</p>
+        ) : (
+          <div className="space-y-2">
+            {supervisorExecutionDiscipline.worstSupervisors.map((row) => {
+              const tone = getExecutionDeviationTone(row.deviation);
+              return (
+                <div key={row.supervisorId} className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2">
+                  <p className="text-sm font-bold text-[var(--color-text)]">{row.name}</p>
+                  <div className="flex items-center gap-3 text-xs font-bold">
+                    <span className="text-[var(--color-text-muted)]">متأخر: {row.delayed}</span>
+                    <span className={
+                      tone === 'good'
+                        ? 'text-emerald-600'
+                        : tone === 'danger'
+                          ? 'text-rose-600'
+                          : 'text-amber-600'
+                    }>
+                      {row.deviation > 0 ? '+' : ''}{row.deviation}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
       {/* ── Product Summary Table ──────────────────────────────────────────── */}
       {productSummary.length > 0 && (() => {
         return (

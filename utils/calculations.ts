@@ -577,6 +577,95 @@ export const addDaysToDate = (dateStr: string, days: number): string => {
   return `${y}-${m}-${day}`;
 };
 
+export type ExecutionDeviationTone = 'good' | 'warning' | 'danger' | 'neutral';
+
+export interface WorkOrderExecutionMetrics {
+  avgDailyActual: number;
+  requiredDailyRate: number;
+  deviationPct: number | null;
+  forecastEndDate: string;
+  remainingQty: number;
+  elapsedDays: number;
+  daysToTarget: number;
+}
+
+export const normalizeDateInputToYmd = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (DATE_ONLY_REGEX.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return null;
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const parsed = toDateCandidate(value);
+  if (!parsed) return null;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+/**
+ * Unified execution metrics used across Work Orders, Supervisor details, and dashboards.
+ */
+export const calculateWorkOrderExecutionMetrics = (params: {
+  quantity: number;
+  producedQuantity: number;
+  targetDate?: string;
+  createdAt?: unknown;
+  startDate?: unknown;
+  status?: WorkOrder['status'];
+  today?: string;
+}): WorkOrderExecutionMetrics => {
+  const today = params.today || getTodayDateString();
+  const quantity = Number(params.quantity || 0);
+  const producedQuantity = Number(params.producedQuantity || 0);
+  const remainingQty = Math.max(quantity - producedQuantity, 0);
+
+  const normalizedStart = normalizeDateInputToYmd(params.startDate)
+    || normalizeDateInputToYmd(params.createdAt)
+    || today;
+  const elapsedDays = Math.max(daysBetween(normalizedStart, today) + 1, 1);
+  const avgDailyActual = elapsedDays > 0 ? producedQuantity / elapsedDays : 0;
+
+  const targetDate = params.targetDate || today;
+  const daysToTarget = daysBetween(today, targetDate);
+  const requiredDailyRate = remainingQty > 0
+    ? remainingQty / Math.max(daysToTarget, 1)
+    : 0;
+
+  const deviationPct = requiredDailyRate > 0
+    ? Number((((avgDailyActual - requiredDailyRate) / requiredDailyRate) * 100).toFixed(1))
+    : null;
+
+  const forecastEndDate = remainingQty <= 0
+    ? today
+    : avgDailyActual > 0
+      ? addDaysToDate(today, Math.ceil(remainingQty / avgDailyActual))
+      : '—';
+
+  return {
+    avgDailyActual,
+    requiredDailyRate,
+    deviationPct,
+    forecastEndDate,
+    remainingQty,
+    elapsedDays,
+    daysToTarget,
+  };
+};
+
+export const getExecutionDeviationTone = (deviationPct: number | null): ExecutionDeviationTone => {
+  if (deviationPct === null || Number.isNaN(deviationPct)) return 'neutral';
+  if (deviationPct >= 0) return 'good';
+  if (deviationPct <= -20) return 'danger';
+  return 'warning';
+};
+
 /**
  * Aggregate KPI values from today's reports and (optionally) monthly reports.
  */

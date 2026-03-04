@@ -23,8 +23,8 @@ import {
 } from '../../../utils/costCalculations';
 import { usePermission } from '../../../utils/permissions';
 import { ProductionReport, MonthlyProductionCost, ProductMaterial } from '../../../types';
-import { monthlyProductionCostService } from '../../../services/monthlyProductionCostService';
-import { productMaterialService } from '../../../services/productMaterialService';
+import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
+import { productMaterialService } from '../services/productMaterialService';
 import { stockService } from '../../inventory/services/stockService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { StockItemBalance } from '../../inventory/types';
