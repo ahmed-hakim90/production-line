@@ -262,3 +262,7 @@
 ## [4.0.42] - 2026-03-04
 
 - Reports Pro
+
+## [4.0.43] - 2026-03-04
+
+- Reports Pro WorkOrder
