@@ -1,10 +1,10 @@
-﻿import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { employeeService } from '../../hr/employeeService';
 import {
   formatNumber,

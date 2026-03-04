@@ -11,6 +11,7 @@ import {
   SingleReportPrint,
   ReportPrintRow,
 } from '../components/ProductionReportPrint';
+import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 
 export const QuickAction: React.FC = () => {
   const { canCreateReport } = usePermission();
@@ -20,6 +21,7 @@ export const QuickAction: React.FC = () => {
   const employees = useAppStore((s) => s.employees);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
+  const saveErrorFromStore = useAppStore((s) => s.error);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
 
   const [employeeId, setEmployeeId] = useState('');
@@ -32,6 +34,7 @@ export const QuickAction: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
@@ -44,7 +47,17 @@ export const QuickAction: React.FC = () => {
 
   const printRef = useRef<HTMLDivElement>(null);
 
-  const today = useMemo(() => getOperationalDateString(8), []);
+  const [today, setToday] = useState(() => getOperationalDateString(8));
+
+  useEffect(() => {
+    const syncOperationalDate = () => {
+      const next = getOperationalDateString(8);
+      setToday((prev) => (prev === next ? prev : next));
+    };
+    syncOperationalDate();
+    const timer = window.setInterval(syncOperationalDate, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const fetchWorkersFromLineAssignments = useCallback(async () => {
     if (!lineId) {
@@ -160,6 +173,7 @@ export const QuickAction: React.FC = () => {
   const handleSave = async () => {
     if (!lineId || !productId || !employeeId || !quantity || !workers || !hours) return;
     setSaving(true);
+    setSaveError(null);
 
     const data = {
       employeeId,
@@ -189,6 +203,9 @@ export const QuickAction: React.FC = () => {
       };
       setPrintReport(row);
       setSaved(true);
+      setSaveError(null);
+    } else {
+      setSaveError(getReportDuplicateMessage(saveErrorFromStore, 'تعذر حفظ التقرير'));
     }
     setSaving(false);
   };
@@ -203,6 +220,7 @@ export const QuickAction: React.FC = () => {
     setHours('');
     setNotes('');
     setSaved(false);
+    setSaveError(null);
     setPrintReport(null);
   };
 
@@ -296,6 +314,16 @@ export const QuickAction: React.FC = () => {
           <span className="material-icons-round text-emerald-500">image</span>
           <p className="text-sm font-medium text-emerald-700 flex-1">{shareToast}</p>
           <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
+            <span className="material-icons-round text-sm">close</span>
+          </button>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+          <span className="material-icons-round text-rose-500">error</span>
+          <p className="text-sm font-bold text-rose-700 flex-1">{saveError}</p>
+          <button onClick={() => setSaveError(null)} className="p-1 text-rose-400 hover:text-rose-600 transition-colors shrink-0">
             <span className="material-icons-round text-sm">close</span>
           </button>
         </div>

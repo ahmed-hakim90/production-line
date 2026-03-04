@@ -8,7 +8,7 @@ import { buildReportsCosts, buildSupervisorHourlyRatesMap, estimateReportCost, f
 import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { exportReportsByDateRange, exportWorkOrders } from '../../../utils/exportExcel';
-import { exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
+import { exportToPDF, exportElementsToSinglePDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
 import {
   parseExcelFile,
   parseReportDateUpdateExcelFile,
@@ -19,7 +19,7 @@ import {
 } from '../../../utils/importExcel';
 import { downloadReportsTemplate, ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
-import { reportService, type FirestoreCursor } from '../../../services/reportService';
+import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
 import { useLocation } from 'react-router-dom';
 import {
   ProductionReportPrint,
@@ -35,6 +35,7 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 
 const emptyForm = {
   employeeId: '',
@@ -68,10 +69,12 @@ export const Reports: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
+  const saveErrorFromStore = useAppStore((s) => s.error);
   const createReport = useAppStore((s) => s.createReport);
   const updateReport = useAppStore((s) => s.updateReport);
   const deleteReport = useAppStore((s) => s.deleteReport);
   const fetchReportsFromStore = useAppStore((s) => s.fetchReports);
+  const syncMissingProductionEntryTransfers = useAppStore((s) => s.syncMissingProductionEntryTransfers);
   const reportsLoading = useAppStore((s) => s.reportsLoading);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const addJob = useJobsStore((s) => s.addJob);
@@ -104,10 +107,13 @@ export const Reports: React.FC = () => {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [saveToastType, setSaveToastType] = useState<'success' | 'error'>('success');
+  const [syncingMissingTransfers, setSyncingMissingTransfers] = useState(false);
   const [expandedNoteRows, setExpandedNoteRows] = useState<Set<string>>(new Set());
 
   // Import from Excel state
@@ -124,6 +130,8 @@ export const Reports: React.FC = () => {
   // Single-report print state
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
   const singlePrintRef = useRef<HTMLDivElement>(null);
+  const [bulkSinglePrintRows, setBulkSinglePrintRows] = useState<ReportPrintRow[] | null>(null);
+  const bulkSinglePrintRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Bulk print ref
   const bulkPrintRef = useRef<HTMLDivElement>(null);
@@ -741,6 +749,13 @@ export const Reports: React.FC = () => {
       }
     } else {
       const createdId = await createReport(form);
+      if (!createdId) {
+        setSaving(false);
+        setSaveToastType('error');
+        setSaveToast(getReportDuplicateMessage(saveErrorFromStore, 'تعذر حفظ التقرير'));
+        setTimeout(() => setSaveToast(null), 4000);
+        return;
+      }
       setSaving(false);
       setForm({ ...emptyForm, date: form.date, lineId: form.lineId });
       setSaveToastType('success');
@@ -756,6 +771,8 @@ export const Reports: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    setDeleteBusy(true);
+    setDeleteError(null);
     try {
       await deleteReport(id);
       setSaveToastType('success');
@@ -763,10 +780,14 @@ export const Reports: React.FC = () => {
       setTimeout(() => setSaveToast(null), 3500);
       setDeleteConfirmId(null);
     } catch (error: any) {
+      const message = error?.message || 'تعذر حذف التقرير الآن.';
       setSaveToastType('error');
-      setSaveToast(error?.message || 'تعذر حذف التقرير الآن.');
+      setSaveToast(message);
+      setDeleteError(message);
       setTimeout(() => setSaveToast(null), 5000);
       // Keep confirmation open so user can re-try after resolving dependency issue.
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -779,6 +800,7 @@ export const Reports: React.FC = () => {
       setTimeout(() => setSaveToast(null), 5000);
       return;
     }
+    setDeleteError(null);
     setDeleteConfirmId(reportId);
   }, []);
 
@@ -899,6 +921,25 @@ export const Reports: React.FC = () => {
       setExporting(false);
     }
   };
+
+  const handleSyncMissingTransfers = useCallback(async () => {
+    if (syncingMissingTransfers) return;
+    setSyncingMissingTransfers(true);
+    try {
+      const summary = await syncMissingProductionEntryTransfers(startDate, endDate);
+      window.alert(
+        `تمت المزامنة بنجاح.\n` +
+        `تم الفحص: ${summary.processed}\n` +
+        `تم الإنشاء: ${summary.created}\n` +
+        `تم التخطي: ${summary.skipped}\n` +
+        `فشل: ${summary.failed}`,
+      );
+    } catch (error: any) {
+      window.alert(error?.message || 'تعذر تنفيذ مزامنة التحويلات الناقصة.');
+    } finally {
+      setSyncingMissingTransfers(false);
+    }
+  }, [syncMissingProductionEntryTransfers, startDate, endDate, syncingMissingTransfers]);
 
   // ── Import from Excel ────────────────────────────────────────────────────
 
@@ -1025,7 +1066,8 @@ export const Reports: React.FC = () => {
     let failed = 0;
     for (const row of validRows) {
       try {
-        await createReport(toReportData(row));
+        const created = await createReport(toReportData(row));
+        if (!created) failed++;
       } catch {
         failed++;
       }
@@ -1229,6 +1271,34 @@ export const Reports: React.FC = () => {
     setTimeout(() => setBulkPrintSource(null), 1000);
   }, [triggerBulkPrint]);
 
+  const handleBulkPrintSelectedAsSinglePagesPdf = useCallback(async (items: ProductionReport[]) => {
+    if (!items.length) return;
+    const rows = items.map((item) => buildReportRow(item));
+    bulkSinglePrintRefs.current = [];
+    setBulkSinglePrintRows(rows);
+    setExporting(true);
+    try {
+      await new Promise((r) => setTimeout(r, 350));
+      const printableElements = bulkSinglePrintRefs.current
+        .slice(0, rows.length)
+        .filter((el): el is HTMLDivElement => !!el);
+      if (!printableElements.length) return;
+      await exportElementsToSinglePDF(
+        printableElements,
+        `تقارير-الإنتاج-منفصلة-${startDate}`,
+        {
+          paperSize: printTemplate?.paperSize,
+          orientation: printTemplate?.orientation,
+          copies: 1,
+        },
+      );
+    } finally {
+      setExporting(false);
+      setBulkSinglePrintRows(null);
+      bulkSinglePrintRefs.current = [];
+    }
+  }, [buildReportRow, printTemplate?.paperSize, printTemplate?.orientation, startDate]);
+
   const handleBulkDeleteConfirmed = useCallback(async () => {
     if (!bulkDeleteItems) return;
     setBulkDeleting(true);
@@ -1265,6 +1335,7 @@ export const Reports: React.FC = () => {
   const reportBulkActions = useMemo<TableBulkAction<ProductionReport>[]>(() => {
     const actions: TableBulkAction<ProductionReport>[] = [
       { label: 'طباعة المحدد', icon: 'print', action: handleBulkPrintSelected, permission: 'print' },
+      { label: 'طباعة منفصلة PDF', icon: 'picture_as_pdf', action: handleBulkPrintSelectedAsSinglePagesPdf, permission: 'print' },
       { label: 'حذف المحدد', icon: 'delete', action: (items) => setBulkDeleteItems(items), permission: 'reports.delete', variant: 'danger' },
     ];
     if (canExportFromPage) {
@@ -1276,7 +1347,7 @@ export const Reports: React.FC = () => {
       });
     }
     return actions;
-  }, [handleBulkPrintSelected, canExportFromPage, startDate, endDate, lookups, canViewCosts, reportCosts]);
+  }, [handleBulkPrintSelected, handleBulkPrintSelectedAsSinglePagesPdf, canExportFromPage, startDate, endDate, lookups, canViewCosts, reportCosts]);
 
   const renderReportActions = (report: ProductionReport) => (
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
@@ -1401,6 +1472,14 @@ export const Reports: React.FC = () => {
             hidden: !can('quality.reports.view'),
             onClick: () => { window.location.hash = '#/quality/reports'; },
           },
+          {
+            label: syncingMissingTransfers ? 'جاري المزامنة...' : 'مزامنة تحويلات ناقصة',
+            icon: 'sync',
+            group: 'أدوات',
+            hidden: !can('reports.edit'),
+            disabled: syncingMissingTransfers,
+            onClick: handleSyncMissingTransfers,
+          },
         ]}
       />
 
@@ -1461,6 +1540,16 @@ export const Reports: React.FC = () => {
           printSettings={printTemplate}
         />
         <SingleReportPrint ref={singlePrintRef} report={printReport} printSettings={printTemplate} />
+        {bulkSinglePrintRows?.map((row, idx) => (
+          <SingleReportPrint
+            key={`${row.reportId || row.date}-${idx}`}
+            ref={(el) => {
+              bulkSinglePrintRefs.current[idx] = el;
+            }}
+            report={row}
+            printSettings={printTemplate}
+          />
+        ))}
       </div>
 
       {/* ══ Create / Edit Report Modal ══ */}
@@ -1758,22 +1847,32 @@ export const Reports: React.FC = () => {
 
       {/* ══ Delete Confirmation ══ */}
       {deleteConfirmId && can("reports.delete") && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف التقرير</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا التقرير؟</p>
+            {deleteError && (
+              <div className="mb-4 rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold px-3 py-2">
+                {deleteError}
+              </div>
+            )}
             <div className="flex items-center justify-center gap-3">
-              <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
+              <Button variant="outline" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusy}>إلغاء</Button>
               <button
                 type="button"
                 onClick={() => handleDelete(deleteConfirmId)}
+                disabled={deleteBusy}
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
-                <span className="material-icons-round text-sm">delete</span>
-                نعم، احذف
+                {deleteBusy ? (
+                  <span className="material-icons-round text-sm animate-spin">refresh</span>
+                ) : (
+                  <span className="material-icons-round text-sm">delete</span>
+                )}
+                {deleteBusy ? 'جاري الحذف...' : 'نعم، احذف'}
               </button>
             </div>
           </div>

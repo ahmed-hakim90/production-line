@@ -1,5 +1,5 @@
 {
-  "name": "Pro-Tech ERP Production Management",
+  "name": "Hakimo ERP Production Management",
   "description": "A comprehensive industrial ERP dashboard for production management, product tracking, and line monitoring with RTL support and Firebase integration.",
   "requestFramePermissions": [
     "camera"

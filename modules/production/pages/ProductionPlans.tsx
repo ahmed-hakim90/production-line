@@ -18,7 +18,7 @@ import {
   getTodayDateString,
 } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { productionPlanService } from '../../../services/productionPlanService';
 import { exportProductionPlans } from '../../../utils/exportExcel';
 import type { ProductionPlan, ProductionReport, PlanPriority, PlanStatus, SmartStatus } from '../../../types';

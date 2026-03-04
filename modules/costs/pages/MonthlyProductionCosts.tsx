@@ -4,7 +4,7 @@ import { Card, Badge, Button, KPIBox } from '../components/UI';
 import { useShallowStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { monthlyProductionCostService } from '../../../services/monthlyProductionCostService';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { getCurrentMonth, formatCost, calculateDailyIndirectCost, buildSupervisorHourlyRatesMap } from '../../../utils/costCalculations';
 import { productMaterialService } from '../../../services/productMaterialService';
 import type { MonthlyProductionCost } from '../../../types';

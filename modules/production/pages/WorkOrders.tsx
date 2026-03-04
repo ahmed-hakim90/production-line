@@ -107,27 +107,25 @@ export const WorkOrders: React.FC = () => {
   const [workOrdersCursor, setWorkOrdersCursor] = useState<any>(null);
   const [workOrdersHasMore, setWorkOrdersHasMore] = useState(false);
   const [workOrdersLoading, setWorkOrdersLoading] = useState(false);
-  const workOrdersCursorRef = useRef<any>(null);
 
   const loadWorkOrders = useCallback(async (append = false) => {
     setWorkOrdersLoading(true);
     try {
       const res = await workOrderService.listPaged({
         limit: 50,
-        cursor: append ? workOrdersCursorRef.current : null,
+        cursor: append ? workOrdersCursor : null,
       });
       setWorkOrders((prev) => append ? [...prev, ...res.items] : res.items);
-      workOrdersCursorRef.current = res.nextCursor;
       setWorkOrdersCursor(res.nextCursor);
       setWorkOrdersHasMore(Boolean(res.hasMore && res.nextCursor));
     } finally {
       setWorkOrdersLoading(false);
     }
-  }, []);
+  }, [workOrdersCursor]);
 
   useEffect(() => {
     void loadWorkOrders(false);
-  }, []);
+  }, [loadWorkOrders]);
 
   const supervisors = useMemo(
     () => _rawEmployees.filter((e) => e.level === 2 && e.isActive),

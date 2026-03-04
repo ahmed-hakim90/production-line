@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Badge, LoadingSkeleton } from '../components/UI';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
@@ -13,7 +13,7 @@ import {
   getTodayDateString,
   countUniqueDays,
 } from '../../../utils/calculations';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { usePermission } from '../../../utils/permissions';
 import type { ProductionReport, WorkOrder } from '../../../types';
 import type { InventoryTransferRequest } from '../../inventory/types';

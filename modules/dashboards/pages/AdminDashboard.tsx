@@ -5,7 +5,7 @@ import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { dashboardStatsService } from '../../../services/dashboardStatsService';
 import { adminService, type SystemUsers } from '../../../services/adminService';
 import { formatNumber, calculateWasteRatio } from '../../../utils/calculations';
@@ -324,8 +324,11 @@ export const AdminDashboard: React.FC = () => {
   // ── KPI Calculations ──────────────────────────────────────────────────────
 
   const kpis = useMemo(() => {
-    const totalProduction = rangeAggregate?.totalProduction ?? reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-    const totalWaste = rangeAggregate?.totalWaste ?? reports.reduce((s, r) => s + (r.quantityWaste || 0), 0);
+    const reportsTotalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+    const reportsTotalWaste = reports.reduce((s, r) => s + (r.quantityWaste || 0), 0);
+    const hasAggregateData = Boolean(rangeAggregate && rangeAggregate.reportsCount > 0);
+    const totalProduction = hasAggregateData ? (rangeAggregate?.totalProduction || 0) : reportsTotalProduction;
+    const totalWaste = hasAggregateData ? (rangeAggregate?.totalWaste || 0) : reportsTotalWaste;
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
@@ -362,7 +365,7 @@ export const AdminDashboard: React.FC = () => {
     });
 
     const computedTotalCost = totalLaborCost + totalIndirectCost;
-    const totalCost = rangeAggregate?.totalCost ?? computedTotalCost;
+    const totalCost = hasAggregateData ? (rangeAggregate?.totalCost || 0) : computedTotalCost;
     const avgCostPerUnit = totalProduction > 0 ? totalCost / totalProduction : 0;
 
     const standardConfigs = lineProductConfigs;

@@ -62,16 +62,11 @@ export const workOrderService = {
       const rows: WorkOrder[] = [];
       let cursor: WorkOrderCursor = null;
       const maxPages = 10;
-      let truncated = false;
       for (let page = 0; page < maxPages; page += 1) {
         const res = await this.listPaged({ limit: MAX_PAGE_SIZE, cursor });
         rows.push(...res.items);
         if (!res.hasMore || !res.nextCursor) break;
-        if (page === maxPages - 1 && res.hasMore) truncated = true;
         cursor = res.nextCursor;
-      }
-      if (truncated) {
-        console.warn('workOrderService.getAll truncated at safety cap. Use listPaged in consuming screens.');
       }
       return rows;
     } catch (error) {

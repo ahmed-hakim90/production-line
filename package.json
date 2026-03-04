@@ -1,11 +1,13 @@
 {
-  "name": "pro-tech-erp-production-management",
+  "name": "hakimo-erp-production-management",
   "private": true,
-  "version": "4.0.41",
+  "version": "4.0.42",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:functions": "npm --prefix functions run typecheck",
     "preview": "vite preview",
     "version:auto": "node scripts/auto-version.mjs",
     "changelog:auto": "node scripts/auto-changelog.mjs",

@@ -9,7 +9,7 @@ import { ProductionLineStatus, FirestoreProductionLine, WorkOrder, ProductionPla
 import type { LineWorkerAssignment } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
@@ -56,7 +56,6 @@ export const Lines: React.FC = () => {
   const [todayAssignments, setTodayAssignments] = useState<LineWorkerAssignment[]>([]);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [recentReportsScoped, setRecentReportsScoped] = useState<ProductionReport[]>([]);
-  const [scopedReportsLoaded, setScopedReportsLoaded] = useState(false);
 
   useEffect(() => {
     lineAssignmentService.getByDate(getTodayDateString()).then(setTodayAssignments).catch(() => {});
@@ -78,20 +77,18 @@ export const Lines: React.FC = () => {
         if (cancelled) return;
         setTodayReportsScoped(todayPage.items);
         setRecentReportsScoped(monthPage.items);
-        setScopedReportsLoaded(true);
       } catch {
         if (cancelled) return;
         setTodayReportsScoped([]);
         setRecentReportsScoped([]);
-        setScopedReportsLoaded(true);
       }
     };
     void loadScopedReports();
     return () => { cancelled = true; };
   }, []);
 
-  const todayReports = scopedReportsLoaded ? todayReportsScoped : storeTodayReports;
-  const productionReports = scopedReportsLoaded ? recentReportsScoped : storeProductionReports;
+  const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
+  const productionReports = recentReportsScoped.length > 0 ? recentReportsScoped : storeProductionReports;
 
   const getTodayWorkersCount = (lineId: string) =>
     todayAssignments.filter((a) => a.lineId === lineId).length;

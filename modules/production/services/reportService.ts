@@ -3,9 +3,7 @@ import {
   doc,
   getDocs,
   getDoc,
-  addDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -16,12 +14,26 @@ import {
   Unsubscribe,
   startAfter,
   QueryDocumentSnapshot,
+  runTransaction,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { ProductionReport } from '../../../types';
+import { createReportDuplicateError } from '../utils/reportDuplicateError';
 
 const COLLECTION = 'production_reports';
+const UNIQUE_COLLECTION = 'production_report_uniques';
 const MAX_PAGE_SIZE = 100;
+
+const normalizeKeyPart = (value: string) =>
+  encodeURIComponent(String(value || '').trim().toLowerCase());
+
+const buildReportUniqueKey = (data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId'>): string =>
+  [
+    normalizeKeyPart(data.date),
+    normalizeKeyPart(data.lineId),
+    normalizeKeyPart(data.employeeId),
+    normalizeKeyPart(data.productId),
+  ].join('__');
 
 export type FirestoreCursor = QueryDocumentSnapshot | null;
 export interface FirestorePageResult<T> {
@@ -89,7 +101,6 @@ export const reportService = {
       const reports: ProductionReport[] = [];
       let cursor: FirestoreCursor = null;
       const maxPages = 10;
-      let truncated = false;
       for (let page = 0; page < maxPages; page += 1) {
         const res = await this.listByDateRangePaged({
           startDate: '1900-01-01',
@@ -99,11 +110,7 @@ export const reportService = {
         });
         reports.push(...res.items);
         if (!res.hasMore || !res.nextCursor) break;
-        if (page === maxPages - 1 && res.hasMore) truncated = true;
         cursor = res.nextCursor;
-      }
-      if (truncated) {
-        console.warn('reportService.getAll truncated at safety cap. Use listByDateRangePaged in consuming screens.');
       }
       return reports;
     } catch (error) {
@@ -179,13 +186,38 @@ export const reportService = {
 
     try {
       const reportCode = data.reportCode || await generateNextReportCode();
-      const ref = await addDoc(collection(db, COLLECTION), {
-        ...data,
-        reportCode,
-        quantityWaste: data.quantityWaste ?? 0,
-        createdAt: serverTimestamp(),
+      const reportRef = doc(collection(db, COLLECTION));
+      const uniqueKey = buildReportUniqueKey({
+        date: data.date,
+        lineId: data.lineId,
+        employeeId: data.employeeId,
+        productId: data.productId,
       });
-      return ref.id;
+      const uniqueRef = doc(db, UNIQUE_COLLECTION, uniqueKey);
+
+      await runTransaction(db, async (tx) => {
+        const uniqueSnap = await tx.get(uniqueRef);
+        if (uniqueSnap.exists()) {
+          throw createReportDuplicateError();
+        }
+
+        tx.set(reportRef, {
+          ...data,
+          reportCode,
+          quantityWaste: data.quantityWaste ?? 0,
+          createdAt: serverTimestamp(),
+        });
+        tx.set(uniqueRef, {
+          reportId: reportRef.id,
+          date: data.date,
+          lineId: data.lineId,
+          employeeId: data.employeeId,
+          productId: data.productId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      return reportRef.id;
     } catch (error) {
       console.error('reportService.create error:', error);
       throw error;
@@ -196,7 +228,50 @@ export const reportService = {
     if (!isConfigured) return;
     try {
       const { id: _id, createdAt: _ts, ...fields } = data as any;
-      await updateDoc(doc(db, COLLECTION, id), fields);
+      if (Object.keys(fields).length === 0) return;
+
+      const reportRef = doc(db, COLLECTION, id);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(reportRef);
+        if (!snap.exists()) {
+          throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
+        }
+
+        const current = { id: snap.id, ...snap.data() } as ProductionReport;
+        const next = { ...current, ...fields } as ProductionReport;
+        const oldKey = buildReportUniqueKey(current);
+        const nextKey = buildReportUniqueKey(next);
+
+        if (oldKey !== nextKey) {
+          const nextUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
+          const nextUniqueSnap = await tx.get(nextUniqueRef);
+          if (nextUniqueSnap.exists()) {
+            const ownerId = String((nextUniqueSnap.data() as { reportId?: string })?.reportId || '');
+            if (!ownerId || ownerId !== id) {
+              throw createReportDuplicateError();
+            }
+          }
+          const oldUniqueRef = doc(db, UNIQUE_COLLECTION, oldKey);
+          tx.delete(oldUniqueRef);
+          tx.set(
+            nextUniqueRef,
+            {
+              reportId: id,
+              date: next.date,
+              lineId: next.lineId,
+              employeeId: next.employeeId,
+              productId: next.productId,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        } else {
+          const sameUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
+          tx.set(sameUniqueRef, { reportId: id, updatedAt: serverTimestamp() }, { merge: true });
+        }
+
+        tx.update(reportRef, fields);
+      });
     } catch (error) {
       console.error('reportService.update error:', error);
       throw error;
@@ -226,7 +301,15 @@ export const reportService = {
   async delete(id: string): Promise<void> {
     if (!isConfigured) return;
     try {
-      await deleteDoc(doc(db, COLLECTION, id));
+      const reportRef = doc(db, COLLECTION, id);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(reportRef);
+        if (!snap.exists()) return;
+        const current = { id: snap.id, ...snap.data() } as ProductionReport;
+        tx.delete(reportRef);
+        const uniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
+        tx.delete(uniqueRef);
+      });
     } catch (error) {
       console.error('reportService.delete error:', error);
       throw error;
@@ -247,8 +330,32 @@ export const reportService = {
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
-      console.error('reportService.getByLineAndProduct error:', error);
-      throw error;
+      const code = (error as { code?: string })?.code || '';
+      const message = String((error as { message?: string })?.message || '');
+      const requiresIndex = code === 'failed-precondition' || message.includes('requires an index');
+      if (!requiresIndex) {
+        console.error('reportService.getByLineAndProduct error:', error);
+        throw error;
+      }
+
+      // Fallback for live environments where composite index is not yet deployed.
+      // Uses index-free query (lineId only), then filters/sorts client-side.
+      try {
+        const fallbackQ = query(
+          collection(db, COLLECTION),
+          where('lineId', '==', lineId),
+          limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
+        );
+        const fallbackSnap = await getDocs(fallbackQ);
+        let rows = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+        rows = rows.filter((r) => r.productId === productId);
+        if (fromDate) rows = rows.filter((r) => (r.date || '') >= fromDate);
+        rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        return rows.slice(0, MAX_PAGE_SIZE);
+      } catch (fallbackError) {
+        console.error('reportService.getByLineAndProduct fallback error:', fallbackError);
+        throw fallbackError;
+      }
     }
   },
 
@@ -259,8 +366,30 @@ export const reportService = {
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
-      console.error('reportService.getByProduct error:', error);
-      throw error;
+      const code = (error as { code?: string })?.code || '';
+      const message = String((error as { message?: string })?.message || '');
+      const requiresIndex = code === 'failed-precondition' || message.includes('requires an index');
+      if (!requiresIndex) {
+        console.error('reportService.getByProduct error:', error);
+        throw error;
+      }
+
+      // Fallback for environments where the productId+date index is not deployed yet.
+      // Uses index-free query (productId only), then sorts client-side by date.
+      try {
+        const fallbackQ = query(
+          collection(db, COLLECTION),
+          where('productId', '==', productId),
+          limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
+        );
+        const fallbackSnap = await getDocs(fallbackQ);
+        const rows = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+        rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        return rows.slice(0, MAX_PAGE_SIZE);
+      } catch (fallbackError) {
+        console.error('reportService.getByProduct fallback error:', fallbackError);
+        throw fallbackError;
+      }
     }
   },
 

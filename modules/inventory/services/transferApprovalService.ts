@@ -24,6 +24,8 @@ import { stockService } from './stockService';
 const COLLECTION = 'inventory_transfer_requests';
 const toIsoNow = () => new Date().toISOString();
 const MAX_PAGE_SIZE = 100;
+const INV_REF_REGEX = /^INV-(\d+)$/i;
+const formatInvReference = (seq: number) => `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
 
 type FirestoreCursor = QueryDocumentSnapshot | null;
 type TransferRequestPageResult = {
@@ -38,7 +40,7 @@ type CreateTransferRequestInput = {
   fromWarehouseName?: string;
   toWarehouseId: string;
   toWarehouseName?: string;
-  referenceNo: string;
+  referenceNo?: string;
   note?: string;
   sourceReportId?: string;
   lines: TransferRequestLine[];
@@ -59,6 +61,19 @@ type ApproveRequestOptions = {
 const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
 
 export const transferApprovalService = {
+  async getNextInvReferenceNo(): Promise<string> {
+    if (!isConfigured) return formatInvReference(1);
+    const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'), limit(500));
+    const snap = await getDocs(q);
+    const maxInv = snap.docs.reduce((max, d) => {
+      const ref = String((d.data() as any)?.referenceNo || '').trim();
+      const match = ref.match(INV_REF_REGEX);
+      if (!match) return max;
+      return Math.max(max, Number(match[1] || 0));
+    }, 0);
+    return formatInvReference(maxInv + 1);
+  },
+
   async listPaged(params?: {
     status?: TransferRequestStatus;
     requestType?: TransferRequestType;
@@ -115,13 +130,31 @@ export const transferApprovalService = {
 
   async getBySourceReportId(sourceReportId: string): Promise<InventoryTransferRequest[]> {
     if (!isConfigured || !sourceReportId.trim()) return [];
-    const q = query(
-      collection(db, COLLECTION),
-      where('sourceReportId', '==', sourceReportId.trim()),
-      orderBy('createdAt', 'desc'),
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+    try {
+      const q = query(
+        collection(db, COLLECTION),
+        where('sourceReportId', '==', sourceReportId.trim()),
+        orderBy('createdAt', 'desc'),
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+    } catch (error) {
+      const code = (error as { code?: string })?.code || '';
+      const message = String((error as { message?: string })?.message || '');
+      const requiresIndex = code === 'failed-precondition' || message.includes('requires an index');
+      if (!requiresIndex) throw error;
+
+      // Fallback for environments where sourceReportId+createdAt index is not deployed yet.
+      const fallbackQ = query(
+        collection(db, COLLECTION),
+        where('sourceReportId', '==', sourceReportId.trim()),
+        limit(500),
+      );
+      const fallbackSnap = await getDocs(fallbackQ);
+      const rows = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+      rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      return rows;
+    }
   },
 
   async createRequest(input: CreateTransferRequestInput): Promise<string | null> {
@@ -142,21 +175,27 @@ export const transferApprovalService = {
     if (!lines.length) {
       throw new Error('لا توجد أصناف صالحة في طلب التحويل.');
     }
+    const resolvedReferenceNo = input.referenceNo?.trim() || await this.getNextInvReferenceNo();
     const payload: InventoryTransferRequest = {
       requestType,
       fromWarehouseId: input.fromWarehouseId,
-      fromWarehouseName: input.fromWarehouseName,
       toWarehouseId: input.toWarehouseId,
-      toWarehouseName: input.toWarehouseName,
-      referenceNo: input.referenceNo.trim(),
-      note: input.note,
-      sourceReportId: input.sourceReportId,
+      referenceNo: resolvedReferenceNo,
       lines,
       status: 'pending',
       createdBy: input.createdBy,
-      createdByUserId: input.createdByUserId?.trim() || undefined,
       createdAt: toIsoNow(),
     };
+    const fromWarehouseName = String(input.fromWarehouseName || '').trim();
+    if (fromWarehouseName) payload.fromWarehouseName = fromWarehouseName;
+    const toWarehouseName = String(input.toWarehouseName || '').trim();
+    if (toWarehouseName) payload.toWarehouseName = toWarehouseName;
+    const note = String(input.note || '').trim();
+    if (note) payload.note = note;
+    const sourceReportId = String(input.sourceReportId || '').trim();
+    if (sourceReportId) payload.sourceReportId = sourceReportId;
+    const createdByUserId = String(input.createdByUserId || '').trim();
+    if (createdByUserId) payload.createdByUserId = createdByUserId;
     const ref = await addDoc(collection(db, COLLECTION), payload);
     return ref.id;
   },
@@ -221,12 +260,14 @@ export const transferApprovalService = {
       }
     }
 
-    await updateDoc(doc(db, COLLECTION, id), {
+    const approvePatch: Record<string, any> = {
       status: 'approved',
       approvedBy,
-      approvedByUserId: options?.approverUserId?.trim() || undefined,
       approvedAt: toIsoNow(),
-    });
+    };
+    const approvedByUserId = options?.approverUserId?.trim();
+    if (approvedByUserId) approvePatch.approvedByUserId = approvedByUserId;
+    await updateDoc(doc(db, COLLECTION, id), approvePatch);
   },
 
   async rejectRequest(id: string, rejectedBy: string, rejectionReason?: string, rejectedByUserId?: string): Promise<void> {
@@ -236,13 +277,15 @@ export const transferApprovalService = {
     if (request.status !== 'pending') {
       throw new Error('لا يمكن رفض طلب غير معلق.');
     }
-    await updateDoc(doc(db, COLLECTION, id), {
+    const rejectPatch: Record<string, any> = {
       status: 'rejected',
       rejectedBy,
-      rejectedByUserId: rejectedByUserId?.trim() || undefined,
       rejectedAt: toIsoNow(),
       rejectionReason: rejectionReason?.trim() || '',
-    });
+    };
+    const rejectedByUserIdClean = rejectedByUserId?.trim();
+    if (rejectedByUserIdClean) rejectPatch.rejectedByUserId = rejectedByUserIdClean;
+    await updateDoc(doc(db, COLLECTION, id), rejectPatch);
   },
 
   async cancelRequest(id: string, cancelledBy: string, cancellationReason?: string, cancelledByUserId?: string): Promise<void> {
@@ -270,13 +313,15 @@ export const transferApprovalService = {
     } else {
       await stockService.deleteTransferByReference(request.referenceNo.trim());
     }
-    await updateDoc(doc(db, COLLECTION, id), {
+    const cancelPatch: Record<string, any> = {
       status: 'cancelled',
       cancelledBy,
-      cancelledByUserId: cancelledByUserId?.trim() || undefined,
       cancelledAt: toIsoNow(),
       cancellationReason: cancellationReason?.trim() || '',
-    });
+    };
+    const cancelledByUserIdClean = cancelledByUserId?.trim();
+    if (cancelledByUserIdClean) cancelPatch.cancelledByUserId = cancelledByUserIdClean;
+    await updateDoc(doc(db, COLLECTION, id), cancelPatch);
   },
 
   async updateRequest(id: string, updates: UpdateTransferRequestInput): Promise<void> {

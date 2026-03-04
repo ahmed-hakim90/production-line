@@ -18,7 +18,7 @@ import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';
 import type { StockItemBalance } from '../../inventory/types';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
@@ -146,7 +146,6 @@ export const Products: React.FC = () => {
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
-  const [scopedReportsLoaded, setScopedReportsLoaded] = useState(false);
 
   // Sort & Pagination & Selection
   const PAGE_SIZE = 20;
@@ -244,20 +243,18 @@ export const Products: React.FC = () => {
         if (cancelled) return;
         setTodayReportsScoped(todayPage.items);
         setMonthlyReportsScoped(monthPage.items);
-        setScopedReportsLoaded(true);
       } catch {
         if (cancelled) return;
         setTodayReportsScoped([]);
         setMonthlyReportsScoped([]);
-        setScopedReportsLoaded(true);
       }
     };
     void loadScopedReports();
     return () => { cancelled = true; };
   }, []);
 
-  const todayReports = scopedReportsLoaded ? todayReportsScoped : storeTodayReports;
-  const monthlyReports = scopedReportsLoaded ? monthlyReportsScoped : storeMonthlyReports;
+  const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
+  const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
 
   const productWarehouseBalances = useMemo(() => {
     const keyOf = (warehouseId: string, productId: string) => `${warehouseId}__${productId}`;

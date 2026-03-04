@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -6,6 +6,7 @@ import { ImportResult, parseExcelFile, toReportData } from '../../../utils/impor
 import { downloadReportsTemplate } from '../../../utils/downloadTemplates';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { getReportDuplicateMessage, isReportDuplicateError } from '../../../modules/production/utils/reportDuplicateError';
 
 export const GlobalImportReportsModal: React.FC = () => {
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.REPORTS_IMPORT);
@@ -100,10 +101,17 @@ export const GlobalImportReportsModal: React.FC = () => {
 
     let done = 0;
     let failed = 0;
+    let duplicate = 0;
     for (const row of validRows) {
       try {
-        await createReport(toReportData(row));
-      } catch {
+        const created = await createReport(toReportData(row));
+        if (!created) {
+          const storeErr = useAppStore.getState().error;
+          if (isReportDuplicateError(storeErr)) duplicate += 1;
+          failed += 1;
+        }
+      } catch (error) {
+        if (isReportDuplicateError(error)) duplicate += 1;
         failed += 1;
       } finally {
         done += 1;
@@ -115,7 +123,11 @@ export const GlobalImportReportsModal: React.FC = () => {
       setMessage(`تم استيراد ${done} تقرير بنجاح`);
       setResult(null);
     } else {
-      setMessage(`تم استيراد ${done - failed} تقرير وفشل ${failed}`);
+      const failedMsg =
+        duplicate > 0
+          ? `تم استيراد ${done - failed} تقرير وفشل ${failed} (${duplicate} مكرر).`
+          : `تم استيراد ${done - failed} تقرير وفشل ${failed}.`;
+      setMessage(getReportDuplicateMessage(null, failedMsg));
     }
     setSaving(false);
   };

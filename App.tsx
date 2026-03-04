@@ -154,8 +154,8 @@ const App: React.FC = () => {
       cleanupSubsRef.current?.();
       cleanupSubsRef.current = null;
     };
-    // Safety net: never block forever if auth callback is delayed.
     const resolveTimer = window.setTimeout(() => {
+      // Safety fallback for local/dev if auth callback is delayed.
       setAuthResolved(true);
       useAppStore.setState({ loading: false });
     }, 6000);
@@ -219,7 +219,6 @@ const App: React.FC = () => {
     };
   }, [initializeApp, subscribeToDashboard, subscribeToLineStatuses, subscribeToWorkOrders, subscribeToScanEventsToday]);
 
-  // Block only until the first auth-state resolution.
   if (!authResolved) {
     return (
       <div className="erp-auth-page has-panel" dir="rtl">
@@ -229,7 +228,7 @@ const App: React.FC = () => {
           <div className="erp-auth-panel-logo">
             <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
           </div>
-          <h1 className="erp-auth-panel-name">Pro Tech ERP</h1>
+          <h1 className="erp-auth-panel-name">Hakimo ERP</h1>
           <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
           <div className="erp-auth-panel-features">
             {[
@@ -277,7 +276,7 @@ const App: React.FC = () => {
               color: '#1e1b4b', marginBottom: 6,
               fontFamily: 'Cairo, sans-serif',
             }}>
-              Pro Tech ERP
+              Hakimo ERP
             </h2>
             <p style={{
               fontSize: 13, color: '#6b7280',

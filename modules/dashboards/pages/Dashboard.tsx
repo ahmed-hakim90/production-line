@@ -15,7 +15,7 @@ import {
 import { buildLineCosts, buildProductCosts, buildProductAvgCost, formatCost, ProductCostData, buildDailyProductionCostChart, getCurrentMonth } from '../../../utils/costCalculations';
 import { ProductionLineStatus, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import {
   getKPIThreshold,
   getKPIColor,
@@ -114,7 +114,6 @@ export const Dashboard: React.FC = () => {
   const [chartLoading, setChartLoading] = useState(false);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
-  const [scopedReportsLoaded, setScopedReportsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,20 +131,18 @@ export const Dashboard: React.FC = () => {
         if (cancelled) return;
         setTodayReportsScoped(todayPage.items);
         setMonthlyReportsScoped(monthPage.items);
-        setScopedReportsLoaded(true);
       } catch {
         if (cancelled) return;
         setTodayReportsScoped([]);
         setMonthlyReportsScoped([]);
-        setScopedReportsLoaded(true);
       }
     };
     void loadScopedReports();
     return () => { cancelled = true; };
   }, []);
 
-  const todayReports = scopedReportsLoaded ? todayReportsScoped : storeTodayReports;
-  const monthlyReports = scopedReportsLoaded ? monthlyReportsScoped : storeMonthlyReports;
+  const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
+  const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
 
   // ── Set Target Modal ──
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);

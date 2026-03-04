@@ -1,10 +1,10 @@
-﻿
+
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
-import { reportService } from '../../../services/reportService';
+import { reportService } from '@/modules/production/services/reportService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { workOrderService } from '../../../services/workOrderService';
 import type { LineWorkerAssignment, WorkOrder } from '../../../types';

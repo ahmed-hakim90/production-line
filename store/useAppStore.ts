@@ -78,6 +78,7 @@ import {
 } from '../utils/calculations';
 import { eventBus, SystemEvents } from '../shared/events';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
+import { REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
 
 // ─── Helper: build full admin permissions map (fallback) ─────────────────────
 
@@ -344,6 +345,10 @@ interface AppState {
   createReport: (data: Omit<ProductionReport, 'id' | 'createdAt'>) => Promise<string | null>;
   updateReport: (id: string, data: Partial<ProductionReport>) => Promise<void>;
   deleteReport: (id: string) => Promise<void>;
+  syncMissingProductionEntryTransfers: (
+    startDate: string,
+    endDate: string
+  ) => Promise<{ processed: number; created: number; skipped: number; failed: number }>;
 
   // Mutations — Line Status & Config
   updateLineStatus: (id: string, data: Partial<LineStatus>) => Promise<void>;
@@ -632,15 +637,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   initializeApp: async () => {
     // Skip during admin user creation to avoid race condition
-    if (_creatingUser) {
-      set({ loading: false });
-      return;
-    }
+    if (_creatingUser) return;
 
-    if (!auth) {
-      set({ loading: false, isAuthenticated: false });
-      return;
-    }
+    if (!auth) return;
     const currentUser = auth.currentUser;
     if (!currentUser) {
       set({ loading: false, isAuthenticated: false });
@@ -691,12 +690,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       get()._applyRole(role);
       await get()._loadAppData();
+      set({ loading: false });
     } catch (error) {
       console.error('initializeApp error:', error);
-      set({ error: (error as Error).message });
-    } finally {
-      // Never leave app in perpetual loading state.
-      if (get().loading) set({ loading: false });
+      set({ error: (error as Error).message, loading: false });
     }
   },
 
@@ -732,12 +729,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: Load all app data (after auth) ────────────────────────────
 
   _loadAppData: async () => {
-    const [rawProducts, rawLines, rawEmployees, configs, laborSettings, systemSettingsRaw] =
+    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, systemSettingsRaw] =
       await Promise.all([
         productService.getAll(),
         lineService.getAll(),
         employeeService.getAll(),
         lineProductConfigService.getAll(),
+        productionPlanService.getAll(),
+        workOrderService.getAll(),
+        costCenterService.getAll(),
+        costCenterValueService.getAll(),
+        costAllocationService.getAll(),
         laborSettingsService.get(),
         systemSettingsService.get(),
       ]);
@@ -749,6 +751,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     ]);
     const todayReports = todayPage.items;
     const monthlyReports: ProductionReport[] = [];
+
+    const activePlans = productionPlans.filter(
+      (p) => p.status === 'in_progress' || p.status === 'planned'
+    );
+    const planReports: Record<string, ProductionReport[]> = {};
+        const planReportResults = await Promise.allSettled(
+          activePlans.map(async (plan) => {
+            const key = `${plan.lineId}_${plan.productId}`;
+            const reports = await reportService.getByLineAndProduct(
+              plan.lineId, plan.productId, plan.startDate
+            );
+            return { key, reports };
+          })
+        );
+        planReportResults.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            planReports[result.value.key] = result.value.reports;
+          }
+        });
 
     const mergedSettings = systemSettingsRaw
       ? { ...DEFAULT_SYSTEM_SETTINGS, ...systemSettingsRaw }
@@ -774,12 +795,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       monthlyReports,
       productionReports: [],
       lineStatuses,
-      productionPlans: [],
-      planReports: {},
-      workOrders: [],
-      costCenters: [],
-      costCenterValues: [],
-      costAllocations: [],
+      productionPlans,
+      planReports,
+      workOrders,
+      costCenters,
+      costCenterValues,
+      costAllocations,
       laborSettings,
       systemSettings: mergedSettings,
     });
@@ -791,7 +812,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const products = buildProducts(rawProducts, allReports, configs);
     const productionLines = buildProductionLines(
       rawLines, rawProducts, rawEmployees, todayReports, lineStatuses, configs,
-      [], {}, []
+      productionPlans, planReports, workOrders
     );
     const employees: Employee[] = rawEmployees.map((e) => ({
       id: e.id!,
@@ -811,43 +832,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     set({ products, productionLines, employees });
-
-    // Load heavy module data in background to avoid blocking post-login UI.
-    void (async () => {
-      try {
-        const [productionPlans, workOrders, costCenters, costCenterValues, costAllocations] = await Promise.all([
-          productionPlanService.getAll(),
-          workOrderService.getAll(),
-          costCenterService.getAll(),
-          costCenterValueService.getAll(),
-          costAllocationService.getAll(),
-        ]);
-        const activePlans = productionPlans.filter(
-          (p) => p.status === 'in_progress' || p.status === 'planned'
-        );
-        const planReports: Record<string, ProductionReport[]> = {};
-        await Promise.all(
-          activePlans.map(async (plan) => {
-            const key = `${plan.lineId}_${plan.productId}`;
-            planReports[key] = await reportService.getByLineAndProduct(
-              plan.lineId, plan.productId, plan.startDate
-            );
-          })
-        );
-        set({
-          productionPlans,
-          planReports,
-          workOrders,
-          costCenters,
-          costCenterValues,
-          costAllocations,
-        });
-        get()._rebuildLines();
-        get()._rebuildProducts();
-      } catch (error) {
-        console.error('_loadAppData background phase error:', error);
-      }
-    })();
   },
 
   // ── Role Switching ─────────────────────────────────────────────────────────
@@ -1529,7 +1513,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           r.productId === data.productId,
       );
       if (hasDuplicate) {
-        set({ error: 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف والمنتج' });
+        set({ error: REPORT_DUPLICATE_MESSAGE });
         return null;
       }
 
@@ -1593,7 +1577,6 @@ export const useAppStore = create<AppState>((set, get) => ({
               fromWarehouseName: 'تقارير الإنتاج',
               toWarehouseId: routing.finishedReceiveWarehouseId,
               toWarehouseName: 'مخزن تم الصنع',
-              referenceNo: `PR-${id}`,
               note: `Pending production entry from report ${id}`,
               sourceReportId: id,
               lines: [{
@@ -1754,7 +1737,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       return id;
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: getReportDuplicateMessage(error, 'تعذر حفظ التقرير') });
       return null;
     }
   },
@@ -1906,6 +1889,89 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       const message = (error as Error)?.message || 'تعذر حذف التقرير.';
       set({ error: message });
+      throw error;
+    }
+  },
+
+  syncMissingProductionEntryTransfers: async (startDate, endDate) => {
+    set({ error: null });
+    let processed = 0;
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    try {
+      const from = String(startDate || '').trim();
+      const to = String(endDate || '').trim();
+      if (!from || !to) {
+        throw new Error('يرجى تحديد فترة صحيحة قبل المزامنة.');
+      }
+
+      const systemSettings = get().systemSettings;
+      const requiresFinishedApproval = systemSettings.planSettings?.requireFinishedStockApprovalForReports !== false;
+      if (!requiresFinishedApproval) {
+        return { processed: 0, created: 0, skipped: 0, failed: 0 };
+      }
+
+      const routing = await resolveInventoryRouting(systemSettings);
+      if (!routing.finishedReceiveWarehouseId) {
+        throw new Error('لم يتم تحديد مخزن تم الصنع في الإعدادات.');
+      }
+
+      const reports = await reportService.getByDateRange(from, to);
+      const actorName = get().userDisplayName || get().userEmail || 'System';
+      const actorUserId = get().uid || undefined;
+      const productById = new Map(get()._rawProducts.map((p) => [String(p.id || ''), p]));
+
+      for (const report of reports) {
+        if (!report.id) continue;
+        if (Number(report.quantityProduced || 0) <= 0) continue;
+        processed += 1;
+
+        try {
+          const existing = await transferApprovalService.getBySourceReportId(report.id);
+          const hasLinkedProductionEntry = existing.some(
+            (row) => (row.requestType || 'transfer') === 'production_entry',
+          );
+          if (hasLinkedProductionEntry) {
+            skipped += 1;
+            continue;
+          }
+
+          const product = productById.get(String(report.productId || ''));
+          if (!product?.id) {
+            failed += 1;
+            continue;
+          }
+
+          await transferApprovalService.createRequest({
+            requestType: 'production_entry',
+            fromWarehouseId: '__production_report__',
+            fromWarehouseName: 'تقارير الإنتاج',
+            toWarehouseId: routing.finishedReceiveWarehouseId,
+            toWarehouseName: 'مخزن تم الصنع',
+            note: `Backfill production entry from report ${report.id}`,
+            sourceReportId: report.id,
+            lines: [{
+              itemType: 'finished_good',
+              itemId: report.productId,
+              itemName: product.name,
+              itemCode: product.code,
+              quantity: Number(report.quantityProduced || 0),
+              minStock: (product as any).minStock ?? 0,
+            }],
+            createdBy: actorName,
+            createdByUserId: actorUserId,
+          });
+          created += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+
+      return { processed, created, skipped, failed };
+    } catch (error) {
+      set({ error: (error as Error).message });
       throw error;
     }
   },

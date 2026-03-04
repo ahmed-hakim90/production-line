@@ -61,15 +61,54 @@ export interface ExportPDFOptions {
   copies?: number;
 }
 
+const addCanvasToPdfPages = (
+  pdf: jsPDF,
+  canvas: HTMLCanvasElement,
+  pageW: number,
+  pageH: number,
+  margin: number,
+  addNewPageBeforeFirstSlice: boolean,
+) => {
+  const imgData = canvas.toDataURL('image/png');
+  const imgW = canvas.width;
+  const imgH = canvas.height;
+  const contentW = pageW - margin * 2;
+  const ratio = contentW / imgW;
+  const scaledH = imgH * ratio;
+
+  if (scaledH + margin * 2 <= pageH) {
+    if (addNewPageBeforeFirstSlice) pdf.addPage();
+    pdf.addImage(imgData, 'PNG', margin, margin, contentW, scaledH);
+    return;
+  }
+
+  const contentH = pageH - margin * 2;
+  let offset = 0;
+  let firstSlice = true;
+  while (offset < scaledH) {
+    if (addNewPageBeforeFirstSlice || !firstSlice) pdf.addPage();
+    firstSlice = false;
+    const srcY = offset / ratio;
+    const srcH = Math.min(contentH / ratio, imgH - srcY);
+    const dstH = srcH * ratio;
+    const slice = document.createElement('canvas');
+    slice.width = imgW;
+    slice.height = srcH;
+    const ctx = slice.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(canvas, 0, srcY, imgW, srcH, 0, 0, imgW, srcH);
+      pdf.addImage(slice.toDataURL('image/png'), 'PNG', margin, margin, contentW, dstH);
+    }
+    offset += contentH;
+  }
+};
+
 export const exportToPDF = async (
   el: HTMLElement,
   fileName: string,
   options?: ExportPDFOptions,
 ) => {
   const canvas = await capture(el);
-  const imgData = canvas.toDataURL('image/png');
-  const imgW = canvas.width;
-  const imgH = canvas.height;
 
   const paperSize = options?.paperSize ?? 'a4';
   const orientation = options?.orientation ?? 'portrait';
@@ -84,43 +123,49 @@ export const exportToPDF = async (
 
   const pdf = new jsPDF({ orientation, unit: 'pt', format });
 
-  const addPageContent = (isFirst: boolean) => {
-    const cw = pageW - m * 2;
-    const ratio = cw / imgW;
-    const scaledH = imgH * ratio;
-
-    if (!isFirst) pdf.addPage();
-
-    if (scaledH + m * 2 <= pageH) {
-      pdf.addImage(imgData, 'PNG', m, m, cw, scaledH);
-    } else {
-      const contentH = pageH - m * 2;
-      let offset = 0;
-      let firstSlice = true;
-      while (offset < scaledH) {
-        if (!firstSlice) pdf.addPage();
-        firstSlice = false;
-        const srcY = offset / ratio;
-        const srcH = Math.min(contentH / ratio, imgH - srcY);
-        const dstH = srcH * ratio;
-        const slice = document.createElement('canvas');
-        slice.width = imgW;
-        slice.height = srcH;
-        const ctx = slice.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(canvas, 0, srcY, imgW, srcH, 0, 0, imgW, srcH);
-          pdf.addImage(slice.toDataURL('image/png'), 'PNG', m, m, cw, dstH);
-        }
-        offset += contentH;
-      }
-    }
-  };
-
   for (let c = 0; c < copies; c++) {
-    addPageContent(c === 0);
+    addCanvasToPdfPages(pdf, canvas, pageW, pageH, m, c !== 0);
   }
 
   pdf.save(`${fileName}.pdf`);
+};
+
+export const exportElementsToSinglePDF = async (
+  elements: HTMLElement[],
+  fileName: string,
+  options?: ExportPDFOptions,
+) => {
+  if (!elements.length) return;
+
+  const paperSize = options?.paperSize ?? 'a4';
+  const orientation = options?.orientation ?? 'portrait';
+  const copies = options?.copies ?? 1;
+  const [baseW, baseH] = PAPER_PT[paperSize] || PAPER_PT.a4;
+  const pageW = orientation === 'landscape' ? baseH : baseW;
+  const pageH = orientation === 'landscape' ? baseW : baseH;
+  const m = 20;
+  const format = paperSize === 'thermal' ? [baseW, baseH] : paperSize;
+
+  for (let c = 0; c < copies; c++) {
+    let pdf: jsPDF | null = null;
+    let hasWrittenPage = false;
+
+    for (let i = 0; i < elements.length; i++) {
+      const canvas = await capture(elements[i]);
+      if (!pdf) {
+        pdf = new jsPDF({ orientation, unit: 'pt', format });
+        addCanvasToPdfPages(pdf, canvas, pageW, pageH, m, false);
+      } else {
+        addCanvasToPdfPages(pdf, canvas, pageW, pageH, m, true);
+      }
+      hasWrittenPage = true;
+    }
+
+    if (pdf && hasWrittenPage) {
+      const suffix = copies > 1 ? `-${c + 1}` : '';
+      pdf.save(`${fileName}${suffix}.pdf`);
+    }
+  }
 };
 
 // ─── Export element as image (PNG download) ─────────────────────────────────

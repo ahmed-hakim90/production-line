@@ -5,6 +5,7 @@ import { getOperationalDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
 
 type ReportFormState = {
   employeeId: string;
@@ -113,13 +114,13 @@ export const GlobalCreateReportModal: React.FC = () => {
       const created = await createReport(form);
       if (!created) {
         const storeError = useAppStore.getState().error;
-        openErrorOverlay(storeError || 'تعذر حفظ التقرير');
+        openErrorOverlay(getReportDuplicateMessage(storeError, 'تعذر حفظ التقرير'));
         return;
       }
       setFeedback({ text: 'تم حفظ التقرير بنجاح', type: 'success' });
       setForm(emptyForm());
     } catch (error) {
-      const errorMessage = error instanceof Error && error.message ? error.message : 'تعذر حفظ التقرير';
+      const errorMessage = getReportDuplicateMessage(error, 'تعذر حفظ التقرير');
       openErrorOverlay(errorMessage);
     } finally {
       setSaving(false);
