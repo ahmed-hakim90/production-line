@@ -644,7 +644,7 @@ export const ProductDetails: React.FC = () => {
       />
 
       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-4 sm:px-6 py-3">
-        <div className="erp-filter-bar" style={{ flexWrap: 'wrap' }}>
+        <div className="erp-filter-bar">
           <div className="erp-date-seg">
             <button className={`erp-date-seg-btn${reportViewMode === 'all' ? ' active' : ''}`} onClick={handleShowAllReports}>
               الكل
@@ -1558,7 +1558,7 @@ export const ProductDetails: React.FC = () => {
                   المواد هنا من تعريف "المواد الخام" فقط، ولن تظهر في بحث المنتجات.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المستخدمة</label>
                   <input

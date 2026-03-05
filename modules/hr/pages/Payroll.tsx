@@ -629,7 +629,7 @@ export const Payroll: React.FC = () => {
       {/* Filters */}
       {records.length > 0 && (
         <div className="flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
             <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-lg">search</span>
             <input
               type="text"

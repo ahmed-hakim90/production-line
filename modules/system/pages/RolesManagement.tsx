@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card } from '../components/UI';
 import {
@@ -214,11 +214,11 @@ export const RolesManagement: React.FC = () => {
                 </div>
 
                 {/* Card footer */}
-                <div className="flex items-center gap-2 px-4 py-3 border-t border-[var(--color-border)] bg-[#f8f9fa]/60/30">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 border-t border-[var(--color-border)] bg-[#f8f9fa]/60/30">
                   {can('roles.manage') && (
                     <button
                       onClick={() => openEdit(role)}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] text-xs font-bold bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary hover:text-primary hover:bg-primary/5 transition-all"
+                      className="w-full sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] text-xs font-bold bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary hover:text-primary hover:bg-primary/5 transition-all"
                     >
                       <span className="material-icons-round text-sm">edit</span>
                       تعديل الصلاحيات
@@ -227,7 +227,7 @@ export const RolesManagement: React.FC = () => {
                   {role.id !== userRoleId && can('roles.manage') && (
                     <button
                       onClick={() => setDeleteConfirmId(role.id!)}
-                      className="p-2 rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border border-transparent hover:border-rose-200 dark:hover:border-rose-800 transition-all"
+                      className="w-full sm:w-auto p-2 rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border border-transparent hover:border-rose-200 dark:hover:border-rose-800 transition-all"
                       title="حذف الدور"
                     >
                       <span className="material-icons-round text-[18px]">delete_outline</span>
@@ -247,7 +247,7 @@ export const RolesManagement: React.FC = () => {
           onClick={closeModal}
         >
           <div
-            className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-3xl border border-[var(--color-border)] my-8 animate-in fade-in zoom-in-95 duration-200"
+            className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[98vw] sm:w-[95vw] max-w-3xl border border-[var(--color-border)] my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal header */}
@@ -341,7 +341,7 @@ export const RolesManagement: React.FC = () => {
                         </span>
                       </label>
                       {/* Group permissions */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 px-4 pb-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 px-4 pb-3">
                         {group.permissions.map((perm) => (
                           <label
                             key={perm.key}
@@ -368,14 +368,14 @@ export const RolesManagement: React.FC = () => {
             </div>
 
             {/* Modal footer */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-t border-[var(--color-border)] bg-[#f8f9fa] shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-t border-[var(--color-border)] bg-[#f8f9fa] shrink-0">
               <span className="text-xs text-[var(--color-text-muted)] font-bold">
                 {enabledCount(editPerms)} / {ALL_PERMISSIONS.length} صلاحية مفعلة
               </span>
-              <div className="flex items-center gap-2">
-                <button className="btn btn-secondary" onClick={closeModal}>إلغاء</button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button className="btn btn-secondary w-full sm:w-auto" onClick={closeModal}>إلغاء</button>
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-primary w-full sm:w-auto"
                   onClick={handleSave}
                   disabled={saving || !editName.trim()}
                 >

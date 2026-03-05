@@ -716,12 +716,12 @@ export const Settings: React.FC = () => {
       )}
 
       {/* ── Tab Bar ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] pb-2">
+      <div className="flex gap-2 border-b border-[var(--color-border)] pb-2 overflow-x-auto">
         {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => handleTabChange(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] text-sm font-bold transition-all shrink-0 ${
               activeTab === tab.key
                 ? 'bg-primary text-white shadow-primary/20'
                 : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30 hover:bg-[var(--color-bg)]'

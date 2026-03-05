@@ -882,7 +882,7 @@ export const Employees: React.FC = () => {
       {/* 4. Filters */}
       <Card>
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-end">
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 min-w-0 sm:min-w-[200px]">
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بحث (اسم / رمز)</label>
             <input
               type="text"

@@ -22,12 +22,12 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
 
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold">حدود مؤشرات الأداء</h3>
           <p className="page-subtitle">حدد قيم "جيد" و"تحذير" لكل مؤشر. تُستخدم لتلوين المؤشرات في لوحات التحكم.</p>
         </div>
-        <Button onClick={onSave} disabled={saving}>
+        <Button onClick={onSave} disabled={saving} className="w-full sm:w-auto">
           {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
           <span className="material-icons-round text-sm">save</span>
           حفظ التغييرات
@@ -35,7 +35,58 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
       </div>
 
       <Card>
-        <div className="overflow-x-auto">
+        <div className="md:hidden space-y-2.5">
+          {KPI_DEFINITIONS.map((kpi) => {
+            const threshold = localKPIs[kpi.key] || DEFAULT_KPI_THRESHOLDS[kpi.key];
+            return (
+              <div key={kpi.key} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="material-icons-round text-primary">{kpi.icon}</span>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{kpi.label}</p>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#f0f2f5] text-[var(--color-text-muted)] mr-auto">{kpi.unit}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] font-bold text-emerald-600 mb-1">جيد</p>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      className="w-full border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                      value={threshold.good}
+                      onChange={(e) =>
+                        setLocalKPIs((prev) => ({
+                          ...prev,
+                          [kpi.key]: { ...prev[kpi.key], good: Number(e.target.value) },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-amber-600 mb-1">تحذير</p>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      className="w-full border border-amber-200 bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
+                      value={threshold.warning}
+                      onChange={(e) =>
+                        setLocalKPIs((prev) => ({
+                          ...prev,
+                          [kpi.key]: { ...prev[kpi.key], warning: Number(e.target.value) },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <p className="text-xs font-bold text-[var(--color-text-muted)]">
+                  {kpi.invertedScale ? `خطر إذا > ${threshold.warning}${kpi.unit}` : `خطر إذا < ${threshold.warning}${kpi.unit}`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="erp-thead">
               <tr>

@@ -38,12 +38,12 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
 
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold">إعدادات قالب الطباعة</h3>
           <p className="page-subtitle">تخصيص مظهر التقارير المطبوعة — الشعار، الألوان، حجم الورق والمزيد.</p>
         </div>
-        <div className="erp-page-actions">
+        <div className="erp-page-actions w-full sm:w-auto">
           <Button
             onClick={() => setShowPreview(true)}
             className="!bg-[#f0f2f5] dark:!bg-slate-800 !text-[var(--color-text)] dark:!text-[var(--color-text-muted)] hover:!bg-slate-200 dark:hover:!bg-slate-700"
@@ -260,12 +260,12 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 <p className="text-xs text-slate-400">A4 / A5 / حراري</p>
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               {([['a4', 'A4'], ['a5', 'A5'], ['thermal', 'حراري']] as [PaperSize, string][]).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setLocalPrint((p) => ({ ...p, paperSize: val }))}
-                  className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all ${
+                  className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex-1 sm:flex-none ${
                     localPrint.paperSize === val
                       ? 'bg-primary text-white shadow-primary/20'
                       : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
@@ -287,12 +287,12 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 <p className="text-xs text-slate-400">عمودي أو أفقي</p>
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               {([['portrait', 'عمودي'], ['landscape', 'أفقي']] as [PaperOrientation, string][]).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setLocalPrint((p) => ({ ...p, orientation: val }))}
-                  className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center justify-center gap-2 flex-1 sm:flex-none ${
                     localPrint.orientation === val
                       ? 'bg-primary text-white shadow-primary/20'
                       : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, KPIBox } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
@@ -301,7 +301,40 @@ export const QualityReports: React.FC = () => {
           ) : filteredQualityReportRows.length === 0 ? (
             <p className="text-sm text-slate-500">لا توجد نتائج مطابقة للبحث/التصفية الحالية.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="space-y-2.5">
+              <div className="md:hidden space-y-2.5">
+                {filteredQualityReportRows.map((wo) => {
+                  const qm = qualityStatusMeta(wo.qualityStatus);
+                  const productName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '—';
+                  const lineName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
+                  const lastInspectionDate =
+                    wo.qualitySummary?.lastInspectionAt?.toDate?.()?.toLocaleString?.('ar-EG') ??
+                    (wo.qualityApprovedAt ? new Date(wo.qualityApprovedAt).toLocaleString('ar-EG') : '—');
+                  return (
+                    <div key={wo.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-bold text-[var(--color-text)]">#{wo.workOrderNumber}</p>
+                          <p className="text-xs text-[var(--color-text-muted)]">{productName} - {lineName}</p>
+                        </div>
+                        <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full ${qm.className}`}>{qm.label}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">Inspected</p>
+                          <p className="font-bold">{wo.qualitySummary?.inspectedUnits ?? 0}</p>
+                        </div>
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">Failed</p>
+                          <p className="font-bold">{wo.qualitySummary?.failedUnits ?? 0}</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-[var(--color-text-muted)]"><span className="font-bold">آخر تحديث:</span> {lastInspectionDate}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
@@ -365,6 +398,7 @@ export const QualityReports: React.FC = () => {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
           <p className="mt-3 text-xs text-slate-400">

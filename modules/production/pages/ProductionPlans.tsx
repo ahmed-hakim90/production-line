@@ -939,7 +939,52 @@ export const ProductionPlans: React.FC = () => {
             <p className="text-sm mt-1">{hasActiveFilters ? 'جرب تغيير معايير التصفية' : 'ابدأ بإنشاء خطة جديدة لتتبع الإنتاج'}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="space-y-2.5">
+            <div className="md:hidden space-y-2.5 px-3 pb-3">
+              {plans.map((plan) => {
+                const product = _rawProducts.find((p) => p.id === plan.productId);
+                const line = _rawLines.find((l) => l.id === plan.lineId);
+                const statusInfo = STATUS_CONFIG[plan.status];
+                const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
+                const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
+                return (
+                  <div key={plan.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-primary">{product?.name ?? '—'}</p>
+                        <p className="text-xs text-[var(--color-text-muted)]">{line?.name ?? '—'}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${priorityInfo.bg} ${priorityInfo.color}`}>{priorityInfo.label}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                        <p className="text-[var(--color-text-muted)] mb-0.5">الحالة</p>
+                        <p className={`font-bold ${statusInfo.color}`}>{statusInfo.label}</p>
+                      </div>
+                      <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                        <p className="text-[var(--color-text-muted)] mb-0.5">التقدم</p>
+                        <p className="font-bold text-primary">{plan.progress}%</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-[var(--color-text-muted)]">التنفيذ</span>
+                        <span className={smartInfo.color}>{smartInfo.label}</span>
+                      </div>
+                      <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(plan.progress, 100)}%` }} />
+                      </div>
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)] space-y-1">
+                      <p><span className="font-bold">الكمية:</span> {formatNumber(plan.producedQuantity)} / {formatNumber(plan.plannedQuantity)}</p>
+                      <p><span className="font-bold">الفترة:</span> {plan.startDate} - {plan.endDate}</p>
+                      {canViewCosts && <p><span className="font-bold">التكلفة:</span> {formatCurrency(plan.estimatedCost)}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-right border-collapse">
               <thead>
                 <tr className="bg-[#f8f9fa]/50 border-b border-[var(--color-border)]">
@@ -1075,6 +1120,7 @@ export const ProductionPlans: React.FC = () => {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

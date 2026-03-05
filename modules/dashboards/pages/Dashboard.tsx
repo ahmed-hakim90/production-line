@@ -395,9 +395,9 @@ export const Dashboard: React.FC = () => {
                 <p className="text-[11px] text-[var(--color-text-muted)] font-medium">اختر منتج أو أكثر لمقارنة متوسط التكلفة الشهرية</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <select
-                className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[200px] transition-all"
+                className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[200px] transition-all"
                 value=""
                 onChange={(e) => {
                   if (e.target.value && !costProductIds.includes(e.target.value)) {
@@ -443,7 +443,41 @@ export const Dashboard: React.FC = () => {
 
           {Object.keys(costAnalysisMap).length > 0 ? (
             <div className="p-5 sm:p-6">
-              <div className="overflow-x-auto">
+              <div className="md:hidden space-y-2.5">
+                {costProductIds.map((pid) => {
+                  const data = costAnalysisMap[pid];
+                  const p = products.find((pr) => pr.id === pid);
+                  if (!data) {
+                    return (
+                      <div key={pid} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-xs text-[var(--color-text-muted)]">
+                        <p className="font-bold text-[var(--color-text)] mb-1.5">{p?.name || '—'}</p>
+                        لا توجد بيانات
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={pid} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                      <p className="text-sm font-bold text-primary">{p?.name || '—'}</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">تكلفة الوحدة</p>
+                          <p className="font-bold text-violet-600">{formatCost(data.costPerUnit)} ج.م</p>
+                        </div>
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الإنتاج</p>
+                          <p className="font-bold text-emerald-600">{formatNumber(data.quantityProduced)} وحدة</p>
+                        </div>
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)] space-y-1">
+                        <p><span className="font-bold">العمالة:</span> {formatCost(data.laborCost)} ج.م</p>
+                        <p><span className="font-bold">غير مباشرة:</span> {formatCost(data.indirectCost)} ج.م</p>
+                        <p><span className="font-bold">الإجمالي:</span> <span className="text-primary font-bold">{formatCost(data.totalCost)} ج.م</span></p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-right border-collapse">
                   <thead className="erp-thead">
                     <tr>
@@ -534,7 +568,7 @@ export const Dashboard: React.FC = () => {
 
           <div className="px-5 sm:px-6 pt-4 flex flex-wrap gap-3">
             <select
-              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[160px] transition-all"
               value={chartProductId}
               onChange={(e) => setChartProductId(e.target.value)}
             >
@@ -545,7 +579,7 @@ export const Dashboard: React.FC = () => {
             </select>
 
             <select
-              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[160px] transition-all"
               value={chartLineId}
               onChange={(e) => setChartLineId(e.target.value)}
             >
@@ -556,7 +590,7 @@ export const Dashboard: React.FC = () => {
             </select>
 
             <select
-              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold min-w-[160px] transition-all"
+              className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[160px] transition-all"
               value={chartMonth}
               onChange={(e) => setChartMonth(e.target.value)}
             >
@@ -731,7 +765,7 @@ export const Dashboard: React.FC = () => {
         </div>}
 
         {isVisible('smart_planning') && <div className="lg:col-span-1">
-          <Card className="sticky top-24 border-primary/20 shadow-primary/5" title="التخطيط الذكي">
+          <Card className="lg:sticky lg:top-24 border-primary/20 shadow-primary/5" title="التخطيط الذكي">
             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المنتج</label>

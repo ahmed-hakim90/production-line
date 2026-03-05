@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -212,7 +212,7 @@ export const CostCenterDistribution: React.FC = () => {
               {canManage && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <select
-                    className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm p-2 outline-none focus:border-primary min-w-[170px]"
+                    className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm p-2 outline-none focus:border-primary sm:min-w-[170px]"
                     value={sourceMonth}
                     onChange={(e) => setSourceMonth(e.target.value)}
                     disabled={availableSourceMonths.length === 0}
@@ -298,7 +298,7 @@ export const CostCenterDistribution: React.FC = () => {
               placeholder={`${monthDays}`}
             />
           </div>
-          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center min-w-[120px]">
+          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center w-full sm:w-auto sm:min-w-[120px]">
             <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">يومي ({appliedWorkingDays} يوم)</p>
             <p className="text-lg font-bold text-primary">
               {monthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(monthlyAmount / appliedWorkingDays) : '—'}

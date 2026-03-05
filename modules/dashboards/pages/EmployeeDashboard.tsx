@@ -66,7 +66,7 @@ const DashboardPeriodFilter: React.FC<{
   period: Period;
   onChange: (p: Period) => void;
 }> = ({ period, onChange }) => (
-  <div className="erp-date-seg">
+  <div className="erp-date-seg w-full sm:w-auto">
     {PERIOD_OPTIONS.map((opt) => (
       <button
         key={opt.value}
@@ -396,12 +396,12 @@ export const EmployeeDashboard: React.FC = () => {
       </div>
 
       {/* ── ROW 2: Quick Actions ── */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0 sm:flex-wrap">
         {can('quickAction.view') && (
           <button
             type="button"
             onClick={() => navigate('/quick-action')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-primary text-white hover:bg-primary/90 shadow-primary/20 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-primary text-white hover:bg-primary/90 shadow-primary/20 transition-all shrink-0"
           >
             <span className="material-icons-round text-base">bolt</span>
             الإدخال السريع
@@ -411,7 +411,7 @@ export const EmployeeDashboard: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/inventory/movements')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20 transition-all shrink-0"
           >
             <span className="material-icons-round text-base">warehouse</span>
             حركة المخزون
@@ -421,7 +421,7 @@ export const EmployeeDashboard: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/line-workers')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20 transition-all shrink-0"
           >
             <span className="material-icons-round text-base">group_work</span>
             ربط العمالة بالخط
@@ -431,7 +431,7 @@ export const EmployeeDashboard: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/inventory/transfer-approvals')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-amber-600/20 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-amber-600/20 transition-all shrink-0"
           >
             <span className="material-icons-round text-base">verified_user</span>
             اعتماد التحويلات

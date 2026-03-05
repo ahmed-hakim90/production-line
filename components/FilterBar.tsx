@@ -68,12 +68,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   extra,
 }) => {
   const hasSep = (dateRange || selects?.some((s) => !s.hidden)) && (search || dateSegment);
+  const visibleSelects = selects?.filter((s) => !s.hidden) ?? [];
 
   return (
     <div className="erp-filter-bar" style={{ flexWrap: 'wrap' }}>
       {/* Quick text search */}
       {search && (
-        <div className="erp-search-input" style={{ minWidth: 200, maxWidth: 280 }}>
+        <div className="erp-search-input erp-search-input--table">
           <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
           <input
             value={search.value}
@@ -130,12 +131,12 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       )}
 
       {/* Separator */}
-      {hasSep && selects && selects.filter((s) => !s.hidden).length > 0 && (
+      {hasSep && visibleSelects.length > 0 && (
         <div className="erp-filter-sep" />
       )}
 
       {/* Dropdown selects */}
-      {selects?.filter((s) => !s.hidden).map((sel, i) => (
+      {visibleSelects.map((sel, i) => (
         <select
           key={i}
           className={`erp-filter-select${sel.value ? ' active' : ''}`}

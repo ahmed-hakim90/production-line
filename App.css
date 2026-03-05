@@ -1529,6 +1529,10 @@ table tbody tr[data-selected="true"] {
   transition: all 150ms;
   min-width: 180px;
 }
+.erp-search-input--table {
+  min-width: 220px;
+  max-width: 280px;
+}
 .erp-search-input:focus-within {
   background: #fff;
   border-color: rgb(var(--color-primary));
@@ -1720,6 +1724,77 @@ table tbody tr[data-selected="true"] {
 }
 .erp-filter-apply:hover { background: rgb(var(--color-primary) / 0.14); }
 .erp-filter-apply:active { background: rgb(var(--color-primary) / 0.2); }
+
+/* Shared responsive helpers for list pages */
+.erp-mobile-card-list {
+  display: none;
+}
+
+.erp-desktop-table {
+  display: block;
+}
+
+.erp-table-scroll {
+  overflow: auto;
+  max-height: 68vh;
+}
+
+/* Mobile + tablet-first utilities (up to 1024) */
+@media (max-width: 1024px) {
+  .erp-filter-bar {
+    gap: 8px;
+    padding: 10px;
+  }
+  .erp-filter-sep {
+    display: none;
+  }
+  .erp-search-input,
+  .erp-search-input--table {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  .erp-filter-date,
+  .erp-filter-select,
+  .erp-filter-clear,
+  .erp-filter-apply {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+  .erp-page-title-block h1,
+  .erp-page-title-block h2,
+  .page-title {
+    font-size: 16px;
+  }
+  .erp-table-scroll {
+    max-height: none;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 640px) {
+  .erp-filter-bar {
+    align-items: stretch;
+    padding: 8px;
+  }
+  .erp-filter-date,
+  .erp-filter-select,
+  .erp-filter-clear,
+  .erp-filter-apply {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  .erp-date-seg {
+    width: 100%;
+  }
+  .erp-date-seg-btn {
+    flex: 1 0 auto;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
 
 /* ══════════════════════════════════════════════════════════
    ERPNext PROGRESS BAR

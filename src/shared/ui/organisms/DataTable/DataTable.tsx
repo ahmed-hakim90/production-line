@@ -297,7 +297,7 @@ export function DataTable<T>({
         <div className="erp-filter-bar">
           {/* Built-in quick search */}
           {enableSearch && (
-            <div className="erp-search-input" style={{ minWidth: 220, maxWidth: 280 }}>
+            <div className="erp-search-input erp-search-input--table">
               <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
               <input
                 value={searchTerm}
@@ -320,7 +320,7 @@ export function DataTable<T>({
           {toolbarContent}
 
           {/* Spacer + column visibility */}
-          <div style={{ flex: 1 }} />
+          <div className="hidden sm:block" style={{ flex: 1 }} />
           {columnsVisibilityControl && (
             <div className="shrink-0">
               {columnsVisibilityControl}
@@ -329,7 +329,7 @@ export function DataTable<T>({
         </div>
 
         {/* Table */}
-        <div className="overflow-auto max-h-[68vh]">
+        <div className="erp-table-scroll">
           <table className="w-full text-right border-collapse">
             <thead className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
               <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -455,11 +455,11 @@ export function DataTable<T>({
         </div>
 
         {/* Pagination footer */}
-        <div className="px-3 py-2.5 border-t border-[var(--color-border)] flex items-center justify-between bg-[var(--color-card)]">
+        <div className="px-3 py-2.5 border-t border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-[var(--color-card)]">
           <span className="text-[11.5px] text-[var(--color-text-muted)] font-medium">
             صفحة {currentPage} من {totalPages} — إجمالي {sortedRows.length} سجل
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}

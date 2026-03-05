@@ -607,12 +607,12 @@ export const QuickAction: React.FC = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => handlePrint()}>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            <Button onClick={() => handlePrint()} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">print</span>
               طباعة
             </Button>
-            <Button variant="secondary" disabled={exporting} onClick={handleExportPDF}>
+            <Button variant="secondary" disabled={exporting} onClick={handleExportPDF} className="w-full sm:w-auto">
               {exporting ? (
                 <span className="material-icons-round animate-spin text-sm">refresh</span>
               ) : (
@@ -620,15 +620,15 @@ export const QuickAction: React.FC = () => {
               )}
               تصدير PDF
             </Button>
-            <Button variant="secondary" disabled={exporting} onClick={handleExportImage}>
+            <Button variant="secondary" disabled={exporting} onClick={handleExportImage} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">image</span>
               تصدير كصورة
             </Button>
-            <Button variant="outline" disabled={exporting} onClick={handleShareWhatsApp}>
+            <Button variant="outline" disabled={exporting} onClick={handleShareWhatsApp} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">share</span>
               مشاركة عبر WhatsApp
             </Button>
-            <Button variant="outline" onClick={handleReset}>
+            <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">add</span>
               تقرير جديد
             </Button>
@@ -723,8 +723,8 @@ export const QuickAction: React.FC = () => {
               </button>
             </div>
             <div className="p-4 border-b border-[var(--color-border)] space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="w-full sm:flex-1">
                   <SearchableSelect
                     placeholder="ابحث عن عامل للإضافة السريعة"
                     options={addableWorkerOptions}
@@ -735,7 +735,7 @@ export const QuickAction: React.FC = () => {
                 <Button
                   onClick={handleQuickAddWorker}
                   disabled={!workerPickerId || workerActionBusy}
-                  className="shrink-0"
+                  className="w-full sm:w-auto shrink-0"
                 >
                   {workerActionBusy ? (
                     <span className="material-icons-round animate-spin text-sm">refresh</span>

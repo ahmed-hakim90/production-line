@@ -82,6 +82,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
     const palette = getPrintThemePalette(ps);
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
+    const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const scoreTone =
       data.performanceScore >= 85
         ? { text: 'ممتاز', color: '#059669' }
@@ -113,6 +114,27 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
           boxSizing: 'border-box',
         }}
       >
+        <div style={{ textAlign: 'center', marginBottom: isThermal ? '2mm' : '6mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '1.5mm' : '5mm' }}>
+          {ps.logoUrl && (
+            <img
+              src={ps.logoUrl}
+              alt="logo"
+              style={{ maxHeight: isThermal ? '10mm' : '18mm', marginBottom: '2mm', objectFit: 'contain' }}
+            />
+          )}
+          <h1 style={{ margin: 0, fontSize: isThermal ? '11pt' : '18pt', fontWeight: 900, color: ps.primaryColor }}>
+            {ps.headerText}
+          </h1>
+          <h2 style={{ margin: 0, fontSize: isThermal ? '9.5pt' : '14pt', fontWeight: 900, color: palette.text }}>
+            تقرير تقييم أداء مشرف
+          </h2>
+        </div>
+
+        <div style={{ marginBottom: isThermal ? '2mm' : '4mm' }}>
+          
+         
+        </div>
+
         <div style={{ marginBottom: isThermal ? '2mm' : '4mm', borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '1.5mm' : '3mm' }}>
           <h2 style={{ margin: 0, fontSize: isThermal ? '10pt' : '16pt', fontWeight: 900, color: palette.text }}>
             {data.supervisorName}
@@ -121,9 +143,6 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
             {data.departmentName} — {data.jobTitle} — {data.statusLabel}
             {data.supervisorCode ? ` — ${data.supervisorCode}` : ''}
           </p>
-          {/* <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '6pt' : '9pt', color: '#94a3b8' }}>
-            الفترة: {data.periodLabel} | تاريخ الطباعة: {now}
-          </p> */}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: isThermal ? '1fr' : '1.2fr 1.2fr 2.2fr', gap: isThermal ? '1.5mm' : '2mm', marginBottom: isThermal ? '2.5mm' : '4mm' }}>

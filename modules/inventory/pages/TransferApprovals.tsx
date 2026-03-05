@@ -249,7 +249,47 @@ export const TransferApprovals: React.FC = () => {
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-400">لا توجد طلبات تحويل في هذا الفلتر.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="space-y-2.5">
+            <div className="md:hidden space-y-2.5 p-3">
+              {filtered.map((row) => {
+                const requestType = row.requestType || 'transfer';
+                const fromName = requestType === 'production_entry'
+                  ? (row.fromWarehouseName || 'تقارير الإنتاج')
+                  : (warehouseMap.get(row.fromWarehouseId) || row.fromWarehouseName || row.fromWarehouseId);
+                const toName = warehouseMap.get(row.toWarehouseId) || row.toWarehouseName || row.toWarehouseId;
+                const rowProcessing = processingId === row.id;
+                return (
+                  <div key={row.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-[var(--color-text)]">{row.referenceNo}</p>
+                        <p className="text-xs text-[var(--color-text-muted)]">{REQUEST_TYPE_LABEL[requestType] || requestType}</p>
+                      </div>
+                      <Badge variant={row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'}>
+                        {STATUS_LABEL[row.status] || row.status}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)] space-y-1">
+                      <p><span className="font-bold">من:</span> {fromName}</p>
+                      <p><span className="font-bold">إلى:</span> {toName}</p>
+                      <p><span className="font-bold">المنشئ:</span> {row.createdBy}</p>
+                      <p><span className="font-bold">الأصناف:</span> {row.lines.length}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" onClick={() => openRequest(row)} disabled={rowProcessing}>
+                        <span className="material-icons-round text-sm">visibility</span>
+                        فتح
+                      </Button>
+                      <Button variant="outline" onClick={() => void printRequest(row)} disabled={rowProcessing}>
+                        <span className="material-icons-round text-sm">print</span>
+                        طباعة
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
@@ -374,6 +414,7 @@ export const TransferApprovals: React.FC = () => {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </Card>

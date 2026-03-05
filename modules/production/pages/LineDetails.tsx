@@ -719,7 +719,7 @@ export const LineDetails: React.FC = () => {
       </div>
 
       {/* ── Expanded KPI Cards ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         <KPIBox
           label="الإنتاج مقابل الهدف"
           value={formatNumber(totalProduced)}
@@ -935,7 +935,7 @@ export const LineDetails: React.FC = () => {
               {healthCfg.label}
             </Badge>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
             {/* Elapsed time ratio */}
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">نسبة الوقت المنقضي</p>
@@ -1080,7 +1080,7 @@ export const LineDetails: React.FC = () => {
           <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
           <h3 className="text-lg font-bold">الطاقة الإنتاجية</h3>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           <div className="text-center">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الطاقة اليومية</p>
             <p className="text-2xl font-bold text-primary">

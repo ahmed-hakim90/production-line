@@ -2126,7 +2126,48 @@ export const Reports: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
+                  <div className="md:hidden space-y-2">
+                    {importDateUpdateResult.rows.map((row) => {
+                      const isValid = row.errors.length === 0;
+                      return (
+                        <div
+                          key={row.rowIndex}
+                          className={`rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 ${
+                            isValid ? 'bg-[var(--color-card)]' : 'bg-rose-50/50 dark:bg-rose-900/5'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-xs text-[var(--color-text-muted)]">صف #{row.rowIndex}</p>
+                              <p className={`font-mono text-xs mt-1 ${row.reportCode ? '' : 'text-rose-500'}`}>
+                                كود التقرير: {row.reportCode || '—'}
+                              </p>
+                            </div>
+                            {isValid ? (
+                              <span className="material-icons-round text-emerald-500 text-sm shrink-0">check_circle</span>
+                            ) : (
+                              <span className="material-icons-round text-rose-500 text-sm shrink-0" title={row.errors.join('\n')}>error</span>
+                            )}
+                          </div>
+                          <div className={`mt-2 text-sm ${row.updatedFieldsCount > 0 ? '' : 'text-rose-500'}`}>
+                            {row.updatedFieldsCount > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {row.date && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 text-xs">تاريخ: {row.date}</span>}
+                                {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs">إنتاج: {row.quantityProduced}</span>}
+                                {row.quantityWaste !== undefined && <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 text-xs">هالك: {row.quantityWaste}</span>}
+                                {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 text-xs">عمال: {row.workersCount}</span>}
+                                {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-xs">ساعات: {row.workHours}</span>}
+                              </div>
+                            ) : (
+                              '—'
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
                     <table className="w-full text-right border-collapse text-sm">
                       <thead className="erp-thead">
                         <tr>
@@ -2219,7 +2260,67 @@ export const Reports: React.FC = () => {
                   </div>
 
                   {/* Preview Table */}
-                  <div className="overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
+                  <div className="md:hidden space-y-2">
+                    {importResult.rows.map((row) => {
+                      const isValid = row.errors.length === 0;
+                      const hasWarnings = row.warnings.length > 0;
+                      const cardBg = !isValid
+                        ? 'bg-rose-50/50 dark:bg-rose-900/5'
+                        : row.isDuplicate
+                          ? 'bg-orange-50/50 dark:bg-orange-900/5'
+                          : hasWarnings
+                            ? 'bg-amber-50/30 dark:bg-amber-900/5'
+                            : 'bg-[var(--color-card)]';
+
+                      return (
+                        <div key={row.rowIndex} className={`rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 ${cardBg}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-xs text-[var(--color-text-muted)]">صف #{row.rowIndex}</p>
+                              <p className="text-sm font-medium mt-1">{row.date}</p>
+                            </div>
+                            {!isValid ? (
+                              <span className="material-icons-round text-rose-500 text-sm shrink-0" title={row.errors.join('\n')}>error</span>
+                            ) : row.isDuplicate ? (
+                              <span className="material-icons-round text-orange-500 text-sm shrink-0" title="تقرير مكرر">content_copy</span>
+                            ) : hasWarnings ? (
+                              <span className="material-icons-round text-amber-500 text-sm shrink-0" title={row.warnings.join('\n')}>warning</span>
+                            ) : (
+                              <span className="material-icons-round text-emerald-500 text-sm shrink-0">check_circle</span>
+                            )}
+                          </div>
+
+                          <div className="mt-2 space-y-1 text-xs">
+                            <p className={row.lineId ? '' : 'text-rose-500'}>خط الإنتاج: {row.lineName || '—'}</p>
+                            <p className={row.productId ? '' : 'text-rose-500'}>المنتج: {row.productName || '—'}</p>
+                            <p className={row.employeeId ? '' : 'text-rose-500'}>المشرف: {row.employeeName || '—'}</p>
+                            <p className="text-[var(--color-text-muted)] font-mono">الكود: {row.employeeCode || '—'}</p>
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                            <div className="rounded bg-emerald-50/80 px-2 py-1">
+                              <span className="text-[var(--color-text-muted)]">الكمية: </span>
+                              <span className="font-bold">{row.quantityProduced}</span>
+                            </div>
+                            <div className="rounded bg-rose-50/80 px-2 py-1">
+                              <span className="text-[var(--color-text-muted)]">الهالك: </span>
+                              <span className="font-bold text-rose-500">{row.quantityWaste}</span>
+                            </div>
+                            <div className="rounded bg-slate-50 px-2 py-1">
+                              <span className="text-[var(--color-text-muted)]">عمال: </span>
+                              <span className="font-bold">{row.workersCount}</span>
+                            </div>
+                            <div className="rounded bg-amber-50/80 px-2 py-1">
+                              <span className="text-[var(--color-text-muted)]">ساعات: </span>
+                              <span className="font-bold">{row.workHours}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
                     <table className="w-full text-right border-collapse text-sm">
                       <thead className="erp-thead">
                         <tr>

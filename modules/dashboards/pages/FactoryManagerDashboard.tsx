@@ -39,9 +39,6 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  PieChart,
-  Pie,
-  Cell,
   BarChart,
 } from 'recharts';
 
@@ -77,8 +74,6 @@ const getPresetRange = (preset: PeriodPreset): { start: string; end: string } =>
       return { start: end, end };
   }
 };
-
-const PIE_COLORS = ['#1392ec', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
 
 const PRESET_LABELS: Record<PeriodPreset, string> = {
   week: 'هذا الأسبوع',
@@ -350,16 +345,6 @@ export const FactoryManagerDashboard: React.FC = () => {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [reports, hourlyRate, costCenters, costCenterValues, costAllocations]);
 
-  // ── Chart 2: Cost Breakdown Pie (Labor vs Indirect) ─────────────────────────
-
-  const costPieData = useMemo(() => {
-    if (kpis.totalLaborCost === 0 && kpis.totalIndirectCost === 0) return [];
-    return [
-      { name: 'تكلفة العمالة', value: Number(kpis.totalLaborCost.toFixed(2)) },
-      { name: 'تكاليف غير مباشرة', value: Number(kpis.totalIndirectCost.toFixed(2)) },
-    ];
-  }, [kpis.totalLaborCost, kpis.totalIndirectCost]);
-
   // ── Chart 3: Top 5 Lines by production ──────────────────────────────────────
 
   const topLines = useMemo(() => {
@@ -534,17 +519,6 @@ export const FactoryManagerDashboard: React.FC = () => {
     );
   };
 
-  const PieTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const d = payload[0];
-    return (
-      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm" dir="rtl">
-        <p className="font-bold">{d.name}</p>
-        <p className="text-[var(--color-text-muted)]">{formatCost(d.value)} ج.م</p>
-      </div>
-    );
-  };
-
   if (loading && reports.length === 0) {
     return (
       <div className="space-y-6">
@@ -647,29 +621,35 @@ export const FactoryManagerDashboard: React.FC = () => {
             </div>
           )}
           {canViewCosts && (() => {
-            const cvColor = getKPIColor(Math.abs(kpis.costVariance), getKPIThreshold(systemSettings, 'costVariance'), true);
+            const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+            const directShare = totalTrackedCost > 0 ? ((kpis.totalLaborCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
             return (
               <div className="min-w-[220px] sm:min-w-0">
                 <KPIBox
-                  label="انحراف التكلفة"
-                  value={`${kpis.costVariance > 0 ? '+' : ''}${kpis.costVariance}%`}
-                  icon="compare_arrows"
-                  colorClass={KPI_COLOR_CLASSES[cvColor]}
-                  trend={cvColor === 'good' ? 'ضمن المعيار' : 'أعلى من المعيار'}
-                  trendUp={cvColor === 'good'}
+                  label="التكاليف المباشرة"
+                  value={formatCost(kpis.totalLaborCost)}
+                  icon="groups"
+                  unit="ج.م"
+                  colorClass="bg-blue-100 text-blue-600"
+                  trend={`${directShare}% من توزيع التكاليف`}
+                  trendUp={true}
                 />
               </div>
             );
           })()}
-          {(() => {
-            const wasteColor = getKPIColor(kpis.wastePercent, getKPIThreshold(systemSettings, 'wasteRatio'), true);
+          {canViewCosts && (() => {
+            const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+            const indirectShare = totalTrackedCost > 0 ? ((kpis.totalIndirectCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
             return (
               <div className="min-w-[220px] sm:min-w-0">
                 <KPIBox
-                  label="نسبة الهدر"
-                  value={`${kpis.wastePercent}%`}
-                  icon="delete_sweep"
-                  colorClass={KPI_COLOR_CLASSES[wasteColor]}
+                  label="التكاليف غير المباشرة"
+                  value={formatCost(kpis.totalIndirectCost)}
+                  icon="account_balance"
+                  unit="ج.م"
+                  colorClass="bg-emerald-100 text-emerald-600"
+                  trend={`${indirectShare}% من توزيع التكاليف`}
+                  trendUp={false}
                 />
               </div>
             );
@@ -1203,53 +1183,6 @@ export const FactoryManagerDashboard: React.FC = () => {
               <div className="h-72 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
                 <span className="material-icons-round ml-2">bar_chart</span>
                 لا توجد بيانات للفترة المحددة
-              </div>
-            )}
-          </Card>
-        )}
-
-        {/* Chart 2: Cost Breakdown Pie */}
-        {isVisible('cost_breakdown') && canViewCosts && (
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="material-icons-round text-amber-500">pie_chart</span>
-              <h3 className="text-lg font-bold">توزيع التكاليف</h3>
-            </div>
-            {costPieData.length > 0 ? (
-              <div style={{ direction: 'ltr' }} className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={costPieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={90}
-                      paddingAngle={4}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {costPieData.map((_, idx) => (
-                        <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<PieTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
-                لا توجد بيانات تكاليف
-              </div>
-            )}
-            {costPieData.length > 0 && (
-              <div className="mt-2 flex justify-center gap-6 text-sm">
-                {costPieData.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }}></span>
-                    <span className="text-slate-600">{d.name}: <strong>{formatCost(d.value)}</strong> ج.م</span>
-                  </div>
-                ))}
               </div>
             )}
           </Card>

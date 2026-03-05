@@ -43,7 +43,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             <p className="text-sm font-bold text-[var(--color-text)]">ثيمات جاهزة</p>
             <span className="text-xs text-[var(--color-text-muted)] font-medium">— اختر واحدة وعدّل عليها</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {themePresets.map((preset) => {
               const isActive =
                 localTheme.primaryColor === preset.partialTheme.primaryColor &&
@@ -137,7 +137,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               <p className="text-xs text-[var(--color-text-muted)]">فاتح، داكن، أو تلقائي حسب النظام</p>
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0 w-full sm:w-auto">
             {([
               { value: 'light' as const, label: 'فاتح', icon: 'light_mode' },
               { value: 'dark' as const, label: 'داكن', icon: 'dark_mode' },
@@ -146,7 +146,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               <button
                 key={mode.value}
                 onClick={() => setLocalTheme((p) => ({ ...p, darkMode: mode.value }))}
-                className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold transition-all flex items-center justify-center gap-2 flex-1 sm:flex-none ${
                   localTheme.darkMode === mode.value
                     ? 'bg-primary text-white shadow-primary/20'
                     : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30'
@@ -391,7 +391,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                   style={{ backgroundColor: localTheme.primaryColor }}>م</div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
               {[
                 { label: 'الإنتاج', value: '١٢٤', icon: 'factory' },
                 { label: 'الجودة', value: '٩٨٪', icon: 'verified' },

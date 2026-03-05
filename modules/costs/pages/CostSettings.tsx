@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { formatCost } from '../../../utils/costCalculations';
@@ -44,7 +44,7 @@ export const CostSettings: React.FC = () => {
       <Card title="معدل الأجور بالساعة">
         <div className="space-y-6">
           <div className="flex items-end gap-4 flex-wrap">
-            <div className="flex-1 min-w-[200px] space-y-2">
+            <div className="flex-1 min-w-0 sm:min-w-[200px] space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">السعر لكل ساعة عمل (ج.م)</label>
               <input
                 type="number"
@@ -84,7 +84,7 @@ export const CostSettings: React.FC = () => {
       <Card title="معامل تحويل اليوان الصيني">
         <div className="space-y-6">
           <div className="flex items-end gap-4 flex-wrap">
-            <div className="flex-1 min-w-[200px] space-y-2">
+            <div className="flex-1 min-w-0 sm:min-w-[200px] space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">1 يوان صيني = كام جنيه مصري؟</label>
               <input
                 type="number"

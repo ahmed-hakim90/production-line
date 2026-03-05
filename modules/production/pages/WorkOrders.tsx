@@ -525,7 +525,7 @@ export const WorkOrders: React.FC = () => {
 
       {/* ── Filters ── */}
       <div className="erp-filter-bar">
-        <div className="erp-search-input" style={{ minWidth: 240 }}>
+        <div className="erp-search-input erp-search-input--table">
           <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
           <input
             type="text"
@@ -568,7 +568,72 @@ export const WorkOrders: React.FC = () => {
             <p className="text-sm font-bold text-slate-400">لا توجد أوامر شغل</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="space-y-2.5">
+            <div className="md:hidden space-y-2.5">
+              {tableRows.map(({ wo, progress: prog, execution, productShortName, lineDisplayName, supervisorDisplayName }) => (
+                <div key={wo.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-mono font-bold text-primary text-xs">#{wo.workOrderNumber}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)] mt-1">{productShortName}</p>
+                    </div>
+                    <Badge variant={STATUS_CONFIG[wo.status].variant}>{STATUS_CONFIG[wo.status].label}</Badge>
+                  </div>
+                  <div className="text-xs text-[var(--color-text-muted)] space-y-1">
+                    <p><span className="font-bold">الخط:</span> {lineDisplayName}</p>
+                    <p><span className="font-bold">المشرف:</span> {supervisorDisplayName}</p>
+                    <p><span className="font-bold">التاريخ:</span> {wo.targetDate}</p>
+                    <p><span className="font-bold">متوسط/يوم:</span> {formatNumber(Number((execution.benchmarkDailyRate || 0).toFixed(1)))} وحدة/يوم</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">المطلوب</p>
+                      <p className="text-xs font-bold">{formatNumber(wo.quantity)}</p>
+                    </div>
+                    <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">تم إنتاجه</p>
+                      <p className="text-xs font-bold text-emerald-600">{formatNumber(wo.producedQuantity)}</p>
+                    </div>
+                    <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">المتبقي</p>
+                      <p className="text-xs font-bold text-rose-600">{formatNumber(Math.max(wo.quantity - wo.producedQuantity, 0))}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span className="text-[var(--color-text-muted)]">التقدم</span>
+                      <span className="text-[var(--color-text)]">{prog.toFixed(0)}%</span>
+                    </div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${prog >= 100 ? 'bg-emerald-500' : prog >= 50 ? 'bg-primary' : 'bg-amber-500'}`} style={{ width: `${prog}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 pt-1">
+                    {can('print') && (
+                      <button onClick={() => triggerWOPrint(wo)} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-[#f0f2f5] text-slate-500" title="طباعة">
+                        <span className="material-icons-round text-sm">print</span>
+                      </button>
+                    )}
+                    {can('workOrders.view') && (
+                      <button onClick={() => navigate(`/work-orders/${wo.id}/scanner`)} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-primary/10 text-primary" title="فتح شاشة الاسكان">
+                        <span className="material-icons-round text-sm">qr_code_scanner</span>
+                      </button>
+                    )}
+                    {can('workOrders.edit') && wo.status === 'pending' && (
+                      <button onClick={() => handleStatusChange(wo, 'in_progress')} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600" title="بدء التنفيذ">
+                        <span className="material-icons-round text-sm">play_arrow</span>
+                      </button>
+                    )}
+                    {can('workOrders.edit') && wo.status === 'in_progress' && (
+                      <button onClick={() => openCompleteModal(wo)} className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600" title="اكتمل">
+                        <span className="material-icons-round text-sm">check_circle</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm" data-no-table-enhance="true">
               <thead className="erp-thead">
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
@@ -729,6 +794,7 @@ export const WorkOrders: React.FC = () => {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </Card>

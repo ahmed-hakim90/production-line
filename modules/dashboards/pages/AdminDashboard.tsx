@@ -582,14 +582,6 @@ export const AdminDashboard: React.FC = () => {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [reports, hourlyRate, costCenters, costCenterValues, costAllocations]);
 
-  const costPieData = useMemo(() => {
-    if (kpis.totalLaborCost === 0 && kpis.totalIndirectCost === 0) return [];
-    return [
-      { name: 'تكلفة العمالة', value: Number(kpis.totalLaborCost.toFixed(2)) },
-      { name: 'تكاليف غير مباشرة', value: Number(kpis.totalIndirectCost.toFixed(2)) },
-    ];
-  }, [kpis.totalLaborCost, kpis.totalIndirectCost]);
-
   const topLines = useMemo(() => {
     const lineMap = new Map<string, number>();
     reports.forEach((r) => {
@@ -1126,102 +1118,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      <Card>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="material-icons-round text-indigo-500">task_alt</span>
-          <h3 className="text-sm font-bold text-[var(--color-text)]">متابعة التزام تقارير الإنتاج اليومية</h3>
-          {reportCompliance?.operationalDate && (
-            <Badge variant="info">{reportCompliance.operationalDate}</Badge>
-          )}
-          {complianceLoading && (
-            <span className="text-xs text-[var(--color-text-muted)] ms-auto">جاري التحديث...</span>
-          )}
-        </div>
-
-        {!isAfterComplianceCutoff ? (
-          <div className="erp-alert erp-alert-info">
-            <span className="material-icons-round text-[18px] shrink-0">schedule</span>
-            <span>تبدأ متابعة الالتزام اليومية بعد الساعة 16:00.</span>
-          </div>
-        ) : complianceError ? (
-          <div className="erp-alert erp-alert-warning">
-            <span className="material-icons-round text-[18px] shrink-0">warning</span>
-            <span>{complianceError}</span>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
-                <p className="text-xs text-emerald-700 font-bold mb-1">قدّم تقرير</p>
-                <p className="text-2xl font-black text-emerald-600">{reportCompliance?.submittedCount ?? 0}</p>
-              </div>
-              <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
-                <p className="text-xs text-rose-700 font-bold mb-1">لم يقدّم تقرير</p>
-                <p className="text-2xl font-black text-rose-600">{reportCompliance?.missingCount ?? 0}</p>
-              </div>
-              <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] dark:bg-slate-900/20 p-3">
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">غير مكلّف/غير موجود اليوم</p>
-                <p className="text-2xl font-black text-[var(--color-text)]">{reportCompliance?.unassignedCount ?? 0}</p>
-              </div>
-            </div>
-
-            {(reportCompliance?.assignedSupervisorsCount ?? 0) === 0 ? (
-              <div className="erp-alert erp-alert-info">
-                <span className="material-icons-round text-[18px] shrink-0">info</span>
-                <span>لا يوجد مشرفون مكلّفون اليوم في تعيينات الخطوط.</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-[var(--border-radius-lg)] border border-emerald-200/70 p-3">
-                  <p className="text-xs font-bold text-emerald-700 mb-2">قائمة المرسلين</p>
-                  <div className="space-y-1.5">
-                    {(reportCompliance?.submitted ?? []).slice(0, 8).map((row) => (
-                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
-                        <span className="font-bold">{row.name}</span>
-                        {row.lineNames.length > 0 && (
-                          <span className="text-[var(--color-text-muted)]"> — {row.lineNames.join('، ')}</span>
-                        )}
-                      </div>
-                    ))}
-                    {(reportCompliance?.submittedCount ?? 0) > 8 && (
-                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-[var(--border-radius-lg)] border border-rose-200/70 p-3">
-                  <p className="text-xs font-bold text-rose-700 mb-2">قائمة غير المرسلين</p>
-                  <div className="space-y-1.5">
-                    {(reportCompliance?.missing ?? []).slice(0, 8).map((row) => (
-                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
-                        <span className="font-bold">{row.name}</span>
-                        {row.lineNames.length > 0 && (
-                          <span className="text-[var(--color-text-muted)]"> — {row.lineNames.join('، ')}</span>
-                        )}
-                      </div>
-                    ))}
-                    {(reportCompliance?.missingCount ?? 0) > 8 && (
-                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-[var(--border-radius-lg)] border border-slate-200 p-3">
-                  <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2">غير مكلّف/غير موجود</p>
-                  <div className="space-y-1.5">
-                    {(reportCompliance?.unassigned ?? []).slice(0, 8).map((row) => (
-                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
-                        <span className="font-bold">{row.name}</span>
-                      </div>
-                    ))}
-                    {(reportCompliance?.unassignedCount ?? 0) > 8 && (
-                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </Card>
+      {/*  */}
 
       {quickActions.length > 0 && (
         <Card>
@@ -1290,29 +1187,35 @@ export const AdminDashboard: React.FC = () => {
               </div>
             )}
             {canViewCosts && (() => {
-              const cvColor = getKPIColor(Math.abs(kpis.costVariance), getKPIThreshold(systemSettings, 'costVariance'), true);
+              const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+              const directShare = totalTrackedCost > 0 ? ((kpis.totalLaborCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
               return (
                 <div className="min-w-[220px] sm:min-w-0">
                   <KPIBox
-                    label="انحراف التكلفة"
-                    value={`${kpis.costVariance > 0 ? '+' : ''}${kpis.costVariance}%`}
-                    icon="compare_arrows"
-                    colorClass={KPI_COLOR_CLASSES[cvColor]}
-                    trend={cvColor === 'good' ? 'ضمن المعيار' : 'أعلى من المعيار'}
-                    trendUp={cvColor === 'good'}
+                    label="التكاليف المباشرة"
+                    value={formatCost(kpis.totalLaborCost)}
+                    icon="groups"
+                    unit="ج.م"
+                    colorClass="bg-blue-100 text-blue-600"
+                    trend={`${directShare}% من توزيع التكاليف`}
+                    trendUp={true}
                   />
                 </div>
               );
             })()}
-            {(() => {
-              const wasteColor = getKPIColor(kpis.wastePercent, getKPIThreshold(systemSettings, 'wasteRatio'), true);
+            {canViewCosts && (() => {
+              const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+              const indirectShare = totalTrackedCost > 0 ? ((kpis.totalIndirectCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
               return (
                 <div className="min-w-[220px] sm:min-w-0">
                   <KPIBox
-                    label="نسبة الهدر"
-                    value={`${kpis.wastePercent}%`}
-                    icon="delete_sweep"
-                    colorClass={KPI_COLOR_CLASSES[wasteColor]}
+                    label="التكاليف غير المباشرة"
+                    value={formatCost(kpis.totalIndirectCost)}
+                    icon="account_balance"
+                    unit="ج.م"
+                    colorClass="bg-emerald-100 text-emerald-600"
+                    trend={`${indirectShare}% من توزيع التكاليف`}
+                    trendUp={false}
                   />
                 </div>
               );
@@ -1352,6 +1255,173 @@ export const AdminDashboard: React.FC = () => {
           أعلى نشاط حالي: <span className="font-bold text-[var(--color-text)]">{liveScanKpis.hotLineProduct}</span>
         </p>
       </Card> */}
+{/* ── Product Summary Table ──────────────────────────────────────────── */}
+{productSummary.length > 0 && (() => {
+        return (
+          <Card>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-icons-round text-primary">inventory_2</span>
+                <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
+                <Badge variant="info">{productSummary.length} منتج</Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:mr-auto">
+              <div className="relative flex-1 min-w-[170px] sm:flex-none sm:min-w-0">
+                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
+                  <input
+                    type="text"
+                    placeholder="بحث بالكود أو الاسم..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-56 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                  />
+                </div>
+               
+                <div className="relative flex-1 min-w-[150px] sm:flex-none sm:min-w-0">
+                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
+                  <select
+                    value={productCategoryFilter}
+                    onChange={(e) => setProductCategoryFilter(e.target.value)}
+                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-44 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all appearance-none"
+                  >
+                    <option value="all">كل الفئات</option>
+                    {productSummaryCategories.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </div>
+                {canExportFromPage && (
+                <button
+                  onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold text-[var(--color-text-muted)] hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all w-full sm:w-auto"
+                  title="تصدير Excel"
+                >
+                  <span className="material-icons-round text-sm">download</span>
+                  <span>Excel</span>
+                </button>
+                )}
+              </div>
+            </div>
+            <div className="md:hidden space-y-2.5">
+              {filteredProductSummary.length === 0 ? (
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 text-center text-[var(--color-text-muted)] text-sm">
+                  لا توجد نتائج مطابقة للفلاتر الحالية
+                </div>
+              ) : (
+                <>
+                  {filteredProductSummary.map((p, i) => (
+                    <div key={p.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          onClick={() => navigate(`/products/${p.id}`)}
+                          className="text-sm font-bold text-primary text-right leading-snug hover:underline"
+                        >
+                          {p.name}
+                        </button>
+                        <span className="text-[11px] font-mono text-[var(--color-text-muted)]">#{i + 1}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          {canViewCosts ? (
+                            <>
+                              <p className="text-[var(--color-text-muted)] mb-0.5">متوسط تكلفة الوحدة</p>
+                              <p className="font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-[var(--color-text-muted)] mb-0.5">الكود</p>
+                              <p className="font-mono font-bold text-[var(--color-text)]">{p.code || '—'}</p>
+                            </>
+                          )}
+                        </div>
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الكمية</p>
+                          <p className="font-mono font-bold text-primary">{formatNumber(p.qty)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60 px-3 py-2.5 flex items-center justify-between">
+                    <span className="text-sm font-bold text-[var(--color-text-muted)]">الإجمالي</span>
+                    <span className="font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</span>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">#</th>
+                    <th className="erp-th">المنتج</th>
+                    <th className="erp-th">الكود</th>
+                    <th className="erp-th">الكمية المنتجة</th>
+                    {canViewCosts && (
+                      <th className="erp-th">متوسط تكلفة الوحدة</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProductSummary.length === 0 ? (
+                    <tr>
+                      <td colSpan={canViewCosts ? 5 : 4} className="py-8 text-center text-[var(--color-text-muted)] text-sm">
+                        لا توجد نتائج مطابقة للفلاتر الحالية
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProductSummary.map((p, i) => (
+                      <tr key={i} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                        <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs">{i + 1}</td>
+                        <td className="py-3 px-4 font-bold">
+                          <button
+                            onClick={() => navigate(`/products/${p.id}`)}
+                            className="text-primary hover:underline cursor-pointer transition-colors"
+                          >{p.name}</button>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs text-slate-500">{p.code}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(p.qty)}</td>
+                        {canViewCosts && (
+                          <td className="py-3 px-4 font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {filteredProductSummary.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50">
+                      <td colSpan={3} className="py-3 px-4 font-bold text-[var(--color-text-muted)]">الإجمالي</td>
+                      <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</td>
+                      {canViewCosts && (
+                        <td className="py-3 px-4 font-mono font-bold text-amber-600">
+                          {formatCost(filteredProductSummary.reduce((s, p) => s + p.qty, 0) > 0
+                            ? filteredProductSummary.reduce((s, p) => s + p.avgCost * p.qty, 0) / filteredProductSummary.reduce((s, p) => s + p.qty, 0)
+                            : 0
+                          )} ج.م
+                        </td>
+                      )}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </Card>
+        );
+      })()}
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="material-icons-round text-violet-500">verified</span>
+          <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600" />
+          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600" />
+          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600" />
+          <KPIBox label="Defect Rate" value={qualityKpis.defectRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
+          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600" />
+          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
+        </div>
+      </Card>
 
 {/* ── Active Work Orders (same visual style) ─────────────────────────── */}
 {(() => {
@@ -1502,7 +1572,7 @@ export const AdminDashboard: React.FC = () => {
             >
               أمس
             </button>
-            <Badge variant="info">{selectedComplianceDate}</Badge>
+           
           </div>
         </div>
         {yesterdayComplianceLoading ? (
@@ -1518,7 +1588,8 @@ export const AdminDashboard: React.FC = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المشرفين المطلوب منهم</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1"> إجمالي المشرفين المطلوب منهم</p>
+              
                 <p className="text-2xl font-black text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
@@ -1585,171 +1656,7 @@ export const AdminDashboard: React.FC = () => {
           </>
         )}
       </Card>
-      {/* ── Product Summary Table ──────────────────────────────────────────── */}
-      {productSummary.length > 0 && (() => {
-        return (
-          <Card>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="material-icons-round text-primary">inventory_2</span>
-                <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
-                <Badge variant="info">{productSummary.length} منتج</Badge>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:mr-auto">
-              <div className="relative flex-1 min-w-[170px] sm:flex-none sm:min-w-0">
-                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
-                  <input
-                    type="text"
-                    placeholder="بحث بالكود أو الاسم..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-56 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
-                  />
-                </div>
-               
-                <div className="relative flex-1 min-w-[150px] sm:flex-none sm:min-w-0">
-                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
-                  <select
-                    value={productCategoryFilter}
-                    onChange={(e) => setProductCategoryFilter(e.target.value)}
-                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-44 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all appearance-none"
-                  >
-                    <option value="all">كل الفئات</option>
-                    {productSummaryCategories.map((category) => (
-                      <option key={category} value={category}>{category}</option>
-                    ))}
-                  </select>
-                </div>
-                {canExportFromPage && (
-                <button
-                  onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold text-[var(--color-text-muted)] hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all w-full sm:w-auto"
-                  title="تصدير Excel"
-                >
-                  <span className="material-icons-round text-sm">download</span>
-                  <span>Excel</span>
-                </button>
-                )}
-              </div>
-            </div>
-            <div className="md:hidden space-y-2.5">
-              {filteredProductSummary.length === 0 ? (
-                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 text-center text-[var(--color-text-muted)] text-sm">
-                  لا توجد نتائج مطابقة للفلاتر الحالية
-                </div>
-              ) : (
-                <>
-                  {filteredProductSummary.map((p, i) => (
-                    <div key={p.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          onClick={() => navigate(`/products/${p.id}`)}
-                          className="text-sm font-bold text-primary text-right leading-snug hover:underline"
-                        >
-                          {p.name}
-                        </button>
-                        <span className="text-[11px] font-mono text-[var(--color-text-muted)]">#{i + 1}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
-                          <p className="text-[var(--color-text-muted)] mb-0.5">الكود</p>
-                          <p className="font-mono font-bold text-[var(--color-text)]">{p.code || '—'}</p>
-                        </div>
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
-                          <p className="text-[var(--color-text-muted)] mb-0.5">الكمية</p>
-                          <p className="font-mono font-bold text-primary">{formatNumber(p.qty)}</p>
-                        </div>
-                      </div>
-                      {canViewCosts && (
-                        <div className="text-xs text-[var(--color-text-muted)]">
-                          <span className="font-bold">متوسط تكلفة الوحدة: </span>
-                          <span className="font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60 px-3 py-2.5 flex items-center justify-between">
-                    <span className="text-sm font-bold text-[var(--color-text-muted)]">الإجمالي</span>
-                    <span className="font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</span>
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="erp-thead">
-                  <tr>
-                    <th className="erp-th">#</th>
-                    <th className="erp-th">المنتج</th>
-                    <th className="erp-th">الكود</th>
-                    <th className="erp-th">الكمية المنتجة</th>
-                    {canViewCosts && (
-                      <th className="erp-th">متوسط تكلفة الوحدة</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProductSummary.length === 0 ? (
-                    <tr>
-                      <td colSpan={canViewCosts ? 5 : 4} className="py-8 text-center text-[var(--color-text-muted)] text-sm">
-                        لا توجد نتائج مطابقة للفلاتر الحالية
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredProductSummary.map((p, i) => (
-                      <tr key={i} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
-                        <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs">{i + 1}</td>
-                        <td className="py-3 px-4 font-bold">
-                          <button
-                            onClick={() => navigate(`/products/${p.id}`)}
-                            className="text-primary hover:underline cursor-pointer transition-colors"
-                          >{p.name}</button>
-                        </td>
-                        <td className="py-3 px-4 font-mono text-xs text-slate-500">{p.code}</td>
-                        <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(p.qty)}</td>
-                        {canViewCosts && (
-                          <td className="py-3 px-4 font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</td>
-                        )}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-                {filteredProductSummary.length > 0 && (
-                  <tfoot>
-                    <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50">
-                      <td colSpan={3} className="py-3 px-4 font-bold text-[var(--color-text-muted)]">الإجمالي</td>
-                      <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</td>
-                      {canViewCosts && (
-                        <td className="py-3 px-4 font-mono font-bold text-amber-600">
-                          {formatCost(filteredProductSummary.reduce((s, p) => s + p.qty, 0) > 0
-                            ? filteredProductSummary.reduce((s, p) => s + p.avgCost * p.qty, 0) / filteredProductSummary.reduce((s, p) => s + p.qty, 0)
-                            : 0
-                          )} ج.م
-                        </td>
-                      )}
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </Card>
-        );
-      })()}
-      <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-violet-500">verified</span>
-          <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600" />
-          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600" />
-          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600" />
-          <KPIBox label="Defect Rate" value={qualityKpis.defectRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
-          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600" />
-          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
-        </div>
-      </Card>
-
+      
       {/* ── System KPIs ─────────────────────────────────────────────────────── */}
       {isVisible('system_kpis') && <div>
         <h3 className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -1801,7 +1708,8 @@ export const AdminDashboard: React.FC = () => {
       {/* ── Production Health Score + Charts ─────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Health Score Gauge */}
-        {isVisible('health_score') && <Card>
+        {/* {isVisible('health_score') && 
+        <Card>
           <div className="flex items-center gap-2 mb-4">
             <span className="material-icons-round text-rose-500">monitor_heart</span>
             <h3 className="text-lg font-bold">صحة الإنتاج</h3>
@@ -1833,54 +1741,8 @@ export const AdminDashboard: React.FC = () => {
               </div>
             ))}
           </div>
-        </Card>}
-
-        {/* Cost Breakdown Pie */}
-        {isVisible('cost_breakdown') && canViewCosts && (
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="material-icons-round text-amber-500">pie_chart</span>
-              <h3 className="text-lg font-bold">توزيع التكاليف</h3>
-            </div>
-            {costPieData.length > 0 ? (
-              <div style={{ direction: 'ltr' }} className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={costPieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={80}
-                      paddingAngle={4}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {costPieData.map((_, idx) => (
-                        <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<PieTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-56 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
-                لا توجد بيانات تكاليف
-              </div>
-            )}
-            {costPieData.length > 0 && (
-              <div className="mt-2 flex justify-center gap-6 text-sm">
-                {costPieData.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }}></span>
-                    <span className="text-slate-600 text-xs">{d.name}: <strong>{formatCost(d.value)}</strong> ج.م</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        )}
+        </Card>
+        } */}
 
         {/* Roles Distribution Pie */}
         {isVisible('roles_distribution') && <Card>
