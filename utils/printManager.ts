@@ -23,7 +23,9 @@ export const buildGlobalPrintPageStyle = (settings?: PrintTemplateSettings): str
   const mr = clampMm(ps.marginRightMm);
   const mb = clampMm(ps.marginBottomMm);
   const ml = clampMm(ps.marginLeftMm);
-  const colorAdjust = ps.printBackground ? 'exact' : 'economy';
+  // Force exact color rendering in print to keep report palettes readable
+  // across A4/A5/thermal templates and avoid faded "economy" output.
+  const colorAdjust = 'exact';
 
   return `
     @page {

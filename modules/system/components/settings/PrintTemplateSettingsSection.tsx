@@ -1,8 +1,9 @@
 import React from 'react';
 import { computePrintTotals, ProductionReportPrint } from '../../../production/components/ProductionReportPrint';
 import { Card, Button } from '../UI';
-import type { PaperOrientation, PaperSize, PrintTemplateSettings } from '../../../../types';
+import type { PaperOrientation, PaperSize, PrintTemplateSettings, PrintThemePreset } from '../../../../types';
 import type { ReportPrintRow } from '../../../production/components/ProductionReportPrint';
+import { getPrintThemePresetDefaults } from '../../../../utils/printTheme';
 
 type PrintTemplateSettingsSectionProps = {
   isAdmin: boolean;
@@ -161,6 +162,87 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 value={localPrint.primaryColor}
                 onChange={(e) => setLocalPrint((p) => ({ ...p, primaryColor: e.target.value }))}
               />
+            </div>
+          </div>
+
+          <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-primary">style</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[var(--color-text)]">ثيم الطباعة الشامل</p>
+                <p className="text-xs text-slate-400">ينطبق على كل التقارير المطبوعة بما فيها الجداول (ERPNext style)</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {([
+                ['erpnext', 'ERPNext'],
+                ['classic', 'Classic'],
+                ['high_contrast', 'High Contrast'],
+                ['minimal', 'Minimal'],
+              ] as [PrintThemePreset, string][]).map(([preset, label]) => (
+                <button
+                  key={preset}
+                  onClick={() => {
+                    const presetDefaults = getPrintThemePresetDefaults(preset);
+                    setLocalPrint((p) => ({
+                      ...p,
+                      printThemePreset: preset,
+                      primaryColor: presetDefaults.primary,
+                      textColor: presetDefaults.text,
+                      mutedTextColor: presetDefaults.mutedText,
+                      borderColor: presetDefaults.border,
+                      tableHeaderBgColor: presetDefaults.tableHeaderBg,
+                      tableHeaderTextColor: presetDefaults.tableHeaderText,
+                      tableRowAltBgColor: presetDefaults.tableRowAltBg,
+                      accentSuccessColor: presetDefaults.success,
+                      accentWarningColor: presetDefaults.warning,
+                      accentDangerColor: presetDefaults.danger,
+                    }));
+                  }}
+                  className={`px-3 py-2 rounded-[var(--border-radius-lg)] text-xs font-bold transition-all ${
+                    (localPrint.printThemePreset ?? 'erpnext') === preset
+                      ? 'bg-primary text-white shadow-primary/20'
+                      : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {([
+                { key: 'textColor' as const, label: 'لون النص' },
+                { key: 'mutedTextColor' as const, label: 'النص الثانوي' },
+                { key: 'borderColor' as const, label: 'الحدود' },
+                { key: 'tableHeaderBgColor' as const, label: 'خلفية رأس الجدول' },
+                { key: 'tableHeaderTextColor' as const, label: 'نص رأس الجدول' },
+                { key: 'tableRowAltBgColor' as const, label: 'صف بديل الجدول' },
+                { key: 'accentSuccessColor' as const, label: 'لون النجاح' },
+                { key: 'accentWarningColor' as const, label: 'لون التحذير' },
+                { key: 'accentDangerColor' as const, label: 'لون الخطر' },
+              ]).map((field) => (
+                <label key={field.key} className="space-y-1">
+                  <span className="text-xs font-bold text-slate-500">{field.label}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      className="w-9 h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] cursor-pointer"
+                      value={localPrint[field.key] || '#000000'}
+                      onChange={(e) => setLocalPrint((p) => ({ ...p, [field.key]: e.target.value }))}
+                    />
+                    <input
+                      type="text"
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-xs font-mono font-bold py-2 px-2 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      value={localPrint[field.key] || ''}
+                      onChange={(e) => setLocalPrint((p) => ({ ...p, [field.key]: e.target.value }))}
+                    />
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
         </div>

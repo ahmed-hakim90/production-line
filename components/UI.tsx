@@ -36,7 +36,7 @@ interface KPIBoxProps {
 
 export const KPIBox: React.FC<KPIBoxProps> = ({ label, value, icon, trend, trendUp, colorClass = 'bg-primary/10 text-primary', unit }) => (
   <div
-    className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg,8px)] border border-[var(--color-border)] flex items-center gap-3.5"
+    className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg,8px)] border border-[var(--color-border)] flex items-center gap-3.5 min-h-[108px] h-full"
     style={{ boxShadow: 'var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08))' }}
   >
     <div className={`w-10 h-10 ${colorClass} rounded-[var(--border-radius-base,6px)] flex items-center justify-center shrink-0`}>
@@ -70,7 +70,7 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', pul
     warning: 'bg-amber-50 text-amber-700 border border-amber-200',
     danger:  'bg-rose-50 text-rose-700 border border-rose-200',
     info:    'bg-blue-50 text-blue-700 border border-blue-200',
-    neutral: 'bg-[#f0f2f5] text-[var(--color-text-muted)] border border-[var(--color-border)]',
+    neutral: 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]',
   };
   const dotStyles = {
     success: 'bg-emerald-500',
@@ -88,7 +88,7 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', pul
 };
 
 export const LoadingSkeleton: React.FC<{ rows?: number; type?: 'card' | 'table' | 'detail' }> = ({ rows = 4, type = 'card' }) => {
-  const skeletonBase = 'bg-[#e8eaed] rounded animate-pulse';
+  const skeletonBase = 'bg-[var(--color-border)]/60 rounded animate-pulse';
   if (type === 'detail') {
     return (
       <div className="space-y-4 animate-pulse">
@@ -146,8 +146,8 @@ export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { 
   const variants = {
     primary:   'bg-primary text-white hover:bg-primary/90',
     secondary: 'bg-emerald-600 text-white hover:bg-emerald-700',
-    outline:   'border border-[var(--color-border)] text-[var(--color-text)] bg-[var(--color-card)] hover:bg-[#f0f2f5]',
-    ghost:     'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)]',
+    outline:   'border border-[var(--color-border)] text-[var(--color-text)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]',
+    ghost:     'text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]',
   };
   return (
     <button className={`${base} ${variants[variant]} ${className}`} {...props}>
@@ -278,7 +278,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           'w-full border rounded-[var(--border-radius-base)] text-[13px] font-medium transition-all flex items-center gap-2 cursor-text',
           open
             ? 'border-primary ring-2 ring-primary/15 bg-[var(--color-card)]'
-            : 'border-[var(--color-border)] bg-[#f8f9fa] hover:border-primary/30',
+            : 'border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
         ].join(' ')}
         onClick={() => { setOpen(true); }}
       >

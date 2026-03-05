@@ -2,6 +2,7 @@ import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { PrintTemplateSettings } from '@/types';
 import { DEFAULT_PRINT_TEMPLATE } from '@/utils/dashboardConfig';
+import { getPrintThemePalette } from '@/utils/printTheme';
 
 export interface QualitySummaryPrintData {
   inspectedUnits: number;
@@ -42,6 +43,7 @@ const fmtNum = (value: number, decimalPlaces: number) =>
 export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReportPrintProps>(
   ({ title, subtitle, generatedAt, workOrderNumber, summary, topDefects, printSettings }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
@@ -56,7 +58,13 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
           minHeight: paper.minHeight,
           padding: ps.paperSize === 'thermal' ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: ps.paperSize === 'thermal' ? '8pt' : '11pt',
           lineHeight: 1.5,
           boxSizing: 'border-box',
@@ -70,29 +78,29 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
               style={{ maxHeight: ps.paperSize === 'thermal' ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
             />
           )}
-          <h1 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
+          <h1 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '12pt' : '20pt', fontWeight: 900, color: palette.primary }}>
             {ps.headerText}
           </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: '#64748b', fontWeight: 600 }}>
+          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
             نظام إدارة الجودة - تقارير الجودة
           </p>
         </div>
 
         <div style={{ marginBottom: ps.paperSize === 'thermal' ? '3mm' : '6mm' }}>
-          <h2 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '10pt' : '16pt', fontWeight: 800, color: '#0f172a' }}>{title}</h2>
-          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: '#64748b' }}>{subtitle}</p>}
-          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '6pt' : '9pt', color: '#94a3b8' }}>
+          <h2 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '10pt' : '16pt', fontWeight: 800, color: palette.text }}>{title}</h2>
+          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: palette.mutedText }}>{subtitle}</p>}
+          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '6pt' : '9pt', color: palette.mutedText }}>
             تاريخ الطباعة: {now}
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: ps.paperSize === 'thermal' ? '2mm' : '4mm', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '6mm', flexWrap: 'wrap' }}>
-          <SummaryBox label="تم الفحص" value={fmtNum(summary.inspectedUnits, 0)} color={ps.primaryColor} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="ناجح" value={fmtNum(summary.passedUnits, 0)} color="#059669" small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="فاشل" value={fmtNum(summary.failedUnits, 0)} color="#f43f5e" small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="إعادة تشغيل" value={fmtNum(summary.reworkUnits, 0)} color="#f59e0b" small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="معدل العيوب" value={`${fmtNum(summary.defectRate, dp)}%`} color="#8b5cf6" small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="FPY" value={`${fmtNum(summary.firstPassYield, dp)}%`} color="#06b6d4" small={ps.paperSize === 'thermal'} />
+          <SummaryBox label="تم الفحص" value={fmtNum(summary.inspectedUnits, 0)} color={palette.primary} small={ps.paperSize === 'thermal'} />
+          <SummaryBox label="ناجح" value={fmtNum(summary.passedUnits, 0)} color={palette.success} small={ps.paperSize === 'thermal'} />
+          <SummaryBox label="فاشل" value={fmtNum(summary.failedUnits, 0)} color={palette.danger} small={ps.paperSize === 'thermal'} />
+          <SummaryBox label="إعادة تشغيل" value={fmtNum(summary.reworkUnits, 0)} color={palette.warning} small={ps.paperSize === 'thermal'} />
+          <SummaryBox label="معدل العيوب" value={`${fmtNum(summary.defectRate, dp)}%`} color={palette.warning} small={ps.paperSize === 'thermal'} />
+          <SummaryBox label="FPY" value={`${fmtNum(summary.firstPassYield, dp)}%`} color={palette.primary} small={ps.paperSize === 'thermal'} />
         </div>
 
         <table
@@ -104,7 +112,7 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
           }}
         >
           <thead>
-            <tr style={{ background: '#f1f5f9' }}>
+            <tr style={{ background: palette.tableHeaderBg }}>
               <Th>#</Th>
               <Th>سبب العيب</Th>
               <Th align="center">الكمية</Th>
@@ -117,10 +125,10 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
               </tr>
             ) : (
               topDefects.map((item, idx) => (
-                <tr key={`${item.reasonLabel}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                <tr key={`${item.reasonLabel}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : 'var(--print-row-alt, #f8fafc)' }}>
                   <Td>{idx + 1}</Td>
                   <Td>{item.reasonLabel}</Td>
-                  <Td align="center" bold color={ps.primaryColor}>{fmtNum(item.quantity, 0)}</Td>
+                  <Td align="center" bold color={palette.primary}>{fmtNum(item.quantity, 0)}</Td>
                 </tr>
               ))
             )}
@@ -135,7 +143,7 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
           </div>
         )}
 
-        <div style={{ marginTop: ps.paperSize === 'thermal' ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
+        <div style={{ marginTop: ps.paperSize === 'thermal' ? '3mm' : '10mm', borderTop: `1px solid ${palette.border}`, paddingTop: '3mm', textAlign: 'center' }}>
           {ps.showQRCode && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
@@ -143,10 +151,10 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
                 size={ps.paperSize === 'thermal' ? 40 : 64}
                 level="L"
               />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>رمز QR للتحقق من صحة تقرير الجودة</p>
+              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: palette.mutedText }}>رمز QR للتحقق من صحة تقرير الجودة</p>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '6pt' : '8pt', color: '#94a3b8' }}>
+          <p style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '6pt' : '8pt', color: palette.mutedText }}>
             {ps.footerText} - {now}
           </p>
         </div>
@@ -180,6 +188,7 @@ export const SingleIPQCPrint = React.forwardRef<HTMLDivElement, SingleIPQCPrintP
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const now = new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
@@ -199,7 +208,13 @@ export const SingleIPQCPrint = React.forwardRef<HTMLDivElement, SingleIPQCPrintP
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.6,
           boxSizing: 'border-box',
@@ -290,6 +305,7 @@ export const SingleFinalInspectionPrint = React.forwardRef<HTMLDivElement, Singl
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const now = new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
@@ -309,7 +325,13 @@ export const SingleFinalInspectionPrint = React.forwardRef<HTMLDivElement, Singl
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.6,
           boxSizing: 'border-box',
@@ -407,6 +429,7 @@ export interface QualityDefectsPrintProps {
 export const QualityDefectsPrint = React.forwardRef<HTMLDivElement, QualityDefectsPrintProps>(
   ({ workOrderNumber, rows, generatedAt, printSettings }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
@@ -421,7 +444,13 @@ export const QualityDefectsPrint = React.forwardRef<HTMLDivElement, QualityDefec
           minHeight: paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.5,
           boxSizing: 'border-box',
@@ -440,7 +469,7 @@ export const QualityDefectsPrint = React.forwardRef<HTMLDivElement, QualityDefec
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
           <thead>
-            <tr style={{ background: '#f1f5f9' }}>
+            <tr style={{ background: 'var(--print-th-bg, #f1f5f9)' }}>
               <Th>#</Th>
               <Th>السبب</Th>
               <Th align="center">الكمية</Th>
@@ -456,7 +485,7 @@ export const QualityDefectsPrint = React.forwardRef<HTMLDivElement, QualityDefec
               </tr>
             ) : (
               rows.map((row, idx) => (
-                <tr key={`${row.reasonLabel}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                <tr key={`${row.reasonLabel}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : 'var(--print-row-alt, #f8fafc)' }}>
                   <Td>{idx + 1}</Td>
                   <Td>{row.reasonLabel}</Td>
                   <Td align="center" bold color={ps.primaryColor}>{String(row.quantity)}</Td>
@@ -496,6 +525,7 @@ export interface ReworkOrdersPrintProps {
 export const ReworkOrdersPrint = React.forwardRef<HTMLDivElement, ReworkOrdersPrintProps>(
   ({ rows, generatedAt, printSettings }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
@@ -510,7 +540,13 @@ export const ReworkOrdersPrint = React.forwardRef<HTMLDivElement, ReworkOrdersPr
           minHeight: paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.5,
           boxSizing: 'border-box',
@@ -524,7 +560,7 @@ export const ReworkOrdersPrint = React.forwardRef<HTMLDivElement, ReworkOrdersPr
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
           <thead>
-            <tr style={{ background: '#f1f5f9' }}>
+            <tr style={{ background: 'var(--print-th-bg, #f1f5f9)' }}>
               <Th>#</Th>
               <Th>أمر الشغل</Th>
               <Th>الخط</Th>
@@ -541,7 +577,7 @@ export const ReworkOrdersPrint = React.forwardRef<HTMLDivElement, ReworkOrdersPr
               </tr>
             ) : (
               rows.map((row, idx) => (
-                <tr key={`${row.workOrderNumber}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                <tr key={`${row.workOrderNumber}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : 'var(--print-row-alt, #f8fafc)' }}>
                   <Td>{idx + 1}</Td>
                   <Td>{row.workOrderNumber}</Td>
                   <Td>{row.lineName}</Td>
@@ -581,6 +617,7 @@ export interface SingleCAPAPrintProps {
 export const SingleCAPAPrint = React.forwardRef<HTMLDivElement, SingleCAPAPrintProps>(
   ({ rows, generatedAt, printSettings }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
@@ -595,7 +632,13 @@ export const SingleCAPAPrint = React.forwardRef<HTMLDivElement, SingleCAPAPrintP
           minHeight: paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.5,
           boxSizing: 'border-box',
@@ -633,7 +676,7 @@ export const SingleCAPAPrint = React.forwardRef<HTMLDivElement, SingleCAPAPrintP
           }}
         >
           <thead>
-            <tr style={{ background: '#f1f5f9' }}>
+            <tr style={{ background: 'var(--print-th-bg, #f1f5f9)' }}>
               <Th>#</Th>
               <Th>العنوان</Th>
               <Th>سبب العيب</Th>
@@ -649,7 +692,7 @@ export const SingleCAPAPrint = React.forwardRef<HTMLDivElement, SingleCAPAPrintP
               </tr>
             ) : (
               rows.map((row, idx) => (
-                <tr key={`${row.title}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                <tr key={`${row.title}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : 'var(--print-row-alt, #f8fafc)' }}>
                   <Td>{idx + 1}</Td>
                   <Td>{row.title}</Td>
                   <Td>{row.reasonLabel}</Td>
@@ -699,13 +742,13 @@ const DetailRow: React.FC<{
   even?: boolean;
   highlight?: string;
 }> = ({ label, value, even, highlight }) => (
-  <tr style={{ background: even ? '#f8fafc' : '#fff' }}>
+  <tr style={{ background: even ? 'var(--print-row-alt, #f8fafc)' : '#fff' }}>
     <td
       style={{
         padding: '3mm 4mm',
         fontWeight: 700,
-        color: '#475569',
-        borderBottom: '1px solid #e2e8f0',
+        color: 'var(--print-muted-text, #475569)',
+        borderBottom: '1px solid var(--print-border, #e2e8f0)',
         width: '35%',
         fontSize: '10pt',
       }}
@@ -716,8 +759,8 @@ const DetailRow: React.FC<{
       style={{
         padding: '3mm 4mm',
         fontWeight: highlight ? 800 : 400,
-        color: highlight || '#0f172a',
-        borderBottom: '1px solid #e2e8f0',
+        color: highlight || 'var(--print-text, #0f172a)',
+        borderBottom: '1px solid var(--print-border, #e2e8f0)',
         fontSize: highlight ? '12pt' : '10.5pt',
       }}
     >
@@ -727,8 +770,8 @@ const DetailRow: React.FC<{
 );
 
 const SummaryBox: React.FC<{ label: string; value: string; color: string; small?: boolean }> = ({ label, value, color, small }) => (
-  <div style={{ flex: '1 1 0', minWidth: small ? '18mm' : '30mm', border: '1px solid #e2e8f0', borderRadius: '3mm', padding: small ? '1.5mm 2mm' : '3mm 4mm', textAlign: 'center' }}>
-    <p style={{ margin: 0, fontSize: small ? '6pt' : '8pt', color: '#64748b', fontWeight: 600 }}>{label}</p>
+  <div style={{ flex: '1 1 0', minWidth: small ? '18mm' : '30mm', border: '1px solid var(--print-border, #e2e8f0)', borderRadius: '3mm', padding: small ? '1.5mm 2mm' : '3mm 4mm', textAlign: 'center' }}>
+    <p style={{ margin: 0, fontSize: small ? '6pt' : '8pt', color: 'var(--print-muted-text, #64748b)', fontWeight: 600 }}>{label}</p>
     <p style={{ margin: '1mm 0 0', fontSize: small ? '10pt' : '14pt', fontWeight: 900, color }}>{value}</p>
   </div>
 );
@@ -740,8 +783,8 @@ const Th: React.FC<{ children: React.ReactNode; align?: string }> = ({ children,
       textAlign: (align || 'right') as any,
       fontWeight: 800,
       fontSize: '8.5pt',
-      color: '#475569',
-      borderBottom: '2px solid #cbd5e1',
+      color: 'var(--print-th-text, #475569)',
+      borderBottom: '2px solid var(--print-border, #cbd5e1)',
       whiteSpace: 'nowrap',
     }}
   >
@@ -758,8 +801,8 @@ const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; 
       padding: '2mm 3mm',
       textAlign: (align || 'right') as any,
       fontWeight: bold ? 700 : 400,
-      color: color || '#334155',
-      borderBottom: '1px solid #e2e8f0',
+      color: color || 'var(--print-text, #334155)',
+      borderBottom: '1px solid var(--print-border, #e2e8f0)',
       whiteSpace: 'nowrap',
     }}
   >
@@ -769,9 +812,9 @@ const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; 
 
 const SignatureBlock: React.FC<{ label: string }> = ({ label }) => (
   <div style={{ flex: 1, textAlign: 'center' }}>
-    <p style={{ margin: 0, fontSize: '9pt', fontWeight: 700, color: '#475569' }}>{label}</p>
-    <div style={{ marginTop: '12mm', borderBottom: '1px solid #94a3b8', width: '80%', marginLeft: 'auto', marginRight: 'auto' }} />
-    <p style={{ margin: '2mm 0 0', fontSize: '8pt', color: '#94a3b8' }}>التوقيع / التاريخ</p>
+    <p style={{ margin: 0, fontSize: '9pt', fontWeight: 700, color: 'var(--print-muted-text, #475569)' }}>{label}</p>
+    <div style={{ marginTop: '12mm', borderBottom: '1px solid var(--print-border, #94a3b8)', width: '80%', marginLeft: 'auto', marginRight: 'auto' }} />
+    <p style={{ margin: '2mm 0 0', fontSize: '8pt', color: 'var(--print-muted-text, #94a3b8)' }}>التوقيع / التاريخ</p>
   </div>
 );
 

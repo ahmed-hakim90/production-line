@@ -477,7 +477,7 @@ export const WorkOrderScanner: React.FC = () => {
         <KPIBox label="عمالة فعالة" value={summary.activeWorkers} icon="groups" colorClass="bg-blue-100 text-blue-600" />
         <KPIBox label="متوسط السيكل تايم" value={summary.avgCycleSeconds} icon="timer" unit="ث" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
         <KPIBox label={breakCountdown.label} value={breakCountdown.value} icon="free_breakfast" colorClass="bg-rose-100 text-rose-600" />
-        <KPIBox label="متبقي على انتهاء العمل" value={workEndCountdown} icon="event_available" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
+        <KPIBox label="متبقي على نهاية الوردية اليوم" value={workEndCountdown} icon="event_available" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
       </div>
 
       <Card>

@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -20,7 +20,7 @@ import {
   groupReportsByDate,
   countUniqueDays,
   sumMaxWorkHoursByDate,
-  getTodayDateString,
+  getOperationalDateString,
 } from '../../../utils/calculations';
 import {
   formatCost,
@@ -110,7 +110,18 @@ export const LineDetails: React.FC = () => {
   const [period, setPeriod] = useState<Period>('daily');
   const [viewWorkersData, setViewWorkersData] = useState<{ date: string; workers: LineWorkerAssignment[] } | null>(null);
   const [viewWorkersLoading, setViewWorkersLoading] = useState(false);
-  const todayStr = getTodayDateString();
+  const autoPeriodAdjustedRef = useRef(false);
+  const todayStr = getOperationalDateString(8);
+
+  const shiftDate = useCallback((dateYmd: string, days: number): string => {
+    const parsed = new Date(`${dateYmd}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return dateYmd;
+    parsed.setDate(parsed.getDate() + days);
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
 
   const handleViewWorkers = async (date: string) => {
     if (!id) return;
@@ -139,28 +150,49 @@ export const LineDetails: React.FC = () => {
     }
 
     if (period === 'yesterday') {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const y = yesterday.getFullYear();
-      const m = String(yesterday.getMonth() + 1).padStart(2, '0');
-      const d = String(yesterday.getDate()).padStart(2, '0');
-      const yesterdayStr = `${y}-${m}-${d}`;
+      const yesterdayStr = shiftDate(todayStr, -1);
       return reports.filter((r) => r.date === yesterdayStr);
     }
 
     if (period === 'weekly') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 6);
-      const y = weekAgo.getFullYear();
-      const m = String(weekAgo.getMonth() + 1).padStart(2, '0');
-      const d = String(weekAgo.getDate()).padStart(2, '0');
-      const start = `${y}-${m}-${d}`;
+      const start = shiftDate(todayStr, -6);
       return reports.filter((r) => r.date >= start && r.date <= todayStr);
     }
 
     const monthPrefix = todayStr.slice(0, 7);
     return reports.filter((r) => r.date.startsWith(monthPrefix));
-  }, [reports, period, todayStr]);
+  }, [reports, period, todayStr, shiftDate]);
+
+  useEffect(() => {
+    if (autoPeriodAdjustedRef.current || loading) return;
+
+    // Keep the user-selected period if it already has data.
+    if (periodReports.length > 0) {
+      autoPeriodAdjustedRef.current = true;
+      return;
+    }
+
+    // If there are no reports at all, keep current period and stop auto-adjust.
+    if (reports.length === 0) {
+      autoPeriodAdjustedRef.current = true;
+      return;
+    }
+
+    const yesterdayStr = shiftDate(todayStr, -1);
+    const weekStart = shiftDate(todayStr, -6);
+    const monthPrefix = todayStr.slice(0, 7);
+
+    const hasYesterday = reports.some((r) => r.date === yesterdayStr);
+    const hasWeekly = reports.some((r) => r.date >= weekStart && r.date <= todayStr);
+    const hasMonthly = reports.some((r) => r.date.startsWith(monthPrefix));
+
+    if (hasYesterday) setPeriod('yesterday');
+    else if (hasWeekly) setPeriod('weekly');
+    else if (hasMonthly) setPeriod('monthly');
+    // Otherwise leave current period as-is (data may be from older months only).
+
+    autoPeriodAdjustedRef.current = true;
+  }, [loading, periodReports.length, reports, todayStr, shiftDate]);
 
   useEffect(() => {
     if (!id) return;

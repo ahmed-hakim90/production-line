@@ -283,6 +283,39 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بداية البريك اليومي</label>
+              <input
+                type="time"
+                value={form.breakStartTime}
+                onChange={(e) => setForm((f) => ({ ...f, breakStartTime: e.target.value || DEFAULT_BREAK_START }))}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية البريك اليومي</label>
+              <input
+                type="time"
+                value={form.breakEndTime}
+                onChange={(e) => setForm((f) => ({ ...f, breakEndTime: e.target.value || DEFAULT_BREAK_END }))}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية الوردية اليومية</label>
+              <input
+                type="time"
+                value={form.workdayEndTime}
+                onChange={(e) => setForm((f) => ({ ...f, workdayEndTime: e.target.value || DEFAULT_WORKDAY_END }))}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-[var(--color-text-muted)]">
+            هذه أوقات تشغيل يومية متكررة (للاسكان وحسابات السيكل) وليست موعد انتهاء أمر الشغل نفسه.
+          </p>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
           <Button variant="outline" onClick={handleClose} disabled={saving}>إلغاء</Button>

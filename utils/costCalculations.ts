@@ -194,17 +194,6 @@ export interface ProductCostData {
   costPerUnit: number;
 }
 
-const getSupervisorHourlyRate = (
-  report: ProductionReport,
-  supervisorHourlyRates?: Map<string, number>,
-  fallbackHourlyRate = 0
-): number => {
-  if (!report.employeeId) return Math.max(0, fallbackHourlyRate || 0);
-  const specificRate = supervisorHourlyRates?.get(report.employeeId) || 0;
-  if (specificRate > 0) return specificRate;
-  return Math.max(0, fallbackHourlyRate || 0);
-};
-
 export const buildSupervisorHourlyRatesMap = (
   employees: FirestoreEmployee[]
 ): Map<string, number> => {
@@ -212,6 +201,73 @@ export const buildSupervisorHourlyRatesMap = (
   employees
     .filter((e) => e.id && e.level === 2 && e.isActive)
     .forEach((e) => result.set(e.id!, Math.max(0, e.hourlyRate || 0)));
+  return result;
+};
+
+/**
+ * Distribute supervisor daily indirect cost across reports of the same
+ * (line + date + supervisor) instead of adding it to each report بالكامل.
+ * This prevents multiplying the supervisor daily cost by report count.
+ */
+export const buildSupervisorIndirectShareMap = (
+  reports: ProductionReport[],
+  supervisorHourlyRates?: Map<string, number>,
+  fallbackHourlyRate = 0
+): Map<string, number> => {
+  const result = new Map<string, number>();
+  if (reports.length === 0) return result;
+
+  type GroupData = {
+    reportIds: string[];
+    totalQty: number;
+    maxWorkHours: number;
+    maxSavedSupervisorCost: number;
+    employeeId: string;
+  };
+
+  const groups = new Map<string, GroupData>();
+
+  for (const report of reports) {
+    if (!report.id || !report.employeeId || (report.quantityProduced || 0) <= 0) continue;
+    const groupKey = `${report.lineId}__${report.date}__${report.employeeId}`;
+    const current = groups.get(groupKey) ?? {
+      reportIds: [],
+      totalQty: 0,
+      maxWorkHours: 0,
+      maxSavedSupervisorCost: 0,
+      employeeId: report.employeeId,
+    };
+    current.reportIds.push(report.id);
+    current.totalQty += report.quantityProduced || 0;
+    current.maxWorkHours = Math.max(current.maxWorkHours, Math.max(0, report.workHours || 0));
+    current.maxSavedSupervisorCost = Math.max(current.maxSavedSupervisorCost, Math.max(0, report.supervisorIndirectCost || 0));
+    groups.set(groupKey, current);
+  }
+
+  // Fast lookup for qty by report id.
+  const qtyById = new Map<string, number>();
+  for (const report of reports) {
+    if (!report.id) continue;
+    qtyById.set(report.id, Math.max(0, report.quantityProduced || 0));
+  }
+
+  for (const [, group] of groups) {
+    if (group.totalQty <= 0) continue;
+    const hourlyRate = Math.max(0, supervisorHourlyRates?.get(group.employeeId) || fallbackHourlyRate || 0);
+    const computedDailyCost = hourlyRate * group.maxWorkHours;
+    const dailySupervisorCost = group.maxSavedSupervisorCost > 0
+      ? group.maxSavedSupervisorCost
+      : computedDailyCost;
+
+    if (dailySupervisorCost <= 0) continue;
+
+    for (const reportId of group.reportIds) {
+      const qty = qtyById.get(reportId) || 0;
+      if (qty <= 0) continue;
+      result.set(reportId, dailySupervisorCost * (qty / group.totalQty));
+    }
+  }
+
   return result;
 };
 
@@ -302,14 +358,17 @@ export const buildReportsCosts = (
 
   const indirectCache = new Map<string, number>();
 
+  const supervisorShareMap = buildSupervisorIndirectShareMap(
+    reports,
+    supervisorHourlyRates,
+    hourlyRate
+  );
+
   for (const r of reports) {
     if (!r.id || !r.quantityProduced || r.quantityProduced <= 0) continue;
 
     const laborCost = (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-    const savedSupervisorIndirectCost = r.supervisorIndirectCost ?? 0;
-    const supervisorIndirectCost = savedSupervisorIndirectCost > 0
-      ? savedSupervisorIndirectCost
-      : getSupervisorHourlyRate(r, supervisorHourlyRates, hourlyRate) * (r.workHours || 0);
+    const supervisorIndirectCost = supervisorShareMap.get(r.id) || 0;
 
     const month = r.date?.slice(0, 7) || getCurrentMonth();
     if (!indirectCache.has(`${r.lineId}_${month}`)) {

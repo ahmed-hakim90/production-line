@@ -19,6 +19,18 @@ const getCellText = (row: HTMLTableRowElement, index: number): string => {
 
 export const GlobalTableEnhancer: React.FC = () => {
   useEffect(() => {
+    const mutationTouchesTable = (mutation: MutationRecord): boolean => {
+      const target = mutation.target as Element | null;
+      if (target?.closest?.('table')) return true;
+      const nodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)];
+      for (const node of nodes) {
+        if (!(node instanceof Element)) continue;
+        if (node.tagName === 'TABLE') return true;
+        if (node.querySelector('table')) return true;
+      }
+      return false;
+    };
+
     const tableSortState = new WeakMap<HTMLTableElement, SortState>();
     const tableSelectedRows = new WeakMap<HTMLTableElement, WeakSet<HTMLTableRowElement>>();
     const tableSelectAll = new WeakMap<HTMLTableElement, HTMLInputElement>();
@@ -191,7 +203,8 @@ export const GlobalTableEnhancer: React.FC = () => {
       });
     };
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((mutations) => {
+      if (!mutations.some(mutationTouchesTable)) return;
       scheduleEnhancer();
     });
     const targetContainer = document.querySelector('main') || document.getElementById('root') || document.body;

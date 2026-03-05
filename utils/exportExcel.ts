@@ -19,6 +19,11 @@ interface ReportRow {
   الهالك: number;
   'نسبة الهالك %': string;
   'عدد العمال': number;
+  'عمالة الإنتاج'?: number;
+  'عمالة التعبئة'?: number;
+  'عمالة الجودة'?: number;
+  'عمالة الصيانة'?: number;
+  'عمالة خارجية'?: number;
   'ساعات العمل': number;
   'تكلفة الوحدة'?: number | string;
   'أمر الشغل'?: string;
@@ -59,6 +64,11 @@ const mapReportsToRows = (
       الهالك: r.quantityWaste || 0,
       'نسبة الهالك %': `${wasteRatio}%`,
       'عدد العمال': r.workersCount || 0,
+      'عمالة الإنتاج': r.workersProductionCount || 0,
+      'عمالة التعبئة': r.workersPackagingCount || 0,
+      'عمالة الجودة': r.workersQualityCount || 0,
+      'عمالة الصيانة': r.workersMaintenanceCount || 0,
+      'عمالة خارجية': r.workersExternalCount || 0,
       'ساعات العمل': r.workHours || 0,
     };
     if (hasCosts) {
@@ -83,6 +93,11 @@ const appendSummary = (rows: ReportRow[]): ReportRow[] => {
   const totalProduced = rows.reduce((s, r) => s + r['الكمية المنتجة'], 0);
   const totalWaste = rows.reduce((s, r) => s + r['الهالك'], 0);
   const totalWorkers = rows.reduce((s, r) => s + r['عدد العمال'], 0);
+  const totalWorkersProduction = rows.reduce((s, r) => s + (r['عمالة الإنتاج'] || 0), 0);
+  const totalWorkersPackaging = rows.reduce((s, r) => s + (r['عمالة التعبئة'] || 0), 0);
+  const totalWorkersQuality = rows.reduce((s, r) => s + (r['عمالة الجودة'] || 0), 0);
+  const totalWorkersMaintenance = rows.reduce((s, r) => s + (r['عمالة الصيانة'] || 0), 0);
+  const totalWorkersExternal = rows.reduce((s, r) => s + (r['عمالة خارجية'] || 0), 0);
   const totalHours = rows.reduce((s, r) => s + r['ساعات العمل'], 0);
   const total = totalProduced + totalWaste;
   const wasteRatio = total > 0 ? ((totalWaste / total) * 100).toFixed(1) : '0';
@@ -97,6 +112,11 @@ const appendSummary = (rows: ReportRow[]): ReportRow[] => {
     الهالك: totalWaste,
     'نسبة الهالك %': `${wasteRatio}%`,
     'عدد العمال': totalWorkers,
+    'عمالة الإنتاج': totalWorkersProduction,
+    'عمالة التعبئة': totalWorkersPackaging,
+    'عمالة الجودة': totalWorkersQuality,
+    'عمالة الصيانة': totalWorkersMaintenance,
+    'عمالة خارجية': totalWorkersExternal,
     'ساعات العمل': totalHours,
   };
   if (rows[0]?.['تكلفة الوحدة'] !== undefined) {

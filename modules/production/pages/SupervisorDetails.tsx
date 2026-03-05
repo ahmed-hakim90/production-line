@@ -51,7 +51,7 @@ function computePerformanceScore(produced: number, target: number, wasteRatio: n
 
 type ChartTab = 'production' | 'efficiency' | 'hours';
 type DetailTab = 'production' | 'lines' | 'info';
-type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
+type Period = 'all' | 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
 const CHART_TABS: { key: ChartTab; label: string; icon: string }[] = [
   { key: 'production', label: 'الإنتاج', icon: 'inventory' },
@@ -66,6 +66,7 @@ const DETAIL_TABS: { id: DetailTab; label: string; icon: string }[] = [
 ];
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
+  { value: 'all', label: 'كل البيانات' },
   { value: 'daily', label: 'اليوم' },
   { value: 'yesterday', label: 'أمس' },
   { value: 'weekly', label: 'أسبوعي' },
@@ -87,6 +88,7 @@ export const SupervisorDetails: React.FC = () => {
   const navigate = useNavigate();
   const { can } = usePermission();
 
+  const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const employees = useAppStore((s) => s.employees);
   const productionLines = useAppStore((s) => s.productionLines);
   const products = useAppStore((s) => s.products);
@@ -103,41 +105,90 @@ export const SupervisorDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DetailTab>('production');
   const [chartTab, setChartTab] = useState<ChartTab>('production');
-  const [period, setPeriod] = useState<Period>('daily');
+  const [period, setPeriod] = useState<Period>('all');
 
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
 
   useEffect(() => {
     if (!id) { setLoading(false); return; }
+    const normalizedId = decodeURIComponent(String(id)).trim();
+    if (!normalizedId) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
     (async () => {
       try {
-        const [emp, deptSnap, posSnap, shiftSnap, empReports, supervisorOrders] = await Promise.all([
-          employeeService.getById(id),
+        const [empById, empByUserId, deptSnap, posSnap, shiftSnap] = await Promise.all([
+          employeeService.getById(normalizedId),
+          employeeService.getByUserId(normalizedId),
           getDocs(departmentsRef()),
           getDocs(jobPositionsRef()),
           getDocs(shiftsRef()),
-          reportService.getByEmployee(id),
-          workOrderService.getBySupervisor(id),
         ]);
         if (cancelled) return;
-        setEmployee(emp ?? null);
+        const employeeFromStore = _rawEmployees.find((e) => e.id === normalizedId || e.userId === normalizedId || e.code === normalizedId) ?? null;
+        const resolvedEmployee = empById ?? empByUserId ?? employeeFromStore;
+        const resolvedEmployeeId = resolvedEmployee?.id ?? normalizedId;
+        const supervisorIdsToTry = Array.from(new Set([normalizedId, resolvedEmployeeId].filter(Boolean)));
+
+        const [directReports, supervisorOrderBuckets] = await Promise.all([
+          reportService.getByEmployee(resolvedEmployeeId).catch(() => [] as ProductionReport[]),
+          Promise.all(
+            supervisorIdsToTry.map((sid) =>
+              workOrderService.getBySupervisor(sid).catch(() => []),
+            ),
+          ),
+        ]);
+        const supervisorOrders = Array.from(
+          new Map(
+            supervisorOrderBuckets
+              .flat()
+              .map((wo) => [wo.id || `${wo.workOrderNumber}__${wo.lineId}__${wo.productId}`, wo]),
+          ).values(),
+        );
+
+        setEmployee(resolvedEmployee);
         setDepartments(deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)));
         setJobPositions(posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)));
         setShifts(shiftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift)));
-        setReports(empReports);
         setWorkOrders(supervisorOrders);
+
+        let reportsByWorkOrder: ProductionReport[][] = [];
+        try {
+          reportsByWorkOrder = await Promise.all(
+            supervisorOrders
+              .map((wo) => wo.id)
+              .filter((woId): woId is string => !!woId)
+              .map((woId) => reportService.getByWorkOrderId(woId)),
+          );
+        } catch (reportsByWorkOrderError) {
+          // Keep the details page usable even if work-order report lookups fail
+          // (e.g., missing composite index in some environments).
+          console.warn('SupervisorDetails workOrder reports fallback:', reportsByWorkOrderError);
+        }
+        if (cancelled) return;
+
+        const reportMap = new Map<string, ProductionReport>();
+        const upsertReport = (report: ProductionReport) => {
+          const key = report.id || `${report.date}__${report.lineId}__${report.productId}__${report.employeeId}__${report.workOrderId || ''}`;
+          reportMap.set(key, report);
+        };
+        directReports.forEach(upsertReport);
+        reportsByWorkOrder.flat().forEach(upsertReport);
+        const mergedReports = Array.from(reportMap.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        setReports(mergedReports);
       } catch (e) {
         console.error('SupervisorDetails load error:', e);
-        if (!cancelled) setEmployee(null);
+        if (!cancelled) {
+          const employeeFromStore = _rawEmployees.find((emp) => emp.id === normalizedId || emp.userId === normalizedId || emp.code === normalizedId) ?? null;
+          setEmployee(employeeFromStore);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, _rawEmployees]);
 
   const getDepartmentName = (dId: string) => departments.find((d) => d.id === dId)?.name ?? '—';
   const getJobPositionTitle = (pId: string) => jobPositions.find((j) => j.id === pId)?.title ?? '—';
@@ -160,6 +211,7 @@ export const SupervisorDetails: React.FC = () => {
   const weekStart = useMemo(() => getWeekStart(), []);
   const periodReports = useMemo(() => {
     if (reports.length === 0) return [];
+    if (period === 'all') return reports;
 
     if (period === 'daily') {
       return reports.filter((r) => r.date === today);
@@ -233,6 +285,9 @@ export const SupervisorDetails: React.FC = () => {
   }, [periodReports]);
 
   const periodRange = useMemo(() => {
+    if (period === 'all') {
+      return { start: '1900-01-01', end: '2999-12-31' };
+    }
     if (period === 'daily') return { start: today, end: today };
     if (period === 'yesterday') {
       const yesterday = new Date();
@@ -270,18 +325,20 @@ export const SupervisorDetails: React.FC = () => {
   const activeExecutionRows = useMemo(() => (
     activePeriodWorkOrders.map((wo) => {
       const producedNow = wo.actualProducedFromScans ?? wo.producedQuantity ?? 0;
+      const productAvgDaily = Math.max(0, Number(products.find((p) => p.id === wo.productId)?.avgDailyProduction || 0));
       const execution = calculateWorkOrderExecutionMetrics({
         quantity: wo.quantity,
         producedQuantity: producedNow,
         targetDate: wo.targetDate,
         createdAt: wo.createdAt,
         today,
+        benchmarkDailyRate: productAvgDaily,
       });
       const deviationTone = getExecutionDeviationTone(execution.deviationPct);
       const isLateForecast = execution.forecastEndDate !== '—' && execution.forecastEndDate > wo.targetDate;
       return { wo, execution, deviationTone, producedNow, isLateForecast };
     })
-  ), [activePeriodWorkOrders, today]);
+  ), [activePeriodWorkOrders, today, products]);
 
   const executionSummary = useMemo(() => {
     if (activeExecutionRows.length === 0) {
@@ -821,6 +878,11 @@ export const SupervisorDetails: React.FC = () => {
           <Card className="!p-0 border-none overflow-hidden " title="">
             <div className="px-6 py-4 border-b border-[var(--color-border)]">
               <h3 className="text-lg font-bold">سجل التقارير</h3>
+              {reports.length > 0 && periodReports.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  لا توجد تقارير داخل الفترة الحالية. جرّب تغيير الفترة إلى "كل البيانات".
+                </p>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse">

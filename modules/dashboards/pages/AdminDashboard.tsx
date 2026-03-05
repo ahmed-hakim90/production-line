@@ -276,6 +276,17 @@ export const AdminDashboard: React.FC = () => {
   const [reportCompliance, setReportCompliance] = useState<ReportComplianceSnapshot | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(true);
   const [complianceError, setComplianceError] = useState<string | null>(null);
+  const [yesterdayCompliance, setYesterdayCompliance] = useState<ReportComplianceSnapshot | null>(null);
+  const [yesterdayComplianceLoading, setYesterdayComplianceLoading] = useState(true);
+  const [yesterdayComplianceError, setYesterdayComplianceError] = useState<string | null>(null);
+  const [selectedComplianceDate, setSelectedComplianceDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
   const [clockNow, setClockNow] = useState(() => Date.now());
 
   const dateRange = useMemo(() => {
@@ -288,6 +299,14 @@ export const AdminDashboard: React.FC = () => {
     () => new Date(clockNow).getHours() >= 16,
     [clockNow],
   );
+  const yesterdayOperationalDate = useMemo(() => {
+    const d = new Date(clockNow);
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, [clockNow]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 60 * 1000);
@@ -344,17 +363,35 @@ export const AdminDashboard: React.FC = () => {
     const loadCompliance = async () => {
       setComplianceLoading(true);
       setComplianceError(null);
+      setYesterdayComplianceLoading(true);
+      setYesterdayComplianceError(null);
       try {
-        const snapshot = await reportComplianceService.getTodaySnapshot(_rawEmployees, _rawLines);
-        if (!cancelled) setReportCompliance(snapshot);
+        const [todaySnapshot, yesterdaySnapshot] = await Promise.all([
+          reportComplianceService.getTodaySnapshot(_rawEmployees, _rawLines),
+          reportComplianceService.getSnapshotForDate(
+            selectedComplianceDate,
+            _rawEmployees,
+            _rawLines,
+            { scope: 'all_active' },
+          ),
+        ]);
+        if (!cancelled) {
+          setReportCompliance(todaySnapshot);
+          setYesterdayCompliance(yesterdaySnapshot);
+        }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : 'تعذر تحميل متابعة التزام التقارير.';
           setComplianceError(message);
           setReportCompliance(null);
+          setYesterdayComplianceError(message);
+          setYesterdayCompliance(null);
         }
       } finally {
-        if (!cancelled) setComplianceLoading(false);
+        if (!cancelled) {
+          setComplianceLoading(false);
+          setYesterdayComplianceLoading(false);
+        }
       }
     };
     loadCompliance();
@@ -363,7 +400,7 @@ export const AdminDashboard: React.FC = () => {
       cancelled = true;
       window.clearInterval(refreshTimer);
     };
-  }, [_rawEmployees, _rawLines]);
+  }, [_rawEmployees, _rawLines, selectedComplianceDate]);
 
   const hourlyRate = laborSettings?.hourlyRate ?? 0;
 
@@ -683,12 +720,14 @@ export const AdminDashboard: React.FC = () => {
 
     const rows = activeWOs.map((wo) => {
       const producedNow = liveProduction[wo.id ?? '']?.completedUnits ?? wo.actualProducedFromScans ?? wo.producedQuantity ?? 0;
+      const productAvgDaily = Math.max(0, Number(_rawProducts.find((p) => p.id === wo.productId)?.avgDailyProduction || 0));
       const execution = calculateWorkOrderExecutionMetrics({
         quantity: wo.quantity,
         producedQuantity: producedNow,
         targetDate: wo.targetDate,
         createdAt: wo.createdAt,
         today,
+        benchmarkDailyRate: productAvgDaily,
       });
       const delayed = execution.forecastEndDate !== '—' && execution.forecastEndDate > wo.targetDate;
       return { wo, execution, delayed };
@@ -723,7 +762,7 @@ export const AdminDashboard: React.FC = () => {
       avgDeviation: weightedDeviation !== null ? Number(weightedDeviation.toFixed(1)) : null,
       worstSupervisors,
     };
-  }, [workOrders, liveProduction, _rawEmployees]);
+  }, [workOrders, liveProduction, _rawEmployees, _rawProducts]);
 
   const qualityKpis = useMemo(() => {
     const active = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed');
@@ -1217,69 +1256,83 @@ export const AdminDashboard: React.FC = () => {
           <span className="material-icons-round text-base">precision_manufacturing</span>
           مؤشرات تشغيلية
         </h3>
-        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${canViewCosts ? 'xl:grid-cols-6' : 'xl:grid-cols-3'} gap-4`}>
-          <KPIBox
-            label="إجمالي الإنتاج"
-            value={formatNumber(kpis.totalProduction)}
-            icon="inventory"
-            unit="وحدة"
-            colorClass="bg-primary/10 text-primary"
-          />
-          {canViewCosts && (
-            <KPIBox
-              label={`إجمالي التكلفة (${PRESET_LABELS[preset]})`}
-              value={formatCost(kpis.totalCost)}
-              icon="account_balance_wallet"
-              unit="ج.م"
-              colorClass="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400"
-            />
-          )}
-          {canViewCosts && (
-            <KPIBox
-              label="تكلفة الوحدة"
-              value={formatCost(kpis.avgCostPerUnit)}
-              icon="payments"
-              unit="ج.م"
-              colorClass="bg-amber-100 text-amber-600"
-            />
-          )}
-          {canViewCosts && (() => {
-            const cvColor = getKPIColor(Math.abs(kpis.costVariance), getKPIThreshold(systemSettings, 'costVariance'), true);
-            return (
+        <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
+          <div className={`flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${canViewCosts ? 'xl:grid-cols-6' : 'xl:grid-cols-3'} sm:gap-4`}>
+            <div className="min-w-[220px] sm:min-w-0">
               <KPIBox
-                label="انحراف التكلفة"
-                value={`${kpis.costVariance > 0 ? '+' : ''}${kpis.costVariance}%`}
-                icon="compare_arrows"
-                colorClass={KPI_COLOR_CLASSES[cvColor]}
-                trend={cvColor === 'good' ? 'ضمن المعيار' : 'أعلى من المعيار'}
-                trendUp={cvColor === 'good'}
+                label="إجمالي الإنتاج"
+                value={formatNumber(kpis.totalProduction)}
+                icon="inventory"
+                unit="وحدة"
+                colorClass="bg-primary/10 text-primary"
               />
-            );
-          })()}
-          {(() => {
-            const wasteColor = getKPIColor(kpis.wastePercent, getKPIThreshold(systemSettings, 'wasteRatio'), true);
-            return (
-              <KPIBox
-                label="نسبة الهدر"
-                value={`${kpis.wastePercent}%`}
-                icon="delete_sweep"
-                colorClass={KPI_COLOR_CLASSES[wasteColor]}
-              />
-            );
-          })()}
-          {(() => {
-            const effColor = getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false);
-            return (
-              <KPIBox
-                label="الكفاءة العامة"
-                value={`${kpis.efficiency}%`}
-                icon="speed"
-                colorClass={KPI_COLOR_CLASSES[effColor]}
-                trend={effColor === 'good' ? 'ممتاز' : effColor === 'warning' ? 'جيد' : 'يحتاج تحسين'}
-                trendUp={effColor !== 'danger'}
-              />
-            );
-          })()}
+            </div>
+            {canViewCosts && (
+              <div className="min-w-[220px] sm:min-w-0">
+                <KPIBox
+                  label={`إجمالي التكلفة (${PRESET_LABELS[preset]})`}
+                  value={formatCost(kpis.totalCost)}
+                  icon="account_balance_wallet"
+                  unit="ج.م"
+                  colorClass="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400"
+                />
+              </div>
+            )}
+            {canViewCosts && (
+              <div className="min-w-[220px] sm:min-w-0">
+                <KPIBox
+                  label="تكلفة الوحدة"
+                  value={formatCost(kpis.avgCostPerUnit)}
+                  icon="payments"
+                  unit="ج.م"
+                  colorClass="bg-amber-100 text-amber-600"
+                />
+              </div>
+            )}
+            {canViewCosts && (() => {
+              const cvColor = getKPIColor(Math.abs(kpis.costVariance), getKPIThreshold(systemSettings, 'costVariance'), true);
+              return (
+                <div className="min-w-[220px] sm:min-w-0">
+                  <KPIBox
+                    label="انحراف التكلفة"
+                    value={`${kpis.costVariance > 0 ? '+' : ''}${kpis.costVariance}%`}
+                    icon="compare_arrows"
+                    colorClass={KPI_COLOR_CLASSES[cvColor]}
+                    trend={cvColor === 'good' ? 'ضمن المعيار' : 'أعلى من المعيار'}
+                    trendUp={cvColor === 'good'}
+                  />
+                </div>
+              );
+            })()}
+            {(() => {
+              const wasteColor = getKPIColor(kpis.wastePercent, getKPIThreshold(systemSettings, 'wasteRatio'), true);
+              return (
+                <div className="min-w-[220px] sm:min-w-0">
+                  <KPIBox
+                    label="نسبة الهدر"
+                    value={`${kpis.wastePercent}%`}
+                    icon="delete_sweep"
+                    colorClass={KPI_COLOR_CLASSES[wasteColor]}
+                  />
+                </div>
+              );
+            })()}
+            {(() => {
+              const effColor = getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false);
+              return (
+                <div className="min-w-[220px] sm:min-w-0">
+                  <KPIBox
+                    label="الكفاءة العامة"
+                    value={`${kpis.efficiency}%`}
+                    icon="speed"
+                    colorClass={KPI_COLOR_CLASSES[effColor]}
+                    trend={effColor === 'good' ? 'ممتاز' : effColor === 'warning' ? 'جيد' : 'يحتاج تحسين'}
+                    trendUp={effColor !== 'danger'}
+                  />
+                </div>
+              );
+            })()}
+          </div>
         </div>
       </div>
       )}
@@ -1326,8 +1379,9 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {activeWOs.map((wo) => {
+            <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
+              <div className="flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 xl:grid-cols-3 sm:gap-4">
+                {activeWOs.map((wo) => {
                 const product = _rawProducts.find((p) => p.id === wo.productId);
                 const lineName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
                 const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
@@ -1341,7 +1395,7 @@ export const AdminDashboard: React.FC = () => {
                   <div
                     key={wo.id}
                     onClick={() => navigate('/work-orders')}
-                    className={`rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${
+                    className={`min-w-[280px] max-w-[85vw] sm:min-w-0 sm:max-w-none rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${
                       wo.status === 'in_progress'
                         ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40'
                         : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'
@@ -1421,59 +1475,114 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 );
-              })}
+                })}
+              </div>
             </div>
           </div>
         );
       })()}
       <Card>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="material-icons-round text-rose-500">insights</span>
-          <h3 className="text-sm font-bold text-[var(--color-text)]">انضباط تنفيذ أوامر الشغل (المشرفين)</h3>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-icons-round text-rose-500">fact_check</span>
+            <h3 className="text-sm font-bold text-[var(--color-text)]">التزام المشرفين بالتقرير</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={selectedComplianceDate}
+              max={getTodayDateString()}
+              onChange={(e) => setSelectedComplianceDate(e.target.value)}
+              className="px-2.5 py-1.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-xs font-bold text-[var(--color-text)] outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+            />
+            <button
+              type="button"
+              onClick={() => setSelectedComplianceDate(yesterdayOperationalDate)}
+              className="px-2.5 py-1.5 text-xs font-bold rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 transition-all"
+            >
+              أمس
+            </button>
+            <Badge variant="info">{selectedComplianceDate}</Badge>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-          <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
-            <p className="text-xs text-rose-700 font-bold mb-1">أوامر متأخرة</p>
-            <p className="text-2xl font-black text-rose-600">{supervisorExecutionDiscipline.delayedCount}</p>
+        {yesterdayComplianceLoading ? (
+          <p className="text-xs text-[var(--color-text-muted)]">جاري تحميل الحالة...</p>
+        ) : yesterdayComplianceError ? (
+          <p className="text-xs text-rose-600 font-bold">{yesterdayComplianceError}</p>
+        ) : yesterdayCompliance?.isFactoryHoliday ? (
+          <div className="erp-alert erp-alert-info">
+            <span className="material-icons-round text-[18px] shrink-0">weekend</span>
+            <span>{yesterdayCompliance.holidayReason || 'إجازة المصنع'}</span>
           </div>
-          <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">متوسط الانحراف</p>
-            <p className="text-2xl font-black text-[var(--color-text)]">
-              {supervisorExecutionDiscipline.avgDeviation === null
-                ? '—'
-                : `${supervisorExecutionDiscipline.avgDeviation > 0 ? '+' : ''}${supervisorExecutionDiscipline.avgDeviation}%`}
-            </p>
-          </div>
-          <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 dark:bg-blue-900/10 p-3">
-            <p className="text-xs text-blue-700 font-bold mb-1">أسوأ 3 مشرفين</p>
-            <p className="text-2xl font-black text-blue-600">{supervisorExecutionDiscipline.worstSupervisors.length}</p>
-          </div>
-        </div>
-        {supervisorExecutionDiscipline.worstSupervisors.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-muted)]">لا توجد بيانات كافية للعرض.</p>
         ) : (
-          <div className="space-y-2">
-            {supervisorExecutionDiscipline.worstSupervisors.map((row) => {
-              const tone = getExecutionDeviationTone(row.deviation);
-              return (
-                <div key={row.supervisorId} className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2">
-                  <p className="text-sm font-bold text-[var(--color-text)]">{row.name}</p>
-                  <div className="flex items-center gap-3 text-xs font-bold">
-                    <span className="text-[var(--color-text-muted)]">متأخر: {row.delayed}</span>
-                    <span className={
-                      tone === 'good'
-                        ? 'text-emerald-600'
-                        : tone === 'danger'
-                          ? 'text-rose-600'
-                          : 'text-amber-600'
-                    }>
-                      {row.deviation > 0 ? '+' : ''}{row.deviation}%
-                    </span>
-                  </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المشرفين المطلوب منهم</p>
+                <p className="text-2xl font-black text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
+              </div>
+              <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
+                <p className="text-xs text-emerald-700 font-bold mb-1">بعت تقرير</p>
+                <p className="text-2xl font-black text-emerald-600">{yesterdayCompliance?.submittedCount ?? 0}</p>
+              </div>
+              <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
+                <p className="text-xs text-rose-700 font-bold mb-1">ما بعتش تقرير</p>
+                <p className="text-2xl font-black text-rose-600">{yesterdayCompliance?.missingCount ?? 0}</p>
+              </div>
+            </div>
+            {(yesterdayCompliance?.assignedSupervisorsCount ?? 0) === 0 ? (
+              <p className="text-xs text-[var(--color-text-muted)]">لا يوجد مشرفون مكلّفون في هذا التاريخ.</p>
+            ) : (
+              <div className="space-y-2">
+                <div className="md:hidden space-y-2">
+                  {[
+                    ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
+                    ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
+                  ].map((row) => (
+                    <div key={row.employeeId} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-bold text-[var(--color-text)] leading-snug">{row.name}</p>
+                        <Badge variant={row.submitted ? 'success' : 'danger'}>
+                          {row.submitted ? 'بعت' : 'ما بعتش'}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)]">
+                        <span className="font-bold">الخطوط: </span>
+                        <span>{row.lineNames.length > 0 ? row.lineNames.join('، ') : '—'}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm" data-no-table-enhance="true">
+                    <thead className="erp-thead">
+                      <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
+                        <th className="erp-th">المشرف</th>
+                        <th className="erp-th">الخطوط</th>
+                        <th className="erp-th">الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
+                        ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
+                      ].map((row) => (
+                        <tr key={row.employeeId} className="border-b border-[var(--color-border)]">
+                          <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.name}</td>
+                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.lineNames.length > 0 ? row.lineNames.join('، ') : '—'}</td>
+                          <td className="py-2.5 px-3">
+                            <Badge variant={row.submitted ? 'success' : 'danger'}>
+                              {row.submitted ? 'بعت' : 'ما بعتش'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Card>
       {/* ── Product Summary Table ──────────────────────────────────────────── */}
@@ -1486,8 +1595,8 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
                 <Badge variant="info">{productSummary.length} منتج</Badge>
               </div>
-              <div className="flex items-center gap-2 sm:mr-auto">
-              <div className="relative">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:mr-auto">
+              <div className="relative flex-1 min-w-[170px] sm:flex-none sm:min-w-0">
                   <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
                   <input
                     type="text"
@@ -1498,7 +1607,7 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
                
-                <div className="relative">
+                <div className="relative flex-1 min-w-[150px] sm:flex-none sm:min-w-0">
                   <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
                   <select
                     value={productCategoryFilter}
@@ -1514,16 +1623,59 @@ export const AdminDashboard: React.FC = () => {
                 {canExportFromPage && (
                 <button
                   onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold text-[var(--color-text-muted)] hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold text-[var(--color-text-muted)] hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all w-full sm:w-auto"
                   title="تصدير Excel"
                 >
                   <span className="material-icons-round text-sm">download</span>
-                  <span className="hidden sm:inline">Excel</span>
+                  <span>Excel</span>
                 </button>
                 )}
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="md:hidden space-y-2.5">
+              {filteredProductSummary.length === 0 ? (
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 text-center text-[var(--color-text-muted)] text-sm">
+                  لا توجد نتائج مطابقة للفلاتر الحالية
+                </div>
+              ) : (
+                <>
+                  {filteredProductSummary.map((p, i) => (
+                    <div key={p.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          onClick={() => navigate(`/products/${p.id}`)}
+                          className="text-sm font-bold text-primary text-right leading-snug hover:underline"
+                        >
+                          {p.name}
+                        </button>
+                        <span className="text-[11px] font-mono text-[var(--color-text-muted)]">#{i + 1}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الكود</p>
+                          <p className="font-mono font-bold text-[var(--color-text)]">{p.code || '—'}</p>
+                        </div>
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الكمية</p>
+                          <p className="font-mono font-bold text-primary">{formatNumber(p.qty)}</p>
+                        </div>
+                      </div>
+                      {canViewCosts && (
+                        <div className="text-xs text-[var(--color-text-muted)]">
+                          <span className="font-bold">متوسط تكلفة الوحدة: </span>
+                          <span className="font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60 px-3 py-2.5 flex items-center justify-between">
+                    <span className="text-sm font-bold text-[var(--color-text-muted)]">الإجمالي</span>
+                    <span className="font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</span>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="erp-thead">
                   <tr>

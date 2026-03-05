@@ -709,7 +709,7 @@ export const Settings: React.FC = () => {
       </div>
 
       {hasUnsavedChanges && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold bg-amber-50 text-amber-700 border border-amber-200">
+        <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700/40">
           <span className="material-icons-round text-lg">pending_actions</span>
           لديك تعديلات غير محفوظة. تأكد من الضغط على زر الحفظ في التبويب المناسب.
         </div>
@@ -724,7 +724,7 @@ export const Settings: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
               activeTab === tab.key
                 ? 'bg-primary text-white shadow-primary/20'
-                : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
+                : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30 hover:bg-[var(--color-bg)]'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
@@ -804,24 +804,24 @@ export const Settings: React.FC = () => {
           {/* ── System Status (for all users) ─────────────────────────────── */}
           <Card title="حالة النظام">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
+              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">cloud_done</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">اتصال Firebase</p>
                 <Badge variant={isAuthenticated ? 'success' : 'danger'}>
                   {isAuthenticated ? 'متصل' : 'غير متصل'}
                 </Badge>
               </div>
-              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
+              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">inventory_2</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المنتجات</p>
                 <p className="text-2xl font-bold text-[var(--color-text)]">{products.length}</p>
               </div>
-              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
+              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">precision_manufacturing</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">خطوط الإنتاج</p>
                 <p className="text-2xl font-bold text-[var(--color-text)]">{productionLines.length}</p>
               </div>
-              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-5 text-center">
+              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">groups</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المشرفين</p>
                 <p className="text-2xl font-bold text-[var(--color-text)]">{employees.length}</p>

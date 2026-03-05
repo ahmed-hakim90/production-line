@@ -57,7 +57,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                     'relative flex flex-col items-center gap-2.5 p-3 rounded-[var(--border-radius-lg)] border-2 transition-all duration-150 text-center group',
                     isActive
                       ? 'border-primary bg-primary/5 shadow-md shadow-primary/10'
-                      : 'border-[var(--color-border)] hover:border-primary/40 hover:bg-[#f8f9fa]/60',
+                      : 'border-[var(--color-border)] hover:border-primary/40 hover:bg-[var(--color-bg)]/70',
                   ].join(' ')}
                 >
                   {isActive && (
@@ -106,7 +106,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               { key: 'dangerColor' as const, label: 'لون الخطر' },
               { key: 'backgroundColor' as const, label: 'لون الخلفية' },
             ]).map((color) => (
-              <div key={color.key} className="flex items-center gap-3 p-3 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <div key={color.key} className="flex items-center gap-3 p-3 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <input
                   type="color"
                   className="w-10 h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] cursor-pointer shrink-0"
@@ -127,14 +127,14 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">dark_mode</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">الوضع</p>
-              <p className="text-xs text-slate-400">فاتح، داكن، أو تلقائي حسب النظام</p>
+              <p className="text-xs text-[var(--color-text-muted)]">فاتح، داكن، أو تلقائي حسب النظام</p>
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -159,14 +159,14 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">text_fields</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">نوع الخط</p>
-              <p className="text-xs text-slate-400">الخط المستخدم في جميع أنحاء التطبيق</p>
+              <p className="text-xs text-[var(--color-text-muted)]">الخط المستخدم في جميع أنحاء التطبيق</p>
             </div>
           </div>
           <select
@@ -179,7 +179,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-3 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">format_size</span>
             </div>
@@ -199,7 +199,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-3 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">rounded_corner</span>
             </div>
@@ -219,7 +219,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                     className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition-all ${
                       localTheme.borderRadius === preset.value
                         ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40'
+                        : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40'
                     }`}
                   >
                     {preset.label}
@@ -241,19 +241,19 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-3 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">title</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">لون النص الرئيسي</p>
-              <p className="text-[10px] text-slate-400 mb-2">نص العناوين والبيانات الأساسية</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] mb-2">نص العناوين والبيانات الأساسية</p>
               <div className="flex items-center gap-3">
                 <input
                   type="color"
                   value={localTheme.textColor || '#1a1a1a'}
                   onChange={(e) => setLocalTheme((p) => ({ ...p, textColor: e.target.value }))}
-                  className="w-10 h-8 rounded cursor-pointer border border-[var(--color-border)] p-0.5 bg-white"
+                  className="w-10 h-8 rounded cursor-pointer border border-[var(--color-border)] p-0.5 bg-[var(--color-card)]"
                 />
                 <input
                   type="text"
@@ -274,19 +274,19 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-3 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">subtitles</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">لون النص الثانوي</p>
-              <p className="text-[10px] text-slate-400 mb-2">التسميات والتفاصيل الرمادية</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] mb-2">التسميات والتفاصيل الرمادية</p>
               <div className="flex items-center gap-3">
                 <input
                   type="color"
                   value={localTheme.mutedTextColor || '#8d99a6'}
                   onChange={(e) => setLocalTheme((p) => ({ ...p, mutedTextColor: e.target.value }))}
-                  className="w-10 h-8 rounded cursor-pointer border border-[var(--color-border)] p-0.5 bg-white"
+                  className="w-10 h-8 rounded cursor-pointer border border-[var(--color-border)] p-0.5 bg-[var(--color-card)]"
                 />
                 <input
                   type="text"
@@ -308,14 +308,14 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">density_medium</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">كثافة العرض</p>
-              <p className="text-xs text-slate-400">مريح يعطي مساحة أكبر، مضغوط يعرض محتوى أكثر</p>
+              <p className="text-xs text-[var(--color-text-muted)]">مريح يعطي مساحة أكبر، مضغوط يعرض محتوى أكثر</p>
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -339,14 +339,14 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">interests</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">ألوان أيقونات القائمة</p>
-              <p className="text-xs text-slate-400">ملوّن يعطي كل قسم لونه، رئيسي يوحّد اللون، محايد رمادي هادئ</p>
+              <p className="text-xs text-[var(--color-text-muted)]">ملوّن يعطي كل قسم لونه، رئيسي يوحّد اللون، محايد رمادي هادئ</p>
             </div>
           </div>
           <div className="flex gap-2 shrink-0 flex-wrap">
@@ -372,7 +372,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
         </div>
 
         <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
-          <p className="text-xs font-bold text-[var(--color-text-muted)] px-4 py-2.5 bg-[#f8f9fa] border-b border-[var(--color-border)]">
+          <p className="text-xs font-bold text-[var(--color-text-muted)] px-4 py-2.5 bg-[var(--color-bg)] border-b border-[var(--color-border)]">
             معاينة مباشرة
           </p>
           <div className="p-4" style={{ backgroundColor: localTheme.backgroundColor }}>
@@ -384,8 +384,8 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                 <span className="text-xs font-bold" style={{ color: '#0f172a' }}>مؤسسة المغربي</span>
               </div>
               <div className="flex gap-1.5">
-                <div className="w-6 h-6 rounded-full bg-[#f0f2f5] flex items-center justify-center">
-                  <span className="material-icons-round text-slate-400" style={{ fontSize: 13 }}>notifications</span>
+                <div className="w-6 h-6 rounded-full bg-[var(--color-bg)] flex items-center justify-center">
+                  <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 13 }}>notifications</span>
                 </div>
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
                   style={{ backgroundColor: localTheme.primaryColor }}>م</div>
@@ -442,10 +442,10 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             { label: 'خطر', color: localTheme.dangerColor },
             { label: 'خلفية', color: localTheme.backgroundColor },
           ]).map((swatch) => (
-            <div key={swatch.label} className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)]">
+            <div key={swatch.label} className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] border border-[var(--color-border)]">
               <div className="w-4 h-4 rounded shadow-inner border border-black/10" style={{ backgroundColor: swatch.color }} />
-              <span className="text-[10px] font-bold text-slate-500">{swatch.label}</span>
-              <span className="text-[9px] font-mono text-slate-400">{swatch.color}</span>
+              <span className="text-[10px] font-bold text-[var(--color-text-muted)]">{swatch.label}</span>
+              <span className="text-[9px] font-mono text-[var(--color-text-muted)]">{swatch.color}</span>
             </div>
           ))}
         </div>

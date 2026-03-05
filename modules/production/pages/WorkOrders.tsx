@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { Card, Badge, Button, KPIBox, SearchableSelect } from '../components/UI';
@@ -7,6 +7,7 @@ import type { WorkOrderPrintData } from '../components/ProductionReportPrint';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import {
+  addDaysToDate,
   calculateWorkOrderExecutionMetrics,
   formatCurrency,
   formatNumber,
@@ -140,15 +141,49 @@ export const WorkOrders: React.FC = () => {
     [_rawEmployees],
   );
 
-  const productName = useCallback((id: string) => _rawProducts.find((p) => p.id === id)?.name ?? '—', [_rawProducts]);
-  const lineName = useCallback((id: string) => _rawLines.find((l) => l.id === id)?.name ?? '—', [_rawLines]);
-  const supervisorName = useCallback((id: string) => _rawEmployees.find((e) => e.id === id)?.name ?? '—', [_rawEmployees]);
+  const productNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of _rawProducts) {
+      if (p.id) map.set(p.id, p.name);
+    }
+    return map;
+  }, [_rawProducts]);
+  const productAvgDailyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of _rawProducts) {
+      if (!p.id) continue;
+      map.set(p.id, Math.max(0, Number((p as any).avgDailyProduction || 0)));
+    }
+    return map;
+  }, [_rawProducts]);
+
+  const lineNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const l of _rawLines) {
+      if (l.id) map.set(l.id, l.name);
+    }
+    return map;
+  }, [_rawLines]);
+
+  const employeeNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of _rawEmployees) {
+      if (e.id) map.set(e.id, e.name);
+    }
+    return map;
+  }, [_rawEmployees]);
+
+  const productName = useCallback((id: string) => productNameMap.get(id) ?? '—', [productNameMap]);
+  const lineName = useCallback((id: string) => lineNameMap.get(id) ?? '—', [lineNameMap]);
+  const supervisorName = useCallback((id: string) => employeeNameMap.get(id) ?? '—', [employeeNameMap]);
   const shortProductName = useCallback((id: string) => {
     const fullName = productName(id);
     const parts = fullName.trim().split(/\s+/);
     if (parts.length <= 2) return fullName;
     return `${parts[0]} ${parts[1]}`;
   }, [productName]);
+
+  const deferredSearchTerm = useDeferredValue(searchTerm);
 
   const filtered = useMemo(() => {
     const scoped = currentEmployee?.level === 2
@@ -157,8 +192,8 @@ export const WorkOrders: React.FC = () => {
     let list = [...scoped];
     if (filterStatus !== 'all') list = list.filter((w) => w.status === filterStatus);
     if (filterLine) list = list.filter((w) => w.lineId === filterLine);
-    if (searchTerm.trim()) {
-      const q = searchTerm.trim().toLowerCase();
+    if (deferredSearchTerm.trim()) {
+      const q = deferredSearchTerm.trim().toLowerCase();
       list = list.filter((w) =>
         w.workOrderNumber.toLowerCase().includes(q) ||
         (productName(w.productId)).toLowerCase().includes(q)
@@ -169,7 +204,7 @@ export const WorkOrders: React.FC = () => {
       return (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
     });
     return list;
-  }, [workOrders, currentEmployee, filterStatus, filterLine, searchTerm]);
+  }, [workOrders, currentEmployee, filterStatus, filterLine, deferredSearchTerm, productName]);
 
   useEffect(() => {
     if (highlightId && highlightRef.current) {
@@ -441,8 +476,21 @@ export const WorkOrders: React.FC = () => {
       startDate: (wo as any).startedAt,
       status: wo.status,
       today: todayDate,
+      benchmarkDailyRate: productAvgDailyMap.get(wo.productId) || 0,
     })
-  ), [todayDate]);
+  ), [todayDate, productAvgDailyMap]);
+
+  const tableRows = useMemo(() => (
+    filtered.map((wo) => ({
+      wo,
+      progress: progress(wo),
+      variance: costVariance(wo),
+      execution: getExecutionMetrics(wo),
+      productShortName: shortProductName(wo.productId),
+      lineDisplayName: lineName(wo.lineId),
+      supervisorDisplayName: supervisorName(wo.supervisorId),
+    }))
+  ), [filtered, getExecutionMetrics, lineName, shortProductName, supervisorName]);
 
   return (
     <div className="space-y-6">
@@ -514,14 +562,14 @@ export const WorkOrders: React.FC = () => {
 
       {/* Table */}
       <Card>
-        {filtered.length === 0 ? (
+        {tableRows.length === 0 ? (
           <div className="text-center py-16">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">assignment</span>
             <p className="text-sm font-bold text-slate-400">لا توجد أوامر شغل</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" data-no-table-enhance="true">
               <thead className="erp-thead">
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
                   <th className="erp-th">رقم الأمر</th>
@@ -546,10 +594,15 @@ export const WorkOrders: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((wo) => {
-                  const prog = progress(wo);
-                  const variance = costVariance(wo);
-                  const execution = getExecutionMetrics(wo);
+                {tableRows.map(({ wo, progress: prog, variance, execution, productShortName, lineDisplayName, supervisorDisplayName }) => {
+                  const referenceDailyRate = Math.max(0, Number(execution.benchmarkDailyRate || 0));
+                  const referenceForecastEndDate = wo.status === 'completed'
+                    ? 'مكتمل'
+                    : execution.remainingQty <= 0
+                      ? todayDate
+                      : referenceDailyRate > 0
+                        ? addDaysToDate(todayDate, Math.ceil(execution.remainingQty / referenceDailyRate))
+                        : '—';
                   return (
                     <tr
                       key={wo.id}
@@ -559,9 +612,9 @@ export const WorkOrders: React.FC = () => {
                       }`}
                     >
                       <td className="py-3 px-3 font-mono font-bold text-primary text-xs">{wo.workOrderNumber}</td>
-                      <td className="py-3 px-3 font-bold">{shortProductName(wo.productId)}</td>
-                      <td className="py-3 px-3 text-[var(--color-text-muted)]">{lineName(wo.lineId)}</td>
-                      <td className="py-3 px-3 text-[var(--color-text-muted)]">{supervisorName(wo.supervisorId)}</td>
+                      <td className="py-3 px-3 font-bold">{productShortName}</td>
+                      <td className="py-3 px-3 text-[var(--color-text-muted)]">{lineDisplayName}</td>
+                      <td className="py-3 px-3 text-[var(--color-text-muted)]">{supervisorDisplayName}</td>
                       <td className="py-3 px-3 font-mono">
                         <span className="font-bold">{formatNumber(wo.producedQuantity)}</span>
                         <span className="text-[var(--color-text-muted)]"> / {formatNumber(wo.quantity)}</span>
@@ -580,14 +633,14 @@ export const WorkOrders: React.FC = () => {
                       <td className="py-3 px-3 font-mono text-slate-500">{wo.maxWorkers} عامل</td>
                       <td className="py-3 px-3 font-mono text-xs text-slate-500">{wo.targetDate}</td>
                       <td className="py-3 px-3 font-mono text-xs">
-                        {formatNumber(Number(execution.avgDailyActual.toFixed(1)))} وحدة/يوم
+                        {formatNumber(Number(referenceDailyRate.toFixed(1)))} وحدة/يوم
                       </td>
                       <td className="py-3 px-3 font-mono text-xs">
                         {wo.status === 'completed' ? (
                           <span className="text-emerald-600">مكتمل</span>
                         ) : (
-                          <span className={execution.forecastEndDate !== '—' && execution.forecastEndDate > wo.targetDate ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}>
-                            {execution.forecastEndDate}
+                          <span className={referenceForecastEndDate !== '—' && referenceForecastEndDate > wo.targetDate ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}>
+                            {referenceForecastEndDate}
                           </span>
                         )}
                       </td>
@@ -834,7 +887,7 @@ export const WorkOrders: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بداية البريك</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بداية البريك اليومي</label>
                   <input
                     type="time"
                     value={form.breakStartTime}
@@ -843,7 +896,7 @@ export const WorkOrders: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية البريك</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية البريك اليومي</label>
                   <input
                     type="time"
                     value={form.breakEndTime}
@@ -852,7 +905,7 @@ export const WorkOrders: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية العمل</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نهاية الوردية اليومية</label>
                   <input
                     type="time"
                     value={form.workdayEndTime}
@@ -861,6 +914,9 @@ export const WorkOrders: React.FC = () => {
                   />
                 </div>
               </div>
+              <p className="text-[11px] text-[var(--color-text-muted)]">
+                هذه أوقات يومية متكررة (للاسكان وحساب السيكل) وليست تاريخ انتهاء أمر الشغل نفسه.
+              </p>
 
               {/* Notes */}
               <div>

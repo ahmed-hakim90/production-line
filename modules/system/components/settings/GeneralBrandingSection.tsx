@@ -30,14 +30,14 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
   return (
     <Card title="هوية المصنع">
       <div className="space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">factory</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">اسم المصنع</p>
-              <p className="text-xs text-slate-400">يظهر في التقارير والواجهة</p>
+              <p className="text-xs text-[var(--color-text-muted)]">يظهر في التقارير والواجهة</p>
             </div>
           </div>
           <input
@@ -48,14 +48,14 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">image</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">شعار المصنع</p>
-              <p className="text-xs text-slate-400">PNG أو JPG — يظهر في الواجهة والتقارير</p>
+              <p className="text-xs text-[var(--color-text-muted)]">PNG أو JPG — يظهر في الواجهة والتقارير</p>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -79,14 +79,14 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">payments</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">العملة</p>
-              <p className="text-xs text-slate-400">العملة المستخدمة في التكاليف والتقارير</p>
+              <p className="text-xs text-[var(--color-text-muted)]">العملة المستخدمة في التكاليف والتقارير</p>
             </div>
           </div>
           <select
@@ -98,14 +98,14 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
           </select>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">schedule</span>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">المنطقة الزمنية</p>
-              <p className="text-xs text-slate-400">تحدد توقيت التقارير والعمليات</p>
+              <p className="text-xs text-[var(--color-text-muted)]">تحدد توقيت التقارير والعمليات</p>
             </div>
           </div>
           <select

@@ -1205,6 +1205,21 @@ html.dark input:focus, html.dark textarea:focus, html.dark select:focus {
   background-color: #1a2433 !important;
 }
 
+/* Normalize legacy hardcoded light utilities in dark mode */
+html.dark [class*="bg-[#f8f9fa]"] {
+  background-color: #111c2d !important;
+}
+html.dark [class*="bg-[#f0f2f5]"] {
+  background-color: #162235 !important;
+}
+html.dark [class*="hover:bg-[#e8eaed]"]:hover {
+  background-color: #1d2a3f !important;
+}
+html.dark [class*="text-slate-400"],
+html.dark [class*="text-slate-500"] {
+  color: var(--color-text-muted) !important;
+}
+
 /* ══════════════════════════════════════════════════════════
    ERPNext MODAL SYSTEM
    ══════════════════════════════════════════════════════════ */

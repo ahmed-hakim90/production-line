@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, KPIBox, Button, Badge, LoadingSkeleton } from '../components/UI';
+import { Card, KPIBox, Button, LoadingSkeleton } from '../components/UI';
+import { PageHeader } from '../../../components/PageHeader';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { reportService } from '@/modules/production/services/reportService';
@@ -61,6 +62,13 @@ const normalizeMaterialText = (value: string) =>
     .replace(/ى/g, 'ي')
     .replace(/\s+/g, ' ');
 
+const toDateInputValue = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -97,6 +105,11 @@ export const ProductDetails: React.FC = () => {
   const [materialForm, setMaterialForm] = useState({ materialId: '', materialName: '', quantityUsed: 0, unitCost: 0 });
   const [savingMaterial, setSavingMaterial] = useState(false);
   const [materialSaveMsg, setMaterialSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [reportViewMode, setReportViewMode] = useState<'all' | 'range'>('all');
+  const [reportStartDate, setReportStartDate] = useState('');
+  const [reportEndDate, setReportEndDate] = useState('');
+  const [reportFilterLineId, setReportFilterLineId] = useState('');
+  const [reportFilterEmployeeId, setReportFilterEmployeeId] = useState('');
   const printComponentRef = useRef<HTMLDivElement>(null);
 
   const product = products.find((p) => p.id === id);
@@ -292,19 +305,29 @@ export const ProductDetails: React.FC = () => {
     return Math.round(pct * 10) / 10;
   }, [currentMonthCost, previousMonthCost]);
 
+  const scopedReports = useMemo(() => {
+    let list = reports;
+    if (reportFilterLineId) list = list.filter((r) => r.lineId === reportFilterLineId);
+    if (reportFilterEmployeeId) list = list.filter((r) => r.employeeId === reportFilterEmployeeId);
+    if (reportViewMode === 'range' && reportStartDate && reportEndDate) {
+      list = list.filter((r) => r.date >= reportStartDate && r.date <= reportEndDate);
+    }
+    return list;
+  }, [reports, reportFilterLineId, reportFilterEmployeeId, reportViewMode, reportStartDate, reportEndDate]);
+
   const totalProduced = useMemo(
-    () => reports.reduce((sum, r) => sum + (r.quantityProduced || 0), 0),
-    [reports]
+    () => scopedReports.reduce((sum, r) => sum + (r.quantityProduced || 0), 0),
+    [scopedReports]
   );
 
   const totalWaste = useMemo(
-    () => reports.reduce((sum, r) => sum + (r.quantityWaste || 0), 0),
-    [reports]
+    () => scopedReports.reduce((sum, r) => sum + (r.quantityWaste || 0), 0),
+    [scopedReports]
   );
 
   const avgAssemblyTime = useMemo(
-    () => calculateAvgAssemblyTime(reports),
-    [reports]
+    () => calculateAvgAssemblyTime(scopedReports),
+    [scopedReports]
   );
 
   const wasteRatio = useMemo(
@@ -313,13 +336,13 @@ export const ProductDetails: React.FC = () => {
   );
 
   const bestLine = useMemo(
-    () => findBestLine(reports, _rawLines),
-    [reports, _rawLines]
+    () => findBestLine(scopedReports, _rawLines),
+    [scopedReports, _rawLines]
   );
 
-  const chartData = useMemo(() => groupReportsByDate(reports), [reports]);
+  const chartData = useMemo(() => groupReportsByDate(scopedReports), [scopedReports]);
 
-  const uniqueDays = useMemo(() => countUniqueDays(reports), [reports]);
+  const uniqueDays = useMemo(() => countUniqueDays(scopedReports), [scopedReports]);
 
   const avgDailyProduction = useMemo(
     () => (uniqueDays > 0 ? Math.round(totalProduced / uniqueDays) : 0),
@@ -374,19 +397,19 @@ export const ProductDetails: React.FC = () => {
   const hourlyRate = laborSettings?.hourlyRate ?? 0;
 
   const historicalAvgCost = useMemo(() => {
-    if (!canViewCosts || !id || reports.length === 0) return null;
-    return buildProductAvgCost(id, reports, hourlyRate, costCenters, costCenterValues, costAllocations);
-  }, [canViewCosts, id, reports, hourlyRate, costCenters, costCenterValues, costAllocations]);
+    if (!canViewCosts || !id || scopedReports.length === 0) return null;
+    return buildProductAvgCost(id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+  }, [canViewCosts, id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations]);
 
   const costByLine = useMemo(() => {
-    if (!canViewCosts || !id || reports.length === 0) return [];
-    return buildProductCostByLine(id, reports, hourlyRate, costCenters, costCenterValues, costAllocations, getLineName);
-  }, [canViewCosts, id, reports, hourlyRate, costCenters, costCenterValues, costAllocations, _rawLines]);
+    if (!canViewCosts || !id || scopedReports.length === 0) return [];
+    return buildProductCostByLine(id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations, getLineName);
+  }, [canViewCosts, id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations, _rawLines]);
 
   const costHistory = useMemo(() => {
-    if (!canViewCosts || !id || reports.length === 0) return [];
-    return buildProductCostHistory(id, reports, hourlyRate, costCenters, costCenterValues, costAllocations);
-  }, [canViewCosts, id, reports, hourlyRate, costCenters, costCenterValues, costAllocations]);
+    if (!canViewCosts || !id || scopedReports.length === 0) return [];
+    return buildProductCostHistory(id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+  }, [canViewCosts, id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations]);
 
   const costTrend = useMemo(() => {
     if (costHistory.length < 2) return null;
@@ -405,15 +428,81 @@ export const ProductDetails: React.FC = () => {
   }, [costByLine]);
   const getEmployeeName = (empId: string) => employees.find((s) => s.id === empId)?.name ?? '—';
 
+  const filteredReports = scopedReports;
+  const filteredTotalProduced = totalProduced;
+  const filteredTotalWaste = totalWaste;
+  const filteredUniqueDays = uniqueDays;
+  const activeReportFilterCount =
+    (reportViewMode === 'range' && reportStartDate && reportEndDate ? 1 : 0) +
+    (reportFilterLineId ? 1 : 0) +
+    (reportFilterEmployeeId ? 1 : 0);
+
+  const handleShowAllReports = useCallback(() => {
+    setReportViewMode('all');
+    setReportStartDate('');
+    setReportEndDate('');
+  }, []);
+
+  const handleShowTodayReports = useCallback(() => {
+    const today = toDateInputValue(new Date());
+    setReportViewMode('range');
+    setReportStartDate(today);
+    setReportEndDate(today);
+  }, []);
+
+  const handleShowYesterdayReports = useCallback(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterday = toDateInputValue(d);
+    setReportViewMode('range');
+    setReportStartDate(yesterday);
+    setReportEndDate(yesterday);
+  }, []);
+
+  const handleShowWeeklyReports = useCallback(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    setReportViewMode('range');
+    setReportStartDate(toDateInputValue(start));
+    setReportEndDate(toDateInputValue(end));
+  }, []);
+
+  const handleShowMonthlyReports = useCallback(() => {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    setReportViewMode('range');
+    setReportStartDate(toDateInputValue(start));
+    setReportEndDate(toDateInputValue(end));
+  }, []);
+
   const lookups = useMemo(() => ({
     getLineName,
     getProductName: () => product?.name || rawProduct?.name || '—',
     getEmployeeName,
   }), [_rawLines, employees, product, rawProduct]);
 
-  const printRows = useMemo(() => mapReportsToPrintRows(reports, lookups), [reports, lookups]);
+  const printRows = useMemo(() => mapReportsToPrintRows(scopedReports, lookups), [scopedReports, lookups]);
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
   const productDisplayName = product?.name || rawProduct?.name || '';
+  const productHeaderSubtitle = useMemo(() => {
+    const pieces: string[] = [];
+    if (product?.code || rawProduct?.code) {
+      pieces.push(`الكود: ${product?.code || rawProduct?.code}`);
+    }
+    if (product?.category || rawProduct?.model) {
+      pieces.push(`الفئة: ${product?.category || rawProduct?.model}`);
+    }
+    if (product) {
+      const stockLabel = product.stockStatus === 'available'
+        ? 'متوفر'
+        : product.stockStatus === 'low'
+          ? 'منخفض'
+          : 'نفذ';
+      pieces.push(`المخزون: ${stockLabel}`);
+    }
+    return pieces.join(' • ');
+  }, [product, rawProduct]);
 
   const handlePrint = useManagedPrint({ contentRef: printComponentRef, printSettings: printTemplate });
 
@@ -505,67 +594,142 @@ export const ProductDetails: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="erp-page-head">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          <button
-            onClick={() => navigate('/products')}
-            className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all shrink-0"
-          >
-            <span className="material-icons-round">arrow_forward</span>
-          </button>
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div className="hidden sm:flex w-14 h-14 rounded-[var(--border-radius-lg)] bg-primary/10 items-center justify-center shrink-0">
-              <span className="material-icons-round text-primary text-3xl">inventory_2</span>
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] truncate">
-                {product?.name || rawProduct?.name}
-              </h2>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
-                <span className="text-xs sm:text-sm text-[var(--color-text-muted)] font-mono">{product?.code || rawProduct?.code}</span>
-                {(product?.category || rawProduct?.model) && (
-                  <span className="text-xs bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-0.5 rounded-full font-bold">
-                    {product?.category || rawProduct?.model}
-                  </span>
-                )}
-                {product && (
-                  <Badge variant={product.stockStatus === 'available' ? 'success' : product.stockStatus === 'low' ? 'warning' : 'danger'}>
-                    {product.stockStatus === 'available' ? 'متوفر' : product.stockStatus === 'low' ? 'منخفض' : 'نفذ'}
-                  </Badge>
-                )}
-              </div>
-            </div>
+      <PageHeader
+        title={productDisplayName || 'تفاصيل المنتج'}
+        subtitle={productHeaderSubtitle}
+        icon="inventory_2"
+        primaryAction={rawProduct ? {
+          label: 'تصدير المنتج',
+          icon: 'download',
+          onClick: handleExportProduct,
+        } : undefined}
+        secondaryAction={filteredReports.length > 0 ? {
+          label: 'تقارير Excel',
+          icon: 'table_chart',
+          onClick: () => exportProductReports(productDisplayName, filteredReports, lookups),
+          disabled: exporting,
+        } : undefined}
+        moreActions={[
+          {
+            label: 'طباعة',
+            icon: 'print',
+            group: 'تصدير',
+            hidden: filteredReports.length === 0,
+            disabled: exporting,
+            onClick: () => handlePrint(),
+          },
+          {
+            label: 'تصدير PDF',
+            icon: exporting ? 'refresh' : 'picture_as_pdf',
+            group: 'تصدير',
+            hidden: filteredReports.length === 0,
+            disabled: exporting,
+            onClick: handlePDF,
+          },
+          {
+            label: 'مشاركة واتساب',
+            icon: 'share',
+            group: 'تصدير',
+            hidden: filteredReports.length === 0,
+            disabled: exporting,
+            onClick: handleWhatsApp,
+          },
+          {
+            label: 'العودة للمنتجات',
+            icon: 'arrow_forward',
+            group: 'تنقل',
+            onClick: () => navigate('/products'),
+          },
+        ]}
+      />
+
+      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-4 sm:px-6 py-3">
+        <div className="erp-filter-bar" style={{ flexWrap: 'wrap' }}>
+          <div className="erp-date-seg">
+            <button className={`erp-date-seg-btn${reportViewMode === 'all' ? ' active' : ''}`} onClick={handleShowAllReports}>
+              الكل
+            </button>
+            <button
+              className={`erp-date-seg-btn${reportViewMode === 'range' && reportStartDate === reportEndDate && reportStartDate === toDateInputValue(new Date()) ? ' active' : ''}`}
+              onClick={handleShowTodayReports}
+            >
+              اليوم
+            </button>
+            <button
+              className={`erp-date-seg-btn${reportViewMode === 'range' && reportStartDate === reportEndDate && reportStartDate === toDateInputValue(new Date(new Date().setDate(new Date().getDate() - 1))) ? ' active' : ''}`}
+              onClick={handleShowYesterdayReports}
+            >
+              أمس
+            </button>
+            <button className="erp-date-seg-btn" onClick={handleShowWeeklyReports}>
+              أسبوعي
+            </button>
+            <button className="erp-date-seg-btn" onClick={handleShowMonthlyReports}>
+              شهري
+            </button>
           </div>
-        </div>
-        <div className="erp-page-actions">
-          {rawProduct && (
-            <Button variant="secondary" onClick={handleExportProduct}>
-              <span className="material-icons-round text-sm">download</span>
-              <span className="hidden sm:inline">تصدير المنتج</span>
-            </Button>
-          )}
-          {reports.length > 0 && (
-            <>
-              <Button variant="outline" onClick={() => exportProductReports(productDisplayName, reports, lookups)}>
-                <span className="material-icons-round text-sm">table_chart</span>
-                <span className="hidden sm:inline">تقارير Excel</span>
-              </Button>
-              <Button variant="outline" disabled={exporting} onClick={() => handlePrint()}>
-                <span className="material-icons-round text-sm">print</span>طباعة
-              </Button>
-              <Button variant="outline" disabled={exporting} onClick={handlePDF}>
-                {exporting ? (
-                  <span className="material-icons-round animate-spin text-sm">refresh</span>
-                ) : (
-                  <span className="material-icons-round text-sm">picture_as_pdf</span>
-                )}
-                PDF
-              </Button>
-              <Button variant="outline" disabled={exporting} onClick={handleWhatsApp}>
-                <span className="material-icons-round text-sm">share</span>واتساب
-              </Button>
-            </>
+
+          <div className="erp-filter-date">
+            <span className="erp-filter-label">من</span>
+            <input
+              type="date"
+              value={reportStartDate}
+              onChange={(e) => {
+                setReportViewMode('range');
+                setReportStartDate(e.target.value);
+              }}
+            />
+          </div>
+          <div className="erp-filter-date">
+            <span className="erp-filter-label">إلى</span>
+            <input
+              type="date"
+              value={reportEndDate}
+              onChange={(e) => {
+                setReportViewMode('range');
+                setReportEndDate(e.target.value);
+              }}
+            />
+          </div>
+
+          <div className="erp-filter-sep" />
+
+          <select
+            className={`erp-filter-select${reportFilterLineId ? ' active' : ''}`}
+            value={reportFilterLineId}
+            onChange={(e) => setReportFilterLineId(e.target.value)}
+            style={{ minWidth: 130 }}
+          >
+            <option value="">كل الخطوط</option>
+            {_rawLines.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+
+          <select
+            className={`erp-filter-select${reportFilterEmployeeId ? ' active' : ''}`}
+            value={reportFilterEmployeeId}
+            onChange={(e) => setReportFilterEmployeeId(e.target.value)}
+            style={{ minWidth: 145 }}
+          >
+            <option value="">كل المشرفين</option>
+            {employees.filter((e) => e.level === 2).map((emp) => (
+              <option key={emp.id} value={emp.id}>{emp.name}</option>
+            ))}
+          </select>
+
+          {activeReportFilterCount > 0 && (
+            <button
+              className="erp-filter-clear"
+              onClick={() => {
+                handleShowAllReports();
+                setReportFilterLineId('');
+                setReportFilterEmployeeId('');
+              }}
+            >
+              <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
+              مسح ({activeReportFilterCount})
+            </button>
           )}
         </div>
       </div>
@@ -716,7 +880,7 @@ export const ProductDetails: React.FC = () => {
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">متوسط وقت التجميع الفعلي</p>
               <p className="text-lg font-bold text-[var(--color-text)]">
-                {reports.length > 0 ? `${avgAssemblyTime} دقيقة/وحدة` : (product?.avgAssemblyTime ? `${product.avgAssemblyTime} دقيقة/وحدة` : '—')}
+                {filteredReports.length > 0 ? `${avgAssemblyTime} دقيقة/وحدة` : (product?.avgAssemblyTime ? `${product.avgAssemblyTime} دقيقة/وحدة` : '—')}
               </p>
             </div>
           </div>
@@ -1271,9 +1435,9 @@ export const ProductDetails: React.FC = () => {
       <Card className="!p-0 border-none overflow-hidden " title="">
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <h3 className="text-lg font-bold">التقارير التفصيلية</h3>
-          {reports.length > 0 && (
+          {filteredReports.length > 0 && (
             <span className="text-xs font-bold text-slate-400">
-              {uniqueDays} يوم عمل مسجل
+              {filteredUniqueDays} يوم عمل مسجل
             </span>
           )}
         </div>
@@ -1302,16 +1466,16 @@ export const ProductDetails: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {reports.length === 0 && (
+                {filteredReports.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                       <span className="material-icons-round text-4xl mb-2 block opacity-30">description</span>
-                      <p className="font-bold">لا توجد تقارير لهذا المنتج</p>
+                      <p className="font-bold">لا توجد تقارير مطابقة للفلاتر</p>
                       <p className="text-sm mt-1">أضف تقارير إنتاج من صفحة "التقارير"</p>
                     </td>
                   </tr>
                 )}
-                {reports.map((r) => (
+                {filteredReports.map((r) => (
                   <tr key={r.id}>
                     <td className="px-5 py-3 text-sm font-bold text-[var(--color-text)]">{r.date}</td>
                     <td className="px-5 py-3 text-sm font-medium text-[var(--color-text-muted)]">{getLineName(r.lineId)}</td>
@@ -1330,17 +1494,17 @@ export const ProductDetails: React.FC = () => {
             </table>
           </div>
         )}
-        {reports.length > 0 && (
+        {filteredReports.length > 0 && (
           <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between">
             <span className="text-sm text-[var(--color-text-muted)] font-bold">
-              إجمالي <span className="text-primary">{reports.length}</span> تقرير
+              إجمالي <span className="text-primary">{filteredReports.length}</span> تقرير
             </span>
             <div className="flex items-center gap-4 text-xs font-bold">
               <span className="text-emerald-600">
-                إنتاج: {formatNumber(totalProduced)}
+                إنتاج: {formatNumber(filteredTotalProduced)}
               </span>
               <span className="text-rose-500">
-                هالك: {formatNumber(totalWaste)}
+                هالك: {formatNumber(filteredTotalWaste)}
               </span>
             </div>
           </div>

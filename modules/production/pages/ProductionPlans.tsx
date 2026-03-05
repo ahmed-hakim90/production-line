@@ -86,6 +86,7 @@ export const ProductionPlans: React.FC = () => {
   const createProductionPlan = useAppStore((s) => s.createProductionPlan);
   const updateProductionPlan = useAppStore((s) => s.updateProductionPlan);
   const deleteProductionPlan = useAppStore((s) => s.deleteProductionPlan);
+  const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
   const { can } = usePermission();
 
   const canCreate = can('plans.create');
@@ -132,6 +133,11 @@ export const ProductionPlans: React.FC = () => {
   // ── Delete confirm ──
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // ── Bulk date shift ──
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [bulkStartDate, setBulkStartDate] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   // ── Reports for calculations ──
   const [productReports, setProductReports] = useState<ProductionReport[]>([]);
@@ -301,6 +307,50 @@ export const ProductionPlans: React.FC = () => {
     return sortDirection === 'asc' ? sorted : sorted.reverse();
   }, [filteredPlans, sortField, sortDirection, _rawProducts, _rawLines]);
 
+  useEffect(() => {
+    setSelectedPlanIds((prev) => {
+      const visibleIds = new Set(sortedPlans.map((p) => p.id).filter((id): id is string => Boolean(id)));
+      return prev.filter((id) => visibleIds.has(id));
+    });
+  }, [sortedPlans]);
+
+  const selectedPlans = useMemo(
+    () => sortedPlans.filter((plan) => plan.id && selectedPlanIds.includes(plan.id)),
+    [sortedPlans, selectedPlanIds],
+  );
+
+  const allVisibleSelected = useMemo(() => {
+    if (sortedPlans.length === 0) return false;
+    return sortedPlans.every((plan) => plan.id && selectedPlanIds.includes(plan.id));
+  }, [sortedPlans, selectedPlanIds]);
+
+  const resolvePlanDurationDays = (plan: ProductionPlan): number => {
+    const estimated = Number(plan.estimatedDurationDays || 0);
+    if (estimated > 0) return Math.ceil(estimated);
+
+    const start = plan.plannedStartDate || plan.startDate;
+    const end = plan.plannedEndDate;
+    if (!start || !end) return 0;
+    const diffMs = new Date(`${end}T00:00:00`).getTime() - new Date(`${start}T00:00:00`).getTime();
+    if (!Number.isFinite(diffMs) || diffMs <= 0) return 0;
+    return Math.ceil(diffMs / 86_400_000);
+  };
+
+  const togglePlanSelection = (planId: string) => {
+    setSelectedPlanIds((prev) =>
+      prev.includes(planId) ? prev.filter((id) => id !== planId) : [...prev, planId],
+    );
+  };
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedPlanIds([]);
+      return;
+    }
+    const ids = sortedPlans.map((plan) => plan.id).filter((id): id is string => Boolean(id));
+    setSelectedPlanIds(ids);
+  };
+
   // ── KPIs ──
   const kpis = useMemo(() => {
     const active = enrichedPlans.filter((p) => p.status === 'in_progress' || p.status === 'planned');
@@ -368,15 +418,40 @@ export const ProductionPlans: React.FC = () => {
 
   const handleEdit = async () => {
     if (!editPlan?.id) return;
+    const durationDays = resolvePlanDurationDays(editPlan);
     setEditSaving(true);
     await updateProductionPlan(editPlan.id, {
       plannedQuantity: editForm.plannedQuantity,
       startDate: editForm.startDate,
+      plannedStartDate: editForm.startDate,
+      plannedEndDate: durationDays > 0 ? addDaysToDate(editForm.startDate, durationDays) : editPlan.plannedEndDate,
       lineId: editForm.lineId,
       priority: editForm.priority,
     });
     setEditSaving(false);
     setEditPlan(null);
+  };
+
+  const handleBulkDateShift = async () => {
+    if (!bulkStartDate || selectedPlans.length === 0) return;
+    setBulkSaving(true);
+    try {
+      await Promise.all(
+        selectedPlans.map((plan) => {
+          if (!plan.id) return Promise.resolve();
+          const durationDays = resolvePlanDurationDays(plan);
+          return productionPlanService.update(plan.id, {
+            startDate: bulkStartDate,
+            plannedStartDate: bulkStartDate,
+            plannedEndDate: durationDays > 0 ? addDaysToDate(bulkStartDate, durationDays) : plan.plannedEndDate,
+          });
+        }),
+      );
+      await fetchProductionPlans();
+      setSelectedPlanIds([]);
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
   const handleStatusChange = async () => {
@@ -834,6 +909,28 @@ export const ProductionPlans: React.FC = () => {
             <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{plans.length} خطة {hasActiveFilters ? '(مصفاة)' : ''}</p>
           </div>
         </div>
+        {canEdit && (
+          <div className="px-5 sm:px-6 py-3 border-b border-[var(--color-border)] flex flex-wrap items-center gap-3 bg-[#f8f9fa]/40">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">
+              محدد: {selectedPlanIds.length}
+            </p>
+            <input
+              type="date"
+              className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-xs font-medium outline-none focus:border-primary focus:ring-primary/20"
+              value={bulkStartDate}
+              onChange={(e) => setBulkStartDate(e.target.value)}
+            />
+            <Button
+              variant="outline"
+              onClick={handleBulkDateShift}
+              disabled={bulkSaving || selectedPlanIds.length === 0 || !bulkStartDate}
+            >
+              {bulkSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+              <span className="material-icons-round text-sm">event_repeat</span>
+              ترحيل التاريخ للمحدد
+            </Button>
+          </div>
+        )}
 
         {plans.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
@@ -846,6 +943,16 @@ export const ProductionPlans: React.FC = () => {
             <table className="w-full text-right border-collapse">
               <thead>
                 <tr className="bg-[#f8f9fa]/50 border-b border-[var(--color-border)]">
+                  {canEdit && (
+                    <th className="erp-th text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAllVisible}
+                        aria-label="تحديد كل الخطط الظاهرة"
+                      />
+                    </th>
+                  )}
                   <th className="erp-th">المنتج</th>
                   <th className="erp-th">الخط</th>
                   <th className="erp-th text-center">الأولوية</th>
@@ -868,6 +975,18 @@ export const ProductionPlans: React.FC = () => {
 
                   return (
                     <tr key={plan.id} className="hover:bg-[#f8f9fa]/50 transition-colors">
+                      {canEdit && (
+                        <td className="px-4 py-3.5 text-center">
+                          {plan.id && (
+                            <input
+                              type="checkbox"
+                              checked={selectedPlanIds.includes(plan.id)}
+                              onChange={() => togglePlanSelection(plan.id!)}
+                              aria-label="تحديد الخطة"
+                            />
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3.5">
                         <button onClick={() => navigate(`/products/${plan.productId}`)} className="text-sm font-bold text-primary hover:underline text-right">
                           {product?.name ?? '—'}

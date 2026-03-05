@@ -582,6 +582,7 @@ export type ExecutionDeviationTone = 'good' | 'warning' | 'danger' | 'neutral';
 export interface WorkOrderExecutionMetrics {
   avgDailyActual: number;
   requiredDailyRate: number;
+  benchmarkDailyRate: number;
   deviationPct: number | null;
   forecastEndDate: string;
   remainingQty: number;
@@ -620,6 +621,7 @@ export const calculateWorkOrderExecutionMetrics = (params: {
   startDate?: unknown;
   status?: WorkOrder['status'];
   today?: string;
+  benchmarkDailyRate?: number;
 }): WorkOrderExecutionMetrics => {
   const today = params.today || getTodayDateString();
   const quantity = Number(params.quantity || 0);
@@ -637,9 +639,11 @@ export const calculateWorkOrderExecutionMetrics = (params: {
   const requiredDailyRate = remainingQty > 0
     ? remainingQty / Math.max(daysToTarget, 1)
     : 0;
+  const benchmarkDailyRate = Math.max(0, Number(params.benchmarkDailyRate || 0));
+  const deviationBaseRate = benchmarkDailyRate > 0 ? benchmarkDailyRate : requiredDailyRate;
 
-  const deviationPct = requiredDailyRate > 0
-    ? Number((((avgDailyActual - requiredDailyRate) / requiredDailyRate) * 100).toFixed(1))
+  const deviationPct = deviationBaseRate > 0
+    ? Number((((avgDailyActual - deviationBaseRate) / deviationBaseRate) * 100).toFixed(1))
     : null;
 
   const forecastEndDate = remainingQty <= 0
@@ -651,6 +655,7 @@ export const calculateWorkOrderExecutionMetrics = (params: {
   return {
     avgDailyActual,
     requiredDailyRate,
+    benchmarkDailyRate,
     deviationPct,
     forecastEndDate,
     remainingQty,

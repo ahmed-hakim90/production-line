@@ -16,7 +16,10 @@ import type {
   CostCenterValue,
   CostAllocation,
 } from '../../../types';
-import { calculateDailyIndirectCost } from '../../../utils/costCalculations';
+import {
+  buildSupervisorIndirectShareMap,
+  calculateDailyIndirectCost,
+} from '../../../utils/costCalculations';
 
 const COLLECTION = 'monthly_production_costs';
 
@@ -110,6 +113,11 @@ export const monthlyProductionCostService = {
     });
 
     const indirectCache = new Map<string, number>();
+    const supervisorShareMap = buildSupervisorIndirectShareMap(
+      allReports,
+      supervisorHourlyRates,
+      hourlyRate,
+    );
     let totalLabor = 0;
     let totalIndirect = 0;
     let totalQty = 0;
@@ -140,7 +148,9 @@ export const monthlyProductionCostService = {
           totalIndirect += lineIndirect * (r.quantityProduced / lineDateTotalQty);
         }
       }
-      totalIndirect += (supervisorHourlyRates?.get(r.employeeId) || 0) * (r.workHours || 0);
+      if (r.id) {
+        totalIndirect += supervisorShareMap.get(r.id) || 0;
+      }
     }
 
     const totalCost = totalLabor + totalIndirect;

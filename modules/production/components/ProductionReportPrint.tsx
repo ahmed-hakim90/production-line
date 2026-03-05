@@ -7,6 +7,7 @@ import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ProductionReport, PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
+import { getPrintThemePalette } from '../../../utils/printTheme';
 
 export interface ReportPrintRow {
   reportId?: string;
@@ -120,6 +121,7 @@ function shortProductName(name: string): string {
 export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrintProps>(
   ({ title, subtitle, generatedAt, rows, totals, printSettings }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const t = totals ?? computePrintTotals(rows, dp);
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
@@ -142,7 +144,13 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           minHeight: paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.5,
           boxSizing: 'border-box',
@@ -160,7 +168,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
             {ps.headerText}
           </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: '#64748b', fontWeight: 600 }}>
+          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
             نظام إدارة الإنتاج - مؤسسة المغربي
           </p>
         </div>
@@ -168,8 +176,8 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
         {/* ── Report Title ── */}
         <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
           <h2 style={{ margin: 0, fontSize: isThermal ? '10pt' : '16pt', fontWeight: 800, color: '#0f172a' }}>{title}</h2>
-          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: '#64748b' }}>{subtitle}</p>}
-          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '6pt' : '9pt', color: '#94a3b8' }}>تاريخ الطباعة: {now}</p>
+          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText }}>{subtitle}</p>}
+          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '6pt' : '9pt', color: palette.mutedText }}>تاريخ الطباعة: {now}</p>
         </div>
 
         {/* ── Summary Cards ── */}
@@ -195,7 +203,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           }}
         >
           <thead>
-            <tr style={{ background: '#f1f5f9' }}>
+                    <tr style={{ background: palette.tableHeaderBg }}>
               <Th>#</Th>
               <Th>التاريخ</Th>
               <Th>خط الإنتاج</Th>
@@ -213,7 +221,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+              <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : palette.tableRowAltBg }}>
                 <Td>{i + 1}</Td>
                 <Td>{row.date}</Td>
                 <Td>{row.lineName}</Td>
@@ -237,7 +245,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
             ))}
 
             {/* Totals Row */}
-            <tr style={{ background: '#e2e8f0', fontWeight: 800 }}>
+            <tr style={{ background: palette.tableHeaderBg, fontWeight: 800 }}>
               <Td colSpan={(showEmployee ? 5 : 4) + (showWO ? 1 : 0) + (showNotes ? 1 : 0)}>الإجمالي</Td>
               <Td align="center" bold color="#059669">{fmtNum(t.totalProduced, dp)}</Td>
               {showWaste && <Td align="center" bold color="#f43f5e">{fmtNum(t.totalWaste, dp)}</Td>}
@@ -276,7 +284,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               </p>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: '#94a3b8' }}>
+          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
             {ps.footerText} — {now}
           </p>
         </div>
@@ -301,6 +309,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     if (!report) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const now = new Date().toLocaleString('ar-EG');
     const total = report.quantityProduced + report.quantityWaste;
@@ -323,7 +332,13 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.6,
           boxSizing: 'border-box',
@@ -341,7 +356,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
             {ps.headerText}
           </h1>
-          <h2 style={{ margin: '2mm 0 0', fontSize: isThermal ? '9pt' : '14pt', fontWeight: 700, color: '#334155' }}>
+          <h2 style={{ margin: '2mm 0 0', fontSize: isThermal ? '9pt' : '14pt', fontWeight: 700, color: palette.mutedText }}>
             تقرير إنتاج
           </h2>
         </div>
@@ -409,7 +424,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
               </p>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: '#94a3b8' }}>
+          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
             {ps.footerText} — {now}
           </p>
         </div>
@@ -451,6 +466,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const now = new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
@@ -467,7 +483,13 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
           padding: isThermal ? '4mm 3mm' : '12mm 15mm',
           background: '#fff',
-          color: '#1e293b',
+          color: palette.text,
+          ['--print-text' as any]: palette.text,
+          ['--print-muted-text' as any]: palette.mutedText,
+          ['--print-border' as any]: palette.border,
+          ['--print-th-bg' as any]: palette.tableHeaderBg,
+          ['--print-th-text' as any]: palette.tableHeaderText,
+          ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
           lineHeight: 1.6,
           boxSizing: 'border-box',
@@ -481,18 +503,18 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
           <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
             {ps.headerText}
           </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: '#64748b', fontWeight: 600 }}>
+          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
             أمر شغل رقم: {data.workOrderNumber}
           </p>
         </div>
 
         {/* Progress Bar */}
         <div style={{ marginBottom: isThermal ? '3mm' : '8mm' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8pt', color: '#64748b', marginBottom: '1mm' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8pt', color: palette.mutedText, marginBottom: '1mm' }}>
             <span>نسبة الإنجاز</span>
             <span style={{ fontWeight: 800, color: progress >= 100 ? '#059669' : ps.primaryColor }}>{progress.toFixed(0)}%</span>
           </div>
-          <div style={{ width: '100%', height: isThermal ? '3mm' : '5mm', background: '#e2e8f0', borderRadius: '3mm', overflow: 'hidden' }}>
+          <div style={{ width: '100%', height: isThermal ? '3mm' : '5mm', background: palette.tableHeaderBg, borderRadius: '3mm', overflow: 'hidden' }}>
             <div style={{ width: `${Math.min(progress, 100)}%`, height: '100%', background: progress >= 100 ? '#059669' : ps.primaryColor, borderRadius: '3mm' }} />
           </div>
         </div>
@@ -543,7 +565,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
               </p>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: '#94a3b8' }}>
+          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
             {ps.footerText} — {now}
           </p>
         </div>
@@ -568,7 +590,9 @@ const DetailRow: React.FC<{
         padding: '3mm 4mm',
         fontWeight: 700,
         color: '#475569',
+        color: 'var(--print-muted-text, #475569)',
         borderBottom: '1px solid #e2e8f0',
+        borderBottom: '1px solid var(--print-border, #e2e8f0)',
         width: '35%',
         fontSize: '10pt',
       }}
@@ -580,7 +604,9 @@ const DetailRow: React.FC<{
         padding: '3mm 4mm',
         fontWeight: highlight ? 800 : 400,
         color: highlight || '#0f172a',
+        color: highlight || 'var(--print-text, #0f172a)',
         borderBottom: '1px solid #e2e8f0',
+        borderBottom: '1px solid var(--print-border, #e2e8f0)',
         fontSize: highlight ? '12pt' : '10.5pt',
       }}
     >
@@ -590,8 +616,8 @@ const DetailRow: React.FC<{
 );
 
 const SummaryBox: React.FC<{ label: string; value: string; unit?: string; color: string; small?: boolean }> = ({ label, value, unit, color, small }) => (
-  <div style={{ flex: '1 1 0', minWidth: small ? '18mm' : '30mm', border: '1px solid #e2e8f0', borderRadius: '3mm', padding: small ? '1.5mm 2mm' : '3mm 4mm', textAlign: 'center' }}>
-    <p style={{ margin: 0, fontSize: small ? '6pt' : '8pt', color: '#64748b', fontWeight: 600 }}>{label}</p>
+  <div style={{ flex: '1 1 0', minWidth: small ? '18mm' : '30mm', border: '1px solid var(--print-border, #e2e8f0)', borderRadius: '3mm', padding: small ? '1.5mm 2mm' : '3mm 4mm', textAlign: 'center' }}>
+    <p style={{ margin: 0, fontSize: small ? '6pt' : '8pt', color: 'var(--print-muted-text, #64748b)', fontWeight: 600 }}>{label}</p>
     <p style={{ margin: '1mm 0 0', fontSize: small ? '10pt' : '14pt', fontWeight: 900, color }}>
       {value}
       {unit && <span style={{ fontSize: small ? '5pt' : '8pt', fontWeight: 600, marginRight: '1mm', color: '#94a3b8' }}>{unit}</span>}
@@ -606,8 +632,8 @@ const Th: React.FC<{ children: React.ReactNode; align?: string }> = ({ children,
       textAlign: (align || 'right') as React.CSSProperties['textAlign'],
       fontWeight: 800,
       fontSize: '8.5pt',
-      color: '#475569',
-      borderBottom: '2px solid #cbd5e1',
+      color: 'var(--print-th-text, #475569)',
+      borderBottom: '2px solid var(--print-border, #cbd5e1)',
       whiteSpace: 'nowrap',
     }}
   >
@@ -624,8 +650,8 @@ const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; 
       padding: '2mm 3mm',
       textAlign: (align || 'right') as React.CSSProperties['textAlign'],
       fontWeight: bold ? 700 : 400,
-      color: color || '#334155',
-      borderBottom: '1px solid #e2e8f0',
+      color: color || 'var(--print-text, #334155)',
+      borderBottom: '1px solid var(--print-border, #e2e8f0)',
       whiteSpace: 'nowrap',
     }}
   >
@@ -635,8 +661,8 @@ const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; 
 
 const SignatureBlock: React.FC<{ label: string }> = ({ label }) => (
   <div style={{ flex: 1, textAlign: 'center' }}>
-    <p style={{ margin: 0, fontSize: '9pt', fontWeight: 700, color: '#475569' }}>{label}</p>
-    <div style={{ marginTop: '12mm', borderBottom: '1px solid #94a3b8', width: '80%', marginLeft: 'auto', marginRight: 'auto' }} />
-    <p style={{ margin: '2mm 0 0', fontSize: '8pt', color: '#94a3b8' }}>الاسم / التوقيع</p>
+    <p style={{ margin: 0, fontSize: '9pt', fontWeight: 700, color: 'var(--print-muted-text, #475569)' }}>{label}</p>
+    <div style={{ marginTop: '12mm', borderBottom: '1px solid var(--print-border, #94a3b8)', width: '80%', marginLeft: 'auto', marginRight: 'auto' }} />
+    <p style={{ margin: '2mm 0 0', fontSize: '8pt', color: 'var(--print-muted-text, #94a3b8)' }}>الاسم / التوقيع</p>
   </div>
 );

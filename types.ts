@@ -497,7 +497,8 @@ export type NotificationType =
   | 'work_order_updated'
   | 'work_order_completed'
   | 'quality_report_created'
-  | 'quality_report_updated';
+  | 'quality_report_updated'
+  | 'report_compliance_daily';
 
 export interface AppNotification {
   id?: string;
@@ -593,12 +594,23 @@ export interface KPIThreshold {
 
 export type PaperSize = 'a4' | 'a5' | 'thermal';
 export type PaperOrientation = 'portrait' | 'landscape';
+export type PrintThemePreset = 'erpnext' | 'classic' | 'high_contrast' | 'minimal';
 
 export interface PrintTemplateSettings {
   logoUrl: string;
   headerText: string;
   footerText: string;
   primaryColor: string;
+  printThemePreset?: PrintThemePreset;
+  textColor?: string;
+  mutedTextColor?: string;
+  borderColor?: string;
+  tableHeaderBgColor?: string;
+  tableHeaderTextColor?: string;
+  tableRowAltBgColor?: string;
+  accentSuccessColor?: string;
+  accentWarningColor?: string;
+  accentDangerColor?: string;
   paperSize: PaperSize;
   orientation: PaperOrientation;
   copies: number;

@@ -5,11 +5,17 @@ import { useManagedPrint } from '@/utils/printManager';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../components/SelectableTable';
 import { ProductionReportPrint, mapReportsToPrintRows, computePrintTotals } from '../components/ProductionReportPrint';
+import {
+  SupervisorPerformancePrint,
+  type SupervisorPerformancePrintData,
+  type SupervisorProductPerformancePrintRow,
+  type SupervisorLinePerformancePrintRow,
+} from '../components/SupervisorPerformancePrint';
 import type { FirestoreEmployee, ProductionReport } from '../../../types';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
-import { formatNumber, calculateWasteRatio, getTodayDateString } from '../../../utils/calculations';
+import { formatNumber, calculateWasteRatio, getOperationalDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
@@ -19,19 +25,6 @@ import { PageHeader } from '../../../components/PageHeader';
 // ─── Performance Score ────────────────────────────────────────────────────────
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
-
-function computePerformanceScore(
-  produced: number,
-  target: number,
-  wasteRatio: number,
-  activeDays: number,
-  totalDays: number,
-): number {
-  const productionScore = target > 0 ? (produced / target) * 100 : (produced > 0 ? 75 : 0);
-  const wastePenalty = wasteRatio;
-  const consistencyBonus = totalDays > 0 ? (activeDays / totalDays) * 10 : 0;
-  return clamp(Math.round(productionScore - wastePenalty + consistencyBonus), 0, 100);
-}
 
 function getScoreBadge(score: number): { variant: 'success' | 'warning' | 'danger'; label: string } {
   if (score >= 85) return { variant: 'success', label: 'ممتاز' };
@@ -79,6 +72,14 @@ function countUniqueDaysInRange(reports: ProductionReport[], start: string, end:
   return dates.size;
 }
 
+function daysBetweenInclusive(start: string, end: string): number {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 1;
+  const ms = endDate.getTime() - startDate.getTime();
+  return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
+}
+
 // ─── SupervisorRow type ───────────────────────────────────────────────────────
 
 interface SupervisorRow extends FirestoreEmployee {
@@ -89,7 +90,18 @@ interface SupervisorRow extends FirestoreEmployee {
   todayProduced: number;
   weekProduced: number;
   scrapRate: number;
+  avgDailyActual: number;
+  benchmarkDaily: number;
+  deviationPct: number | null;
+  activeDays: number;
+  totalDaysInRange: number;
   performanceScore: number;
+  performanceByLine: Array<{
+    lineId: string;
+    lineName: string;
+    performanceScore: number;
+    deviationPct: number | null;
+  }>;
   assignedLines: string[];
   totalWorkers: number;
   lastActivity: string;
@@ -98,6 +110,14 @@ interface SupervisorRow extends FirestoreEmployee {
 // ─── Active filter for stat cards ─────────────────────────────────────────────
 
 type StatFilter = '' | 'today' | 'week' | 'highScrap' | 'lowScore' | 'active';
+type ReportsViewMode = 'today' | 'range';
+
+const toDateInputValue = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 export const Supervisors: React.FC = () => {
   const navigate = useNavigate();
@@ -109,7 +129,9 @@ export const Supervisors: React.FC = () => {
   const productionLines = useAppStore((s) => s.productionLines);
   const products = useAppStore((s) => s.products);
   const employees = useAppStore((s) => s.employees);
-  const productionPlans = useAppStore((s) => s.productionPlans);
+  const workOrders = useAppStore((s) => s.workOrders);
+  const fetchReportsFromStore = useAppStore((s) => s.fetchReports);
+  const reportsLoading = useAppStore((s) => s.reportsLoading);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
 
@@ -122,14 +144,24 @@ export const Supervisors: React.FC = () => {
   const [filterLine, setFilterLine] = useState('');
   const [filterStatus, setFilterStatus] = useState<'' | 'active' | 'inactive'>('');
   const [filterScoreRange, setFilterScoreRange] = useState<'' | 'high' | 'mid' | 'low'>('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const today = getOperationalDateString(8);
+  const [viewMode, setViewMode] = useState<ReportsViewMode>('today');
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [rangeError, setRangeError] = useState<string | null>(null);
   const [statFilter, setStatFilter] = useState<StatFilter>('');
   const [hoveredSupervisor, setHoveredSupervisor] = useState<string | null>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
   const [bulkPrintReports, setBulkPrintReports] = useState<ProductionReport[] | null>(null);
   const bulkPrintRef = useRef<HTMLDivElement>(null);
   const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
+  const [singleSupervisorPrintData, setSingleSupervisorPrintData] = useState<SupervisorPerformancePrintData | null>(null);
+  const singleSupervisorPrintRef = useRef<HTMLDivElement>(null);
+  const handleSingleSupervisorPrint = useManagedPrint({
+    contentRef: singleSupervisorPrintRef,
+    printSettings: printTemplate,
+    documentTitle: ' ',
+  });
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'supervisors'),
     [exportImportSettings]
@@ -154,6 +186,60 @@ export const Supervisors: React.FC = () => {
 
   useEffect(() => { loadRefData(); }, [loadRefData]);
 
+  const loadReportsRange = useCallback(async (from: string, to: string) => {
+    try {
+      setRangeError(null);
+      await fetchReportsFromStore(from, to);
+      setViewMode('range');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تحميل بيانات الفترة المحددة.';
+      setRangeError(message);
+    }
+  }, [fetchReportsFromStore]);
+
+  const handleShowToday = useCallback(() => {
+    const operationalToday = getOperationalDateString(8);
+    setStartDate(operationalToday);
+    setEndDate(operationalToday);
+    setViewMode('today');
+    setRangeError(null);
+  }, []);
+
+  const handleShowYesterday = useCallback(async () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterday = toDateInputValue(d);
+    setStartDate(yesterday);
+    setEndDate(yesterday);
+    await loadReportsRange(yesterday, yesterday);
+  }, [loadReportsRange]);
+
+  const handleShowWeekly = useCallback(async () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    const from = toDateInputValue(start);
+    const to = toDateInputValue(end);
+    setStartDate(from);
+    setEndDate(to);
+    await loadReportsRange(from, to);
+  }, [loadReportsRange]);
+
+  const handleShowMonthly = useCallback(async () => {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    const from = toDateInputValue(start);
+    const to = toDateInputValue(end);
+    setStartDate(from);
+    setEndDate(to);
+    await loadReportsRange(from, to);
+  }, [loadReportsRange]);
+
+  const handleApplyDateRange = useCallback(async () => {
+    if (!startDate || !endDate) return;
+    await loadReportsRange(startDate, endDate);
+  }, [startDate, endDate, loadReportsRange]);
+
   const getDepartmentName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const getJobPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '—';
   const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? '—';
@@ -170,43 +256,58 @@ export const Supervisors: React.FC = () => {
   );
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
 
-  const today = getTodayDateString();
   const weekStart = useMemo(() => getWeekStart(), []);
   const lastWeek = useMemo(() => getLastWeekRange(), []);
 
-  const allReports = productionReports.length > 0 ? productionReports : todayReports;
+  const allReports = viewMode === 'today' ? todayReports : productionReports;
+  const productAvgDailyById = useMemo(
+    () => new Map(products.filter((p) => Boolean(p.id)).map((p) => [String(p.id), Math.max(0, Number((p as any).avgDailyProduction || 0))])),
+    [products],
+  );
+  const rangeStart = viewMode === 'today' ? today : startDate;
+  const rangeEnd = viewMode === 'today' ? today : endDate;
+  const totalDaysInRange = useMemo(
+    () => daysBetweenInclusive(rangeStart, rangeEnd),
+    [rangeStart, rangeEnd],
+  );
 
-  const reportsByEmployee = useMemo(() => {
+  const supervisorIdSet = useMemo(
+    () => new Set(_rawEmployees.filter((e) => e.level === 2 && e.id).map((e) => e.id as string)),
+    [_rawEmployees],
+  );
+
+  const workOrderSupervisorById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const wo of workOrders) {
+      if (!wo.id || !wo.supervisorId) continue;
+      map.set(wo.id, wo.supervisorId);
+    }
+    return map;
+  }, [workOrders]);
+
+  const resolveSupervisorIdForReport = useCallback((report: ProductionReport): string => {
+    if (report.employeeId && supervisorIdSet.has(report.employeeId)) return report.employeeId;
+    if (report.workOrderId) return workOrderSupervisorById.get(report.workOrderId) ?? '';
+    return '';
+  }, [supervisorIdSet, workOrderSupervisorById]);
+
+  const reportsBySupervisor = useMemo(() => {
     const map = new Map<string, ProductionReport[]>();
     for (const r of allReports) {
-      const list = map.get(r.employeeId) ?? [];
+      const supervisorId = resolveSupervisorIdForReport(r);
+      if (!supervisorId) continue;
+      const list = map.get(supervisorId) ?? [];
       list.push(r);
-      map.set(r.employeeId, list);
+      map.set(supervisorId, list);
     }
     return map;
-  }, [allReports]);
-
-  const targetByEmployee = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const plan of productionPlans) {
-      if (plan.status === 'in_progress' || plan.status === 'planned') {
-        const lineReports = allReports.filter((r) => r.lineId === plan.lineId);
-        const empIds = new Set(lineReports.map((r) => r.employeeId));
-        empIds.forEach((empId) => {
-          map.set(empId, (map.get(empId) ?? 0) + (plan.plannedQuantity ?? 0));
-        });
-      }
-    }
-    return map;
-  }, [productionPlans, allReports]);
+  }, [allReports, resolveSupervisorIdForReport]);
 
   const supervisors = useMemo<SupervisorRow[]>(() => {
-    const totalDaysInRange = Math.max(1, Math.ceil((new Date().getTime() - new Date(weekStart).getTime()) / (1000 * 60 * 60 * 24)) + 1);
-
     return _rawEmployees
       .filter((e) => e.level === 2)
       .map((e) => {
-        const reports = reportsByEmployee.get(e.id!) ?? [];
+        const reports = reportsBySupervisor.get(e.id!) ?? [];
         const totalProduced = reports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
         const totalWaste = reports.reduce((s, r) => s + (r.quantityWaste ?? 0), 0);
         const todayProduced = reports
@@ -216,9 +317,71 @@ export const Supervisors: React.FC = () => {
           .filter((r) => r.date >= weekStart && r.date <= today)
           .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
         const scrapRate = calculateWasteRatio(totalWaste, totalProduced + totalWaste);
-        const target = targetByEmployee.get(e.id!) ?? 0;
-        const activeDays = countUniqueDaysInRange(reports, weekStart, today);
-        const performanceScore = computePerformanceScore(totalProduced, target, scrapRate, activeDays, totalDaysInRange);
+        const activeDays = countUniqueDaysInRange(reports, rangeStart, rangeEnd);
+        const avgDailyActual = activeDays > 0 ? totalProduced / activeDays : 0;
+        const benchmarkWeight = reports.reduce((sum, r) => sum + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+        const benchmarkWeightedSum = reports.reduce((sum, r) => {
+          const qty = Math.max(0, Number(r.quantityProduced ?? 0));
+          const ref = productAvgDailyById.get(r.productId) || 0;
+          return sum + (ref * qty);
+        }, 0);
+        const fallbackBenchmark = reports.length > 0
+          ? reports.reduce((sum, r) => sum + (productAvgDailyById.get(r.productId) || 0), 0) / reports.length
+          : 0;
+        const benchmarkDaily = benchmarkWeight > 0 ? (benchmarkWeightedSum / benchmarkWeight) : fallbackBenchmark;
+        const deviationPct = benchmarkDaily > 0
+          ? Number((((avgDailyActual - benchmarkDaily) / benchmarkDaily) * 100).toFixed(1))
+          : null;
+        const daysCommitmentPct = totalDaysInRange > 0 ? (activeDays / totalDaysInRange) * 100 : 0;
+        const throughputPct = benchmarkDaily > 0 ? (avgDailyActual / benchmarkDaily) * 100 : (avgDailyActual > 0 ? 100 : 0);
+        const lineReportsMap = new Map<string, ProductionReport[]>();
+        for (const report of reports) {
+          const lineId = String(report.lineId || '').trim();
+          if (!lineId) continue;
+          const arr = lineReportsMap.get(lineId) ?? [];
+          arr.push(report);
+          lineReportsMap.set(lineId, arr);
+        }
+        const performanceByLine = Array.from(lineReportsMap.entries())
+          .map(([lineId, lineReports]) => {
+            const produced = lineReports.reduce((sum, r) => sum + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+            const lineActiveDays = countUniqueDaysInRange(lineReports, rangeStart, rangeEnd);
+            const lineAvgDailyActual = lineActiveDays > 0 ? produced / lineActiveDays : 0;
+            const lineBenchmarkWeight = lineReports.reduce((sum, r) => sum + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+            const lineBenchmarkSum = lineReports.reduce((sum, r) => {
+              const qty = Math.max(0, Number(r.quantityProduced ?? 0));
+              const ref = productAvgDailyById.get(r.productId) || 0;
+              return sum + (ref * qty);
+            }, 0);
+            const lineFallbackBenchmark = lineReports.length > 0
+              ? lineReports.reduce((sum, r) => sum + (productAvgDailyById.get(r.productId) || 0), 0) / lineReports.length
+              : 0;
+            const lineBenchmarkDaily = lineBenchmarkWeight > 0 ? (lineBenchmarkSum / lineBenchmarkWeight) : lineFallbackBenchmark;
+            const lineDeviationPct = lineBenchmarkDaily > 0
+              ? Number((((lineAvgDailyActual - lineBenchmarkDaily) / lineBenchmarkDaily) * 100).toFixed(1))
+              : null;
+            const lineDaysCommitmentPct = totalDaysInRange > 0 ? (lineActiveDays / totalDaysInRange) * 100 : 0;
+            const lineThroughputPct = lineBenchmarkDaily > 0 ? (lineAvgDailyActual / lineBenchmarkDaily) * 100 : (lineAvgDailyActual > 0 ? 100 : 0);
+            const linePerformanceScore = clamp(Math.round((lineThroughputPct * 0.75) + (lineDaysCommitmentPct * 0.25)), 0, 100);
+            return {
+              lineId,
+              lineName: getLineName(lineId),
+              performanceScore: linePerformanceScore,
+              deviationPct: lineDeviationPct,
+            };
+          })
+          .sort((a, b) => b.performanceScore - a.performanceScore);
+        const weightedProduced = Array.from(lineReportsMap.values())
+          .reduce((sum, lineReports) => sum + lineReports.reduce((s, r) => s + Math.max(0, Number(r.quantityProduced ?? 0)), 0), 0);
+        const weightedLineScore = weightedProduced > 0
+          ? performanceByLine.reduce((sum, row) => {
+              const lineProduced = (lineReportsMap.get(row.lineId) ?? []).reduce((s, r) => s + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+              return sum + (row.performanceScore * lineProduced);
+            }, 0) / weightedProduced
+          : (performanceByLine.length > 0
+              ? performanceByLine.reduce((sum, row) => sum + row.performanceScore, 0) / performanceByLine.length
+              : clamp(Math.round((throughputPct * 0.75) + (daysCommitmentPct * 0.25)), 0, 100));
+        const performanceScore = clamp(Math.round(weightedLineScore), 0, 100);
         const assignedLines = [...new Set(reports.map((r) => r.lineId))];
         const totalWorkers = reports.length > 0
           ? Math.round(reports.reduce((s, r) => s + (r.workersCount ?? 0), 0) / reports.length)
@@ -236,13 +399,19 @@ export const Supervisors: React.FC = () => {
           todayProduced,
           weekProduced,
           scrapRate,
+          avgDailyActual,
+          benchmarkDaily,
+          deviationPct,
+          activeDays,
+          totalDaysInRange,
           performanceScore,
+          performanceByLine,
           assignedLines,
           totalWorkers,
           lastActivity,
         };
       });
-  }, [_rawEmployees, reportsByEmployee, targetByEmployee, today, weekStart]);
+  }, [_rawEmployees, reportsBySupervisor, today, rangeStart, rangeEnd, totalDaysInRange, productAvgDailyById]);
 
   // ── Filtering ───────────────────────────────────────────────────────────────
 
@@ -269,19 +438,8 @@ export const Supervisors: React.FC = () => {
     if (filterScoreRange === 'mid') list = list.filter((e) => e.performanceScore >= 70 && e.performanceScore < 85);
     if (filterScoreRange === 'low') list = list.filter((e) => e.performanceScore < 70);
 
-    if (filterDateFrom || filterDateTo) {
-      list = list.filter((s) => {
-        const hasReportsInRange = s.reports.some((r) => {
-          if (filterDateFrom && r.date < filterDateFrom) return false;
-          if (filterDateTo && r.date > filterDateTo) return false;
-          return true;
-        });
-        return hasReportsInRange;
-      });
-    }
-
     return list;
-  }, [supervisors, search, filterDepartment, filterLine, filterStatus, filterScoreRange, filterDateFrom, filterDateTo, statFilter]);
+  }, [supervisors, search, filterDepartment, filterLine, filterStatus, filterScoreRange, statFilter]);
 
   // ── Summary KPIs ────────────────────────────────────────────────────────────
 
@@ -300,18 +458,27 @@ export const Supervisors: React.FC = () => {
       const d = new Date(); d.setDate(d.getDate() - 1);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     })();
+    const supervisorIds = new Set(supervisors.map((s) => s.id));
     const yesterdayTotal = allReports
-      .filter((r) => r.date === yesterdayStr && supervisors.some((s) => s.id === r.employeeId))
+      .filter((r) => {
+        if (r.date !== yesterdayStr) return false;
+        const supervisorId = resolveSupervisorIdForReport(r);
+        return !!supervisorId && supervisorIds.has(supervisorId);
+      })
       .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
     const todayChange = yesterdayTotal > 0 ? Math.round(((todayTotal - yesterdayTotal) / yesterdayTotal) * 100) : 0;
 
     const lastWeekTotal = allReports
-      .filter((r) => r.date >= lastWeek.start && r.date <= lastWeek.end && supervisors.some((s) => s.id === r.employeeId))
+      .filter((r) => {
+        if (r.date < lastWeek.start || r.date > lastWeek.end) return false;
+        const supervisorId = resolveSupervisorIdForReport(r);
+        return !!supervisorId && supervisorIds.has(supervisorId);
+      })
       .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
     const weekChange = lastWeekTotal > 0 ? Math.round(((weekTotal - lastWeekTotal) / lastWeekTotal) * 100) : 0;
 
     return { activeSupervisors, todayTotal, weekTotal, overallScrapRate, avgScore, todayChange, weekChange };
-  }, [supervisors, allReports, lastWeek]);
+  }, [supervisors, allReports, lastWeek, resolveSupervisorIdForReport]);
 
   // ── Hover card ──────────────────────────────────────────────────────────────
 
@@ -336,7 +503,13 @@ export const Supervisors: React.FC = () => {
       'إجمالي الإنتاج': s.totalProduced,
       'إجمالي الهالك': s.totalWaste,
       'نسبة الهالك %': s.scrapRate,
-      'درجة الأداء': s.performanceScore,
+      'المتوسط المرجعي / يوم': Number(s.benchmarkDaily.toFixed(1)),
+      'الإنتاج اليومي الفعلي': Number(s.avgDailyActual.toFixed(1)),
+      'الانحراف %': s.deviationPct ?? '—',
+      'أيام النشاط': `${s.activeDays}/${s.totalDaysInRange}`,
+      'نسبة الأداء %': s.performanceScore,
+      'تقييم': getScoreBadge(s.performanceScore).label,
+      'الأداء لكل خط': s.performanceByLine.map((line) => `${line.lineName}: ${line.performanceScore}%`).join(' | '),
       'إنتاج اليوم': s.todayProduced,
       'إنتاج الأسبوع': s.weekProduced,
       'آخر نشاط': s.lastActivity,
@@ -353,6 +526,218 @@ export const Supervisors: React.FC = () => {
     setBulkPrintReports(allSelectedReports);
     setTimeout(() => handleBulkPrint(), 100);
   }, [handleBulkPrint]);
+
+  const buildSupervisorLineRows = useCallback((sup: SupervisorRow): SupervisorLinePerformancePrintRow[] => {
+    const byLine = new Map<string, { produced: number; waste: number; reports: number; workers: number; hours: number }>();
+    sup.reports.forEach((r) => {
+      const prev = byLine.get(r.lineId) ?? { produced: 0, waste: 0, reports: 0, workers: 0, hours: 0 };
+      prev.produced += r.quantityProduced ?? 0;
+      prev.waste += r.quantityWaste ?? 0;
+      prev.reports += 1;
+      prev.workers += r.workersCount ?? 0;
+      prev.hours += r.workHours ?? 0;
+      byLine.set(r.lineId, prev);
+    });
+    return Array.from(byLine.entries())
+      .map(([lineId, row]) => {
+        const totalQty = row.produced + row.waste;
+        return {
+          lineName: getLineName(lineId),
+          reportsCount: row.reports,
+          produced: row.produced,
+          waste: row.waste,
+          wasteRatio: totalQty > 0 ? Number(((row.waste / totalQty) * 100).toFixed(1)) : 0,
+          avgWorkers: row.reports > 0 ? Number((row.workers / row.reports).toFixed(1)) : 0,
+          totalHours: Number(row.hours.toFixed(1)),
+        };
+      })
+      .sort((a, b) => b.produced - a.produced);
+  }, [getLineName]);
+
+  const buildSupervisorProductRows = useCallback((sup: SupervisorRow): SupervisorProductPerformancePrintRow[] => {
+    const byProduct = new Map<string, { produced: number; reports: number; activeDates: Set<string> }>();
+    sup.reports.forEach((r) => {
+      const productId = String(r.productId || '').trim();
+      if (!productId) return;
+      const prev = byProduct.get(productId) ?? { produced: 0, reports: 0, activeDates: new Set<string>() };
+      prev.produced += Number(r.quantityProduced ?? 0);
+      prev.reports += 1;
+      if (r.date) prev.activeDates.add(r.date);
+      byProduct.set(productId, prev);
+    });
+    return Array.from(byProduct.entries())
+      .map(([productId, row]) => {
+        const benchmarkDaily = Math.max(0, Number(products.find((p) => p.id === productId)?.avgDailyProduction || 0));
+        const activeDays = row.activeDates.size;
+        const requiredQty = Number((benchmarkDaily * activeDays).toFixed(1));
+        const achievedQty = Number(row.produced.toFixed(1));
+        const performanceRatio = requiredQty > 0
+          ? Number(((achievedQty / requiredQty) * 100).toFixed(1))
+          : (achievedQty > 0 ? 100 : 0);
+        return {
+          productName: products.find((p) => p.id === productId)?.name ?? '—',
+          reportsCount: row.reports,
+          requiredQty,
+          achievedQty,
+          performanceRatio,
+        };
+      })
+      .sort((a, b) => b.achievedQty - a.achievedQty);
+  }, [products]);
+
+  const buildAppreciation = useCallback((sup: SupervisorRow, lineRows: SupervisorLinePerformancePrintRow[]) => {
+    if (sup.performanceScore >= 90) {
+      return {
+        title: 'شكر وتقدير على الأداء المتميز',
+        body: `نتقدم بالشكر للمشرف ${sup.name} على الحفاظ على أداء مرتفع وانضباط تشغيلي واضح خلال الفترة الحالية.`,
+        recommendations: [
+          'الاستمرار على نفس وتيرة المتابعة اليومية للخطوط.',
+          'مشاركة أفضل ممارسات التشغيل مع باقي المشرفين.',
+        ],
+      };
+    }
+    if (sup.performanceScore >= 75) {
+      return {
+        title: 'أداء جيد مع فرص تطوير',
+        body: `نشكر المشرف ${sup.name} على الأداء الجيد، مع وجود فرصة لرفع الكفاءة وتقليل الهالك على بعض الخطوط.`,
+        recommendations: [
+          'تركيز المتابعة على الخطوط ذات الهالك الأعلى.',
+          'مراجعة توزيع العمالة خلال ساعات الذروة.',
+          ...lineRows.filter((l) => l.wasteRatio > 3).slice(0, 2).map((l) => `الخط ${l.lineName}: تقليل الهالك الحالي (${l.wasteRatio}%).`),
+        ],
+      };
+    }
+    return {
+      title: 'خطة تحسين أداء مطلوبة',
+      body: `نقدّر مجهود المشرف ${sup.name}، ويوصى بتنفيذ خطة تحسين قصيرة المدى لرفع الإنتاجية وضبط الجودة.`,
+      recommendations: [
+        'وضع هدف أسبوعي واضح لرفع درجة الأداء تدريجيًا.',
+        'تحليل أسباب التوقف والهالك يوميًا على مستوى كل خط.',
+        'تطبيق متابعة دورية مع فريق الخط والجودة.',
+      ],
+    };
+  }, []);
+
+  const printSupervisorPerformance = useCallback((sup: SupervisorRow) => {
+    const lineRows = buildSupervisorLineRows(sup);
+    const productRows = buildSupervisorProductRows(sup);
+    const appreciation = buildAppreciation(sup, lineRows);
+    const periodLabel = viewMode === 'today' ? `اليوم (${today})` : `${startDate} إلى ${endDate}`;
+    const requiredQty = Number((sup.benchmarkDaily * sup.totalDaysInRange).toFixed(1));
+    const achievedQty = Number(sup.totalProduced.toFixed(1));
+    const performanceRatio = requiredQty > 0
+      ? Number(((achievedQty / requiredQty) * 100).toFixed(1))
+      : Number(sup.performanceScore.toFixed(1));
+    const costStatusHigh = sup.scrapRate > 5;
+    const costStatusLabel = costStatusHigh ? 'مرتفعة' : 'طبيعية';
+    const lineUtilizationRatio = Number(((sup.activeDays / Math.max(sup.totalDaysInRange, 1)) * 100).toFixed(1));
+    const lineUtilizationHigh = lineUtilizationRatio >= 70;
+
+    setSingleSupervisorPrintData({
+      supervisorName: sup.name,
+      supervisorCode: sup.code,
+      departmentName: getDepartmentName(sup.departmentId ?? ''),
+      jobTitle: getJobPositionTitle(sup.jobPositionId ?? ''),
+      statusLabel: sup.isActive !== false ? 'نشط' : 'غير نشط',
+      periodLabel,
+      performanceScore: sup.performanceScore,
+      totalProduced: sup.totalProduced,
+      totalWaste: sup.totalWaste,
+      wasteRatio: sup.scrapRate,
+      reportsCount: sup.reportCount,
+      workDays: sup.activeDays,
+      todayProduced: sup.todayProduced,
+      weekProduced: sup.weekProduced,
+      linesCount: sup.assignedLines.length,
+      avgWorkers: sup.totalWorkers,
+      requiredQty,
+      achievedQty,
+      performanceRatio,
+      costStatusLabel,
+      costStatusHigh,
+      lineUtilizationRatio,
+      lineUtilizationHigh,
+      appreciationTitle: appreciation.title,
+      appreciationBody: appreciation.body,
+      recommendations: appreciation.recommendations,
+      productRows,
+      lineRows,
+    });
+    setTimeout(() => handleSingleSupervisorPrint(), 120);
+  }, [
+    buildSupervisorLineRows,
+    buildSupervisorProductRows,
+    buildAppreciation,
+    endDate,
+    getDepartmentName,
+    getJobPositionTitle,
+    handleSingleSupervisorPrint,
+    startDate,
+    today,
+    viewMode,
+  ]);
+
+  const exportSupervisorPerformance = useCallback((sup: SupervisorRow) => {
+    if (!canExportFromPage) return;
+    const lineRows = buildSupervisorLineRows(sup);
+    const productRows = buildSupervisorProductRows(sup);
+    const appreciation = buildAppreciation(sup, lineRows);
+    const periodLabel = viewMode === 'today' ? `اليوم (${today})` : `${startDate} إلى ${endDate}`;
+
+    const summarySheet = [
+      { البند: 'اسم المشرف', القيمة: sup.name },
+      { البند: 'الكود', القيمة: sup.code ?? '—' },
+      { البند: 'القسم', القيمة: getDepartmentName(sup.departmentId ?? '') },
+      { البند: 'الوظيفة', القيمة: getJobPositionTitle(sup.jobPositionId ?? '') },
+      { البند: 'الفترة', القيمة: periodLabel },
+      { البند: 'درجة الأداء', القيمة: sup.performanceScore },
+      { البند: 'إجمالي الإنتاج', القيمة: sup.totalProduced },
+      { البند: 'إجمالي الهالك', القيمة: sup.totalWaste },
+      { البند: 'نسبة الهالك %', القيمة: sup.scrapRate },
+      { البند: 'إنتاج اليوم', القيمة: sup.todayProduced },
+      { البند: 'إنتاج الأسبوع', القيمة: sup.weekProduced },
+      { البند: 'عدد التقارير', القيمة: sup.reportCount },
+      { البند: 'عدد الخطوط', القيمة: sup.assignedLines.length },
+      { البند: 'متوسط العمالة', القيمة: sup.totalWorkers },
+      { البند: 'رسالة التقدير', القيمة: appreciation.title },
+      { البند: 'ملخص التقييم', القيمة: appreciation.body },
+    ];
+    const lineSheet = lineRows.map((r) => ({
+      'خط الإنتاج': r.lineName,
+      'عدد التقارير': r.reportsCount,
+      'الإنتاج': r.produced,
+      'الهالك': r.waste,
+      'نسبة الهالك %': r.wasteRatio,
+      'متوسط العمالة': r.avgWorkers,
+      'إجمالي الساعات': r.totalHours,
+    }));
+    const productSheet = productRows.map((r) => ({
+      'المنتج': r.productName,
+      'عدد التقارير': r.reportsCount,
+      'الكمية المطلوبة': r.requiredQty,
+      'الكمية المحققة': r.achievedQty,
+      'نسبة الأداء %': r.performanceRatio,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summarySheet), 'ملخص التقييم');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(productSheet), 'تفصيل المنتجات');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lineSheet), 'تفصيل الخطوط');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const safeName = (sup.name || 'supervisor').replace(/[\\/:*?"<>|]/g, '_');
+    saveAs(new Blob([buf], { type: 'application/octet-stream' }), `supervisor_performance_${safeName}_${today}.xlsx`);
+  }, [
+    buildAppreciation,
+    buildSupervisorLineRows,
+    buildSupervisorProductRows,
+    canExportFromPage,
+    endDate,
+    getDepartmentName,
+    getJobPositionTitle,
+    startDate,
+    today,
+    viewMode,
+  ]);
 
   const bulkActions = useMemo<TableBulkAction<SupervisorRow>[]>(() => {
     const actions: TableBulkAction<SupervisorRow>[] = [
@@ -415,14 +800,38 @@ export const Supervisors: React.FC = () => {
                   <p className="text-rose-500 font-medium">الهالك</p>
                   <p className="font-bold text-rose-700 text-sm">{sup.scrapRate}%</p>
                 </div>
-                <div className={`rounded-[var(--border-radius-base)] p-2 text-center ${sup.performanceScore >= 85 ? 'bg-emerald-50 dark:bg-emerald-900/10' : sup.performanceScore >= 70 ? 'bg-amber-50 dark:bg-amber-900/10' : 'bg-rose-50 dark:bg-rose-900/10'}`}>
-                  <p className={`font-medium ${sup.performanceScore >= 85 ? 'text-emerald-500' : sup.performanceScore >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>الأداء</p>
-                  <p className={`font-black text-sm ${sup.performanceScore >= 85 ? 'text-emerald-700' : sup.performanceScore >= 70 ? 'text-amber-700' : 'text-rose-700'}`}>{sup.performanceScore}</p>
+                <div className={`rounded-[var(--border-radius-base)] p-2 text-center ${
+                  (sup.deviationPct ?? 0) >= 0
+                    ? 'bg-emerald-50 dark:bg-emerald-900/10'
+                    : (sup.deviationPct ?? 0) <= -20
+                      ? 'bg-rose-50 dark:bg-rose-900/10'
+                      : 'bg-amber-50 dark:bg-amber-900/10'
+                }`}>
+                  <p className={`font-medium ${
+                    (sup.deviationPct ?? 0) >= 0
+                      ? 'text-emerald-500'
+                      : (sup.deviationPct ?? 0) <= -20
+                        ? 'text-rose-500'
+                        : 'text-amber-500'
+                  }`}>الانحراف</p>
+                  <p className={`font-black text-sm ${
+                    (sup.deviationPct ?? 0) >= 0
+                      ? 'text-emerald-700'
+                      : (sup.deviationPct ?? 0) <= -20
+                        ? 'text-rose-700'
+                        : 'text-amber-700'
+                  }`}>
+                    {sup.deviationPct === null ? '—' : `${sup.deviationPct > 0 ? '+' : ''}${sup.deviationPct}%`}
+                  </p>
                 </div>
               </div>
-              <div className="mt-2 text-[10px] text-[var(--color-text-muted)] flex items-center gap-1">
+              <div className="mt-2 text-[10px] text-[var(--color-text-muted)] flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1">
+                  <span className="material-icons-round text-[10px]">calendar_month</span>
+                  {sup.activeDays}/{sup.totalDaysInRange} يوم
+                </span>
                 <span className="material-icons-round text-[10px]">precision_manufacturing</span>
-                {sup.assignedLines.length} خط إنتاج
+                <span>{sup.assignedLines.length} خط إنتاج</span>
               </div>
             </div>
           )}
@@ -492,18 +901,60 @@ export const Supervisors: React.FC = () => {
       },
     },
     {
+      header: 'الانحراف',
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (sup) => {
+        const deviation = sup.deviationPct;
+        if (deviation === null) return <span className="text-xs text-[var(--color-text-muted)]">—</span>;
+        const tone = deviation >= 0 ? 'text-emerald-600' : deviation <= -20 ? 'text-rose-600' : 'text-amber-600';
+        return (
+          <span className={`text-xs font-bold ${tone}`}>
+            {deviation > 0 ? '+' : ''}{deviation}%
+          </span>
+        );
+      },
+    },
+    {
       header: 'الأداء',
       headerClassName: 'text-center',
       className: 'text-center',
       render: (sup) => {
-        const { variant } = getScoreBadge(sup.performanceScore);
+        const { variant, label } = getScoreBadge(sup.performanceScore);
         const colorMap = { success: 'text-emerald-600', warning: 'text-amber-600', danger: 'text-rose-600' };
         const bgMap = { success: 'bg-emerald-500', warning: 'bg-amber-500', danger: 'bg-rose-500' };
         return (
-          <div className="flex flex-col items-center gap-1">
-            <span className={`text-lg font-bold ${colorMap[variant]}`}>{sup.performanceScore}</span>
-            <div className="w-12 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${bgMap[variant]}`} style={{ width: `${sup.performanceScore}%` }} />
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex flex-col items-center gap-1">
+              <span className={`text-lg font-bold ${colorMap[variant]}`}>{sup.performanceScore}%</span>
+              <div className="w-12 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${bgMap[variant]}`} style={{ width: `${sup.performanceScore}%` }} />
+              </div>
+              <span className={`text-[10px] font-bold ${colorMap[variant]}`}>{label}</span>
+            </div>
+            <div className="flex flex-wrap justify-center gap-1 max-w-[180px]">
+              {sup.performanceByLine.slice(0, 3).map((line) => {
+                const lineBadge = getScoreBadge(line.performanceScore);
+                const lineTone =
+                  lineBadge.variant === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : lineBadge.variant === 'warning'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-rose-50 text-rose-700 border-rose-200';
+                return (
+                  <span
+                    key={`${sup.id}_${line.lineId}`}
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-sm)] border text-[10px] font-bold ${lineTone}`}
+                    title={`${line.lineName}: ${line.performanceScore}%`}
+                  >
+                    <span>{line.lineName}</span>
+                    <span>{line.performanceScore}%</span>
+                  </span>
+                );
+              })}
+              {sup.performanceByLine.length > 3 && (
+                <span className="text-[10px] font-bold text-[var(--color-text-muted)]">+{sup.performanceByLine.length - 3}</span>
+              )}
             </div>
           </div>
         );
@@ -525,6 +976,24 @@ export const Supervisors: React.FC = () => {
 
   const renderActions = useCallback((sup: SupervisorRow) => (
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+      {can('print') && (
+        <button
+          onClick={() => printSupervisorPerformance(sup)}
+          className="p-2 text-[var(--color-text-muted)] hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-[var(--border-radius-base)] transition-all"
+          title="طباعة تقييم الأداء"
+        >
+          <span className="material-icons-round text-lg">print</span>
+        </button>
+      )}
+      {canExportFromPage && (
+        <button
+          onClick={() => exportSupervisorPerformance(sup)}
+          className="p-2 text-[var(--color-text-muted)] hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-[var(--border-radius-base)] transition-all"
+          title="تصدير تقييم الأداء"
+        >
+          <span className="material-icons-round text-lg">download</span>
+        </button>
+      )}
       <button
         onClick={() => navigate(`/supervisors/${sup.id}`)}
         className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/10 rounded-[var(--border-radius-base)] transition-all"
@@ -540,7 +1009,7 @@ export const Supervisors: React.FC = () => {
         <span className="material-icons-round text-lg">person</span>
       </button>
     </div>
-  ), [navigate]);
+  ), [can, canExportFromPage, exportSupervisorPerformance, navigate, printSupervisorPerformance]);
 
   // ── Unique values for filters ───────────────────────────────────────────────
 
@@ -560,12 +1029,10 @@ export const Supervisors: React.FC = () => {
     setFilterLine('');
     setFilterStatus('');
     setFilterScoreRange('');
-    setFilterDateFrom('');
-    setFilterDateTo('');
     setStatFilter('');
   };
 
-  const hasActiveFilters = search || filterDepartment || filterLine || filterStatus || filterScoreRange || filterDateFrom || filterDateTo || statFilter;
+  const hasActiveFilters = search || filterDepartment || filterLine || filterStatus || filterScoreRange || statFilter;
 
   // ── Loading ─────────────────────────────────────────────────────────────────
 
@@ -680,21 +1147,61 @@ export const Supervisors: React.FC = () => {
             <option value="low">ضعيف (&lt;70)</option>
           </select>
         </div>
-        {/* Date range */}
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <span className="material-icons-round text-lg">calendar_month</span>
-            <span className="font-medium">فترة التقارير:</span>
+        {/* Reports date scope */}
+        <div className="space-y-3 mb-4">
+          <div className="erp-date-seg">
+            <button className={`erp-date-seg-btn${viewMode === 'today' ? ' active' : ''}`} onClick={handleShowToday}>
+              اليوم
+            </button>
+            <button
+              className={`erp-date-seg-btn${viewMode === 'range' && startDate === endDate && startDate !== today ? ' active' : ''}`}
+              onClick={handleShowYesterday}
+            >
+              أمس
+            </button>
+            <button
+              className={`erp-date-seg-btn${viewMode === 'range' && startDate !== endDate ? ' active' : ''}`}
+              onClick={handleShowWeekly}
+            >
+              أسبوعي
+            </button>
+            <button
+              className={`erp-date-seg-btn${viewMode === 'range' && startDate.endsWith('-01') ? ' active' : ''}`}
+              onClick={handleShowMonthly}
+            >
+              شهري
+            </button>
           </div>
-          <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-            className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:border-primary focus:ring-2 focus:ring-primary/12 transition-all" />
-          <span className="text-[var(--color-text-muted)]">—</span>
-          <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-            className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:border-primary focus:ring-2 focus:ring-primary/12 transition-all" />
-          {hasActiveFilters && (
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="material-icons-round text-lg">calendar_month</span>
+              <span className="font-medium">نطاق البيانات:</span>
+            </div>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:border-primary focus:ring-2 focus:ring-primary/12 transition-all"
+            />
+            <span className="text-[var(--color-text-muted)]">—</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:border-primary focus:ring-2 focus:ring-primary/12 transition-all"
+            />
+            <Button variant="outline" onClick={handleApplyDateRange} disabled={!startDate || !endDate || reportsLoading}>
+              {reportsLoading ? 'جارٍ التحميل...' : 'تطبيق النطاق'}
+            </Button>
             <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold">
               {filtered.length} نتيجة
             </span>
+          </div>
+          {rangeError && (
+            <div className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-[var(--border-radius-base)] px-3 py-2">
+              {rangeError}
+            </div>
           )}
         </div>
 
@@ -720,6 +1227,14 @@ export const Supervisors: React.FC = () => {
           subtitle={`${filtered.length} مشرف — ${today}`}
           rows={printRows}
           totals={printTotals}
+          printSettings={printTemplate}
+        />
+      </div>
+
+      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+        <SupervisorPerformancePrint
+          ref={singleSupervisorPrintRef}
+          data={singleSupervisorPrintData}
           printSettings={printTemplate}
         />
       </div>
