@@ -6,6 +6,16 @@ const toNumber = (value) => {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
 };
+const deriveComponentWaste = (items) => {
+    if (!Array.isArray(items))
+        return 0;
+    return items.reduce((sum, item) => {
+        const qty = item && typeof item === 'object'
+            ? toNumber(item.quantity)
+            : 0;
+        return sum + qty;
+    }, 0);
+};
 const parseArgs = (argv) => {
     const getValue = (flag) => {
         const idx = argv.findIndex((arg) => arg === flag);
@@ -57,15 +67,16 @@ const run = async () => {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
                 continue;
             const month = date.slice(0, 7);
+            const wasteQuantity = deriveComponentWaste(data.componentScrapItems);
             const daily = dailyAgg.get(date) || makeAggregate();
             daily.totalProduction += toNumber(data.quantityProduced);
-            daily.totalWaste += toNumber(data.quantityWaste);
+            daily.totalWaste += wasteQuantity;
             daily.totalCost += toNumber(data.totalCost);
             daily.reportsCount += 1;
             dailyAgg.set(date, daily);
             const monthly = monthlyAgg.get(month) || makeAggregate();
             monthly.totalProduction += toNumber(data.quantityProduced);
-            monthly.totalWaste += toNumber(data.quantityWaste);
+            monthly.totalWaste += wasteQuantity;
             monthly.totalCost += toNumber(data.totalCost);
             monthly.reportsCount += 1;
             monthlyAgg.set(month, monthly);

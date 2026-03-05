@@ -13,6 +13,7 @@ import {
   formatNumber,
   calculateWasteRatio,
   getTodayDateString,
+  getReportWaste,
   normalizeDateInputToYmd,
   sumMaxWorkHoursByDate,
 } from '../../../utils/calculations';
@@ -40,11 +41,85 @@ import {
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
 
-function computePerformanceScore(produced: number, target: number, wasteRatio: number, activeDays: number, totalDays: number): number {
-  const productionScore = target > 0 ? (produced / target) * 100 : (produced > 0 ? 75 : 0);
-  const wastePenalty = wasteRatio;
-  const consistencyBonus = totalDays > 0 ? (activeDays / totalDays) * 10 : 0;
-  return clamp(Math.round(productionScore - wastePenalty + consistencyBonus), 0, 100);
+function countUniqueDaysInRange(reports: ProductionReport[], start: string, end: string): number {
+  const dates = new Set<string>();
+  for (const r of reports) {
+    if (r.date >= start && r.date <= end) dates.add(r.date);
+  }
+  return dates.size;
+}
+
+function daysBetweenInclusive(start: string, end: string): number {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 1;
+  const ms = endDate.getTime() - startDate.getTime();
+  return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
+}
+
+function computeSupervisorLikePerformanceScore(
+  reports: ProductionReport[],
+  rangeStart: string,
+  rangeEnd: string,
+  productAvgDailyById: Map<string, number>,
+): number {
+  const totalDaysInRange = daysBetweenInclusive(rangeStart, rangeEnd);
+  const activeDays = countUniqueDaysInRange(reports, rangeStart, rangeEnd);
+  const totalProduced = reports.reduce((sum, r) => sum + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+  const avgDailyActual = activeDays > 0 ? totalProduced / activeDays : 0;
+  const benchmarkWeight = reports.reduce((sum, r) => sum + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+  const benchmarkWeightedSum = reports.reduce((sum, r) => {
+    const qty = Math.max(0, Number(r.quantityProduced ?? 0));
+    const ref = productAvgDailyById.get(r.productId) || 0;
+    return sum + (ref * qty);
+  }, 0);
+  const fallbackBenchmark = reports.length > 0
+    ? reports.reduce((sum, r) => sum + (productAvgDailyById.get(r.productId) || 0), 0) / reports.length
+    : 0;
+  const benchmarkDaily = benchmarkWeight > 0 ? (benchmarkWeightedSum / benchmarkWeight) : fallbackBenchmark;
+  const daysCommitmentPct = totalDaysInRange > 0 ? (activeDays / totalDaysInRange) * 100 : 0;
+  const throughputPct = benchmarkDaily > 0 ? (avgDailyActual / benchmarkDaily) * 100 : (avgDailyActual > 0 ? 100 : 0);
+
+  const lineReportsMap = new Map<string, ProductionReport[]>();
+  for (const report of reports) {
+    const lineId = String(report.lineId || '').trim();
+    if (!lineId) continue;
+    const arr = lineReportsMap.get(lineId) ?? [];
+    arr.push(report);
+    lineReportsMap.set(lineId, arr);
+  }
+
+  const performanceByLine = Array.from(lineReportsMap.values()).map((lineReports) => {
+    const produced = lineReports.reduce((sum, r) => sum + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+    const lineActiveDays = countUniqueDaysInRange(lineReports, rangeStart, rangeEnd);
+    const lineAvgDailyActual = lineActiveDays > 0 ? produced / lineActiveDays : 0;
+    const lineBenchmarkWeight = lineReports.reduce((sum, r) => sum + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+    const lineBenchmarkSum = lineReports.reduce((sum, r) => {
+      const qty = Math.max(0, Number(r.quantityProduced ?? 0));
+      const ref = productAvgDailyById.get(r.productId) || 0;
+      return sum + (ref * qty);
+    }, 0);
+    const lineFallbackBenchmark = lineReports.length > 0
+      ? lineReports.reduce((sum, r) => sum + (productAvgDailyById.get(r.productId) || 0), 0) / lineReports.length
+      : 0;
+    const lineBenchmarkDaily = lineBenchmarkWeight > 0 ? (lineBenchmarkSum / lineBenchmarkWeight) : lineFallbackBenchmark;
+    const lineDaysCommitmentPct = totalDaysInRange > 0 ? (lineActiveDays / totalDaysInRange) * 100 : 0;
+    const lineThroughputPct = lineBenchmarkDaily > 0 ? (lineAvgDailyActual / lineBenchmarkDaily) * 100 : (lineAvgDailyActual > 0 ? 100 : 0);
+    return clamp(Math.round((lineThroughputPct * 0.75) + (lineDaysCommitmentPct * 0.25)), 0, 100);
+  });
+
+  const weightedProduced = Array.from(lineReportsMap.values())
+    .reduce((sum, lineReports) => sum + lineReports.reduce((s, r) => s + Math.max(0, Number(r.quantityProduced ?? 0)), 0), 0);
+  const weightedLineScore = weightedProduced > 0
+    ? Array.from(lineReportsMap.values()).reduce((sum, lineReports, idx) => {
+        const lineProduced = lineReports.reduce((s, r) => s + Math.max(0, Number(r.quantityProduced ?? 0)), 0);
+        return sum + ((performanceByLine[idx] || 0) * lineProduced);
+      }, 0) / weightedProduced
+    : (performanceByLine.length > 0
+        ? performanceByLine.reduce((sum, score) => sum + score, 0) / performanceByLine.length
+        : clamp(Math.round((throughputPct * 0.75) + (daysCommitmentPct * 0.25)), 0, 100));
+
+  return clamp(Math.round(weightedLineScore), 0, 100);
 }
 
 // ─── Chart Tab type ───────────────────────────────────────────────────────────
@@ -242,7 +317,7 @@ export const SupervisorDetails: React.FC = () => {
   }, [reports, period, today]);
 
   const totalProduced = useMemo(() => periodReports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0), [periodReports]);
-  const totalWaste = useMemo(() => periodReports.reduce((s, r) => s + (r.quantityWaste ?? 0), 0), [periodReports]);
+  const totalWaste = useMemo(() => periodReports.reduce((s, r) => s + getReportWaste(r), 0), [periodReports]);
   const wasteRatio = useMemo(() => calculateWasteRatio(totalWaste, totalProduced + totalWaste), [totalProduced, totalWaste]);
   const totalWorkerHours = useMemo(() => periodReports.reduce((s, r) => s + (r.workersCount ?? 0) * (r.workHours ?? 0), 0), [periodReports]);
   const laborBreakdownTotals = useMemo(() => (
@@ -261,6 +336,10 @@ export const SupervisorDetails: React.FC = () => {
 
   const todayProduced = useMemo(() => periodReports.filter((r) => r.date === today).reduce((s, r) => s + (r.quantityProduced ?? 0), 0), [periodReports, today]);
   const weekProduced = useMemo(() => periodReports.filter((r) => r.date >= weekStart && r.date <= today).reduce((s, r) => s + (r.quantityProduced ?? 0), 0), [periodReports, weekStart, today]);
+  const productAvgDailyById = useMemo(
+    () => new Map(products.filter((p) => Boolean(p.id)).map((p) => [String(p.id), Math.max(0, Number((p as any).avgDailyProduction || 0))])),
+    [products],
+  );
 
   const target = useMemo(() => {
     let t = 0;
@@ -272,12 +351,6 @@ export const SupervisorDetails: React.FC = () => {
     }
     return t;
   }, [productionPlans, periodReports]);
-
-  const performanceScore = useMemo(() => {
-    const totalDays = Math.max(1, Math.ceil((new Date().getTime() - new Date(weekStart).getTime()) / (1000 * 60 * 60 * 24)) + 1);
-    const activeDays = new Set(periodReports.filter((r) => r.date >= weekStart && r.date <= today).map((r) => r.date)).size;
-    return computePerformanceScore(totalProduced, target, wasteRatio, activeDays, totalDays);
-  }, [totalProduced, target, wasteRatio, periodReports, weekStart, today]);
 
   const avgWorkersPerReport = useMemo(() => {
     if (periodReports.length === 0) return 0;
@@ -309,6 +382,11 @@ export const SupervisorDetails: React.FC = () => {
     const monthStart = `${today.slice(0, 7)}-01`;
     return { start: monthStart, end: today };
   }, [period, today]);
+
+  const performanceScore = useMemo(
+    () => computeSupervisorLikePerformanceScore(periodReports, periodRange.start, periodRange.end, productAvgDailyById),
+    [periodReports, periodRange.start, periodRange.end, productAvgDailyById],
+  );
 
   const periodWorkOrders = useMemo(() => (
     workOrders.filter((wo) => {
@@ -403,7 +481,7 @@ export const SupervisorDetails: React.FC = () => {
     periodReports.forEach((r) => {
       const prev = byDate.get(r.date) ?? { produced: 0, waste: 0, hours: 0, workerHours: 0, workers: 0, count: 0 };
       prev.produced += r.quantityProduced ?? 0;
-      prev.waste += r.quantityWaste ?? 0;
+      prev.waste += getReportWaste(r);
       prev.hours = Math.max(prev.hours, r.workHours ?? 0);
       prev.workerHours += (r.workersCount ?? 0) * (r.workHours ?? 0);
       prev.workers += r.workersCount ?? 0;
@@ -435,7 +513,7 @@ export const SupervisorDetails: React.FC = () => {
       const prev = map.get(r.lineId) ?? { reports: 0, produced: 0, waste: 0, maxHoursByDate: new Map<string, number>() };
       prev.reports++;
       prev.produced += r.quantityProduced ?? 0;
-      prev.waste += r.quantityWaste ?? 0;
+      prev.waste += getReportWaste(r);
       const currentDateHours = prev.maxHoursByDate.get(r.date) ?? 0;
       prev.maxHoursByDate.set(r.date, Math.max(currentDateHours, r.workHours ?? 0));
       map.set(r.lineId, prev);
@@ -459,7 +537,7 @@ export const SupervisorDetails: React.FC = () => {
     periodReports.forEach((r) => {
       const prev = map.get(r.productId) ?? { produced: 0, waste: 0 };
       prev.produced += r.quantityProduced ?? 0;
-      prev.waste += r.quantityWaste ?? 0;
+      prev.waste += getReportWaste(r);
       map.set(r.productId, prev);
     });
     return Array.from(map.entries())
@@ -610,7 +688,7 @@ export const SupervisorDetails: React.FC = () => {
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" />
+        {/* <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" /> */}
         <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20" />
         <KPIBox
           label="إجمالي الإنتاج"
@@ -917,7 +995,7 @@ export const SupervisorDetails: React.FC = () => {
                           {formatNumber(r.quantityProduced)}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(r.quantityWaste)}</td>
+                      <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
                       <td className="px-5 py-3 text-center text-sm font-bold">{r.workersCount}</td>
                       <td className="px-5 py-3 text-center text-xs font-bold text-[var(--color-text-muted)]">
                         إ:{r.workersProductionCount ?? 0} | ت:{r.workersPackagingCount ?? 0} | ج:{r.workersQualityCount ?? 0} | ص:{r.workersMaintenanceCount ?? 0} | خ:{r.workersExternalCount ?? 0}

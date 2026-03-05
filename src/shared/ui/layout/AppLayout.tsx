@@ -33,7 +33,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
           onSidebarCollapseToggle={toggleCollapse}
         />
 
-        <main className="flex-1">
+        <main className="flex-1 pt-[52px]">
           <div className="max-w-screen-2xl mx-auto px-4 sm:px-5 py-4 sm:py-5 animate-in fade-in duration-200">
             {children}
           </div>

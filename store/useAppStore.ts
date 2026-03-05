@@ -31,6 +31,7 @@ import {
   AppNotification,
   WorkOrderScanEvent,
   WorkOrderLiveSummary,
+  ReportComponentScrapItem,
 } from '../types';
 
 import {
@@ -1220,7 +1221,6 @@ export const useAppStore = create<AppState>((set, get) => ({
               updatedWorkOrder.producedQuantity ??
               0,
             ),
-            quantityWaste: 0,
             workersCount: Number(
               updatedWorkOrder.actualWorkersCount ??
               updatedWorkOrder.maxWorkers ??
@@ -1509,6 +1509,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const { systemSettings, laborSettings } = get();
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
+      const componentScrapItems = (Array.isArray((data as any).componentScrapItems) ? (data as any).componentScrapItems : [])
+        .map((item: ReportComponentScrapItem) => ({
+          materialId: String(item?.materialId || '').trim(),
+          materialName: String(item?.materialName || '').trim(),
+          quantity: Number(item?.quantity || 0),
+        }))
+        .filter((item: { materialId: string; quantity: number }) => item.materialId && item.quantity > 0);
 
       const sameDayReports = await reportService.getByDateRange(data.date, data.date);
       const hasDuplicate = sameDayReports.some(
@@ -1571,7 +1578,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         const actorName = get().userDisplayName || get().userEmail || 'System';
         const actorUserId = get().uid || undefined;
         const producedQty = Number(data.quantityProduced || 0);
-        const wasteQty = Number(data.quantityWaste || 0);
 
         const requiresFinishedApproval = systemSettings.planSettings?.requireFinishedStockApprovalForReports !== false;
         if (product && routing.finishedReceiveWarehouseId && producedQty > 0) {
@@ -1610,22 +1616,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         }
 
-        if (product && routing.wasteReceiveWarehouseId && wasteQty > 0) {
-          await stockService.createMovement({
-            warehouseId: routing.wasteReceiveWarehouseId,
-            itemType: 'finished_good',
-            itemId: data.productId,
-            itemName: product.name,
-            itemCode: product.code,
-            movementType: 'IN',
-            quantity: wasteQty,
-            note: `Auto waste from production report ${id}`,
-            createdBy: actorName,
-          });
-        }
-
         if (routing.decomposedSourceWarehouseId) {
-          const baseUnits = producedQty + wasteQty;
+          const baseUnits = producedQty;
           if (baseUnits > 0) {
             const [materials, rawMaterials] = await Promise.all([
               productMaterialService.getByProduct(data.productId),
@@ -1661,6 +1653,52 @@ export const useAppStore = create<AppState>((set, get) => ({
             }
           }
         }
+
+        if (
+          product &&
+          product.autoDeductComponentScrapFromDecomposed === true &&
+          routing.decomposedSourceWarehouseId &&
+          routing.wasteReceiveWarehouseId &&
+          componentScrapItems.length > 0
+        ) {
+          const rawMaterials = await rawMaterialService.getAll();
+          const rawById = new Map(
+            rawMaterials
+              .filter((rm) => Boolean(rm.id))
+              .map((rm) => [String(rm.id), rm]),
+          );
+          for (const scrapItem of componentScrapItems) {
+            const raw = rawById.get(scrapItem.materialId);
+            if (!raw?.id) continue;
+            const qty = Number(scrapItem.quantity || 0);
+            if (qty <= 0) continue;
+
+            await stockService.createMovement({
+              warehouseId: routing.decomposedSourceWarehouseId,
+              itemType: 'raw_material',
+              itemId: raw.id,
+              itemName: raw.name,
+              itemCode: raw.code,
+              movementType: 'OUT',
+              quantity: qty,
+              note: `Component scrap OUT from production report ${id}`,
+              createdBy: actorName,
+              allowNegative: routing.allowNegativeDecomposedStock,
+            });
+
+            await stockService.createMovement({
+              warehouseId: routing.wasteReceiveWarehouseId,
+              itemType: 'raw_material',
+              itemId: raw.id,
+              itemName: raw.name,
+              itemCode: raw.code,
+              movementType: 'IN',
+              quantity: qty,
+              note: `Component scrap IN from production report ${id}`,
+              createdBy: actorName,
+            });
+          }
+        }
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
       }
@@ -1669,9 +1707,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (activeWO?.id) {
           await workOrderService.incrementProduced(activeWO.id, data.quantityProduced, laborCost);
           const newProduced = (activeWO.producedQuantity ?? 0) + data.quantityProduced;
-          const remainingBefore = Math.max(activeWO.quantity - (activeWO.producedQuantity ?? 0), 0);
-          const wasteClosesWorkOrder = Math.abs((data.quantityWaste ?? 0) - remainingBefore) < 0.0001;
-          if (newProduced >= activeWO.quantity || wasteClosesWorkOrder) {
+          if (newProduced >= activeWO.quantity) {
             await workOrderService.update(activeWO.id, { status: 'completed', completedAt: new Date().toISOString() });
           } else if (activeWO.status === 'pending') {
             await workOrderService.update(activeWO.id, { status: 'in_progress' });

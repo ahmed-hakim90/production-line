@@ -19,7 +19,6 @@ export interface ParsedReportRow {
   employeeCode: string;
   employeeId: string;
   quantityProduced: number;
-  quantityWaste: number;
   workersCount: number;
   workHours: number;
   errors: string[];
@@ -41,7 +40,6 @@ export interface ParsedReportDateUpdateRow {
   reportCode: string;
   date?: string;
   quantityProduced?: number;
-  quantityWaste?: number;
   workersCount?: number;
   workHours?: number;
   updatedFieldsCount: number;
@@ -95,9 +93,6 @@ const HEADER_MAP: Record<string, string> = {
   'الانتاج': 'quantityProduced',
   'الإنتاج': 'quantityProduced',
   'quantity': 'quantityProduced',
-  'الهالك': 'quantityWaste',
-  'هالك': 'quantityWaste',
-  'waste': 'quantityWaste',
   'عدد العمال': 'workersCount',
   'العمال': 'workersCount',
   'عمال': 'workersCount',
@@ -122,9 +117,6 @@ const DATE_UPDATE_HEADER_MAP: Record<string, string> = {
   'الكمية المنتجة': 'quantityProduced',
   'كمية منتجة': 'quantityProduced',
   'كمية جديدة': 'quantityProduced',
-  'الهالك': 'quantityWaste',
-  'هالك': 'quantityWaste',
-  'هالك جديد': 'quantityWaste',
   'عدد العمال': 'workersCount',
   'عمال': 'workersCount',
   'عدد العمال الجديد': 'workersCount',
@@ -132,7 +124,6 @@ const DATE_UPDATE_HEADER_MAP: Record<string, string> = {
   'ساعات': 'workHours',
   'ساعات جديدة': 'workHours',
   'produced quantity': 'quantityProduced',
-  'waste quantity': 'quantityWaste',
   'workers count': 'workersCount',
   'work hours': 'workHours',
 };
@@ -382,20 +373,11 @@ export function parseExcelFile(
             const quantityProduced = Number(getValue('quantityProduced')) || 0;
             if (quantityProduced <= 0) errors.push('الكمية المنتجة يجب أن تكون أكبر من 0');
 
-            const quantityWaste = Number(getValue('quantityWaste')) || 0;
-            if (quantityWaste < 0) errors.push('الهالك لا يمكن أن يكون سالب');
-
             const workersCount = Number(getValue('workersCount')) || 0;
             if (workersCount <= 0) errors.push('عدد العمال مفقود');
 
             const workHours = Number(getValue('workHours')) || 0;
             if (workHours <= 0) errors.push('ساعات العمل مفقودة');
-
-            // ── Waste ratio warning
-            if (quantityProduced > 0 && quantityWaste > 0) {
-              const wasteRatio = quantityWaste / (quantityProduced + quantityWaste);
-              if (wasteRatio > 0.2) warnings.push(`نسبة الهالك مرتفعة (${(wasteRatio * 100).toFixed(1)}%)`);
-            }
 
             // ── Duplicate detection
             let isDuplicate = false;
@@ -424,7 +406,6 @@ export function parseExcelFile(
               employeeCode,
               employeeId,
               quantityProduced,
-              quantityWaste,
               workersCount,
               workHours,
               errors,
@@ -486,9 +467,6 @@ export function parseReportDateUpdateExcelFile(
         const producedKey = rawHeaders.find(
           (h) => DATE_UPDATE_HEADER_MAP[normalizeHeaderForMap(h)] === 'quantityProduced'
         );
-        const wasteKey = rawHeaders.find(
-          (h) => DATE_UPDATE_HEADER_MAP[normalizeHeaderForMap(h)] === 'quantityWaste'
-        );
         const workersKey = rawHeaders.find(
           (h) => DATE_UPDATE_HEADER_MAP[normalizeHeaderForMap(h)] === 'workersCount'
         );
@@ -496,7 +474,7 @@ export function parseReportDateUpdateExcelFile(
           (h) => DATE_UPDATE_HEADER_MAP[normalizeHeaderForMap(h)] === 'workHours'
         );
 
-        const hasAnyUpdateColumn = !!dateKey || !!producedKey || !!wasteKey || !!workersKey || !!hoursKey;
+        const hasAnyUpdateColumn = !!dateKey || !!producedKey || !!workersKey || !!hoursKey;
         const detectedTemplate = !!reportCodeKey && hasAnyUpdateColumn;
         if (!detectedTemplate) {
           resolve({ rows: [], totalRows: 0, validCount: 0, errorCount: 0, detectedTemplate: false });
@@ -517,7 +495,6 @@ export function parseReportDateUpdateExcelFile(
               return Number.isFinite(n) ? n : undefined;
             };
             const quantityProduced = producedKey ? toNum(row[producedKey]) : undefined;
-            const quantityWaste = wasteKey ? toNum(row[wasteKey]) : undefined;
             const workersCount = workersKey ? toNum(row[workersKey]) : undefined;
             const workHours = hoursKey ? toNum(row[hoursKey]) : undefined;
 
@@ -532,12 +509,6 @@ export function parseReportDateUpdateExcelFile(
               errors.push('الكمية المنتجة غير رقمية');
             } else if (quantityProduced !== undefined && quantityProduced <= 0) {
               errors.push('الكمية المنتجة يجب أن تكون أكبر من 0');
-            }
-
-            if (wasteKey && String(row[wasteKey] ?? '').trim() && quantityWaste === undefined) {
-              errors.push('الهالك غير رقمي');
-            } else if (quantityWaste !== undefined && quantityWaste < 0) {
-              errors.push('الهالك لا يمكن أن يكون سالب');
             }
 
             if (workersKey && String(row[workersKey] ?? '').trim() && workersCount === undefined) {
@@ -555,7 +526,6 @@ export function parseReportDateUpdateExcelFile(
             const updatedFieldsCount = [
               date ? 1 : 0,
               quantityProduced !== undefined ? 1 : 0,
-              quantityWaste !== undefined ? 1 : 0,
               workersCount !== undefined ? 1 : 0,
               workHours !== undefined ? 1 : 0,
             ].reduce((s, n) => s + n, 0);
@@ -568,7 +538,6 @@ export function parseReportDateUpdateExcelFile(
               reportCode,
               date: date || undefined,
               quantityProduced,
-              quantityWaste,
               workersCount,
               workHours,
               updatedFieldsCount,
@@ -579,7 +548,6 @@ export function parseReportDateUpdateExcelFile(
             r.reportCode ||
             r.date ||
             r.quantityProduced !== undefined ||
-            r.quantityWaste !== undefined ||
             r.workersCount !== undefined ||
             r.workHours !== undefined ||
             r.errors.length > 0
@@ -615,7 +583,6 @@ export function toReportData(
     productId: row.productId,
     employeeId: row.employeeId,
     quantityProduced: row.quantityProduced,
-    quantityWaste: row.quantityWaste,
     workersCount: row.workersCount,
     workHours: row.workHours,
   };

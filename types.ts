@@ -82,6 +82,7 @@ export interface FirestoreProduct {
   outerCartonCost?: number;
   unitsPerCarton?: number;
   sellingPrice?: number;
+  autoDeductComponentScrapFromDecomposed?: boolean;
 }
 
 export interface ProductMaterial {
@@ -190,7 +191,6 @@ export interface ProductionReport {
   lineId: string;
   date: string;
   quantityProduced: number;
-  quantityWaste: number;
   workersCount: number;
   workersProductionCount?: number;
   workersPackagingCount?: number;
@@ -202,7 +202,14 @@ export interface ProductionReport {
   supervisorIndirectCost?: number;
   notes?: string;
   workOrderId?: string;
+  componentScrapItems?: ReportComponentScrapItem[];
   createdAt?: any;
+}
+
+export interface ReportComponentScrapItem {
+  materialId: string;
+  materialName: string;
+  quantity: number;
 }
 
 export interface LineStatus {

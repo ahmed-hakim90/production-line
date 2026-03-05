@@ -14,7 +14,6 @@ type ReportFormState = {
   workOrderId: string;
   date: string;
   quantityProduced: number;
-  quantityWaste: number;
   workersCount: number;
   workersProductionCount: number;
   workersPackagingCount: number;
@@ -37,7 +36,6 @@ const emptyForm = (): ReportFormState => ({
   workOrderId: '',
   date: getOperationalDateString(8),
   quantityProduced: 0,
-  quantityWaste: 0,
   workersCount: 0,
   workersProductionCount: 0,
   workersPackagingCount: 0,
@@ -299,17 +297,6 @@ export const GlobalCreateReportModal: React.FC = () => {
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={form.quantityProduced || ''}
                 onChange={(e) => setForm((prev) => ({ ...prev, quantityProduced: Number(e.target.value) }))}
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهالك</label>
-              <input
-                type="number"
-                min={0}
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                value={form.quantityWaste || ''}
-                onChange={(e) => setForm((prev) => ({ ...prev, quantityWaste: Number(e.target.value) }))}
                 placeholder="0"
               />
             </div>

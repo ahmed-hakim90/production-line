@@ -90,7 +90,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   }, []);
 
   const toggleGroup = (key: string) => setOpenGroup((p) => (p === key ? null : key));
-  const sidebarW = collapsed ? 'w-[52px]' : 'w-[260px]';
+  const sidebarW = collapsed
+    ? 'w-[88vw] max-w-[300px] lg:w-[52px] lg:max-w-none'
+    : 'w-[88vw] max-w-[300px] lg:w-[260px] lg:max-w-none';
+  const showExpandedHeader = !collapsed || open;
 
   return (
     <>
@@ -108,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           'fixed inset-y-0 right-0 z-50 flex flex-col',
           'bg-[var(--color-sidebar-bg)]',
           'border-l border-[var(--color-sidebar-border)]',
-          'transition-[width] duration-300 ease-in-out overflow-hidden',
+          'transition-[width,transform] duration-300 ease-in-out overflow-hidden',
           open ? 'translate-x-0' : 'translate-x-full lg:translate-x-0',
         ].join(' ')}
         style={{ boxShadow: open ? '0 4px 20px rgba(0,0,0,0.1)' : undefined }}
@@ -117,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className={[
           'shrink-0 flex items-center border-b border-[var(--color-sidebar-border)]',
-          collapsed ? 'justify-center h-[52px] px-0' : 'h-[52px] px-3 gap-2.5',
+          collapsed ? 'justify-center h-[52px] px-0 lg:px-0' : 'h-[52px] px-3 gap-2.5',
         ].join(' ')}>
 
           {/* Logo icon */}
@@ -132,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             <span className="material-icons-round text-[16px]">factory</span>
           </button>
 
-          {!collapsed && (
+          {showExpandedHeader && (
             <>
               <div className="flex-1 min-w-0">
                 <p className="text-[12.5px] font-bold text-[var(--color-text)] truncate leading-tight">مؤسسة المغربي</p>

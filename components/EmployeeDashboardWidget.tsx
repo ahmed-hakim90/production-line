@@ -1,10 +1,11 @@
-﻿import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Badge, LoadingSkeleton } from './UI';
 import { useShallowStore } from '../store/useAppStore';
 import {
   formatNumber,
   calculateWasteRatio,
   calculatePlanProgress,
+  getReportWaste,
   countUniqueDays,
 } from '../utils/calculations';
 import { reportService } from '../modules/production/services/reportService';
@@ -128,7 +129,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
   // ── KPIs ──
   const kpis = useMemo(() => {
     const totalProduction = myReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-    const totalWaste = myReports.reduce((s, r) => s + (r.quantityWaste || 0), 0);
+    const totalWaste = myReports.reduce((s, r) => s + getReportWaste(r), 0);
     const wasteRatio = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const totalHours = myReports.reduce((s, r) => s + (r.workHours || 0), 0);
     const uniqueDays = countUniqueDays(myReports);

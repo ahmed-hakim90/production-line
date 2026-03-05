@@ -9,7 +9,7 @@ import type { FirestoreEmployee, ProductionReport } from '../../../types';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
-import { formatNumber, calculateWasteRatio, getTodayDateString } from '../../../utils/calculations';
+import { formatNumber, calculateWasteRatio, getTodayDateString, getReportWaste } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
@@ -209,7 +209,7 @@ export const ProductionWorkers: React.FC = () => {
       .map((e) => {
         const reports = reportsByEmployee.get(e.id!) ?? [];
         const totalProduced = reports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
-        const totalWaste = reports.reduce((s, r) => s + (r.quantityWaste ?? 0), 0);
+        const totalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
         const todayProduced = reports
           .filter((r) => r.date === today)
           .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);

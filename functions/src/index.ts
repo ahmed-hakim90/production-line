@@ -17,7 +17,7 @@ const AUTOMATION_RUNS_COLLECTION = 'automation_runs';
 type ReportLike = {
   date?: string;
   quantityProduced?: number;
-  quantityWaste?: number;
+  componentScrapItems?: Array<{ quantity?: number }>;
   totalCost?: number;
 };
 
@@ -26,12 +26,17 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const deriveComponentWaste = (items: ReportLike['componentScrapItems']): number => {
+  if (!Array.isArray(items)) return 0;
+  return items.reduce((sum, item) => sum + toNumber(item?.quantity), 0);
+};
+
 const normalizeReport = (value: ReportLike | undefined): Required<ReportLike> | null => {
   if (!value || !value.date || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
   return {
     date: value.date,
     quantityProduced: toNumber(value.quantityProduced),
-    quantityWaste: toNumber(value.quantityWaste),
+    componentScrapItems: Array.isArray(value.componentScrapItems) ? value.componentScrapItems : [],
     totalCost: toNumber(value.totalCost),
   };
 };
@@ -61,9 +66,10 @@ const summarizeNames = (names: string[], maxItems = 5): string => {
 const applyDelta = async (report: Required<ReportLike>, factor: 1 | -1) => {
   const dailyRef = db.doc(`${STATS_ROOT}/daily/${report.date}`);
   const monthlyRef = db.doc(`${STATS_ROOT}/monthly/${monthKey(report.date)}`);
+  const wasteQuantity = deriveComponentWaste(report.componentScrapItems);
   const payload = {
     totalProduction: FieldValue.increment(report.quantityProduced * factor),
-    totalWaste: FieldValue.increment(report.quantityWaste * factor),
+    totalWaste: FieldValue.increment(wasteQuantity * factor),
     totalCost: FieldValue.increment(report.totalCost * factor),
     reportsCount: FieldValue.increment(1 * factor),
     updatedAt: FieldValue.serverTimestamp(),

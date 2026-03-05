@@ -13,6 +13,7 @@ import {
   findBestLine,
   groupReportsByDate,
   countUniqueDays,
+  getReportWaste,
 } from '../../../utils/calculations';
 import {
   buildProductCosts,
@@ -321,7 +322,7 @@ export const ProductDetails: React.FC = () => {
   );
 
   const totalWaste = useMemo(
-    () => scopedReports.reduce((sum, r) => sum + (r.quantityWaste || 0), 0),
+    () => scopedReports.reduce((sum, r) => sum + getReportWaste(r), 0),
     [scopedReports]
   );
 
@@ -1485,7 +1486,7 @@ export const ProductDetails: React.FC = () => {
                         {formatNumber(r.quantityProduced)}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(r.quantityWaste)}</td>
+                    <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
                     <td className="px-5 py-3 text-center text-sm font-bold">{r.workersCount}</td>
                     <td className="px-5 py-3 text-center text-sm font-bold">{r.workHours}</td>
                   </tr>

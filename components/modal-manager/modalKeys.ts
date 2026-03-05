@@ -1,6 +1,7 @@
 export const MODAL_KEYS = {
   REPORTS_CREATE: 'reports.create',
   REPORTS_IMPORT: 'reports.import',
+  REPORTS_COMPONENT_SCRAP: 'reports.componentScrap',
   WORK_ORDERS_CREATE: 'workOrders.create',
   PRODUCTS_CREATE: 'products.create',
   LINES_CREATE: 'lines.create',

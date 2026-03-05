@@ -23,6 +23,16 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const deriveComponentWaste = (items: unknown): number => {
+  if (!Array.isArray(items)) return 0;
+  return items.reduce((sum, item) => {
+    const qty = item && typeof item === 'object'
+      ? toNumber((item as { quantity?: unknown }).quantity)
+      : 0;
+    return sum + qty;
+  }, 0);
+};
+
 const parseArgs = (argv: string[]): ParsedArgs => {
   const getValue = (flag: string): string | undefined => {
     const idx = argv.findIndex((arg) => arg === flag);
@@ -80,17 +90,18 @@ const run = async () => {
       const date = String(data.date || '');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       const month = date.slice(0, 7);
+      const wasteQuantity = deriveComponentWaste(data.componentScrapItems);
 
       const daily = dailyAgg.get(date) || makeAggregate();
       daily.totalProduction += toNumber(data.quantityProduced);
-      daily.totalWaste += toNumber(data.quantityWaste);
+      daily.totalWaste += wasteQuantity;
       daily.totalCost += toNumber(data.totalCost);
       daily.reportsCount += 1;
       dailyAgg.set(date, daily);
 
       const monthly = monthlyAgg.get(month) || makeAggregate();
       monthly.totalProduction += toNumber(data.quantityProduced);
-      monthly.totalWaste += toNumber(data.quantityWaste);
+      monthly.totalWaste += wasteQuantity;
       monthly.totalCost += toNumber(data.totalCost);
       monthly.reportsCount += 1;
       monthlyAgg.set(month, monthly);

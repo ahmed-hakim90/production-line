@@ -6,7 +6,7 @@ import { useManagedPrint } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { employeeService } from '../../hr/employeeService';
-import { formatNumber, calculateWasteRatio, getTodayDateString } from '../../../utils/calculations';
+import { formatNumber, calculateWasteRatio, getTodayDateString, getReportWaste } from '../../../utils/calculations';
 import { JOB_LEVEL_LABELS, type JobLevel } from '../../hr/types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import type { ProductionReport, FirestoreEmployee } from '../../../types';
@@ -131,7 +131,7 @@ export const ProductionWorkerDetails: React.FC = () => {
   const weekStart = useMemo(() => getWeekStart(), []);
 
   const totalProduced = useMemo(() => reports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0), [reports]);
-  const totalWaste = useMemo(() => reports.reduce((s, r) => s + (r.quantityWaste ?? 0), 0), [reports]);
+  const totalWaste = useMemo(() => reports.reduce((s, r) => s + getReportWaste(r), 0), [reports]);
   const wasteRatio = useMemo(() => calculateWasteRatio(totalWaste, totalProduced + totalWaste), [totalProduced, totalWaste]);
   const totalWorkerHours = useMemo(() => reports.reduce((s, r) => s + (r.workersCount ?? 0) * (r.workHours ?? 0), 0), [reports]);
   const totalHours = useMemo(() => reports.reduce((s, r) => s + (r.workHours ?? 0), 0), [reports]);
@@ -186,7 +186,7 @@ export const ProductionWorkerDetails: React.FC = () => {
     reports.forEach((r) => {
       const prev = byDate.get(r.date) ?? { produced: 0, waste: 0, hours: 0, workerHours: 0, workers: 0, count: 0 };
       prev.produced += r.quantityProduced ?? 0;
-      prev.waste += r.quantityWaste ?? 0;
+      prev.waste += getReportWaste(r);
       prev.hours += r.workHours ?? 0;
       prev.workerHours += (r.workersCount ?? 0) * (r.workHours ?? 0);
       prev.workers += r.workersCount ?? 0;
@@ -216,7 +216,7 @@ export const ProductionWorkerDetails: React.FC = () => {
       const prev = map.get(r.lineId) ?? { reports: 0, produced: 0, waste: 0, hours: 0 };
       prev.reports++;
       prev.produced += r.quantityProduced ?? 0;
-      prev.waste += r.quantityWaste ?? 0;
+      prev.waste += getReportWaste(r);
       prev.hours += r.workHours ?? 0;
       map.set(r.lineId, prev);
     });
@@ -230,7 +230,7 @@ export const ProductionWorkerDetails: React.FC = () => {
     reports.forEach((r) => {
       const prev = map.get(r.productId) ?? { produced: 0, waste: 0 };
       prev.produced += r.quantityProduced ?? 0;
-      prev.waste += r.quantityWaste ?? 0;
+      prev.waste += getReportWaste(r);
       map.set(r.productId, prev);
     });
     return Array.from(map.entries())
@@ -539,7 +539,7 @@ export const ProductionWorkerDetails: React.FC = () => {
                           {formatNumber(r.quantityProduced)}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(r.quantityWaste)}</td>
+                      <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
                       <td className="px-5 py-3 text-center text-sm font-bold">{r.workHours}</td>
                     </tr>
                   ))}

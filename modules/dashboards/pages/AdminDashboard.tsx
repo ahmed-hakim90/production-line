@@ -13,6 +13,7 @@ import {
   calculateWasteRatio,
   calculateWorkOrderExecutionMetrics,
   formatNumber,
+  getReportWaste,
   getExecutionDeviationTone,
   getTodayDateString,
 } from '../../../utils/calculations';
@@ -408,7 +409,7 @@ export const AdminDashboard: React.FC = () => {
 
   const kpis = useMemo(() => {
     const reportsTotalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-    const reportsTotalWaste = reports.reduce((s, r) => s + (r.quantityWaste || 0), 0);
+    const reportsTotalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
     const hasAggregateData = Boolean(rangeAggregate && rangeAggregate.reportsCount > 0);
     const totalProduction = hasAggregateData ? (rangeAggregate?.totalProduction || 0) : reportsTotalProduction;
     const totalWaste = hasAggregateData ? (rangeAggregate?.totalWaste || 0) : reportsTotalWaste;

@@ -92,10 +92,11 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
     <>
       <header
         className={[
-          'h-[52px] sticky top-0 z-30 shrink-0',
+          'h-[52px] fixed top-0 left-0 right-0 z-40 shrink-0',
+          collapsed ? 'lg:right-[52px]' : 'lg:right-[260px]',
           'bg-[var(--color-card)]',
           'border-b border-[var(--color-border)]',
-          'px-3 sm:px-4 flex items-center gap-2',
+          'px-2.5 sm:px-4 py-2 sm:py-0 flex items-center gap-1.5 sm:gap-2',
           scrolled ? 'shadow-sm' : '',
         ].join(' ')}
       >
@@ -146,6 +147,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               <span className="material-icons-round text-[15px]">home</span>
               <span>الرئيسية</span>
             </button>
+          )}
+
+          {breadcrumb && (
+            <div className="sm:hidden flex items-center gap-1 min-w-0">
+              <span className="material-icons-round text-[14px] text-primary shrink-0">{breadcrumb.pageIcon}</span>
+              <span className="text-[12px] font-semibold text-[var(--color-text)] truncate">{breadcrumb.page}</span>
+            </div>
           )}
         </div>
 

@@ -13,6 +13,7 @@ import {
   calculateWasteRatio,
   calculateWorkOrderExecutionMetrics,
   formatNumber,
+  getReportWaste,
   getExecutionDeviationTone,
   getTodayDateString,
 } from '../../../utils/calculations';
@@ -216,7 +217,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
   const kpis = useMemo(() => {
     const totalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-    const totalWaste = reports.reduce((s, r) => s + (r.quantityWaste || 0), 0);
+    const totalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
@@ -592,7 +593,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             </div>
           </>
         )}
-        <div className="erp-filter-sep" />
+        <div className="erp-filter-sep hidden sm:block" />
         <span className="text-xs text-[var(--color-text-muted)] font-medium">{dateRange.start} ← {dateRange.end}</span>
       </div>
 
@@ -1245,38 +1246,77 @@ export const FactoryManagerDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">ملخص أداء المنتجات</h3>
           </div>
           {topProducts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="erp-thead">
-                  <tr>
-                    <th className="erp-th">المنتج</th>
-                    <th className="erp-th">الإنتاج</th>
-                    <th className="erp-th">الحصة %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topProducts.map((p, i) => (
-                    <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
-                      <td className="py-3 px-4 font-bold text-primary">{p.name}</td>
-                      <td className="py-3 px-4">{formatNumber(p.production)}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 max-w-[120px] h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-violet-500 rounded-full transition-all"
-                              style={{ width: `${kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-[var(--color-text-muted)] text-xs font-bold">
-                            {kpis.totalProduction > 0 ? ((p.production / kpis.totalProduction) * 100).toFixed(1) : 0}%
-                          </span>
+            <>
+              <div className="md:hidden space-y-2.5">
+                {topProducts.map((p, i) => {
+                  const share = kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0;
+                  return (
+                    <div key={p.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          onClick={() => navigate(`/products/${p.id}`)}
+                          className="text-sm font-bold text-primary text-right leading-snug hover:underline"
+                        >
+                          {p.name}
+                        </button>
+                        <span className="text-[11px] font-mono text-[var(--color-text-muted)]">#{i + 1}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الإنتاج</p>
+                          <p className="font-mono font-bold text-primary">{formatNumber(p.production)}</p>
                         </div>
-                      </td>
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الحصة</p>
+                          <p className="font-mono font-bold text-violet-600">{share.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-violet-500 rounded-full transition-all"
+                            style={{ width: `${share}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">المنتج</th>
+                      <th className="erp-th">الإنتاج</th>
+                      <th className="erp-th">الحصة %</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {topProducts.map((p, i) => (
+                      <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
+                        <td className="py-3 px-4 font-bold text-primary">{p.name}</td>
+                        <td className="py-3 px-4">{formatNumber(p.production)}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 max-w-[120px] h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-violet-500 rounded-full transition-all"
+                                style={{ width: `${kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-[var(--color-text-muted)] text-xs font-bold">
+                              {kpis.totalProduction > 0 ? ((p.production / kpis.totalProduction) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
           )}

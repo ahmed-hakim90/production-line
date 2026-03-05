@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, WorkOrder, ProductionPlan } from '../types';
 import type { ProductCostBreakdown } from './productCostBreakdown';
-import { formatOperationDateTime } from './calculations';
+import { formatOperationDateTime, getReportWaste } from './calculations';
 
 interface ReportRow {
   'كود التقرير': string;
@@ -49,10 +49,11 @@ const mapReportsToRows = (
   const hasWO = lookups.getWorkOrder && reports.some((r) => r.workOrderId);
   const hasCosts = costMap && costMap.size > 0;
   return reports.map((r) => {
-    const total = (r.quantityProduced || 0) + (r.quantityWaste || 0);
+    const wasteQuantity = getReportWaste(r);
+    const total = (r.quantityProduced || 0) + wasteQuantity;
     const wasteRatio =
       total > 0
-        ? (((r.quantityWaste || 0) / total) * 100).toFixed(1)
+        ? ((wasteQuantity / total) * 100).toFixed(1)
         : '0';
     const row: ReportRow = {
       'كود التقرير': r.reportCode || '—',
@@ -61,7 +62,7 @@ const mapReportsToRows = (
       المنتج: lookups.getProductName(r.productId),
       الموظف: lookups.getEmployeeName(r.employeeId),
       'الكمية المنتجة': r.quantityProduced || 0,
-      الهالك: r.quantityWaste || 0,
+      الهالك: wasteQuantity,
       'نسبة الهالك %': `${wasteRatio}%`,
       'عدد العمال': r.workersCount || 0,
       'عمالة الإنتاج': r.workersProductionCount || 0,

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
-import { formatNumber, getTodayDateString, calculatePlanProgress, calculateSmartStatus, calculateTimeRatio, calculateProgressRatio } from '../../../utils/calculations';
+import { formatNumber, getTodayDateString, calculatePlanProgress, calculateSmartStatus, calculateTimeRatio, calculateProgressRatio, getReportWaste } from '../../../utils/calculations';
 import { formatCost, buildLineAllocatedCostSummary, getCurrentMonth } from '../../../utils/costCalculations';
 import { ProductionLineStatus, FirestoreProductionLine, WorkOrder, ProductionPlan, ProductionReport } from '../../../types';
 import type { LineWorkerAssignment } from '../../../types';
@@ -729,7 +729,7 @@ export const Lines: React.FC = () => {
                     </div>
                     <div className="bg-[var(--color-card)]/70 rounded-[var(--border-radius-base)] p-2">
                       <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">الهالك</p>
-                      <p className="text-sm font-bold text-rose-500">{lastLineReport ? formatNumber(lastLineReport.quantityWaste || 0) : '—'}</p>
+                      <p className="text-sm font-bold text-rose-500">{lastLineReport ? formatNumber(getReportWaste(lastLineReport)) : '—'}</p>
                     </div>
                     <div className="bg-[var(--color-card)]/70 rounded-[var(--border-radius-base)] p-2">
                       <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">عمالة التقرير</p>

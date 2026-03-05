@@ -19,6 +19,7 @@ import {
   calculatePlanProgress,
   groupReportsByDate,
   countUniqueDays,
+  getReportWaste,
   sumMaxWorkHoursByDate,
   getOperationalDateString,
 } from '../../../utils/calculations';
@@ -242,7 +243,7 @@ export const LineDetails: React.FC = () => {
   );
 
   const totalWaste = useMemo(
-    () => periodReports.reduce((sum, r) => sum + (r.quantityWaste || 0), 0),
+    () => periodReports.reduce((sum, r) => sum + getReportWaste(r), 0),
     [periodReports]
   );
 
@@ -477,7 +478,7 @@ export const LineDetails: React.FC = () => {
     periodReports.forEach((r) => {
       const prev = byDate.get(r.date) || { produced: 0, waste: 0, hours: 0, workerHours: 0 };
       prev.produced += r.quantityProduced || 0;
-      prev.waste += r.quantityWaste || 0;
+      prev.waste += getReportWaste(r);
       prev.hours = Math.max(prev.hours, r.workHours || 0);
       prev.workerHours += (r.workersCount || 0) * (r.workHours || 0);
       byDate.set(r.date, prev);
@@ -1245,7 +1246,7 @@ export const LineDetails: React.FC = () => {
                         {formatNumber(r.quantityProduced)}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(r.quantityWaste)}</td>
+                    <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
                     <td className="px-5 py-3 text-center text-sm font-bold">
                       <button
                         onClick={() => handleViewWorkers(r.date)}

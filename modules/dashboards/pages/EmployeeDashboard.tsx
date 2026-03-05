@@ -10,6 +10,7 @@ import {
   formatCurrency,
   calculateWasteRatio,
   calculatePlanProgress,
+  getReportWaste,
   getTodayDateString,
   countUniqueDays,
 } from '../../../utils/calculations';
@@ -208,7 +209,7 @@ export const EmployeeDashboard: React.FC = () => {
       (sum, r) => sum + (r.quantityProduced || 0), 0
     );
     const totalWaste = periodReports.reduce(
-      (sum, r) => sum + (r.quantityWaste || 0), 0
+      (sum, r) => sum + getReportWaste(r), 0
     );
     const wasteRatio = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
 

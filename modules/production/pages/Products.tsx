@@ -72,6 +72,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
   outerCartonCost: 0,
   unitsPerCarton: 0,
   sellingPrice: 0,
+  autoDeductComponentScrapFromDecomposed: false,
 };
 
 export const Products: React.FC = () => {
@@ -114,6 +115,7 @@ export const Products: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [bulkToggleSaving, setBulkToggleSaving] = useState(false);
 
   // Export customization
   const [showColumnsModal, setShowColumnsModal] = useState(false);
@@ -300,6 +302,7 @@ export const Products: React.FC = () => {
       outerCartonCost: raw?.outerCartonCost ?? 0,
       unitsPerCarton: raw?.unitsPerCarton ?? 0,
       sellingPrice: raw?.sellingPrice ?? 0,
+      autoDeductComponentScrapFromDecomposed: raw?.autoDeductComponentScrapFromDecomposed === true,
     });
     setSaveMsg(null);
     setShowModal(true);
@@ -608,6 +611,56 @@ export const Products: React.FC = () => {
                 حذف المحدد
               </button>
             )}
+            {can('products.edit') && (
+              <>
+                <button
+                  className="btn btn-secondary btn-sm gap-1"
+                  disabled={bulkToggleSaving}
+                  onClick={async () => {
+                    if (bulkToggleSaving) return;
+                    setBulkToggleSaving(true);
+                    try {
+                      await Promise.all(
+                        [...selectedIds].map((id) =>
+                          updateProduct(id, { autoDeductComponentScrapFromDecomposed: true }),
+                        ),
+                      );
+                      setSaveMsg({ type: 'success', text: 'تم تفعيل خصم هالك المكونات تلقائياً للمنتجات المحددة' });
+                    } catch {
+                      setSaveMsg({ type: 'error', text: 'تعذر تنفيذ التفعيل الجماعي حالياً' });
+                    } finally {
+                      setBulkToggleSaving(false);
+                    }
+                  }}
+                >
+                  <span className="material-icons-round text-[15px]">done_all</span>
+                  تفعيل خصم الهالك
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm gap-1"
+                  disabled={bulkToggleSaving}
+                  onClick={async () => {
+                    if (bulkToggleSaving) return;
+                    setBulkToggleSaving(true);
+                    try {
+                      await Promise.all(
+                        [...selectedIds].map((id) =>
+                          updateProduct(id, { autoDeductComponentScrapFromDecomposed: false }),
+                        ),
+                      );
+                      setSaveMsg({ type: 'success', text: 'تم تعطيل خصم هالك المكونات للمنتجات المحددة' });
+                    } catch {
+                      setSaveMsg({ type: 'error', text: 'تعذر تنفيذ التعطيل الجماعي حالياً' });
+                    } finally {
+                      setBulkToggleSaving(false);
+                    }
+                  }}
+                >
+                  <span className="material-icons-round text-[15px]">remove_done</span>
+                  تعطيل خصم الهالك
+                </button>
+              </>
+            )}
             <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(new Set())}>
               <span className="material-icons-round text-[15px]">close</span>
               إلغاء التحديد
@@ -886,6 +939,16 @@ export const Products: React.FC = () => {
                   placeholder="0"
                   onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-bold text-[var(--color-text-muted)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.autoDeductComponentScrapFromDecomposed === true}
+                    onChange={(e) => setForm({ ...form, autoDeductComponentScrapFromDecomposed: e.target.checked })}
+                  />
+                  خصم هالك المكونات تلقائياً من مخزن المفكك أثناء تقرير الإنتاج
+                </label>
               </div>
 
               {/* ── Cost Breakdown Fields ── */}

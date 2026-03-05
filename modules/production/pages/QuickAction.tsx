@@ -6,15 +6,18 @@ import { usePermission } from '../../../utils/permissions';
 import { exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
-import type { LineWorkerAssignment } from '../../../types';
+import type { LineWorkerAssignment, ReportComponentScrapItem } from '../../../types';
 import {
   SingleReportPrint,
   ReportPrintRow,
 } from '../components/ProductionReportPrint';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 export const QuickAction: React.FC = () => {
   const { canCreateReport } = usePermission();
+  const { openModal } = useGlobalModalManager();
   const createReport = useAppStore((s) => s.createReport);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -28,7 +31,6 @@ export const QuickAction: React.FC = () => {
   const [lineId, setLineId] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [waste, setWaste] = useState('');
   const [workersProduction, setWorkersProduction] = useState('');
   const [workersPackaging, setWorkersPackaging] = useState('');
   const [workersQuality, setWorkersQuality] = useState('');
@@ -36,6 +38,7 @@ export const QuickAction: React.FC = () => {
   const [workersExternal, setWorkersExternal] = useState('');
   const [hours, setHours] = useState('');
   const [notes, setNotes] = useState('');
+  const [componentScrapItems, setComponentScrapItems] = useState<ReportComponentScrapItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -191,7 +194,6 @@ export const QuickAction: React.FC = () => {
       productId,
       date: today,
       quantityProduced: Number(quantity),
-      quantityWaste: Number(waste) || 0,
       workersCount: workersTotal,
       workersProductionCount: Number(workersProduction) || 0,
       workersPackagingCount: Number(workersPackaging) || 0,
@@ -200,6 +202,7 @@ export const QuickAction: React.FC = () => {
       workersExternalCount: Number(workersExternal) || 0,
       workHours: Number(hours),
       notes: notes.trim(),
+      componentScrapItems,
     };
 
     const id = await createReport(data);
@@ -211,7 +214,7 @@ export const QuickAction: React.FC = () => {
         productName: getProductName(productId),
         employeeName: getEmployeeName(employeeId),
         quantityProduced: data.quantityProduced,
-        quantityWaste: data.quantityWaste,
+        wasteQuantity: totalComponentScrapQty,
         workersCount: data.workersCount,
         workersProductionCount: data.workersProductionCount,
         workersPackagingCount: data.workersPackagingCount,
@@ -235,7 +238,6 @@ export const QuickAction: React.FC = () => {
     setLineId('');
     setProductId('');
     setQuantity('');
-    setWaste('');
     setWorkersProduction('');
     setWorkersPackaging('');
     setWorkersQuality('');
@@ -243,6 +245,7 @@ export const QuickAction: React.FC = () => {
     setWorkersExternal('');
     setHours('');
     setNotes('');
+    setComponentScrapItems([]);
     setSaved(false);
     setSaveError(null);
     setPrintReport(null);
@@ -333,6 +336,26 @@ export const QuickAction: React.FC = () => {
     setProductId(wo.productId);
     setEmployeeId(isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
   }, [activeWOs, isSupervisorReporter, currentEmployee?.id]);
+
+  const totalComponentScrapQty = useMemo(
+    () => componentScrapItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    [componentScrapItems],
+  );
+
+  const openComponentScrapModal = useCallback(() => {
+    if (!productId) {
+      setSaveError('اختر المنتج أولاً قبل تسجيل هالك المكونات.');
+      return;
+    }
+    openModal(MODAL_KEYS.REPORTS_COMPONENT_SCRAP, {
+      source: 'quick-action.page',
+      productId,
+      items: componentScrapItems,
+      onSave: (items: ReportComponentScrapItem[]) => {
+        setComponentScrapItems(items);
+      },
+    });
+  }, [productId, componentScrapItems, openModal]);
 
   return (
     <div className="space-y-6">
@@ -439,15 +462,26 @@ export const QuickAction: React.FC = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الهالك</label>
-              <input
-                type="number"
-                value={waste}
-                onChange={(e) => setWaste(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
-                placeholder="0"
-                min="0"
-              />
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">هالك المكونات</label>
+              <button
+                type="button"
+                data-modal-key={MODAL_KEYS.REPORTS_COMPONENT_SCRAP}
+                onClick={openComponentScrapModal}
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium hover:border-primary/40 hover:bg-primary/5 transition-all flex items-center justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-icons-round text-base text-primary">inventory</span>
+                  {totalComponentScrapQty > 0
+                    ? `إجمالي هالك المكونات: ${formatNumber(totalComponentScrapQty)}`
+                    : 'اضغط لإضافة هالك المكونات'}
+                </span>
+                <span className="material-icons-round text-base text-[var(--color-text-muted)]">open_in_new</span>
+              </button>
+              {componentScrapItems.length > 0 && (
+                <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+                  {componentScrapItems.length} مكون مسجل كهالك لهذا التقرير.
+                </p>
+              )}
             </div>
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ساعات العمل *</label>
@@ -654,10 +688,6 @@ export const QuickAction: React.FC = () => {
                   <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-emerald-100 dark:border-emerald-900/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الكمية المنتجة</p>
                     <p className="text-sm font-bold text-emerald-600">{printReport.quantityProduced}</p>
-                  </div>
-                  <div className="bg-rose-50 dark:bg-rose-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-rose-100 dark:border-rose-900/20">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الهالك</p>
-                    <p className="text-sm font-bold text-rose-500">{printReport.quantityWaste}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -30,6 +30,14 @@ export const calculateWasteRatio = (waste: number, total: number): number => {
   return Number(((waste / total) * 100).toFixed(1));
 };
 
+export const getReportWaste = (
+  report: Pick<ProductionReport, 'componentScrapItems'>,
+): number =>
+  (report.componentScrapItems || []).reduce(
+    (sum, item) => sum + Number(item.quantity || 0),
+    0,
+  );
+
 // ─── Formatting ─────────────────────────────────────────────────────────────
 
 export const formatCurrency = (amount: number): string => {
@@ -229,7 +237,7 @@ export const groupReportsByDate = (
   reports.forEach((r) => {
     const existing = map.get(r.date) || { produced: 0, waste: 0 };
     existing.produced += r.quantityProduced || 0;
-    existing.waste += r.quantityWaste || 0;
+    existing.waste += getReportWaste(r);
     map.set(r.date, existing);
   });
   return Array.from(map.entries())
@@ -293,7 +301,7 @@ export const buildProducts = (
       0
     );
     const totalWaste = prodReports.reduce(
-      (sum, r) => sum + (r.quantityWaste || 0),
+      (sum, r) => sum + getReportWaste(r),
       0
     );
     const config = configs.find((c) => c.productId === p.id);
@@ -687,7 +695,7 @@ export const buildDashboardKPIs = (
     0
   );
   const totalWaste = todayReports.reduce(
-    (sum, r) => sum + (r.quantityWaste || 0),
+    (sum, r) => sum + getReportWaste(r),
     0
   );
   const totalTarget = todayProduction + totalWaste;

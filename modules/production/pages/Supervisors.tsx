@@ -15,7 +15,7 @@ import type { FirestoreEmployee, ProductionReport } from '../../../types';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
-import { formatNumber, calculateWasteRatio, getOperationalDateString } from '../../../utils/calculations';
+import { formatNumber, calculateWasteRatio, getOperationalDateString, getReportWaste } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
@@ -309,7 +309,7 @@ export const Supervisors: React.FC = () => {
       .map((e) => {
         const reports = reportsBySupervisor.get(e.id!) ?? [];
         const totalProduced = reports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
-        const totalWaste = reports.reduce((s, r) => s + (r.quantityWaste ?? 0), 0);
+        const totalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
         const todayProduced = reports
           .filter((r) => r.date === today)
           .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
@@ -532,7 +532,7 @@ export const Supervisors: React.FC = () => {
     sup.reports.forEach((r) => {
       const prev = byLine.get(r.lineId) ?? { produced: 0, waste: 0, reports: 0, workers: 0, hours: 0 };
       prev.produced += r.quantityProduced ?? 0;
-      prev.waste += r.quantityWaste ?? 0;
+      prev.waste += getReportWaste(r);
       prev.reports += 1;
       prev.workers += r.workersCount ?? 0;
       prev.hours += r.workHours ?? 0;

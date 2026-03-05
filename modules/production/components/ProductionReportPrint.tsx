@@ -8,6 +8,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { ProductionReport, PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
+import { getReportWaste } from '../../../utils/calculations';
 
 export interface ReportPrintRow {
   reportId?: string;
@@ -16,7 +17,7 @@ export interface ReportPrintRow {
   productName: string;
   employeeName: string;
   quantityProduced: number;
-  quantityWaste: number;
+  wasteQuantity: number;
   workersCount: number;
   workersProductionCount?: number;
   workersPackagingCount?: number;
@@ -68,7 +69,7 @@ export const mapReportsToPrintRows = (
       productName: lookups.getProductName(r.productId),
       employeeName: lookups.getEmployeeName(r.employeeId),
       quantityProduced: r.quantityProduced || 0,
-      quantityWaste: r.quantityWaste || 0,
+      wasteQuantity: getReportWaste(r),
       workersCount: r.workersCount || 0,
       workersProductionCount: r.workersProductionCount || 0,
       workersPackagingCount: r.workersPackagingCount || 0,
@@ -87,7 +88,7 @@ export const mapReportsToPrintRows = (
  */
 export const computePrintTotals = (rows: ReportPrintRow[], decimalPlaces = 0) => {
   const totalProduced = rows.reduce((s, r) => s + r.quantityProduced, 0);
-  const totalWaste = rows.reduce((s, r) => s + r.quantityWaste, 0);
+  const totalWaste = rows.reduce((s, r) => s + r.wasteQuantity, 0);
   const totalHours = rows.reduce((s, r) => s + r.workHours, 0);
   const totalWorkers = rows.reduce((s, r) => s + r.workersCount, 0);
   const total = totalProduced + totalWaste;
@@ -230,7 +231,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
                 {showWO       && <Td>{row.workOrderNumber || '—'}</Td>}
                 {showNotes    && <Td>{row.notes?.trim() || '—'}</Td>}
                 <Td align="center" bold color="#059669">{fmtNum(row.quantityProduced, dp)}</Td>
-                {showWaste    && <Td align="center" bold>{fmtNum(row.quantityWaste, dp)}</Td>}
+                {showWaste    && <Td align="center" bold>{fmtNum(row.wasteQuantity, dp)}</Td>}
                 <Td align="center">{row.workersCount}</Td>
                 <Td>
                   إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
@@ -312,8 +313,8 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const now = new Date().toLocaleString('ar-EG');
-    const total = report.quantityProduced + report.quantityWaste;
-    const wasteRatio = total > 0 ? ((report.quantityWaste / total) * 100).toFixed(dp) : '0';
+    const total = report.quantityProduced + report.wasteQuantity;
+    const wasteRatio = total > 0 ? ((report.wasteQuantity / total) * 100).toFixed(dp) : '0';
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
 
@@ -381,7 +382,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
             <DetailRow label="الكمية المنتجة"     value={`${fmtNum(report.quantityProduced, dp)} وحدة`} highlight="#059669" even />
             {ps.showWaste && (
               <>
-                <DetailRow label="الهالك"          value={`${fmtNum(report.quantityWaste, dp)} وحدة`}   highlight="#f43f5e" />
+                <DetailRow label="هالك المكونات"   value={`${fmtNum(report.wasteQuantity, dp)} وحدة`}   highlight="#f43f5e" />
                 <DetailRow label="نسبة الهالك"     value={`${wasteRatio}%`}                              even />
               </>
             )}
@@ -589,9 +590,7 @@ const DetailRow: React.FC<{
       style={{
         padding: '3mm 4mm',
         fontWeight: 700,
-        color: '#475569',
         color: 'var(--print-muted-text, #475569)',
-        borderBottom: '1px solid #e2e8f0',
         borderBottom: '1px solid var(--print-border, #e2e8f0)',
         width: '35%',
         fontSize: '10pt',
@@ -603,9 +602,7 @@ const DetailRow: React.FC<{
       style={{
         padding: '3mm 4mm',
         fontWeight: highlight ? 800 : 400,
-        color: highlight || '#0f172a',
         color: highlight || 'var(--print-text, #0f172a)',
-        borderBottom: '1px solid #e2e8f0',
         borderBottom: '1px solid var(--print-border, #e2e8f0)',
         fontSize: highlight ? '12pt' : '10.5pt',
       }}

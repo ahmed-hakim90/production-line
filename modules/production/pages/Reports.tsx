@@ -5,7 +5,7 @@ import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
 import { buildReportsCosts, buildSupervisorHourlyRatesMap, estimateReportCost, formatCost } from '../../../utils/costCalculations';
-import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus } from '../../../types';
+import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus, ReportComponentScrapItem } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { exportReportsByDateRange, exportWorkOrders } from '../../../utils/exportExcel';
 import { exportToPDF, exportElementsToSinglePDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
@@ -44,7 +44,6 @@ const emptyForm = {
   workOrderId: '',
   date: getOperationalDateString(8),
   quantityProduced: 0,
-  quantityWaste: 0,
   workersCount: 0,
   workersProductionCount: 0,
   workersPackagingCount: 0,
@@ -53,7 +52,11 @@ const emptyForm = {
   workersExternalCount: 0,
   workHours: 0,
   notes: '',
+  componentScrapItems: [] as ReportComponentScrapItem[],
 };
+
+const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>): number =>
+  (report.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const NOTE_PREVIEW_LENGTH = 10;
 
 const toDateInputValue = (date: Date): string => {
@@ -212,8 +215,14 @@ export const Reports: React.FC = () => {
   const isSupervisorReporter = currentEmployee?.level === 2;
 
   const openCreate = useCallback(() => {
-    openModal(MODAL_KEYS.REPORTS_CREATE, { source: 'reports.page' });
-  }, [openModal]);
+    setEditId(null);
+    setSaveToast(null);
+    setForm({
+      ...emptyForm,
+      date: getOperationalDateString(8),
+    });
+    setShowModal(true);
+  }, []);
 
   const openImport = useCallback(() => {
     openModal(MODAL_KEYS.REPORTS_IMPORT, { source: 'reports.page' });
@@ -473,7 +482,7 @@ export const Reports: React.FC = () => {
         productName: getProductName(report.productId),
         employeeName: getEmployeeName(report.employeeId),
         quantityProduced: report.quantityProduced || 0,
-        quantityWaste: report.quantityWaste || 0,
+        wasteQuantity: deriveReportWaste(report as ProductionReport),
         workersCount: report.workersCount || 0,
         workersProductionCount: report.workersProductionCount || 0,
         workersPackagingCount: report.workersPackagingCount || 0,
@@ -732,7 +741,6 @@ export const Reports: React.FC = () => {
       workOrderId: report.workOrderId ?? '',
       date: report.date,
       quantityProduced: report.quantityProduced,
-      quantityWaste: report.quantityWaste,
       workersCount: report.workersCount,
       workersProductionCount: report.workersProductionCount || 0,
       workersPackagingCount: report.workersPackagingCount || 0,
@@ -741,9 +749,32 @@ export const Reports: React.FC = () => {
       workersExternalCount: report.workersExternalCount || 0,
       workHours: report.workHours,
       notes: report.notes ?? '',
+      componentScrapItems: Array.isArray(report.componentScrapItems) ? report.componentScrapItems : [],
     });
     setShowModal(true);
   };
+
+  const totalComponentScrapQty = useMemo(
+    () => (form.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    [form.componentScrapItems],
+  );
+
+  const openComponentScrapModal = useCallback(() => {
+    if (!form.productId) {
+      setSaveToastType('error');
+      setSaveToast('اختر المنتج أولاً قبل تسجيل هالك المكونات');
+      setTimeout(() => setSaveToast(null), 3000);
+      return;
+    }
+    openModal(MODAL_KEYS.REPORTS_COMPONENT_SCRAP, {
+      source: 'reports.page',
+      productId: form.productId,
+      items: form.componentScrapItems || [],
+      onSave: (items: ReportComponentScrapItem[]) => {
+        setForm((prev) => ({ ...prev, componentScrapItems: items }));
+      },
+    });
+  }, [form.productId, form.componentScrapItems, openModal]);
 
   const hasDuplicateLineSupervisorReport = useCallback(
     async (
@@ -1075,7 +1106,6 @@ export const Reports: React.FC = () => {
           const updated = await reportService.updateByReportCode(row.reportCode, {
             ...(row.date ? { date: row.date } : {}),
             ...(row.quantityProduced !== undefined ? { quantityProduced: row.quantityProduced } : {}),
-            ...(row.quantityWaste !== undefined ? { quantityWaste: row.quantityWaste } : {}),
             ...(row.workersCount !== undefined ? { workersCount: row.workersCount } : {}),
             ...(row.workHours !== undefined ? { workHours: row.workHours } : {}),
           });
@@ -1205,7 +1235,12 @@ export const Reports: React.FC = () => {
           </span>
         ),
       },
-      { header: 'الهالك', headerClassName: 'text-center', className: 'text-center text-rose-500 font-bold', render: (r) => <>{formatNumber(r.quantityWaste)}</> },
+      {
+        header: 'هالك المكونات',
+        headerClassName: 'text-center',
+        className: 'text-center text-rose-500 font-bold',
+        render: (r) => <>{formatNumber(deriveReportWaste(r))}</>,
+      },
       {
         id: 'notes',
         header: 'الملحوظة',
@@ -1451,7 +1486,7 @@ export const Reports: React.FC = () => {
       {displayedReports.length > 0 && (
         <div className="flex items-center gap-4 text-xs font-bold">
           <span className="text-emerald-600">إنتاج: {formatNumber(displayedReports.reduce((s, r) => s + r.quantityProduced, 0))}</span>
-          <span className="text-rose-500">هالك: {formatNumber(displayedReports.reduce((s, r) => s + r.quantityWaste, 0))}</span>
+          <span className="text-rose-500">هالك: {formatNumber(displayedReports.reduce((s, r) => s + deriveReportWaste(r), 0))}</span>
         </div>
       )}
     </div>
@@ -1625,7 +1660,7 @@ export const Reports: React.FC = () => {
 
       {/* ══ Create / Edit Report Modal ══ */}
       {showModal && (can("reports.create") || can("reports.edit")) && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div
             className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
@@ -1754,16 +1789,29 @@ export const Reports: React.FC = () => {
                     placeholder="0"
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهالك</label>
-                  <input
-                    type="number"
-                    min={0}
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    value={form.quantityWaste || ''}
-                    onChange={(e) => setForm({ ...form, quantityWaste: Number(e.target.value) })}
-                    placeholder="0"
-                  />
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
+                  <button
+                    type="button"
+                    data-modal-key={MODAL_KEYS.REPORTS_COMPONENT_SCRAP}
+                    onClick={openComponentScrapModal}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium transition-all flex items-center justify-between hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="material-icons-round text-base text-primary">inventory</span>
+                      {totalComponentScrapQty > 0
+                        ? `إجمالي هالك المكونات: ${formatNumber(totalComponentScrapQty)}`
+                        : 'اضغط لإضافة هالك المكونات'}
+                    </span>
+                    <span className="material-icons-round text-base text-[var(--color-text-muted)]">open_in_new</span>
+                  </button>
+                  {(form.componentScrapItems || []).length > 0 && (
+                    <p className="text-[11px] text-[var(--color-text-muted)]">
+                      {(form.componentScrapItems || []).length} مكون مسجل كهالك لهذا التقرير.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1939,7 +1987,6 @@ export const Reports: React.FC = () => {
               );
             })()}
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-              <Button variant="outline" onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }}>إلغاء</Button>
               {can('print') && (
                 <Button
                   variant="outline"
@@ -2154,7 +2201,6 @@ export const Reports: React.FC = () => {
                               <div className="flex flex-wrap gap-1.5">
                                 {row.date && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 text-xs">تاريخ: {row.date}</span>}
                                 {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs">إنتاج: {row.quantityProduced}</span>}
-                                {row.quantityWaste !== undefined && <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 text-xs">هالك: {row.quantityWaste}</span>}
                                 {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 text-xs">عمال: {row.workersCount}</span>}
                                 {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-xs">ساعات: {row.workHours}</span>}
                               </div>
@@ -2196,7 +2242,6 @@ export const Reports: React.FC = () => {
                                   <div className="flex flex-wrap gap-1.5">
                                     {row.date && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 text-xs">تاريخ: {row.date}</span>}
                                     {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs">إنتاج: {row.quantityProduced}</span>}
-                                    {row.quantityWaste !== undefined && <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 text-xs">هالك: {row.quantityWaste}</span>}
                                     {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 text-xs">عمال: {row.workersCount}</span>}
                                     {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-xs">ساعات: {row.workHours}</span>}
                                   </div>
@@ -2302,10 +2347,6 @@ export const Reports: React.FC = () => {
                               <span className="text-[var(--color-text-muted)]">الكمية: </span>
                               <span className="font-bold">{row.quantityProduced}</span>
                             </div>
-                            <div className="rounded bg-rose-50/80 px-2 py-1">
-                              <span className="text-[var(--color-text-muted)]">الهالك: </span>
-                              <span className="font-bold text-rose-500">{row.quantityWaste}</span>
-                            </div>
                             <div className="rounded bg-slate-50 px-2 py-1">
                               <span className="text-[var(--color-text-muted)]">عمال: </span>
                               <span className="font-bold">{row.workersCount}</span>
@@ -2332,7 +2373,6 @@ export const Reports: React.FC = () => {
                           <th className="erp-th">المشرف</th>
                           <th className="erp-th">الكود</th>
                           <th className="erp-th text-center">الكمية</th>
-                          <th className="erp-th text-center">الهالك</th>
                           <th className="erp-th text-center">عمال</th>
                           <th className="erp-th text-center">ساعات</th>
                         </tr>
@@ -2368,7 +2408,6 @@ export const Reports: React.FC = () => {
                               <td className={`px-3 py-2 ${row.employeeId ? '' : 'text-rose-500'}`}>{row.employeeName || '—'}</td>
                               <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.employeeCode || '—'}</td>
                               <td className="px-3 py-2 text-center font-bold">{row.quantityProduced}</td>
-                              <td className="px-3 py-2 text-center text-rose-500">{row.quantityWaste}</td>
                               <td className="px-3 py-2 text-center">{row.workersCount}</td>
                               <td className="px-3 py-2 text-center">{row.workHours}</td>
                             </tr>

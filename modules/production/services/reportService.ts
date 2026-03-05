@@ -215,7 +215,6 @@ export const reportService = {
         tx.set(reportRef, {
           ...data,
           reportCode,
-          quantityWaste: data.quantityWaste ?? 0,
           workersProductionCount: data.workersProductionCount ?? 0,
           workersPackagingCount: data.workersPackagingCount ?? 0,
           workersQualityCount: data.workersQualityCount ?? 0,

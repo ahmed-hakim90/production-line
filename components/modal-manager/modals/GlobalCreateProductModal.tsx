@@ -16,6 +16,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
   outerCartonCost: 0,
   unitsPerCarton: 0,
   sellingPrice: 0,
+  autoDeductComponentScrapFromDecomposed: false,
 };
 
 export const GlobalCreateProductModal: React.FC = () => {
@@ -124,6 +125,17 @@ export const GlobalCreateProductModal: React.FC = () => {
               placeholder="0"
               onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm font-bold text-[var(--color-text-muted)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.autoDeductComponentScrapFromDecomposed === true}
+                onChange={(e) => setForm({ ...form, autoDeductComponentScrapFromDecomposed: e.target.checked })}
+              />
+              خصم هالك المكونات تلقائياً من مخزن المفكك أثناء تقرير الإنتاج
+            </label>
           </div>
 
           {canViewCosts && (
