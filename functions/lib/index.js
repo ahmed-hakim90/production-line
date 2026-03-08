@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 initializeApp();
@@ -11,6 +12,7 @@ const REPORTS_COLLECTION = 'production_reports';
 const ASSIGNMENTS_COLLECTION = 'line_worker_assignments';
 const NOTIFICATIONS_COLLECTION = 'notifications';
 const AUTOMATION_RUNS_COLLECTION = 'automation_runs';
+const USER_DEVICES_COLLECTION = 'user_devices';
 const toNumber = (value) => {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -172,6 +174,162 @@ export const notifyDailySupervisorReportCompliance = onSchedule({
                 type: 'report_compliance_daily',
                 title,
                 message,
+                referenceId: operationalDate,
+                isRead: false,
+                createdAt: FieldValue.serverTimestamp(),
+            });
+        });
+    });
+    if (alreadySent)
+        return;
+});
+export const sendPushOnNotificationCreate = onDocumentWritten({
+    document: 'notifications/{notificationId}',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists)
+        return;
+    // Guard: only on create.
+    if (event.data?.before?.exists)
+        return;
+    const payload = after.data();
+    const recipientId = String(payload.recipientId || '').trim();
+    if (!recipientId)
+        return;
+    const devicesSnap = await db
+        .collection(USER_DEVICES_COLLECTION)
+        .where('employeeId', '==', recipientId)
+        .where('enabled', '==', true)
+        .get();
+    if (devicesSnap.empty)
+        return;
+    const tokens = devicesSnap.docs
+        .map((d) => String(d.data().token || '').trim())
+        .filter(Boolean);
+    if (tokens.length === 0)
+        return;
+    const notificationId = String(after.id);
+    const deepLink = '/#/activity-log';
+    const multicast = {
+        tokens,
+        notification: {
+            title: String(payload.title || 'إشعار جديد'),
+            body: String(payload.message || ''),
+        },
+        data: {
+            notificationId,
+            type: String(payload.type || ''),
+            referenceId: String(payload.referenceId || ''),
+            link: deepLink,
+        },
+        android: {
+            notification: {
+                sound: 'default',
+                channelId: 'default',
+            },
+        },
+        apns: {
+            payload: {
+                aps: {
+                    sound: 'default',
+                },
+            },
+        },
+        webpush: {
+            notification: {
+                icon: '/icons/pwa-icon-192.png',
+                badge: '/icons/pwa-icon-192.png',
+                requireInteraction: false,
+            },
+            headers: {
+                Urgency: 'high',
+            },
+        },
+    };
+    const sendResult = await getMessaging().sendEachForMulticast(multicast);
+    const invalidTokenIndexes = [];
+    sendResult.responses.forEach((response, index) => {
+        const code = response.error?.code || '';
+        if (!response.success && (code.includes('registration-token-not-registered') || code.includes('invalid-registration-token'))) {
+            invalidTokenIndexes.push(index);
+        }
+    });
+    if (invalidTokenIndexes.length === 0)
+        return;
+    const cleanupBatch = db.batch();
+    invalidTokenIndexes.forEach((idx) => {
+        const token = tokens[idx];
+        if (!token)
+            return;
+        cleanupBatch.set(db.collection(USER_DEVICES_COLLECTION).doc(token), {
+            enabled: false,
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+    });
+    await cleanupBatch.commit();
+});
+export const notifySupervisorsMissingDailyReport = onSchedule({
+    schedule: '30 14 * * *',
+    timeZone: 'Africa/Cairo',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async () => {
+    const operationalDate = getOperationalDate(8, new Date());
+    const runRef = db.doc(`${AUTOMATION_RUNS_COLLECTION}/supervisor_missing_report_${operationalDate}`);
+    let alreadySent = false;
+    await db.runTransaction(async (tx) => {
+        const runSnap = await tx.get(runRef);
+        if (runSnap.exists) {
+            alreadySent = true;
+            return;
+        }
+        const [employeesSnap, assignmentsSnap, reportsSnap] = await Promise.all([
+            db.collection(EMPLOYEES_COLLECTION).get(),
+            db.collection(ASSIGNMENTS_COLLECTION).where('date', '==', operationalDate).get(),
+            db.collection(REPORTS_COLLECTION).where('date', '==', operationalDate).get(),
+        ]);
+        const supervisorsById = new Set();
+        employeesSnap.docs.forEach((d) => {
+            const data = d.data();
+            if (data.isActive === false)
+                return;
+            if (Number(data.level || 0) === 2)
+                supervisorsById.add(d.id);
+        });
+        const assignedSupervisorIds = new Set();
+        assignmentsSnap.docs.forEach((d) => {
+            const data = d.data();
+            const employeeId = String(data.employeeId || '').trim();
+            if (!employeeId || !supervisorsById.has(employeeId))
+                return;
+            assignedSupervisorIds.add(employeeId);
+        });
+        const submittedSupervisorIds = new Set();
+        reportsSnap.docs.forEach((d) => {
+            const data = d.data();
+            const employeeId = String(data.employeeId || '').trim();
+            if (!employeeId || !supervisorsById.has(employeeId))
+                return;
+            submittedSupervisorIds.add(employeeId);
+        });
+        const missingSupervisorIds = Array.from(assignedSupervisorIds).filter((id) => !submittedSupervisorIds.has(id));
+        tx.create(runRef, {
+            operationalDate,
+            assignedCount: assignedSupervisorIds.size,
+            submittedCount: submittedSupervisorIds.size,
+            missingCount: missingSupervisorIds.length,
+            missingSupervisorIds,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+        missingSupervisorIds.forEach((recipientId) => {
+            const notifRef = db.collection(NOTIFICATIONS_COLLECTION).doc();
+            tx.create(notifRef, {
+                recipientId,
+                type: 'daily_report_missing',
+                title: `تنبيه تقرير الإنتاج (${operationalDate})`,
+                message: 'لم يتم إرسال تقرير الإنتاج اليوم حتى الآن. برجاء الإرسال قبل نهاية الوردية.',
                 referenceId: operationalDate,
                 isRead: false,
                 createdAt: FieldValue.serverTimestamp(),

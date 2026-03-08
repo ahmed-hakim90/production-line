@@ -188,7 +188,8 @@ export function DataTable<T>({
       </button>
       {showColumnsMenu && (
         <div
-          className="absolute left-0 top-10 z-20 erp-col-menu"
+          className="absolute top-10 z-20 erp-col-menu"
+          style={{ insetInlineEnd: 0 }}
         >
           <div className="flex items-center justify-between px-2 pb-2 mb-1 border-b border-[var(--color-border)]">
             <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide">التحكم في الأعمدة</span>
@@ -290,7 +291,7 @@ export function DataTable<T>({
 
       {/* ── Main table container ── */}
       <div
-        className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden"
+        className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]"
         style={{ boxShadow: 'var(--shadow-card)' }}
       >
         {/* ── Toolbar (ERPNext style) ── */}
