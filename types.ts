@@ -505,7 +505,9 @@ export type NotificationType =
   | 'work_order_completed'
   | 'quality_report_created'
   | 'quality_report_updated'
-  | 'report_compliance_daily';
+  | 'report_compliance_daily'
+  | 'manual_broadcast'
+  | 'daily_report_missing';
 
 export interface AppNotification {
   id?: string;
@@ -516,6 +518,24 @@ export interface AppNotification {
   referenceId: string;
   isRead: boolean;
   createdAt?: any;
+}
+
+export type PresenceState = 'online' | 'idle' | 'offline';
+
+export interface UserPresence {
+  id?: string; // userId
+  userId: string;
+  employeeId?: string;
+  userEmail?: string;
+  displayName?: string;
+  roleId?: string;
+  currentRoute?: string;
+  currentModule?: string;
+  lastAction?: string;
+  lastActionAt?: any;
+  lastHeartbeatAt?: any;
+  state?: PresenceState;
+  updatedAt?: any;
 }
 
 // ─── Cost Management ─────────────────────────────────────────────────────────

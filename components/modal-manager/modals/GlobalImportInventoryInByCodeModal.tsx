@@ -3,13 +3,15 @@ import { Button, SearchableSelect } from '../../../modules/inventory/components/
 import { useAppStore } from '../../../store/useAppStore';
 import { warehouseService } from '../../../modules/inventory/services/warehouseService';
 import { stockService } from '../../../modules/inventory/services/stockService';
-import type { Warehouse } from '../../../modules/inventory/types';
+import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
+import type { Warehouse, RawMaterial } from '../../../modules/inventory/types';
 import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../../../utils/importInventoryInByCode';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 
 type ImportInByCodePayload = {
   warehouseId?: string;
+  itemType?: 'finished_good' | 'raw_material';
   onSaved?: () => void;
 };
 
@@ -17,6 +19,7 @@ const asImportPayload = (payload: Record<string, unknown> | undefined): ImportIn
   if (!payload) return {};
   const next: ImportInByCodePayload = {};
   if (typeof payload.warehouseId === 'string') next.warehouseId = payload.warehouseId;
+  if (payload.itemType === 'finished_good' || payload.itemType === 'raw_material') next.itemType = payload.itemType;
   if (typeof payload.onSaved === 'function') next.onSaved = payload.onSaved as () => void;
   return next;
 };
@@ -26,7 +29,9 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   const products = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [warehouseId, setWarehouseId] = useState('');
+  const [itemType, setItemType] = useState<'finished_good' | 'raw_material'>('finished_good');
   const [importParsing, setImportParsing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importFileName, setImportFileName] = useState('');
@@ -40,14 +45,19 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     if (!isOpen) return;
     const nextWarehouseId = parsedPayload.warehouseId || '';
     setWarehouseId(nextWarehouseId);
+    setItemType(parsedPayload.itemType || 'finished_good');
     setImportFileName('');
     setImportResult(null);
     setMessage(null);
     void (async () => {
-      const rows = await warehouseService.getAll();
-      setWarehouses(rows.filter((w) => w.isActive !== false));
+      const [warehouseRows, rawRows] = await Promise.all([
+        warehouseService.getAll(),
+        rawMaterialService.getAll(),
+      ]);
+      setWarehouses(warehouseRows.filter((w) => w.isActive !== false));
+      setRawMaterials(rawRows.filter((m) => m.isActive !== false));
     })();
-  }, [isOpen, parsedPayload.warehouseId]);
+  }, [isOpen, parsedPayload.warehouseId, parsedPayload.itemType]);
 
   const warehouseSelectOptions = useMemo(
     () =>
@@ -62,6 +72,14 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     () => warehouses.find((w) => w.id === warehouseId) || null,
     [warehouses, warehouseId],
   );
+  const importItems = useMemo(
+    () =>
+      itemType === 'raw_material'
+        ? rawMaterials.map((m) => ({ id: m.id, code: m.code, name: m.name }))
+        : products.map((p) => ({ id: p.id, code: p.code, name: p.name })),
+    [itemType, products, rawMaterials],
+  );
+  const itemTypeLabel = itemType === 'raw_material' ? 'مادة خام' : 'منتج نهائي';
 
   if (!isOpen) return null;
 
@@ -74,6 +92,14 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     fileInputRef.current?.click();
   };
 
+  const handleItemTypeChange = (nextType: 'finished_good' | 'raw_material') => {
+    if (nextType === itemType) return;
+    setItemType(nextType);
+    setImportResult(null);
+    setImportFileName('');
+    setMessage(null);
+  };
+
   const handleImportFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -83,7 +109,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     setImportResult(null);
     setMessage(null);
     try {
-      const result = await parseInventoryInByCodeExcel(file, products);
+      const result = await parseInventoryInByCodeExcel(file, importItems, { itemLabel: itemTypeLabel });
       setImportResult(result);
     } catch (error: any) {
       setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0 });
@@ -139,7 +165,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
         const row = mergedRows[i];
         await stockService.createMovement({
           warehouseId,
-          itemType: 'finished_good',
+          itemType,
           itemId: row.productId,
           itemName: row.productName,
           itemCode: row.productCode,
@@ -185,7 +211,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
 
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold">استيراد منتج نهائي بالكود</h3>
+            <h3 className="text-lg font-bold">استيراد {itemTypeLabel} بالكود</h3>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{importFileName || '—'}</p>
           </div>
           {/* <div className="flex items-center gap-2">
@@ -200,6 +226,26 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
         </div>
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
+          <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+            <p className="text-xs text-[var(--color-text-muted)] mb-2">نوع الصنف</p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={itemType === 'finished_good' ? 'primary' : 'outline'}
+                onClick={() => handleItemTypeChange('finished_good')}
+                disabled={importSaving || importParsing}
+              >
+                منتج نهائي
+              </Button>
+              <Button
+                variant={itemType === 'raw_material' ? 'primary' : 'outline'}
+                onClick={() => handleItemTypeChange('raw_material')}
+                disabled={importSaving || importParsing}
+              >
+                مادة خام
+              </Button>
+            </div>
+          </div>
+
           <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
             <p className="text-xs text-[var(--color-text-muted)] mb-2">المخزن المستهدف</p>
             <SearchableSelect
@@ -217,7 +263,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             <p className="text-sm text-slate-500">جاري تحليل الملف...</p>
           ) : !importResult ? (
             <div className="space-y-3">
-              <p className="text-sm text-slate-500">اختر ملف Excel للبدء في الاستيراد.</p>
+              <p className="text-sm text-slate-500">اختر ملف Excel للبدء في استيراد {itemTypeLabel}.</p>
               <Button variant="primary" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
                 <span className="material-icons-round text-sm">upload_file</span>
                 اختيار ملف الاستيراد
@@ -244,8 +290,8 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">#</th>
-                      <th className="erp-th">كود المنتج</th>
-                      <th className="erp-th">اسم المنتج</th>
+                      <th className="erp-th">الكود</th>
+                      <th className="erp-th">اسم الصنف</th>
                       <th className="erp-th">الكمية</th>
                       <th className="erp-th">الحالة</th>
                     </tr>

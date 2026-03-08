@@ -18,12 +18,14 @@ import { useAppStore } from './store/useAppStore';
 import { useAuthUiSlice } from './store/selectors';
 import { onAuthChange } from './services/firebase';
 import { getHomeRoute } from './utils/permissions';
-import { registerSystemEventListeners } from './shared/events';
+import { eventBus, registerSystemEventListeners, SystemEvents } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
 import { ModalHost } from './components/modal-manager/ModalHost';
 import { ToastContainer } from './components/Toast';
 import { useJobsStore } from './components/background-jobs/useJobsStore';
+import { presenceService } from './services/presenceService';
+import { pushService } from './services/pushService';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 
@@ -145,6 +147,11 @@ const App: React.FC = () => {
   const subscribeToWorkOrders = useAppStore((s) => s.subscribeToWorkOrders);
   const subscribeToScanEventsToday = useAppStore((s) => s.subscribeToScanEventsToday);
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
+  const uid = useAppStore((s) => s.uid);
+  const userEmail = useAppStore((s) => s.userEmail);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id || '');
   const activeSessionUidRef = useRef<string | null>(null);
   const cleanupSubsRef = useRef<(() => void) | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
@@ -218,6 +225,96 @@ const App: React.FC = () => {
       cleanupSubsRef.current = null;
     };
   }, [initializeApp, subscribeToDashboard, subscribeToLineStatuses, subscribeToWorkOrders, subscribeToScanEventsToday]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || !uid) return;
+    const getRoute = () => {
+      const hash = window.location.hash || '#/';
+      return hash.startsWith('#') ? hash.slice(1) : hash;
+    };
+    const deriveModule = (route: string) => {
+      if (!route || route === '/') return 'dashboard';
+      const first = route.split('?')[0].split('/').filter(Boolean)[0];
+      return first || 'dashboard';
+    };
+
+    const emitHeartbeat = () => {
+      const route = getRoute();
+      void presenceService.heartbeat({
+        userId: uid,
+        employeeId: currentEmployeeId || '',
+        userEmail: userEmail || '',
+        displayName: userDisplayName || '',
+        roleId: userRoleId || '',
+        currentRoute: route,
+        currentModule: deriveModule(route),
+      });
+    };
+
+    emitHeartbeat();
+    const timer = window.setInterval(emitHeartbeat, 60_000);
+    const onRouteChanged = () => emitHeartbeat();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') emitHeartbeat();
+    };
+    const onBeforeUnload = () => {
+      void presenceService.markOffline(uid);
+    };
+
+    window.addEventListener('hashchange', onRouteChanged);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    const unsubActions = eventBus.on(SystemEvents.USER_ACTION, (payload) => {
+      const action = String(payload.action || payload.description || 'user.action');
+      void presenceService.setLastAction(uid, action);
+    });
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('hashchange', onRouteChanged);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      unsubActions();
+      void presenceService.markOffline(uid);
+    };
+  }, [
+    isAuthenticated,
+    isPendingApproval,
+    uid,
+    currentEmployeeId,
+    userEmail,
+    userDisplayName,
+    userRoleId,
+  ]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || !uid || !currentEmployeeId) return;
+    void pushService.registerDevice(uid, currentEmployeeId);
+  }, [isAuthenticated, isPendingApproval, uid, currentEmployeeId]);
+
+  useEffect(() => {
+    let unsub = () => {};
+    void pushService.subscribeForeground((title, body) => {
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body });
+      }
+    }).then((fn) => {
+      unsub = fn;
+    });
+
+    const onWorkerMessage = (event: MessageEvent) => {
+      if (event?.data?.type !== 'notification-click') return;
+      const targetUrl = String(event.data.targetUrl || '/');
+      if (targetUrl.startsWith('/')) {
+        window.location.hash = targetUrl;
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', onWorkerMessage);
+    return () => {
+      unsub();
+      navigator.serviceWorker?.removeEventListener('message', onWorkerMessage);
+    };
+  }, []);
 
   if (!authResolved) {
     return (

@@ -11,6 +11,7 @@ import type { FirestoreProduct } from '../../../types';
 import { SelectableTable } from '../../../components/SelectableTable';
 import type { TableColumn } from '../../../components/SelectableTable';
 import { PageHeader } from '../../../components/PageHeader';
+import { exportHRData } from '../../../utils/exportExcel';
 
 // ── Usage Popover ────────────────────────────────────────────────────────────
 function UsagePopover({ count, productNames }: { count: number; productNames: string[] }) {
@@ -179,6 +180,20 @@ export const RawMaterials: React.FC = () => {
     [rows, usageByMaterialId],
   );
 
+  const exportRawMaterials = () => {
+    if (filteredRows.length === 0) return;
+    const exportRows = filteredRows.map((row) => ({
+      'اسم المادة': row.name,
+      'الكود': row.code,
+      'الوحدة': row.unit || 'unit',
+      'الحد الأدنى': Number(row.minStock || 0),
+      'الحالة': row.isActive === false ? 'غير نشط' : 'نشط',
+      'مستخدمة في منتجات': row.id ? (usageByMaterialId[row.id]?.count || 0) : 0,
+    }));
+    const date = new Date().toISOString().slice(0, 10);
+    exportHRData(exportRows, 'المواد الخام', `المواد-الخام-${date}`);
+  };
+
   const openCreateModal = () => {
     setFeedback(null);
     const payload: RawMaterialModalPayload = {
@@ -319,6 +334,29 @@ export const RawMaterials: React.FC = () => {
           onClick: () => void loadRawMaterials(),
           disabled: loading,
         }}
+        moreActions={[
+          {
+            label: 'تصدير المواد الخام Excel',
+            icon: 'download',
+            group: 'تصدير',
+            hidden: filteredRows.length === 0,
+            onClick: exportRawMaterials,
+          },
+          {
+            label: 'استيراد المواد الخام',
+            icon: 'upload_file',
+            group: 'استيراد',
+            hidden: !can('inventory.items.manage'),
+            dataModalKey: MODAL_KEYS.INVENTORY_RAW_MATERIALS_IMPORT,
+            onClick: () =>
+              openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_IMPORT, {
+                onSaved: () => {
+                  void loadRawMaterials();
+                  setFeedback({ type: 'success', text: 'تم استيراد المواد الخام بنجاح.' });
+                },
+              }),
+          },
+        ]}
       />
 
       {feedback && (

@@ -290,6 +290,8 @@ interface ProductExportData {
   raw: FirestoreProduct;
   costBreakdown?: ProductCostBreakdown | null;
   rawMaterialsDetails?: string;
+  warehouseName?: string;
+  warehouseStock?: number;
 }
 
 const fmtCost = (v: number) => v > 0 ? Number(v.toFixed(2)) : 0;
@@ -325,6 +327,10 @@ export const exportAllProducts = (
       'اسم المنتج': d.raw.name,
       'الفئة': d.raw.model || '—',
     };
+    if (d.warehouseName) {
+      base['المخزن'] = d.warehouseName;
+      base['رصيد المخزن'] = Number(d.warehouseStock || 0);
+    }
     if (options.stock) {
       base['إجمالي الإنتاج'] = d.product.totalProduction;
       base['إجمالي الهالك'] = d.product.wasteUnits;

@@ -22,6 +22,8 @@ import { reportService } from '@/modules/production/services/reportService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
+import { warehouseService } from '../../inventory/services/warehouseService';
+import type { Warehouse } from '../../inventory/types';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -148,6 +150,9 @@ export const Products: React.FC = () => {
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [showWarehouseExportModal, setShowWarehouseExportModal] = useState(false);
+  const [exportWarehouseId, setExportWarehouseId] = useState('');
 
   // Sort & Pagination & Selection
   const PAGE_SIZE = 20;
@@ -227,6 +232,22 @@ export const Products: React.FC = () => {
         setInventoryBalances([]);
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadWarehouses = async () => {
+      try {
+        const rows = await warehouseService.getAll();
+        if (cancelled) return;
+        setWarehouses(rows.filter((w) => w.isActive !== false));
+      } catch {
+        if (cancelled) return;
+        setWarehouses([]);
+      }
+    };
+    void loadWarehouses();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -431,7 +452,7 @@ export const Products: React.FC = () => {
     setImportSaving(false);
   };
 
-  const doExportProducts = async (opts: ProductExportOptions) => {
+  const doExportProducts = async (opts: ProductExportOptions, warehouseId?: string) => {
     const materialsByProduct = new Map<string, ProductMaterial[]>();
     await Promise.all(_rawProducts.map(async (rp) => {
       if (!rp.id) return;
@@ -443,10 +464,30 @@ export const Products: React.FC = () => {
       }
     }));
 
+    const selectedWarehouse = warehouseId
+      ? warehouses.find((w) => w.id === warehouseId)
+      : undefined;
     const data = products.map((p) => {
+      const warehouseStock = warehouseId
+        ? productWarehouseBalances.getValue(warehouseId, p.id)
+        : undefined;
+      const productForExport = warehouseId
+        ? {
+            ...p,
+            stockLevel: Number(warehouseStock || 0),
+            stockStatus: Number(warehouseStock || 0) > 0 ? 'available' : 'out',
+          }
+        : p;
       const raw = _rawProducts.find((r) => r.id === p.id);
       if (!raw) {
-        return { product: p, raw: { name: p.name, model: p.category, code: p.code, openingBalance: p.openingStock }, costBreakdown: null, rawMaterialsDetails: '—' };
+        return {
+          product: productForExport,
+          raw: { name: p.name, model: p.category, code: p.code, openingBalance: p.openingStock },
+          costBreakdown: null,
+          rawMaterialsDetails: '—',
+          warehouseName: selectedWarehouse?.name,
+          warehouseStock,
+        };
       }
 
       const materials = raw.id ? (materialsByProduct.get(raw.id) ?? []) : [];
@@ -457,9 +498,19 @@ export const Products: React.FC = () => {
           .join(' | ')
         : '—';
 
-      return { product: p, raw, costBreakdown: breakdown, rawMaterialsDetails };
+      return {
+        product: productForExport,
+        raw,
+        costBreakdown: breakdown,
+        rawMaterialsDetails,
+        warehouseName: selectedWarehouse?.name,
+        warehouseStock,
+      };
     });
     const columnLabels: string[] = ['الكود', 'اسم المنتج', 'الفئة'];
+    if (selectedWarehouse?.name) {
+      columnLabels.push('المخزن', 'رصيد المخزن');
+    }
     if (visibleColumns.openingStock) columnLabels.push('رصيد مفكك');
     if (visibleColumns.totalProduction) columnLabels.push('تم الصنع');
     if (visibleColumns.wasteUnits) columnLabels.push('الهالك');
@@ -529,7 +580,7 @@ export const Products: React.FC = () => {
                 chinesePriceCny: visibleColumns.chinesePriceCny,
               };
               setExportOptions(opts);
-              void doExportProducts(opts);
+              setShowWarehouseExportModal(true);
             },
           },
           {
@@ -1196,6 +1247,52 @@ export const Products: React.FC = () => {
                   )}
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Export Warehouse Selector Modal ── */}
+      {showWarehouseExportModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-icons-round text-primary">warehouse</span>
+                <h3 className="text-lg font-bold">تصدير المنتجات بالمخزن</h3>
+              </div>
+              <button onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+                <span className="material-icons-round">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-3">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المخزن للتصدير</label>
+              <select
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
+                value={exportWarehouseId}
+                onChange={(e) => setExportWarehouseId(e.target.value)}
+              >
+                <option value="">كل المخازن (بدون تحديد)</option>
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-[var(--color-text-muted)]">
+                عند اختيار مخزن سيتم تضمين عمود اسم المخزن ورصيد المنتج داخل هذا المخزن في ملف الإكسل.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowWarehouseExportModal(false)}>إلغاء</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  void doExportProducts(exportOptions, exportWarehouseId || undefined);
+                  setShowWarehouseExportModal(false);
+                }}
+              >
+                <span className="material-icons-round text-sm">download</span>
+                تصدير Excel
+              </Button>
             </div>
           </div>
         </div>

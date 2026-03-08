@@ -18,7 +18,10 @@ export interface InventoryInImportResult {
 }
 
 const HEADER_MAP: Record<string, 'productCode' | 'quantity'> = {
+  'كود الصنف': 'productCode',
   'كود المنتج': 'productCode',
+  'كود المادة الخام': 'productCode',
+  'كود الخام': 'productCode',
   'الكود': 'productCode',
   'product code': 'productCode',
   'productcode': 'productCode',
@@ -33,11 +36,15 @@ function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+type ImportLookupItem = Pick<FirestoreProduct, 'id' | 'name' | 'code'>;
+
 export function parseInventoryInByCodeExcel(
   file: File,
-  products: FirestoreProduct[],
+  items: ImportLookupItem[],
+  options?: { itemLabel?: string },
 ): Promise<InventoryInImportResult> {
   return new Promise((resolve, reject) => {
+    const itemLabel = options?.itemLabel?.trim() || 'الصنف';
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -59,11 +66,11 @@ export function parseInventoryInByCodeExcel(
         const codeIdx = headers.findIndex((h) => HEADER_MAP[h] === 'productCode');
         const qtyIdx = headers.findIndex((h) => HEADER_MAP[h] === 'quantity');
         if (codeIdx < 0 || qtyIdx < 0) {
-          throw new Error('القالب غير صحيح. الأعمدة المطلوبة: كود المنتج + الكمية.');
+          throw new Error('القالب غير صحيح. الأعمدة المطلوبة: الكود + الكمية.');
         }
 
-        const byCode = new Map<string, FirestoreProduct>();
-        products.forEach((p) => byCode.set((p.code || '').trim().toLowerCase(), p));
+        const byCode = new Map<string, ImportLookupItem>();
+        items.forEach((p) => byCode.set((p.code || '').trim().toLowerCase(), p));
 
         const rows: ParsedInventoryInRow[] = [];
         for (let i = 1; i < aoa.length; i++) {
@@ -73,8 +80,8 @@ export function parseInventoryInByCodeExcel(
           if (!rawCode && !rawQty) continue;
           const errors: string[] = [];
           const product = byCode.get(rawCode.toLowerCase());
-          if (!rawCode) errors.push('كود المنتج مطلوب.');
-          if (!product) errors.push(`كود المنتج غير موجود: ${rawCode || '—'}`);
+          if (!rawCode) errors.push(`كود ${itemLabel} مطلوب.`);
+          if (!product) errors.push(`كود ${itemLabel} غير موجود: ${rawCode || '—'}`);
           if (!Number.isFinite(rawQty) || rawQty <= 0) errors.push('الكمية يجب أن تكون أكبر من صفر.');
           rows.push({
             rowIndex: i + 1,

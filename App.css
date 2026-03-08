@@ -2039,7 +2039,7 @@ label[class*="text-[12"] {
     width: 100%;
     justify-content: flex-start;
     flex-wrap: nowrap;
-    overflow-x: auto;
+    /* overflow-x: auto; */
   }
   .erp-page-actions .btn {
     white-space: nowrap;

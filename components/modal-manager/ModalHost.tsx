@@ -7,6 +7,7 @@ import { GlobalCreateProductModal } from './modals/GlobalCreateProductModal';
 import { GlobalCreateLineModal } from './modals/GlobalCreateLineModal';
 import { GlobalCreateWarehouseModal } from './modals/GlobalCreateWarehouseModal';
 import { GlobalCreateRawMaterialModal } from './modals/GlobalCreateRawMaterialModal';
+import { GlobalImportRawMaterialsModal } from './modals/GlobalImportRawMaterialsModal';
 import { GlobalImportInventoryInByCodeModal } from './modals/GlobalImportInventoryInByCodeModal';
 import { GlobalImportProductionPlansModal } from './modals/GlobalImportProductionPlansModal';
 import { GlobalComponentScrapModal } from './modals/GlobalComponentScrapModal';
@@ -29,6 +30,7 @@ export const ModalHost: React.FC = () => {
       <GlobalImportProductionPlansModal />
       <GlobalCreateWarehouseModal />
       <GlobalCreateRawMaterialModal />
+      <GlobalImportRawMaterialsModal />
       <GlobalComponentScrapModal />
     </>
   );

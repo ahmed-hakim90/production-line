@@ -16,6 +16,7 @@ export const MODAL_KEYS = {
   PRODUCTION_PLANS_IMPORT: 'productionPlans.import',
   INVENTORY_WAREHOUSES_CREATE: 'inventory.warehouses.create',
   INVENTORY_RAW_MATERIALS_CREATE: 'inventory.rawMaterials.create',
+  INVENTORY_RAW_MATERIALS_IMPORT: 'inventory.rawMaterials.import',
   SYSTEM_ROLES_CREATE: 'system.roles.create',
 } as const;
 
@@ -84,6 +85,9 @@ export const inferModalKeyFromLegacyContext = (
   }
   if (r.includes('/inventory') && r.includes('/movements') && (hay.includes('اضافه ماده خام') || hay.includes('اضافة مادة خام') || hay.includes('ماده خام') || hay.includes('مواد خام'))) {
     return MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE;
+  }
+  if (r.includes('/products/raw-materials') && (hay.includes('استيراد') || hay.includes('excel') || hay.includes('مواد خام'))) {
+    return MODAL_KEYS.INVENTORY_RAW_MATERIALS_IMPORT;
   }
   if ((r.includes('/roles') || r.includes('/system')) && (hay.includes('انشاء دور جديد') || hay.includes('اضافه دور') || hay.includes('اضافة دور') || hay.includes('دور جديد'))) {
     return MODAL_KEYS.SYSTEM_ROLES_CREATE;

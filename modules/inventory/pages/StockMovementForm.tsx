@@ -100,14 +100,15 @@ export const StockMovementForm: React.FC = () => {
     void loadData();
   }, [loadData]);
 
-  const openImportInByCodeModal = useCallback(() => {
+  const openImportInByCodeModal = useCallback((nextItemType: 'finished_good' | 'raw_material' = 'finished_good') => {
     openModal(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE, {
       warehouseId: warehouseId || '',
+      itemType: nextItemType,
       onSaved: () => {
         void loadData();
       },
     });
-  }, [openModal, warehouseId]);
+  }, [openModal, warehouseId, loadData]);
 
   useEffect(() => {
     const action = new URLSearchParams(location.search).get('action');
@@ -118,7 +119,9 @@ export const StockMovementForm: React.FC = () => {
       openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE);
     }
     if (action === 'import-in-by-code' && can('inventory.transactions.create')) {
-      openImportInByCodeModal();
+      const itemTypeParam = new URLSearchParams(location.search).get('itemType');
+      const importItemType = itemTypeParam === 'raw_material' ? 'raw_material' : 'finished_good';
+      openImportInByCodeModal(importItemType);
     }
   }, [location.search, can, openModal, openImportInByCodeModal]);
 

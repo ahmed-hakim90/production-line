@@ -9,6 +9,8 @@ const TYPE_ICONS: Record<string, string> = {
   work_order_completed: 'check_circle',
   quality_report_created: 'verified',
   quality_report_updated: 'rule',
+  manual_broadcast: 'campaign',
+  daily_report_missing: 'warning_amber',
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -17,6 +19,8 @@ const TYPE_COLORS: Record<string, string> = {
   work_order_completed: 'text-emerald-500',
   quality_report_created: 'text-violet-500',
   quality_report_updated: 'text-cyan-500',
+  manual_broadcast: 'text-indigo-500',
+  daily_report_missing: 'text-rose-500',
 };
 
 function timeAgo(createdAt: any): string {

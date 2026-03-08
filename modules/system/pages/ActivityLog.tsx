@@ -1,12 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { activityLogService, type PaginatedLogs } from '../services/activityLogService';
-import { Card, Badge, LoadingSkeleton } from '../components/UI';
-import type { ActivityLog as ActivityLogType, ActivityAction } from '../../../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { activityLogService } from '../services/activityLogService';
+import { Card, Badge, LoadingSkeleton } from '../components/UI';
+import { usePermission } from '../../../utils/permissions';
+import type {
+  ActivityLog as ActivityLogType,
+  ActivityAction,
+  FirestoreEmployee,
+  FirestoreRole,
+  UserPresence,
+} from '../../../types';
+import { employeeService } from '../../hr/employeeService';
+import { roleService } from '../services/roleService';
+import { presenceService } from '../../../services/presenceService';
+import { notificationComposerService } from '../../../services/notificationComposerService';
 
 const PAGE_SIZE = 15;
 
-const ACTION_LABELS: Record<ActivityAction, { label: string; icon: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }> = {
+const ACTION_LABELS: Partial<Record<ActivityAction, { label: string; icon: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }>> = {
   LOGIN: { label: 'تسجيل دخول', icon: 'login', variant: 'info' },
   LOGOUT: { label: 'تسجيل خروج', icon: 'logout', variant: 'neutral' },
   CREATE_REPORT: { label: 'إنشاء تقرير', icon: 'add_circle', variant: 'success' },
@@ -27,11 +38,23 @@ const ACTION_LABELS: Record<ActivityAction, { label: string; icon: string; varia
 };
 
 export const ActivityLogPage: React.FC = () => {
+  const { can } = usePermission();
+  const canBroadcast = can('roles.manage');
   const [logs, setLogs] = useState<ActivityLogType[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [cursor, setCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [presences, setPresences] = useState<UserPresence[]>([]);
+  const [employeesById, setEmployeesById] = useState<Record<string, FirestoreEmployee>>({});
+  const [roles, setRoles] = useState<FirestoreRole[]>([]);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState('');
+  const [targetMode, setTargetMode] = useState<'single' | 'multi' | 'role'>('single');
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -56,6 +79,27 @@ export const ActivityLogPage: React.FC = () => {
     fetchLogs();
   }, [fetchLogs]);
 
+  useEffect(() => {
+    let mounted = true;
+    void Promise.all([employeeService.getAll(), roleService.getAll()]).then(([employees, rolesRows]) => {
+      if (!mounted) return;
+      const byId = (employees || []).reduce<Record<string, FirestoreEmployee>>((acc, row) => {
+        if (row.id) acc[row.id] = row;
+        return acc;
+      }, {});
+      setEmployeesById(byId);
+      setRoles(rolesRows || []);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsub = presenceService.subscribeAll((rows) => setPresences(rows));
+    return unsub;
+  }, []);
+
   const formatTimestamp = (ts: any): string => {
     if (!ts) return '—';
     const date = ts.toDate ? ts.toDate() : new Date(ts);
@@ -77,6 +121,62 @@ export const ActivityLogPage: React.FC = () => {
     };
   };
 
+  const activeRows = useMemo(() => (
+    presences.filter((row) => row.state !== 'offline')
+  ), [presences]);
+
+  const employeeOptions = useMemo(
+    () =>
+      (Object.values(employeesById) as FirestoreEmployee[])
+        .filter((e) => e.isActive !== false)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar')),
+    [employeesById],
+  );
+
+  const handleRecipientsChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const ids = Array.from(event.target.selectedOptions as any as HTMLOptionElement[]).map((o) => o.value);
+    setSelectedEmployeeIds(ids);
+  };
+
+  const handleRolesChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const ids = Array.from(event.target.selectedOptions as any as HTMLOptionElement[]).map((o) => o.value);
+    setSelectedRoleIds(ids);
+  };
+
+  const handleSendManual = async () => {
+    if (!title.trim() || !message.trim()) {
+      setSendResult('اكتب عنوان ورسالة الإشعار أولاً.');
+      return;
+    }
+    if (targetMode === 'role' && selectedRoleIds.length === 0) {
+      setSendResult('اختر دور واحد على الأقل.');
+      return;
+    }
+    if ((targetMode === 'single' || targetMode === 'multi') && selectedEmployeeIds.length === 0) {
+      setSendResult('اختر مستخدم واحد على الأقل.');
+      return;
+    }
+
+    setSending(true);
+    setSendResult('');
+    try {
+      const sent = await notificationComposerService.create({
+        title,
+        message,
+        targetMode,
+        recipientEmployeeIds: targetMode === 'single' ? selectedEmployeeIds.slice(0, 1) : selectedEmployeeIds,
+        roleIds: selectedRoleIds,
+      });
+      setSendResult(sent > 0 ? `تم إرسال ${sent} إشعار.` : 'لا يوجد مستلمين مطابقين.');
+      setMessage('');
+    } catch (error) {
+      console.error('manual send failed', error);
+      setSendResult('فشل إرسال الإشعار، حاول مرة أخرى.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="erp-page-head">
@@ -95,6 +195,135 @@ export const ActivityLogPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {canBroadcast && (
+        <Card title="إرسال إشعار يدوي">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">نوع الاستهداف</label>
+              <select
+                className="w-full mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2.5 text-sm"
+                value={targetMode}
+                onChange={(e) => {
+                  const next = e.target.value as 'single' | 'multi' | 'role';
+                  setTargetMode(next);
+                  setSelectedEmployeeIds([]);
+                  setSelectedRoleIds([]);
+                }}
+              >
+                <option value="single">مستخدم واحد</option>
+                <option value="multi">عدة مستخدمين</option>
+                <option value="role">حسب الدور</option>
+              </select>
+            </div>
+
+            {(targetMode === 'single' || targetMode === 'multi') && (
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-[var(--color-text-muted)]">
+                  {targetMode === 'single' ? 'اختيار مستخدم' : 'اختيار مستخدمين'} {targetMode === 'multi' ? '(Ctrl/Command)' : ''}
+                </label>
+                <select
+                  className="w-full mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2 text-sm min-h-[44px]"
+                  multiple={targetMode === 'multi'}
+                  value={selectedEmployeeIds}
+                  onChange={handleRecipientsChange}
+                >
+                  {employeeOptions.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name} {employee.code ? `(${employee.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {targetMode === 'role' && (
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-[var(--color-text-muted)]">اختيار الأدوار (Ctrl/Command)</label>
+                <select
+                  className="w-full mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2 text-sm min-h-[88px]"
+                  multiple
+                  value={selectedRoleIds}
+                  onChange={handleRolesChange}
+                >
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="md:col-span-3">
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">عنوان الإشعار</label>
+              <input
+                className="w-full mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2.5 text-sm"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="مثال: تنبيه متابعة الإنتاج"
+              />
+            </div>
+
+            <div className="md:col-span-3">
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">الرسالة</label>
+              <textarea
+                className="w-full mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2.5 text-sm min-h-[90px]"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="اكتب نص الإشعار"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-xs text-[var(--color-text-muted)]">{sendResult}</span>
+            <button
+              className="btn btn-primary"
+              onClick={handleSendManual}
+              disabled={sending}
+            >
+              <span className="material-icons-round" style={{ fontSize: 16 }}>
+                {sending ? 'autorenew' : 'send'}
+              </span>
+              {sending ? 'جاري الإرسال...' : 'إرسال الإشعار'}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      <Card title="المستخدمون النشطون الآن">
+        {activeRows.length === 0 ? (
+          <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
+            لا يوجد مستخدمون نشطون حاليًا.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeRows.map((row) => {
+              const employee = row.employeeId ? employeesById[row.employeeId] : undefined;
+              const stateVariant = row.state === 'online' ? 'success' : 'warning';
+              return (
+                <div key={row.id} className="flex items-start justify-between gap-3 border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-[var(--color-text)] truncate">
+                        {employee?.name || row.displayName || row.userEmail || row.userId}
+                      </p>
+                      <Badge variant={stateVariant}>{row.state === 'online' ? 'متصل' : 'خامل'}</Badge>
+                    </div>
+                    <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                      المسار: {row.currentRoute || '—'} | الإجراء: {row.lastAction || '—'}
+                    </p>
+                  </div>
+                  <span className="text-[11px] text-[var(--color-text-muted)]">
+                    {formatTimestamp((row as any).lastHeartbeatAt)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       {loading ? (
         <LoadingSkeleton rows={8} type="table" />

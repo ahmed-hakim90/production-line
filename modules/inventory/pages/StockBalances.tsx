@@ -6,7 +6,10 @@ import { warehouseService } from '../services/warehouseService';
 import type { StockItemBalance, Warehouse } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
-import { downloadInventoryInByCodeTemplate } from '../../../utils/downloadTemplates';
+import {
+  downloadInventoryInByCodeTemplate,
+  downloadInventoryRawInByCodeTemplate,
+} from '../../../utils/downloadTemplates';
 import { exportHRData } from '../../../utils/exportExcel';
 import { useAppStore } from '../../../store/useAppStore';
 import { PageHeader } from '../../../components/PageHeader';
@@ -100,11 +103,18 @@ export const StockBalances: React.FC = () => {
             onClick: exportBalancesExcel,
           },
           {
-            label: 'تحميل قالب الاستيراد',
+            label: 'تحميل قالب المنتجات النهائية',
             icon: 'file_download',
             group: 'استيراد',
             hidden: !can('inventory.transactions.create'),
             onClick: downloadInventoryInByCodeTemplate,
+          },
+          {
+            label: 'تحميل قالب المواد الخام',
+            icon: 'file_download',
+            group: 'استيراد',
+            hidden: !can('inventory.transactions.create'),
+            onClick: downloadInventoryRawInByCodeTemplate,
           },
           {
             label: 'استيراد بالكود والكمية',

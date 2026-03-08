@@ -24,6 +24,7 @@ export interface PageHeaderAction {
   group?: string;   // shows a separator + group label
   danger?: boolean;
   hidden?: boolean;
+  dataModalKey?: string;
 }
 
 export interface PageHeaderProps {
@@ -171,6 +172,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                         className={`erp-dropdown-item${action.danger ? ' text-rose-600' : ''}`}
                         onClick={() => { action.onClick(); setMenuOpen(false); }}
                         disabled={action.disabled}
+                        data-modal-key={action.dataModalKey}
                       >
                         {action.icon && (
                           <span className={`material-icons-round text-[16px] ${action.danger ? 'text-rose-500' : 'text-[var(--color-text-muted)]'}`}>
