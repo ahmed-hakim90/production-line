@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { activityLogService } from '../services/activityLogService';
-import { Card, Badge, LoadingSkeleton } from '../components/UI';
+import { Card, Badge, LoadingSkeleton, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import type {
   ActivityLog as ActivityLogType,
@@ -53,6 +53,7 @@ export const ActivityLogPage: React.FC = () => {
   const [targetMode, setTargetMode] = useState<'single' | 'multi' | 'role'>('single');
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
 
@@ -133,9 +134,29 @@ export const ActivityLogPage: React.FC = () => {
     [employeesById],
   );
 
-  const handleRecipientsChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const ids = Array.from(event.target.selectedOptions as any as HTMLOptionElement[]).map((o) => o.value);
-    setSelectedEmployeeIds(ids);
+  const employeeSearchOptions = useMemo(
+    () =>
+      employeeOptions.map((employee) => ({
+        value: String(employee.id || ''),
+        label: `${employee.name}${employee.code ? ` (${employee.code})` : ''}`,
+      })),
+    [employeeOptions],
+  );
+
+  const filteredEmployeesForMulti = useMemo(() => {
+    const needle = employeeSearchQuery.trim().toLowerCase();
+    if (!needle) return employeeOptions;
+    return employeeOptions.filter((employee) => {
+      const name = String(employee.name || '').toLowerCase();
+      const code = String(employee.code || '').toLowerCase();
+      return name.includes(needle) || code.includes(needle);
+    });
+  }, [employeeOptions, employeeSearchQuery]);
+
+  const toggleMultiRecipient = (employeeId: string) => {
+    setSelectedEmployeeIds((prev) =>
+      prev.includes(employeeId) ? prev.filter((id) => id !== employeeId) : [...prev, employeeId],
+    );
   };
 
   const handleRolesChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -209,6 +230,7 @@ export const ActivityLogPage: React.FC = () => {
                   setTargetMode(next);
                   setSelectedEmployeeIds([]);
                   setSelectedRoleIds([]);
+                  setEmployeeSearchQuery('');
                 }}
               >
                 <option value="single">مستخدم واحد</option>
@@ -220,20 +242,50 @@ export const ActivityLogPage: React.FC = () => {
             {(targetMode === 'single' || targetMode === 'multi') && (
               <div className="md:col-span-2">
                 <label className="text-xs font-bold text-[var(--color-text-muted)]">
-                  {targetMode === 'single' ? 'اختيار مستخدم' : 'اختيار مستخدمين'} {targetMode === 'multi' ? '(Ctrl/Command)' : ''}
+                  {targetMode === 'single' ? 'اختيار مستخدم' : 'اختيار مستخدمين بالبحث'}
                 </label>
-                <select
-                  className="w-full mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2 text-sm min-h-[44px]"
-                  multiple={targetMode === 'multi'}
-                  value={selectedEmployeeIds}
-                  onChange={handleRecipientsChange}
-                >
-                  {employeeOptions.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.name} {employee.code ? `(${employee.code})` : ''}
-                    </option>
-                  ))}
-                </select>
+                {targetMode === 'single' ? (
+                  <SearchableSelect
+                    className="mt-1"
+                    options={employeeSearchOptions}
+                    value={selectedEmployeeIds[0] || ''}
+                    onChange={(value) => setSelectedEmployeeIds(value ? [value] : [])}
+                    placeholder="ابحث باسم أو كود المستخدم"
+                  />
+                ) : (
+                  <div className="mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2.5 space-y-2">
+                    <input
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2 text-sm"
+                      value={employeeSearchQuery}
+                      onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                      placeholder="ابحث باسم أو كود المستخدم"
+                    />
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {filteredEmployeesForMulti.map((employee) => {
+                        const id = String(employee.id || '');
+                        const checked = selectedEmployeeIds.includes(id);
+                        return (
+                          <label key={id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[var(--color-bg)] cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleMultiRecipient(id)}
+                            />
+                            <span className="text-sm text-[var(--color-text)]">
+                              {employee.name} {employee.code ? `(${employee.code})` : ''}
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {filteredEmployeesForMulti.length === 0 && (
+                        <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">لا يوجد نتائج مطابقة.</p>
+                      )}
+                    </div>
+                    {selectedEmployeeIds.length > 0 && (
+                      <p className="text-xs text-[var(--color-text-muted)]">تم اختيار {selectedEmployeeIds.length} مستخدم</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
