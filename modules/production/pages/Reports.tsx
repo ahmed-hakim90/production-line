@@ -7,7 +7,7 @@ import { formatNumber, getOperationalDateString } from '../../../utils/calculati
 import { buildReportsCosts, buildSupervisorHourlyRatesMap, estimateReportCost, formatCost } from '../../../utils/costCalculations';
 import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus, ReportComponentScrapItem } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { exportReportsByDateRange, exportWorkOrders } from '../../../utils/exportExcel';
+import { exportFactoryGeneralReport, exportReportsByDateRange, exportWorkOrders } from '../../../utils/exportExcel';
 import { exportToPDF, exportElementsToSinglePDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
 import {
   parseExcelFile,
@@ -36,6 +36,9 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
+import { stockService } from '../../inventory/services/stockService';
+import { warehouseService } from '../../inventory/services/warehouseService';
+import type { StockItemBalance, Warehouse } from '../../inventory/types';
 
 const emptyForm = {
   employeeId: '',
@@ -58,6 +61,48 @@ const emptyForm = {
 const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>): number =>
   (report.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const NOTE_PREVIEW_LENGTH = 10;
+
+type FactoryGeneralRow = {
+  key: string;
+  lineId: string;
+  supervisorId: string;
+  productId: string;
+  lineName: string;
+  supervisorName: string;
+  productName: string;
+  totalProducedQty: number;
+  productionWorkers: number;
+  avgWorkersPerReport: number;
+  totalCost: number;
+  unitCost: number;
+  totalDays: number;
+  reportsCount: number;
+  decomposedBalance: number;
+  finishedBalance: number;
+  finalProductBalance: number;
+};
+
+type FactoryGeneralSortKey =
+  | 'lineName'
+  | 'supervisorName'
+  | 'productName'
+  | 'totalProducedQty'
+  | 'productionWorkers'
+  | 'avgWorkersPerReport'
+  | 'unitCost'
+  | 'totalDays'
+  | 'reportsCount'
+  | 'decomposedBalance'
+  | 'finishedBalance'
+  | 'finalProductBalance';
+
+const normalizeWarehouseName = (value: string): string =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه');
 
 const toDateInputValue = (date: Date): string => {
   const y = date.getFullYear();
@@ -196,11 +241,16 @@ export const Reports: React.FC = () => {
   // Date range filter
   const [startDate, setStartDate] = useState(getOperationalDateString(8));
   const [endDate, setEndDate] = useState(getOperationalDateString(8));
-  const [viewMode, setViewMode] = useState<'today' | 'range'>('today');
+  const [viewMode, setViewMode] = useState<'today' | 'range' | 'general'>('today');
   const [rangeCursor, setRangeCursor] = useState<FirestoreCursor>(null);
   const [rangeHasMore, setRangeHasMore] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [factorySearch, setFactorySearch] = useState('');
+  const [factorySortKey, setFactorySortKey] = useState<FactoryGeneralSortKey>('totalProducedQty');
+  const [factorySortDirection, setFactorySortDirection] = useState<'asc' | 'desc'>('desc');
+  const [stockBalances, setStockBalances] = useState<StockItemBalance[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
 
   // Line & supervisor filters
   const [filterLineId, setFilterLineId] = useState('');
@@ -267,6 +317,24 @@ export const Reports: React.FC = () => {
         // Silent fallback to keep page usable.
       });
   }, [can, fetchReportsFromStore, startDate, endDate, viewMode]);
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([stockService.getBalances(), warehouseService.getAll()])
+      .then(([balances, warehousesRows]) => {
+        if (!mounted) return;
+        setStockBalances(balances || []);
+        setWarehouses(warehousesRows || []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setStockBalances([]);
+        setWarehouses([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadRangeReports = useCallback(
     async (from: string, to: string, append = false) => {
@@ -403,6 +471,50 @@ export const Reports: React.FC = () => {
     return buildReportsCosts(displayedReports, hourlyRate, costCenters, costCenterValues, costAllocations, supervisorHourlyRates);
   }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates]);
 
+  const warehouseBuckets = useMemo(() => {
+    const decomposed = new Set<string>();
+    const finished = new Set<string>();
+    const finalProduct = new Set<string>();
+
+    // Prefer explicit warehouse IDs from system settings for 100% accuracy.
+    const decomposedId = String(planSettings?.decomposedSourceWarehouseId || '').trim();
+    const finishedId = String(planSettings?.finishedReceiveWarehouseId || '').trim();
+    const finalProductId = String(planSettings?.finalProductWarehouseId || '').trim();
+    if (decomposedId) decomposed.add(decomposedId);
+    if (finishedId) finished.add(finishedId);
+    if (finalProductId) finalProduct.add(finalProductId);
+
+    // Fallback by warehouse name only when any ID is missing.
+    const needsNameFallback = !decomposedId || !finishedId || !finalProductId;
+    if (!needsNameFallback) {
+      return { decomposed, finished, finalProduct };
+    }
+
+    warehouses.forEach((wh) => {
+      const id = String(wh.id || '');
+      const name = normalizeWarehouseName(wh.name);
+      if (!id || !name) return;
+      if (!decomposedId && (name.includes('مفكك') || name.includes('decomposed'))) decomposed.add(id);
+      if (!finishedId && (name.includes('تم الصنع') || name.includes('finished'))) finished.add(id);
+      if (!finalProductId && (name.includes('منتج تام') || name.includes('منتج نهائي') || name.includes('final product'))) finalProduct.add(id);
+    });
+    return { decomposed, finished, finalProduct };
+  }, [warehouses, planSettings?.decomposedSourceWarehouseId, planSettings?.finishedReceiveWarehouseId, planSettings?.finalProductWarehouseId]);
+
+  const productBalanceByWarehouseBucket = useMemo(() => {
+    const map = new Map<string, { decomposed: number; finished: number; finalProduct: number }>();
+    stockBalances.forEach((row) => {
+      const productId = String(row.itemId || '');
+      if (!productId) return;
+      const current = map.get(productId) || { decomposed: 0, finished: 0, finalProduct: 0 };
+      if (warehouseBuckets.decomposed.has(row.warehouseId)) current.decomposed += Number(row.quantity || 0);
+      if (warehouseBuckets.finished.has(row.warehouseId)) current.finished += Number(row.quantity || 0);
+      if (warehouseBuckets.finalProduct.has(row.warehouseId)) current.finalProduct += Number(row.quantity || 0);
+      map.set(productId, current);
+    });
+    return map;
+  }, [stockBalances, warehouseBuckets]);
+
   // ── Template lookups (for dynamic Excel template) ──────────────────────────
 
   const templateLookups = useMemo<ReportsTemplateLookups>(() => ({
@@ -424,6 +536,134 @@ export const Reports: React.FC = () => {
   const getEmployeeName = useCallback(
     (sid: string) => employees.find((s) => s.id === sid)?.name ?? '—',
     [employees]
+  );
+
+  const factoryGeneralRows = useMemo<FactoryGeneralRow[]>(() => {
+    const source = displayedReports;
+    const grouped = new Map<string, {
+      lineId: string;
+      supervisorId: string;
+      productId: string;
+      totalProducedQty: number;
+      totalProductionWorkers: number;
+      totalWorkersCount: number;
+      reportsCount: number;
+      dates: Set<string>;
+      totalCost: number;
+    }>();
+
+    source.forEach((report) => {
+      const lineId = String(report.lineId || '');
+      const supervisorId = String(report.employeeId || '');
+      const productId = String(report.productId || '');
+      const key = `${lineId}__${supervisorId}__${productId}`;
+      const current = grouped.get(key) || {
+        lineId,
+        supervisorId,
+        productId,
+        totalProducedQty: 0,
+        totalProductionWorkers: 0,
+        totalWorkersCount: 0,
+        reportsCount: 0,
+        dates: new Set<string>(),
+        totalCost: 0,
+      };
+
+      const produced = Number(report.quantityProduced || 0);
+      const productionWorkers = Number(report.workersProductionCount || report.workersCount || 0);
+      const workersCount = Number(report.workersCount || 0);
+      const unitCost = report.id ? Number(reportCosts.get(report.id) || 0) : 0;
+      current.totalProducedQty += produced;
+      current.totalProductionWorkers += productionWorkers;
+      current.totalWorkersCount += workersCount;
+      current.reportsCount += 1;
+      if (report.date) current.dates.add(report.date);
+      current.totalCost += produced * unitCost;
+      grouped.set(key, current);
+    });
+
+    const rows = Array.from(grouped.values()).map((row) => {
+      const balances = productBalanceByWarehouseBucket.get(row.productId) || {
+        decomposed: 0,
+        finished: 0,
+        finalProduct: 0,
+      };
+      const unitCost = row.totalProducedQty > 0 ? row.totalCost / row.totalProducedQty : 0;
+      return {
+        key: `${row.lineId}__${row.supervisorId}__${row.productId}`,
+        lineId: row.lineId,
+        supervisorId: row.supervisorId,
+        productId: row.productId,
+        lineName: getLineName(row.lineId),
+        supervisorName: getEmployeeName(row.supervisorId),
+        productName: getProductName(row.productId),
+        totalProducedQty: row.totalProducedQty,
+        productionWorkers: row.totalProductionWorkers,
+        avgWorkersPerReport: row.reportsCount > 0 ? row.totalWorkersCount / row.reportsCount : 0,
+        totalCost: row.totalCost,
+        unitCost,
+        totalDays: row.dates.size,
+        reportsCount: row.reportsCount,
+        decomposedBalance: balances.decomposed,
+        finishedBalance: balances.finished,
+        finalProductBalance: balances.finalProduct,
+      };
+    });
+
+    const query = factorySearch.trim().toLowerCase();
+    const filtered = !query
+      ? rows
+      : rows.filter((row) =>
+          row.lineName.toLowerCase().includes(query)
+          || row.supervisorName.toLowerCase().includes(query)
+          || row.productName.toLowerCase().includes(query)
+        );
+
+    return filtered;
+  }, [
+    displayedReports,
+    reportCosts,
+    productBalanceByWarehouseBucket,
+    getLineName,
+    getEmployeeName,
+    getProductName,
+    factorySearch,
+  ]);
+
+  const factoryGeneralSortedRows = useMemo(() => {
+    const rows = [...factoryGeneralRows];
+    rows.sort((a, b) => {
+      const aVal = a[factorySortKey];
+      const bVal = b[factorySortKey];
+      let result = 0;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        result = aVal - bVal;
+      } else {
+        result = String(aVal ?? '').localeCompare(String(bVal ?? ''), 'ar');
+      }
+      return factorySortDirection === 'asc' ? result : -result;
+    });
+    return rows;
+  }, [factoryGeneralRows, factorySortKey, factorySortDirection]);
+
+  const factoryGeneralExportRows = useMemo(
+    () =>
+      factoryGeneralSortedRows.map((row) => ({
+        'الخط': row.lineName,
+        'المشرف': row.supervisorName,
+        'الصنف': row.productName,
+        'الصنف المحقق': Number(row.totalProducedQty.toFixed(2)),
+        'عمال الإنتاج': Number(row.productionWorkers.toFixed(2)),
+        'متوسط العمال/تقرير': Number(row.avgWorkersPerReport.toFixed(2)),
+        'تكلفة القطعة': canViewCosts ? Number(row.unitCost.toFixed(2)) : '—',
+        'إجمالي التكلفة': canViewCosts ? Number(row.totalCost.toFixed(2)) : '—',
+        'إجمالي الأيام': row.totalDays,
+        'عدد التقارير': row.reportsCount,
+        'رصيد المفكك': Number(row.decomposedBalance.toFixed(2)),
+        'رصيد تم الصنع': Number(row.finishedBalance.toFixed(2)),
+        'رصيد منتج تام': Number(row.finalProductBalance.toFixed(2)),
+      })),
+    [factoryGeneralSortedRows, canViewCosts],
   );
 
   const woMap = useMemo(() => {
@@ -624,6 +864,20 @@ export const Reports: React.FC = () => {
     setViewMode('range');
   };
 
+  const handleShowGeneralMonthly = async () => {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    const startStr = toDateInputValue(start);
+    const endStr = toDateInputValue(end);
+    setFilterLineId('');
+    setFilterProductCategory('');
+    setFilterEmployeeId('');
+    setStartDate(startStr);
+    setEndDate(endStr);
+    await fetchReports(startStr, endStr);
+    setViewMode('general');
+  };
+
   const activeFilterCount = (filterLineId ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
   const handleLoadMoreRange = async () => {
     if (viewMode !== 'range' || rangeLoading || !rangeHasMore) return;
@@ -657,6 +911,12 @@ export const Reports: React.FC = () => {
           onClick={handleShowMonthly}
         >
           شهري
+        </button>
+        <button
+          className={`erp-date-seg-btn${viewMode === 'general' ? ' active' : ''}`}
+          onClick={handleShowGeneralMonthly}
+        >
+          تقرير عام
         </button>
       </div>
 
@@ -1492,6 +1752,46 @@ export const Reports: React.FC = () => {
     </div>
   );
 
+  const factoryGeneralSummary = useMemo(() => {
+    const totals = factoryGeneralRows.reduce(
+      (acc, row) => {
+        acc.produced += row.totalProducedQty;
+        acc.productionWorkers += row.productionWorkers;
+        acc.totalCost += row.totalCost;
+        acc.reports += row.reportsCount;
+        return acc;
+      },
+      { produced: 0, productionWorkers: 0, totalCost: 0, reports: 0 },
+    );
+    const avgUnitCost = totals.produced > 0 ? totals.totalCost / totals.produced : 0;
+    return { ...totals, avgUnitCost };
+  }, [factoryGeneralRows]);
+
+  const toggleFactorySort = useCallback((key: FactoryGeneralSortKey) => {
+    if (key === factorySortKey) {
+      setFactorySortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setFactorySortKey(key);
+    setFactorySortDirection('asc');
+  }, [factorySortKey]);
+
+  const renderFactorySortHeader = useCallback((label: string, key: FactoryGeneralSortKey, centered = false) => {
+    const isActive = factorySortKey === key;
+    const icon = !isActive ? 'unfold_more' : (factorySortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward');
+    return (
+      <button
+        type="button"
+        className={`w-full flex items-center gap-1 ${centered ? 'justify-center' : 'justify-start'} hover:text-primary transition-colors`}
+        onClick={() => toggleFactorySort(key)}
+        title={`فرز حسب ${label}`}
+      >
+        <span>{label}</span>
+        <span className={`material-icons-round text-sm ${isActive ? 'text-primary' : 'text-[var(--color-text-muted)]'}`}>{icon}</span>
+      </button>
+    );
+  }, [factorySortKey, factorySortDirection, toggleFactorySort]);
+
   const importValidCount = importMode === 'updateDate'
     ? (importDateUpdateResult?.validCount ?? 0)
     : (importResult?.validCount ?? 0);
@@ -1520,6 +1820,19 @@ export const Reports: React.FC = () => {
           dataModalKey: 'reports.create',
         } : undefined}
         moreActions={[
+          {
+            label: 'عرض التقرير العام الشهري',
+            icon: 'insights',
+            group: 'أدوات',
+            onClick: () => { void handleShowGeneralMonthly(); },
+          },
+          {
+            label: 'تقرير المصنع العام Excel',
+            icon: 'analytics',
+            group: 'تصدير',
+            hidden: !canExportFromPage || factoryGeneralRows.length === 0,
+            onClick: () => exportFactoryGeneralReport(factoryGeneralExportRows, startDate, endDate),
+          },
           {
             label: 'تقارير Excel',
             icon: 'table_chart',
@@ -1602,27 +1915,103 @@ export const Reports: React.FC = () => {
       )}
 
       {/* Reports Table */}
-      {rangeError && viewMode === 'range' && (
+      {rangeError && (viewMode === 'range' || viewMode === 'general') && (
         <div className="erp-alert erp-alert-warning">
           <span className="material-icons-round text-[18px] shrink-0">warning</span>
           <span>{rangeError}</span>
         </div>
       )}
-      <SelectableTable<ProductionReport>
-        data={displayedReports}
-        columns={reportColumns}
-        selectAllScope="filtered"
-        enableColumnVisibility
-        toolbarContent={tableToolbarFilters}
-        highlightRowId={highlightReportId}
-        getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
-        bulkActions={reportBulkActions}
-        renderActions={renderReportActions}
-        emptyIcon="bar_chart"
-        emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-        emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
-        footer={reportTableFooter}
-      />
+      {viewMode === 'general' ? (
+        <Card className="!p-0 overflow-hidden">
+          <div className="p-4 border-b border-[var(--color-border)] bg-[#f8f9fa]/40 flex flex-col md:flex-row md:items-center gap-3">
+            <input
+              className="w-full md:max-w-md rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)]"
+              value={factorySearch}
+              onChange={(e) => setFactorySearch(e.target.value)}
+              placeholder="بحث بالخط أو المشرف أو الصنف"
+            />
+            <div className="text-xs md:mr-auto font-bold text-[var(--color-text-muted)]">
+              إجمالي {factoryGeneralRows.length} صف | إنتاج {formatNumber(factoryGeneralSummary.produced)} | تقارير {formatNumber(factoryGeneralSummary.reports)}
+            </div>
+          </div>
+          {factoryGeneralSortedRows.length === 0 ? (
+            <div className="py-16 text-center text-[var(--color-text-muted)]">
+              لا توجد بيانات مطابقة للتقرير العام في هذه الفترة.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">{renderFactorySortHeader('الخط', 'lineName')}</th>
+                    <th className="erp-th">{renderFactorySortHeader('المشرف', 'supervisorName')}</th>
+                    <th className="erp-th">{renderFactorySortHeader('الصنف', 'productName')}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('الصنف المحقق', 'totalProducedQty', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('عمال الإنتاج', 'productionWorkers', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('متوسط العمال/تقرير', 'avgWorkersPerReport', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('تكلفة القطعة', 'unitCost', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('إجمالي الأيام', 'totalDays', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('عدد التقارير', 'reportsCount', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('رصيد المفكك', 'decomposedBalance', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('رصيد تم الصنع', 'finishedBalance', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('رصيد منتج تام', 'finalProductBalance', true)}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {factoryGeneralSortedRows.map((row) => (
+                    <tr key={row.key} className="hover:bg-[#f8f9fa]/70/40">
+                      <td className="px-4 py-3 text-sm font-bold">{row.lineName}</td>
+                      <td className="px-4 py-3 text-sm">{row.supervisorName}</td>
+                      <td className="px-4 py-3 text-sm">{row.productName}</td>
+                      <td className="px-4 py-3 text-sm text-center font-bold tabular-nums">{formatNumber(row.totalProducedQty)}</td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(row.productionWorkers)}</td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(row.avgWorkersPerReport)}</td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">
+                        {canViewCosts ? formatCost(row.unitCost) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(row.totalDays)}</td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(row.reportsCount)}</td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(row.decomposedBalance)}</td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(row.finishedBalance)}</td>
+                      <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(row.finalProductBalance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-[#f8f9fa] font-bold">
+                    <td className="px-4 py-3 text-sm" colSpan={3}>الإجمالي</td>
+                    <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(factoryGeneralSummary.produced)}</td>
+                    <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(factoryGeneralSummary.productionWorkers)}</td>
+                    <td className="px-4 py-3 text-sm text-center">—</td>
+                    <td className="px-4 py-3 text-sm text-center tabular-nums">{canViewCosts ? formatCost(factoryGeneralSummary.avgUnitCost) : '—'}</td>
+                    <td className="px-4 py-3 text-sm text-center">—</td>
+                    <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(factoryGeneralSummary.reports)}</td>
+                    <td className="px-4 py-3 text-sm text-center">—</td>
+                    <td className="px-4 py-3 text-sm text-center">—</td>
+                    <td className="px-4 py-3 text-sm text-center">—</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </Card>
+      ) : (
+        <SelectableTable<ProductionReport>
+          data={displayedReports}
+          columns={reportColumns}
+          selectAllScope="filtered"
+          enableColumnVisibility
+          toolbarContent={tableToolbarFilters}
+          highlightRowId={highlightReportId}
+          getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
+          bulkActions={reportBulkActions}
+          renderActions={renderReportActions}
+          emptyIcon="bar_chart"
+          emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
+          emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+          footer={reportTableFooter}
+        />
+      )}
       {viewMode === 'range' && (
         <div className="flex items-center justify-center">
           <Button

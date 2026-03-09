@@ -12,6 +12,7 @@ import {
   User,
   UserCredential,
 } from 'firebase/auth';
+import { getFunctions, httpsCallable, Functions } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -28,17 +29,44 @@ let app: FirebaseApp;
 let db: Firestore;
 let auth: Auth;
 let storage: FirebaseStorage;
+let functionsClient: Functions;
 
 if (isConfigured) {
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
   auth = getAuth(app);
   storage = getStorage(app);
+  functionsClient = getFunctions(app, 'us-central1');
 } else {
   console.warn('⚠ Firebase not configured. Add VITE_FIREBASE_* variables to .env.local');
 }
 
 export { db, auth, storage, isConfigured };
+
+const normalizeCallableError = (error: any): Error => {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').trim();
+
+  if (code.includes('unauthenticated')) {
+    return new Error('يجب تسجيل الدخول أولًا ثم إعادة المحاولة.');
+  }
+  if (code.includes('permission-denied')) {
+    return new Error('ليس لديك صلاحية لتنفيذ هذا الإجراء.');
+  }
+  if (code.includes('failed-precondition')) {
+    return new Error(message || 'لا يمكن تنفيذ العملية في الحالة الحالية.');
+  }
+  if (code.includes('not-found')) {
+    return new Error('الخدمة غير متاحة حاليًا. تأكد من نشر Cloud Functions.');
+  }
+  if (code.includes('unavailable') || code.includes('deadline-exceeded')) {
+    return new Error('تعذر الاتصال بالخادم. تحقق من اتصال الإنترنت ثم أعد المحاولة.');
+  }
+  if (message) {
+    return new Error(message);
+  }
+  return new Error('حدث خطأ غير متوقع أثناء التواصل مع الخادم.');
+};
 
 export const signInWithEmail = async (
   email: string,
@@ -112,4 +140,34 @@ export const resetPassword = async (email: string): Promise<void> => {
 export const onAuthChange = (callback: (user: User | null) => void): (() => void) => {
   if (!auth) return () => {};
   return onAuthStateChanged(auth, callback);
+};
+
+export const deleteUserHard = async (targetUid: string): Promise<void> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ targetUid: string }, { ok: boolean }>(
+    functionsClient,
+    'adminDeleteUserHard',
+  );
+  try {
+    await callable({ targetUid });
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const updateUserCredentialsHard = async (input: {
+  targetUid: string;
+  email?: string;
+  password?: string;
+}): Promise<void> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { targetUid: string; email?: string; password?: string },
+    { ok: boolean }
+  >(functionsClient, 'adminUpdateUserCredentials');
+  try {
+    await callable(input);
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
 };

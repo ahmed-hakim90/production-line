@@ -246,6 +246,16 @@ export const exportHRData = (
   downloadExcel(rows, sheetName, fileName);
 };
 
+export const exportFactoryGeneralReport = (
+  rows: Record<string, any>[],
+  startDate: string,
+  endDate: string,
+) => {
+  if (rows.length === 0) return;
+  const label = startDate === endDate ? startDate : `${startDate}_${endDate}`;
+  downloadExcel(rows, 'تقرير عام المصنع', `تقرير-عام-المصنع-${label}`);
+};
+
 /**
  * Export product summary table (from admin dashboard).
  */

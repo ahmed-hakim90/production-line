@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
@@ -9,33 +9,17 @@ import { exportHRData } from '@/utils/exportExcel';
 import { formatNumber, formatCurrency } from '@/utils/calculations';
 import type { FirestoreVehicle } from '../types';
 import type { FirestoreEmployee } from '@/types';
-import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
-
-const EMPTY_VEHICLE: Omit<FirestoreVehicle, 'id'> = {
-  name: '',
-  plateNumber: '',
-  capacity: 10,
-  dailyRate: 0,
-  workingDaysPerMonth: 26,
-  driverName: '',
-  driverPhone: '',
-  assignedEmployees: [],
-  notes: '',
-  isActive: true,
-};
 
 export const Vehicles: React.FC = () => {
   const { can } = usePermission();
   const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const { openModal } = useGlobalModalManager();
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY_VEHICLE);
-  const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const pageControl = useMemo(
@@ -58,11 +42,6 @@ export const Vehicles: React.FC = () => {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  const activeEmployees = useMemo(() =>
-    employees.filter((e) => e.isActive).map((e) => ({ value: e.id!, label: `${e.code ? e.code + ' — ' : ''}${e.name}` })),
-    [employees],
-  );
 
   const empNameMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -114,47 +93,16 @@ export const Vehicles: React.FC = () => {
   }, [vehicles, getAssignedEmployeeIds]);
 
   const openCreate = () => {
-    setEditingId(null);
-    setForm({ ...EMPTY_VEHICLE });
-    setShowForm(true);
+    openModal(MODAL_KEYS.VEHICLES_CREATE, { onSaved: fetchData });
   };
-  useRegisterModalOpener(MODAL_KEYS.VEHICLES_CREATE, () => openCreate());
 
   const openEdit = (v: FirestoreVehicle) => {
     const assignedEmployeeIds = getAssignedEmployeeIds(v);
-    setEditingId(v.id!);
-    setForm({
-      name: v.name,
-      plateNumber: v.plateNumber,
-      capacity: v.capacity,
-      dailyRate: v.dailyRate,
-      workingDaysPerMonth: v.workingDaysPerMonth,
-      driverName: v.driverName,
-      driverPhone: v.driverPhone,
-      assignedEmployees: [...assignedEmployeeIds],
-      notes: v.notes,
-      isActive: v.isActive,
+    openModal(MODAL_KEYS.VEHICLES_CREATE, {
+      vehicle: v,
+      assignedEmployeeIds,
+      onSaved: fetchData,
     });
-    setShowForm(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim() || !form.plateNumber.trim()) return;
-    setSaving(true);
-    try {
-      if (editingId) {
-        await vehicleService.update(editingId, form);
-      } else {
-        await vehicleService.create(form);
-      }
-      setShowForm(false);
-      setEditingId(null);
-      await fetchData();
-    } catch (err) {
-      console.error('Failed to save vehicle:', err);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleDelete = async (id: string) => {
@@ -165,16 +113,6 @@ export const Vehicles: React.FC = () => {
     } catch (err) {
       console.error('Failed to delete vehicle:', err);
     }
-  };
-
-  const toggleEmployee = (empId: string) => {
-    setForm((prev) => {
-      const list = [...prev.assignedEmployees];
-      const idx = list.indexOf(empId);
-      if (idx >= 0) list.splice(idx, 1);
-      else if (list.length < prev.capacity) list.push(empId);
-      return { ...prev, assignedEmployees: list };
-    });
   };
 
   const handleExport = () => {
@@ -291,175 +229,6 @@ export const Vehicles: React.FC = () => {
           />
         </div>
       </div>
-
-      {/* Create / Edit Form */}
-      {showForm && (
-        <Card title={editingId ? 'تعديل مركبة' : 'إضافة مركبة جديدة'}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">اسم المركبة *</label>
-              <input
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="مثال: باص 1"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">رقم اللوحة *</label>
-              <input
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                value={form.plateNumber}
-                onChange={(e) => setForm({ ...form, plateNumber: e.target.value })}
-                placeholder="أ ب ج 1234"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">السعة (عدد الركاب)</label>
-              <input
-                type="number"
-                min={1}
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                value={form.capacity}
-                onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) || 1 })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">الأجر اليومي (ج.م)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                value={form.dailyRate}
-                onChange={(e) => setForm({ ...form, dailyRate: Number(e.target.value) || 0 })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">أيام العمل / شهر</label>
-              <input
-                type="number"
-                min={1}
-                max={31}
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                value={form.workingDaysPerMonth}
-                onChange={(e) => setForm({ ...form, workingDaysPerMonth: Math.min(31, Number(e.target.value) || 1) })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
-                التكلفة الشهرية
-              </label>
-              <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold bg-emerald-50 text-emerald-700">
-                {formatCurrency(form.dailyRate * form.workingDaysPerMonth)}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">اسم السائق</label>
-              <input
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                value={form.driverName}
-                onChange={(e) => setForm({ ...form, driverName: e.target.value })}
-                placeholder="اسم السائق"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">هاتف السائق</label>
-              <input
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                value={form.driverPhone}
-                onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
-                placeholder="01xxxxxxxxx"
-                dir="ltr"
-              />
-            </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                  className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary"
-                />
-                <span className="text-sm font-bold text-[var(--color-text-muted)]">نشطة</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Employee Assignment */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-bold text-[var(--color-text-muted)]">
-                ربط الموظفين ({form.assignedEmployees.length}/{form.capacity})
-              </label>
-              {form.assignedEmployees.length >= form.capacity && (
-                <span className="text-xs text-amber-600 font-bold">المركبة ممتلئة</span>
-              )}
-            </div>
-
-            <SearchableSelect
-              options={activeEmployees.filter((e) => !form.assignedEmployees.includes(e.value))}
-              value=""
-              onChange={(val) => { if (val) toggleEmployee(val); }}
-              placeholder="ابحث وأضف موظف..."
-              className="mb-3"
-            />
-
-            {form.assignedEmployees.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {form.assignedEmployees.map((empId) => (
-                  <span
-                    key={empId}
-                    className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium px-3 py-1.5 rounded-[var(--border-radius-base)] border border-indigo-200 dark:border-indigo-800"
-                  >
-                    {getEmpName(empId)}
-                    <button
-                      onClick={() => toggleEmployee(empId)}
-                      className="text-indigo-400 hover:text-rose-500 transition-colors"
-                    >
-                      <span className="material-icons-round text-sm">close</span>
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {form.assignedEmployees.length > 0 && form.dailyRate > 0 && (
-              <div className="mt-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-2">
-                <span className="material-icons-round text-sky-500 text-sm">info</span>
-                <span className="text-sm font-bold text-sky-700 dark:text-sky-400">
-                  تكلفة الموظف الواحد: {formatCurrency((form.dailyRate * form.workingDaysPerMonth) / form.assignedEmployees.length)} / شهر
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Notes */}
-          <div className="mt-4">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">ملاحظات</label>
-            <textarea
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none"
-              rows={2}
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="ملاحظات إضافية..."
-            />
-          </div>
-
-          <div className="flex gap-3 mt-4">
-            <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); }}>إلغاء</Button>
-            <Button
-              variant="primary"
-              onClick={handleSave}
-              disabled={saving || !form.name.trim() || !form.plateNumber.trim()}
-            >
-              {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              <span className="material-icons-round text-sm">save</span>
-              {editingId ? 'حفظ التعديلات' : 'إضافة المركبة'}
-            </Button>
-          </div>
-        </Card>
-      )}
 
       {/* Vehicle Cards */}
       {filtered.length === 0 ? (

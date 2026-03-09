@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Badge, Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -8,7 +8,7 @@ import { getCurrentMonth, getWorkingDaysForMonth } from '../../../utils/costCalc
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 export const CostCenters: React.FC = () => {
@@ -17,11 +17,10 @@ export const CostCenters: React.FC = () => {
   const costAllocations = useAppStore((s) => s.costAllocations);
   const _rawLines = useAppStore((s) => s._rawLines);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
-  const createCostCenter = useAppStore((s) => s.createCostCenter);
-  const updateCostCenter = useAppStore((s) => s.updateCostCenter);
   const deleteCostCenter = useAppStore((s) => s.deleteCostCenter);
   const navigate = useNavigate();
   const { can } = usePermission();
+  const { openModal } = useGlobalModalManager();
   const canManage = can('costs.manage');
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'costCenters'),
@@ -29,9 +28,6 @@ export const CostCenters: React.FC = () => {
   );
   const canExport = can('export') && pageControl.exportEnabled;
 
-  const [modal, setModal] = useState<CostCenter | 'new' | null>(null);
-  const [form, setForm] = useState({ name: '', type: 'indirect' as 'indirect' | 'direct', isActive: true });
-  const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
 
@@ -41,26 +37,11 @@ export const CostCenters: React.FC = () => {
   );
 
   const openCreate = () => {
-    setForm({ name: '', type: 'indirect', isActive: true });
-    setModal('new');
+    openModal(MODAL_KEYS.COST_CENTERS_CREATE);
   };
-  useRegisterModalOpener(MODAL_KEYS.COST_CENTERS_CREATE, () => openCreate());
 
   const openEdit = (cc: CostCenter) => {
-    setForm({ name: cc.name, type: cc.type, isActive: cc.isActive });
-    setModal(cc);
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim()) return;
-    setSaving(true);
-    if (modal === 'new') {
-      await createCostCenter(form);
-    } else if (modal && modal !== 'new') {
-      await updateCostCenter(modal.id!, form);
-    }
-    setSaving(false);
-    setModal(null);
+    openModal(MODAL_KEYS.COST_CENTERS_CREATE, { costCenter: cc });
   };
 
   const handleDelete = async (id: string) => {
@@ -236,6 +217,7 @@ export const CostCenters: React.FC = () => {
                   <>
                     <button
                       onClick={() => openEdit(cc)}
+                      data-modal-key={MODAL_KEYS.COST_CENTERS_CREATE}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-[var(--border-radius-base)] transition-all"
                     >
                       <span className="material-icons-round text-sm">edit</span>
@@ -252,58 +234,6 @@ export const CostCenters: React.FC = () => {
               </div>
             </Card>
           ))}
-        </div>
-      )}
-
-      {/* Create / Edit Modal */}
-      {modal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setModal(null)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-              <h3 className="text-lg font-bold">{modal === 'new' ? 'إضافة مركز تكلفة' : 'تعديل مركز التكلفة'}</h3>
-              <button onClick={() => setModal(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <span className="material-icons-round">close</span>
-              </button>
-            </div>
-            <div className="p-6 space-y-5">
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم مركز التكلفة *</label>
-                <input
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="مثال: إيجار المصنع"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">النوع *</label>
-                <select
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={form.type}
-                  onChange={(e) => setForm({ ...form, type: e.target.value as 'indirect' | 'direct' })}
-                >
-                  <option value="indirect">غير مباشر (يوزع على الخطوط)</option>
-                  <option value="direct">مباشر</option>
-                </select>
-              </div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                  className="w-5 h-5 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
-                />
-                <span className="text-sm font-bold text-[var(--color-text-muted)]">مفعل</span>
-              </label>
-            </div>
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-              <Button variant="outline" onClick={() => setModal(null)}>إلغاء</Button>
-              <Button variant="primary" onClick={handleSave} disabled={saving || !form.name.trim()}>
-                {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                حفظ
-              </Button>
-            </div>
-          </div>
         </div>
       )}
 

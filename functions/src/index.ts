@@ -1,8 +1,10 @@
 import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
 initializeApp();
 
@@ -15,6 +17,8 @@ const ASSIGNMENTS_COLLECTION = 'line_worker_assignments';
 const NOTIFICATIONS_COLLECTION = 'notifications';
 const AUTOMATION_RUNS_COLLECTION = 'automation_runs';
 const USER_DEVICES_COLLECTION = 'user_devices';
+const USERS_COLLECTION = 'users';
+const ROLES_COLLECTION = 'roles';
 
 type ReportLike = {
   date?: string;
@@ -63,6 +67,19 @@ const summarizeNames = (names: string[], maxItems = 5): string => {
   const picked = names.slice(0, maxItems);
   const rest = names.length - picked.length;
   return rest > 0 ? `${picked.join('، ')} +${rest}` : picked.join('، ');
+};
+
+const hasManageUsersPermission = async (uid: string): Promise<boolean> => {
+  const userSnap = await db.collection(USERS_COLLECTION).doc(uid).get();
+  if (!userSnap.exists) return false;
+  const user = userSnap.data() as { roleId?: string };
+  const roleId = String(user.roleId || '').trim();
+  if (!roleId) return false;
+  const roleSnap = await db.collection(ROLES_COLLECTION).doc(roleId).get();
+  if (!roleSnap.exists) return false;
+  const role = roleSnap.data() as { permissions?: Record<string, boolean> };
+  const permissions = role.permissions || {};
+  return permissions['users.manage'] === true || permissions['roles.manage'] === true;
 };
 
 const applyDelta = async (report: Required<ReportLike>, factor: 1 | -1) => {
@@ -383,5 +400,152 @@ export const notifySupervisorsMissingDailyReport = onSchedule(
     });
 
     if (alreadySent) return;
+  },
+);
+
+export const adminDeleteUserHard = onCall(
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const permitted = await hasManageUsersPermission(requesterUid);
+    if (!permitted) {
+      throw new HttpsError('permission-denied', 'لا تملك صلاحية إدارة المستخدمين.');
+    }
+
+    const targetUid = String((request.data as { targetUid?: string })?.targetUid || '').trim();
+    if (!targetUid) {
+      throw new HttpsError('invalid-argument', 'يجب تمرير targetUid.');
+    }
+    if (targetUid === requesterUid) {
+      throw new HttpsError('failed-precondition', 'لا يمكن حذف حسابك الحالي.');
+    }
+
+    const linkedEmployees = await db
+      .collection(EMPLOYEES_COLLECTION)
+      .where('userId', '==', targetUid)
+      .get();
+
+    if (!linkedEmployees.empty) {
+      const batch = db.batch();
+      linkedEmployees.docs.forEach((employeeDoc) => {
+        batch.update(employeeDoc.ref, {
+          userId: '',
+          email: '',
+          hasSystemAccess: false,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+      await batch.commit();
+    }
+
+    await db.collection(USERS_COLLECTION).doc(targetUid).delete();
+
+    try {
+      await getAuth().deleteUser(targetUid);
+    } catch (error: any) {
+      const code = String(error?.code || '');
+      if (code !== 'auth/user-not-found') {
+        throw new HttpsError('internal', 'تعذر حذف حساب المصادقة.');
+      }
+    }
+
+    return { ok: true, targetUid };
+  },
+);
+
+export const adminUpdateUserCredentials = onCall(
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const permitted = await hasManageUsersPermission(requesterUid);
+    if (!permitted) {
+      throw new HttpsError('permission-denied', 'لا تملك صلاحية إدارة المستخدمين.');
+    }
+
+    const targetUid = String((request.data as { targetUid?: string })?.targetUid || '').trim();
+    const nextEmail = String((request.data as { email?: string })?.email || '').trim().toLowerCase();
+    const nextPassword = String((request.data as { password?: string })?.password || '').trim();
+
+    if (!targetUid) {
+      throw new HttpsError('invalid-argument', 'يجب تمرير targetUid.');
+    }
+    if (targetUid === requesterUid) {
+      throw new HttpsError('failed-precondition', 'لا يمكن تعديل بيانات حسابك من هذا الإجراء.');
+    }
+    if (!nextEmail && !nextPassword) {
+      throw new HttpsError('invalid-argument', 'يجب تمرير بريد أو كلمة مرور جديدة.');
+    }
+    if (nextEmail && !nextEmail.includes('@')) {
+      throw new HttpsError('invalid-argument', 'صيغة البريد الإلكتروني غير صحيحة.');
+    }
+    if (nextPassword && nextPassword.length < 6) {
+      throw new HttpsError('invalid-argument', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
+    }
+
+    if (nextEmail) {
+      const existing = await db
+        .collection(USERS_COLLECTION)
+        .where('email', '==', nextEmail)
+        .get();
+      const usedByOther = existing.docs.some((docSnap) => docSnap.id !== targetUid);
+      if (usedByOther) {
+        throw new HttpsError('already-exists', 'البريد الإلكتروني مستخدم بالفعل.');
+      }
+    }
+
+    try {
+      await getAuth().updateUser(targetUid, {
+        ...(nextEmail ? { email: nextEmail } : {}),
+        ...(nextPassword ? { password: nextPassword } : {}),
+      });
+    } catch (error: any) {
+      const code = String(error?.code || '');
+      if (code.includes('email-already-exists')) {
+        throw new HttpsError('already-exists', 'البريد الإلكتروني مستخدم بالفعل في Firebase Auth.');
+      }
+      if (code.includes('user-not-found')) {
+        throw new HttpsError('not-found', 'المستخدم غير موجود في Firebase Auth.');
+      }
+      throw new HttpsError('internal', 'تعذر تحديث بيانات الحساب في Firebase Auth.');
+    }
+
+    if (nextEmail) {
+      await db.collection(USERS_COLLECTION).doc(targetUid).set(
+        {
+          email: nextEmail,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      const linkedEmployees = await db
+        .collection(EMPLOYEES_COLLECTION)
+        .where('userId', '==', targetUid)
+        .get();
+      if (!linkedEmployees.empty) {
+        const batch = db.batch();
+        linkedEmployees.docs.forEach((employeeDoc) => {
+          batch.update(employeeDoc.ref, {
+            email: nextEmail,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
+    }
+
+    return { ok: true, targetUid };
   },
 );

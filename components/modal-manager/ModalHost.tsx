@@ -11,6 +11,13 @@ import { GlobalImportRawMaterialsModal } from './modals/GlobalImportRawMaterials
 import { GlobalImportInventoryInByCodeModal } from './modals/GlobalImportInventoryInByCodeModal';
 import { GlobalImportProductionPlansModal } from './modals/GlobalImportProductionPlansModal';
 import { GlobalComponentScrapModal } from './modals/GlobalComponentScrapModal';
+import { GlobalManageUserModal } from './modals/GlobalManageUserModal';
+import { GlobalCreateSystemUserModal } from './modals/GlobalCreateSystemUserModal';
+import { GlobalImportSystemUsersModal } from './modals/GlobalImportSystemUsersModal';
+import { GlobalSystemRoleModal } from './modals/GlobalSystemRoleModal';
+import { GlobalCostCenterModal } from './modals/GlobalCostCenterModal';
+import { GlobalCreateVehicleModal } from './modals/GlobalCreateVehicleModal';
+import { GlobalOrganizationModal } from './modals/GlobalOrganizationModal';
 
 /**
  * Central host for modal UX layer.
@@ -32,6 +39,13 @@ export const ModalHost: React.FC = () => {
       <GlobalCreateRawMaterialModal />
       <GlobalImportRawMaterialsModal />
       <GlobalComponentScrapModal />
+      <GlobalManageUserModal />
+      <GlobalCreateSystemUserModal />
+      <GlobalImportSystemUsersModal />
+      <GlobalSystemRoleModal />
+      <GlobalCostCenterModal />
+      <GlobalCreateVehicleModal />
+      <GlobalOrganizationModal />
     </>
   );
 };

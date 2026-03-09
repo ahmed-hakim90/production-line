@@ -28,6 +28,16 @@ service cloud.firestore {
         && currentRoleDoc().data.permissions[permissionKey] == true;
     }
 
+    function isActiveUser() {
+      return isAuthenticated()
+        && exists(currentUserPath())
+        && currentUserDoc().data.isActive == true;
+    }
+
+    function isBootstrap() {
+      return isAuthenticated() && !exists(currentUserPath());
+    }
+
     function isPresenceOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -46,7 +56,10 @@ service cloud.firestore {
     }
 
     match /{document=**} {
-      allow read, write: if isAuthenticated();
+      // Temporary baseline hardening:
+      // - Active users can continue working.
+      // - Bootstrap users (before user doc creation) can complete setup.
+      allow read, write: if isActiveUser() || isBootstrap();
     }
   }
 }

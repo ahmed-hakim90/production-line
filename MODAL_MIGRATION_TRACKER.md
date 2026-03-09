@@ -14,6 +14,13 @@ Tracks migration from page-scoped modals to Global Modal Manager architecture.
 - `inventory.rawMaterials.import`
 - `inventory.movements.importInByCode`
 - `productionPlans.import`
+- `system.users.manage`
+- `system.users.create`
+- `system.users.import`
+- `system.roles.create`
+- `costCenters.create`
+- `vehicles.create`
+- `organization.create`
 
 ## In Progress
 
@@ -22,8 +29,8 @@ Tracks migration from page-scoped modals to Global Modal Manager architecture.
 ## Backlog
 
 - HR module modals
-- Costs module modals
-- System module modals
+- Costs module modals (remaining except `costCenters.create`)
+- System module modals (remaining except users + roles)
 
 ## Migration Rules
 

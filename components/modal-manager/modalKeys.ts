@@ -18,6 +18,9 @@ export const MODAL_KEYS = {
   INVENTORY_RAW_MATERIALS_CREATE: 'inventory.rawMaterials.create',
   INVENTORY_RAW_MATERIALS_IMPORT: 'inventory.rawMaterials.import',
   SYSTEM_ROLES_CREATE: 'system.roles.create',
+  SYSTEM_USERS_MANAGE: 'system.users.manage',
+  SYSTEM_USERS_CREATE: 'system.users.create',
+  SYSTEM_USERS_IMPORT: 'system.users.import',
 } as const;
 
 export type ModalKey = (typeof MODAL_KEYS)[keyof typeof MODAL_KEYS];

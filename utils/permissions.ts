@@ -26,6 +26,7 @@ export type Permission =
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
   | 'settings.view' | 'settings.edit'
+  | 'users.manage'
   | 'roles.view' | 'roles.manage'
   | 'activityLog.view'
   | 'quickAction.view'
@@ -202,6 +203,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     permissions: [
       { key: 'roles.view', label: 'عرض الأدوار' },
       { key: 'roles.manage', label: 'إدارة الأدوار' },
+      { key: 'users.manage', label: 'إدارة المستخدمين' },
       { key: 'activityLog.view', label: 'عرض سجل النشاط' },
       { key: 'settings.view', label: 'عرض الإعدادات' },
       { key: 'settings.edit', label: 'تعديل الإعدادات' },
@@ -311,7 +313,7 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
     items: [
       { path: '/hr-dashboard', icon: 'monitoring', label: 'لوحة HR', permission: 'hrDashboard.view' },
       { path: '/employees', icon: 'groups', label: 'الموظفين', permission: 'employees.view' },
-      { path: '/employees/import', icon: 'upload', label: 'استيراد الموظفين', permission: 'import' },
+      { path: '/employees/import', icon: 'upload', label: 'استيراد الموظفين', permission: 'employees.create' },
       { path: '/organization', icon: 'account_tree', label: 'الهيكل التنظيمي', permission: 'hrSettings.view' },
       { path: '/self-service', icon: 'person', label: 'الخدمة الذاتية', permission: 'selfService.view' },
       { path: '/attendance', icon: 'fingerprint', label: 'سجل الحضور', permission: 'attendance.view' },
@@ -352,6 +354,7 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
     key: 'system',
     label: 'النظام',
     items: [
+      { path: '/system/users', icon: 'manage_accounts', label: 'المستخدمون', permission: 'users.manage' },
       { path: '/roles', icon: 'admin_panel_settings', label: 'الأدوار والصلاحيات', permission: 'roles.manage' },
       { path: '/activity-log', icon: 'history', label: 'سجل النشاط', permission: 'activityLog.view' },
       { path: '/settings', icon: 'settings', label: 'الإعدادات', permission: 'settings.view' },
@@ -376,7 +379,7 @@ const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
   hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
   costs: ['/cost-centers', '/cost-settings'],
-  system: ['/roles', '/activity-log', '/settings'],
+  system: ['/system/users', '/roles', '/activity-log', '/settings'],
 };
 
 const sidebarGroupOrderRank = new Map(
@@ -422,7 +425,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/lines': 'lines.view',
   '/lines/:id': 'lines.view',
   '/employees': 'employees.view',
-  '/employees/import': 'import',
+  '/employees/import': 'employees.create',
   '/employees/:id': 'employees.viewDetails',
   '/supervisors': 'supervisors.view',
   '/supervisors/:id': 'supervisors.view',
@@ -446,7 +449,9 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/cost-centers': 'costs.view',
   '/cost-centers/:id': 'costs.view',
   '/cost-settings': 'costs.manage',
+  '/monthly-costs': 'costs.view',
   '/line-workers': 'lineWorkers.view',
+  '/system/users': 'users.manage',
   '/roles': 'roles.manage',
   '/settings': 'settings.view',
   '/attendance': 'attendance.view',
@@ -512,6 +517,9 @@ export function checkPermission(
   ) {
     return permissions['inventory.transactions.create'] === true;
   }
+  if (permission === 'users.manage') {
+    return permissions['roles.manage'] === true;
+  }
 
   return false;
 }
@@ -548,7 +556,7 @@ export function usePermission(): PermissionGuards {
       canCreateReport: can('reports.create'),
       canEditReport: can('reports.edit'),
       canDeleteReport: can('reports.delete'),
-      canManageUsers: can('employees.create') || can('employees.edit'),
+      canManageUsers: can('users.manage') || can('employees.create') || can('employees.edit'),
       canViewActivityLog: can('activityLog.view'),
       canUseQuickAction: can('quickAction.view'),
     };

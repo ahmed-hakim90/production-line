@@ -291,8 +291,6 @@ export const Employees: React.FC = () => {
         ...(form.hasSystemAccess && formEmail.trim() ? { email: formEmail.trim() } : {}),
       };
 
-      const needsUserCreation = form.hasSystemAccess && formEmail.trim() && formPassword;
-
       if (editId) {
         if (salaryChanged && uid && userEmail) {
           activityLogService.log(
@@ -311,90 +309,10 @@ export const Employees: React.FC = () => {
         }
 
         await updateEmployee(editId, payload);
-        const editingRaw = _rawEmployees.find((e) => e.id === editId);
-        const shouldCreateUser = needsUserCreation && (!editingRaw?.userId || recreateAccount);
-        if (shouldCreateUser) {
-          if (recreateAccount && editingRaw?.userId) {
-            try { await userService.delete(editingRaw.userId); } catch { /* old doc cleanup */ }
-          }
-          try {
-            const newUid = await createUser(
-              formEmail.trim(),
-              formPassword,
-              form.name.trim(),
-              formRoleId || roles[0]?.id!
-            );
-            if (newUid) {
-              await updateEmployee(editId, { userId: newUid, email: formEmail.trim() });
-              setSaveMsg({ type: 'success', text: recreateAccount ? `تم إعادة إنشاء حساب الدخول بنجاح (${formEmail.trim()})` : `تم حفظ البيانات وإنشاء حساب دخول بنجاح (${formEmail.trim()})` });
-              setShareCredentials({
-                name: form.name.trim(),
-                email: formEmail.trim(),
-                password: formPassword,
-                phone: (form.phone || '').trim(),
-              });
-              setRecreateAccount(false);
-              await loadUsers();
-            }
-          } catch (authErr: any) {
-            console.error('Create user error:', authErr);
-            setSaveMsg({ type: 'error', text: `تم حفظ بيانات الموظف، لكن فشل إنشاء الحساب: ${getAuthErrorMsg(authErr)}` });
-          }
-        } else if (editingRaw?.userId && !recreateAccount) {
-          const updates: string[] = [];
-          const newEmail = formEmail.trim();
-          if (newEmail && newEmail !== (editingRaw.email ?? '')) {
-            await userService.update(editingRaw.userId, { email: newEmail });
-            await updateEmployee(editId, { email: newEmail });
-            updates.push('البريد الإلكتروني');
-          }
-          let currentRoleId = usersMap[editingRaw.userId]?.roleId;
-          try {
-            const latestUser = await userService.get(editingRaw.userId);
-            currentRoleId = latestUser?.roleId ?? currentRoleId;
-          } catch (e) {
-            console.error('handleSave: failed to fetch latest user before role compare', e);
-          }
-          if (formRoleId && formRoleId !== currentRoleId) {
-            await userService.updateRoleId(editingRaw.userId, formRoleId);
-            updates.push('الدور');
-          }
-          if (updates.length > 0) {
-            setSaveMsg({ type: 'success', text: `تم تحديث ${updates.join(' و ')} بنجاح` });
-            await loadUsers();
-          } else {
-            setSaveMsg({ type: 'success', text: 'تم حفظ بيانات الموظف بنجاح' });
-          }
-        } else {
-          setSaveMsg({ type: 'success', text: 'تم حفظ بيانات الموظف بنجاح' });
-        }
+        setSaveMsg({ type: 'success', text: 'تم حفظ بيانات الموظف بنجاح' });
       } else {
         const id = await createEmployee(payload);
-        if (needsUserCreation && id) {
-          try {
-            const newUid = await createUser(
-              formEmail.trim(),
-              formPassword,
-              form.name.trim(),
-              formRoleId || roles[0]?.id!
-            );
-            if (newUid) {
-              await updateEmployee(id, { userId: newUid, email: formEmail.trim() });
-              setSaveMsg({ type: 'success', text: `تم إضافة الموظف وإنشاء حساب دخول بنجاح (${formEmail.trim()})` });
-              setShareCredentials({
-                name: form.name.trim(),
-                email: formEmail.trim(),
-                password: formPassword,
-                phone: (form.phone || '').trim(),
-              });
-            }
-          } catch (authErr: any) {
-            console.error('Create user error:', authErr);
-            setSaveMsg({ type: 'error', text: `تم إضافة الموظف، لكن فشل إنشاء الحساب: ${getAuthErrorMsg(authErr)}` });
-          }
-        } else {
-          setSaveMsg({ type: 'success', text: 'تم إضافة الموظف بنجاح' });
-        }
+        if (id) setSaveMsg({ type: 'success', text: 'تم إضافة الموظف بنجاح' });
       }
     } catch (err: any) {
       console.error('Save employee error:', err);
@@ -853,29 +771,21 @@ export const Employees: React.FC = () => {
         </Card>
       </div>
 
-      {/* 3. Pending users */}
+      {/* 3. Pending users moved to users page */}
       {pendingUsers.length > 0 && canManageUsers && (
         <Card>
-          <h3 className="text-lg font-bold mb-3">مستخدمون بانتظار الموافقة</h3>
-          <ul className="space-y-2">
-            {pendingUsers.map((u) => (
-              <li
-                key={u.id}
-                className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-[var(--color-border)] last:border-0"
-              >
-                <span className="font-medium">{u.displayName}</span>
-                <span className="text-sm text-slate-500">{u.email}</span>
-                <div className="flex gap-2">
-                  <Button variant="secondary" className="text-xs py-1.5" onClick={() => handleApprove(u.id!)}>
-                    موافقة
-                  </Button>
-                  <Button variant="outline" className="text-xs py-1.5" onClick={() => handleReject(u.id!)}>
-                    رفض
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold">الموافقة على المستخدمين انتقلت لصفحة المستخدمين</h3>
+              <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                يوجد {pendingUsers.length} مستخدم/مستخدمين بانتظار الموافقة.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={() => navigate('/system/users')}>
+              <span className="material-icons-round text-sm">manage_accounts</span>
+              فتح إدارة المستخدمين
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -1304,130 +1214,24 @@ export const Employees: React.FC = () => {
               {/* ═══ Tab 3: System Access ═══ */}
               {formTab === 'access' && (
                 <div className="space-y-5 min-h-[360px]">
-                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={form.hasSystemAccess}
-                      onChange={(e) => setForm({ ...form, hasSystemAccess: e.target.checked })}
-                      className="rounded border-[var(--color-border)] text-primary focus:ring-primary w-5 h-5"
-                    />
-                    <div>
-                      <span className="text-sm font-bold block">لديه دخول للنظام</span>
-                      <span className="text-xs text-slate-500">تفعيل حساب دخول إلكتروني لهذا الموظف</span>
-                    </div>
-                  </label>
-                  {form.hasSystemAccess && (() => {
-                    const editingRaw = editId ? _rawEmployees.find((e) => e.id === editId) : null;
-                    const alreadyHasAccount = editingRaw?.userId && !recreateAccount;
-                    if (alreadyHasAccount) {
-                      return (
-                        <div className="space-y-4">
-                          <div className="border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-emerald-50">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 text-emerald-700">
-                                <span className="material-icons-round text-lg">check_circle</span>
-                                <span className="text-sm font-bold">لديه حساب دخول</span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="block text-xs font-bold text-emerald-600">البريد الإلكتروني</label>
-                              <input
-                                type="email"
-                                className="w-full border border-emerald-200 dark:border-emerald-700 rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium"
-                                value={formEmail}
-                                onChange={(e) => setFormEmail(e.target.value)}
-                              />
-                              {formEmail.trim() !== (editingRaw?.email ?? '') && (
-                                <p className="text-xs text-amber-600 flex items-center gap-1">
-                                  <span className="material-icons-round text-xs">info</span>
-                                  سيتم تحديث البريد في بيانات الموظف. لتغيير بريد تسجيل الدخول يجب إعادة تعيين من Firebase.
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="block text-xs font-bold text-emerald-600">الدور</label>
-                              <select
-                                className="w-full border border-emerald-200 dark:border-emerald-700 rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium"
-                                value={formRoleId}
-                                onChange={(e) => setFormRoleId(e.target.value)}
-                              >
-                                {roles.map((r) => (
-                                  <option key={r.id} value={r.id}>{r.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => { setRecreateAccount(true); setFormPassword(''); }}
-                            className="w-full flex items-center justify-center gap-2 p-3 rounded-[var(--border-radius-lg)] border border-dashed border-amber-300 dark:border-amber-700 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors text-sm font-bold"
-                          >
-                            <span className="material-icons-round text-base">refresh</span>
-                            إعادة إنشاء حساب الدخول (لو تم حذفه من Firebase)
-                          </button>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-blue-50/50 dark:bg-blue-900/10">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-bold text-blue-700">
-                            {recreateAccount ? 'إعادة إنشاء حساب الدخول' : editId ? 'ربط حساب دخول للموظف' : 'إنشاء حساب دخول'}
-                          </p>
-                          {recreateAccount && (
-                            <button
-                              type="button"
-                              onClick={() => setRecreateAccount(false)}
-                              className="text-xs text-[var(--color-text-muted)] hover:text-slate-600 font-bold flex items-center gap-1"
-                            >
-                              <span className="material-icons-round text-sm">arrow_back</span>
-                              رجوع
-                            </button>
-                          )}
-                        </div>
-                        {recreateAccount && (
-                          <div className="flex items-start gap-2 px-3 py-2.5 rounded-[var(--border-radius-base)] bg-amber-50 border border-amber-200">
-                            <span className="material-icons-round text-amber-500 text-sm mt-0.5">warning</span>
-                            <p className="text-xs text-amber-600 font-medium">
-                              تأكد أنك حذفت الحساب القديم من Firebase Auth أولاً. سيتم إنشاء حساب جديد وربطه بالموظف.
-                            </p>
-                          </div>
-                        )}
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-[var(--color-text-muted)]">البريد الإلكتروني</label>
-                          <input
-                            type="email"
-                            className="erp-filter-select w-full"
-                            placeholder="البريد الإلكتروني"
-                            value={formEmail}
-                            onChange={(e) => setFormEmail(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-[var(--color-text-muted)]">كلمة المرور</label>
-                          <input
-                            type="password"
-                            className="erp-filter-select w-full"
-                            placeholder="كلمة المرور (6 أحرف على الأقل)"
-                            value={formPassword}
-                            onChange={(e) => setFormPassword(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-[var(--color-text-muted)]">الدور</label>
-                          <select
-                            className="erp-filter-select w-full"
-                            value={formRoleId}
-                            onChange={(e) => setFormRoleId(e.target.value)}
-                          >
-                            {roles.map((r) => (
-                              <option key={r.id} value={r.id}>{r.name}</option>
-                            ))}
-                          </select>
-                        </div>
+                  <div className="border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-blue-50/50 dark:bg-blue-900/10">
+                    <div className="flex items-start gap-2">
+                      <span className="material-icons-round text-blue-600">info</span>
+                      <div>
+                        <p className="text-sm font-bold text-blue-700">إدارة حسابات الدخول أصبحت من صفحة المستخدمين</p>
+                        <p className="text-xs text-blue-700/80 mt-1">
+                          لإنشاء/ربط/فك ربط/تغيير دور/حذف نهائي للمستخدم، استخدم صفحة النظام → المستخدمون.
+                        </p>
                       </div>
-                    );
-                  })()}
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)]">
+                      الحالة الحالية لهذا الموظف: {form.hasSystemAccess ? 'لديه حساب مرتبط' : 'غير مرتبط بحساب'}.
+                    </div>
+                    <Button variant="secondary" onClick={() => navigate('/system/users')}>
+                      <span className="material-icons-round text-sm">manage_accounts</span>
+                      فتح صفحة المستخدمين
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

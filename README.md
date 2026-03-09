@@ -9,7 +9,7 @@
 ![Firebase](https://img.shields.io/badge/Firebase-12-orange)
 ![Zustand](https://img.shields.io/badge/Zustand-5-purple)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
-![Version](https://img.shields.io/badge/version-4.0.51-green)
+![Version](https://img.shields.io/badge/version-4.0.52-green)
 
 ## 🚀 نظرة عامة
 
@@ -17,7 +17,7 @@
 |--------|-------|
 | المصادقة | تسجيل دخول بالبريد الإلكتروني وكلمة المرور (Firebase Auth) |
 | الصلاحيات | نظام RBAC ديناميكي — 4 أدوار افتراضية + أدوار مخصصة |
-| فريق العمل | إدارة المستخدمين + إنشاء حسابات دخول + تعيين أدوار |
+| المستخدمون | صفحة `/system/users` لإدارة المستخدمين (إنشاء/ربط موظف/تعطيل/حذف نهائي/استيراد/تصدير) |
 | خطوط الإنتاج | إدارة ومتابعة 16+ خط إنتاج مع حالة لحظية |
 | المنتجات | إدارة المنتجات مع المخزون والرصيد الافتتاحي |
 | التقارير | تسجيل تقارير إنتاج يومية + طباعة + تصدير + مشاركة |
@@ -129,7 +129,7 @@ const { can, canCreateReport, canEditReport, canDeleteReport, canManageUsers } =
 | إعدادات المنتج-الخط | `lineProductConfig.view` |
 | الإعدادات | `settings.view` · `settings.edit` |
 | إدارة الأدوار | `roles.view` · `roles.manage` |
-| إدارة المستخدمين | `users.view` · `users.create` · `users.edit` · `users.delete` |
+| إدارة المستخدمين | `users.manage` |
 | سجل النشاط | `activityLog.view` |
 | الإدخال السريع | `quickAction.view` |
 | خاص | `print` · `export` |
@@ -294,7 +294,7 @@ const { can, canCreateReport, canEditReport, canDeleteReport, canManageUsers } =
 
 ## ⚙️ التشغيل المحلي
 
-**المتطلبات:** Node.js 18+
+**المتطلبات:** Node.js 20+ (متوافق مع Firebase Functions في هذا المشروع)
 
 ### 1. تثبيت المكتبات
 
@@ -313,6 +313,7 @@ VITE_FIREBASE_PROJECT_ID=your_project_id
 VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
+VITE_FIREBASE_VAPID_KEY=your_web_push_vapid_key
 ```
 
 ### 3. إعداد Firebase Console
@@ -352,6 +353,64 @@ npm run build
 npm run version:auto     # تحديث رقم الإصدار تلقائيًا
 npm run changelog:auto   # توليد CHANGELOG تلقائيًا
 ```
+
+---
+
+## 🚀 النشر للإنتاج (Firebase)
+
+### 1) تجهيز وبناء المشروع
+
+```bash
+npm install
+npm --prefix functions install
+npm run build
+npm --prefix functions run build
+```
+
+### 2) تسجيل الدخول واختيار المشروع
+
+```bash
+firebase login
+firebase use sokany-production
+```
+
+### 3) نشر الواجهة + Functions + قواعد/فهارس Firestore
+
+> في PowerShell لازم وضع targets بين quotes:
+
+```bash
+firebase deploy --only "hosting,functions,firestore:rules,firestore:indexes"
+```
+
+بديل على دفعات:
+
+```bash
+firebase deploy --only hosting
+firebase deploy --only functions
+firebase deploy --only "firestore:rules,firestore:indexes"
+```
+
+---
+
+## 🔔 إعداد الإشعارات (Web Push + FCM)
+
+### المتطلبات
+- تفعيل Firebase Cloud Messaging من Firebase Console.
+- إنشاء Web Push key واستخدامه في `VITE_FIREBASE_VAPID_KEY`.
+- تشغيل التطبيق على HTTPS (Firebase Hosting موصى به).
+- قبول المستخدم لإذن الإشعارات من المتصفح.
+- مشروع Firebase على Blaze plan لتشغيل Scheduled Functions.
+
+### كيف تعمل في النظام
+- `public/firebase-messaging-sw.js` يستقبل إشعارات الخلفية.
+- يتم حفظ توكنات الأجهزة في `user_devices`.
+- عند إنشاء مستند جديد في `notifications` يتم إرسال Push تلقائيًا عبر Cloud Function.
+
+### اختبار سريع بعد النشر
+1. سجّل الدخول بمستخدم فعّال وافق على إذن الإشعارات.
+2. تأكد أن مستند الجهاز ظهر في `user_devices` وقيمته `enabled: true`.
+3. أنشئ إشعارًا في `notifications` لموظف مستلم.
+4. تحقق من ظهور إشعار داخل التطبيق + Push في المتصفح (foreground/background).
 
 ---
 
@@ -453,6 +512,6 @@ modules/hr/
 
 **HAKIMO — نظام إنتاج متكامل** 🏭
 
-الإصدار 4.0.2 — مع مصادقة + صلاحيات + HR + رواتب + موافقات مؤسسية
+الإصدار 4.0.51 — مع مصادقة + صلاحيات + HR + رواتب + موافقات مؤسسية
 
 </div>

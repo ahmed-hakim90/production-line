@@ -231,3 +231,41 @@ export function downloadRawMaterialsMasterTemplate() {
   XLSX.utils.book_append_sheet(wb, ws, 'تعريف المواد الخام');
   XLSX.writeFile(wb, 'template_raw_materials_master.xlsx');
 }
+
+export function downloadUsersTemplate() {
+  const wb = XLSX.utils.book_new();
+
+  const usersAoa: (string | number)[][] = [
+    ['الاسم', 'البريد الإلكتروني', 'كلمة المرور', 'الدور', 'كود الموظف'],
+    ['أحمد محمد', 'ahmed.user@company.com', '123456', 'مشرف', 'EMP-001'],
+    ['سارة علي', 'sara.user@company.com', '123456', 'مدير المصنع', 'EMP-002'],
+    ['مستخدم بدون موظف', 'no.employee@company.com', '123456', 'مشرف', ''],
+  ];
+
+  const usersWs = XLSX.utils.aoa_to_sheet(usersAoa);
+  usersWs['!cols'] = [
+    { wch: 24 },
+    { wch: 30 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 16 },
+  ];
+  if (!usersWs['!views']) usersWs['!views'] = [];
+  (usersWs['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, usersWs, 'المستخدمون');
+
+  const notesAoa: (string | number)[][] = [
+    ['ملاحظات الاستيراد'],
+    ['- الحقول المطلوبة: الاسم + البريد الإلكتروني + كلمة المرور + الدور.'],
+    ['- كود الموظف اختياري، وإذا تم إدخاله يجب أن يكون موجودًا في بيانات الموظفين.'],
+    ['- يمكن كتابة الدور بالاسم أو بالـ Role ID.'],
+    ['- الاستيراد لا ينشئ الحسابات فورًا، سيتم مراجعة الصفوف ثم إنشاء الحسابات يدويًا من الشاشة.'],
+  ];
+  const notesWs = XLSX.utils.aoa_to_sheet(notesAoa);
+  notesWs['!cols'] = [{ wch: 100 }];
+  if (!notesWs['!views']) notesWs['!views'] = [];
+  (notesWs['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, notesWs, 'ملاحظات');
+
+  XLSX.writeFile(wb, 'template_users_import.xlsx');
+}

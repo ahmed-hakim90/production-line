@@ -1,8 +1,10 @@
 import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 initializeApp();
 const db = getFirestore();
 const STATS_ROOT = 'dashboardStats/global';
@@ -13,6 +15,10 @@ const ASSIGNMENTS_COLLECTION = 'line_worker_assignments';
 const NOTIFICATIONS_COLLECTION = 'notifications';
 const AUTOMATION_RUNS_COLLECTION = 'automation_runs';
 const USER_DEVICES_COLLECTION = 'user_devices';
+const USERS_COLLECTION = 'users';
+const ROLES_COLLECTION = 'roles';
+const INVENTORY_COLLECTION = 'inventory';
+const INVENTORY_MOVEMENTS_COLLECTION = 'inventory_movements';
 const toNumber = (value) => {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -51,6 +57,21 @@ const summarizeNames = (names, maxItems = 5) => {
     const picked = names.slice(0, maxItems);
     const rest = names.length - picked.length;
     return rest > 0 ? `${picked.join('، ')} +${rest}` : picked.join('، ');
+};
+const hasManageUsersPermission = async (uid) => {
+    const userSnap = await db.collection(USERS_COLLECTION).doc(uid).get();
+    if (!userSnap.exists)
+        return false;
+    const user = userSnap.data();
+    const roleId = String(user.roleId || '').trim();
+    if (!roleId)
+        return false;
+    const roleSnap = await db.collection(ROLES_COLLECTION).doc(roleId).get();
+    if (!roleSnap.exists)
+        return false;
+    const role = roleSnap.data();
+    const permissions = role.permissions || {};
+    return permissions['users.manage'] === true || permissions['roles.manage'] === true;
 };
 const applyDelta = async (report, factor) => {
     const dailyRef = db.doc(`${STATS_ROOT}/daily/${report.date}`);
@@ -338,4 +359,174 @@ export const notifySupervisorsMissingDailyReport = onSchedule({
     });
     if (alreadySent)
         return;
+});
+export const adminDeleteUserHard = onCall({
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const permitted = await hasManageUsersPermission(requesterUid);
+    if (!permitted) {
+        throw new HttpsError('permission-denied', 'لا تملك صلاحية إدارة المستخدمين.');
+    }
+    const targetUid = String(request.data?.targetUid || '').trim();
+    if (!targetUid) {
+        throw new HttpsError('invalid-argument', 'يجب تمرير targetUid.');
+    }
+    if (targetUid === requesterUid) {
+        throw new HttpsError('failed-precondition', 'لا يمكن حذف حسابك الحالي.');
+    }
+    const linkedEmployees = await db
+        .collection(EMPLOYEES_COLLECTION)
+        .where('userId', '==', targetUid)
+        .get();
+    if (!linkedEmployees.empty) {
+        const batch = db.batch();
+        linkedEmployees.docs.forEach((employeeDoc) => {
+            batch.update(employeeDoc.ref, {
+                userId: '',
+                email: '',
+                hasSystemAccess: false,
+                updatedAt: FieldValue.serverTimestamp(),
+            });
+        });
+        await batch.commit();
+    }
+    await db.collection(USERS_COLLECTION).doc(targetUid).delete();
+    try {
+        await getAuth().deleteUser(targetUid);
+    }
+    catch (error) {
+        const code = String(error?.code || '');
+        if (code !== 'auth/user-not-found') {
+            throw new HttpsError('internal', 'تعذر حذف حساب المصادقة.');
+        }
+    }
+    return { ok: true, targetUid };
+});
+export const adminUpdateUserCredentials = onCall({
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const permitted = await hasManageUsersPermission(requesterUid);
+    if (!permitted) {
+        throw new HttpsError('permission-denied', 'لا تملك صلاحية إدارة المستخدمين.');
+    }
+    const targetUid = String(request.data?.targetUid || '').trim();
+    const nextEmail = String(request.data?.email || '').trim().toLowerCase();
+    const nextPassword = String(request.data?.password || '').trim();
+    if (!targetUid) {
+        throw new HttpsError('invalid-argument', 'يجب تمرير targetUid.');
+    }
+    if (targetUid === requesterUid) {
+        throw new HttpsError('failed-precondition', 'لا يمكن تعديل بيانات حسابك من هذا الإجراء.');
+    }
+    if (!nextEmail && !nextPassword) {
+        throw new HttpsError('invalid-argument', 'يجب تمرير بريد أو كلمة مرور جديدة.');
+    }
+    if (nextEmail && !nextEmail.includes('@')) {
+        throw new HttpsError('invalid-argument', 'صيغة البريد الإلكتروني غير صحيحة.');
+    }
+    if (nextPassword && nextPassword.length < 6) {
+        throw new HttpsError('invalid-argument', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
+    }
+    if (nextEmail) {
+        const existing = await db
+            .collection(USERS_COLLECTION)
+            .where('email', '==', nextEmail)
+            .get();
+        const usedByOther = existing.docs.some((docSnap) => docSnap.id !== targetUid);
+        if (usedByOther) {
+            throw new HttpsError('already-exists', 'البريد الإلكتروني مستخدم بالفعل.');
+        }
+    }
+    try {
+        await getAuth().updateUser(targetUid, {
+            ...(nextEmail ? { email: nextEmail } : {}),
+            ...(nextPassword ? { password: nextPassword } : {}),
+        });
+    }
+    catch (error) {
+        const code = String(error?.code || '');
+        if (code.includes('email-already-exists')) {
+            throw new HttpsError('already-exists', 'البريد الإلكتروني مستخدم بالفعل في Firebase Auth.');
+        }
+        if (code.includes('user-not-found')) {
+            throw new HttpsError('not-found', 'المستخدم غير موجود في Firebase Auth.');
+        }
+        throw new HttpsError('internal', 'تعذر تحديث بيانات الحساب في Firebase Auth.');
+    }
+    if (nextEmail) {
+        await db.collection(USERS_COLLECTION).doc(targetUid).set({
+            email: nextEmail,
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        const linkedEmployees = await db
+            .collection(EMPLOYEES_COLLECTION)
+            .where('userId', '==', targetUid)
+            .get();
+        if (!linkedEmployees.empty) {
+            const batch = db.batch();
+            linkedEmployees.docs.forEach((employeeDoc) => {
+                batch.update(employeeDoc.ref, {
+                    email: nextEmail,
+                    updatedAt: FieldValue.serverTimestamp(),
+                });
+            });
+            await batch.commit();
+        }
+    }
+    return { ok: true, targetUid };
+});
+export const validateInventoryParity = onCall({
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const permitted = await hasManageUsersPermission(requesterUid);
+    if (!permitted) {
+        throw new HttpsError('permission-denied', 'لا تملك صلاحية التحقق من التكامل.');
+    }
+    const [inventorySnap, movementSnap] = await Promise.all([
+        db.collection(INVENTORY_COLLECTION).get(),
+        db.collection(INVENTORY_MOVEMENTS_COLLECTION).get(),
+    ]);
+    const inventoryByKey = new Map();
+    inventorySnap.docs.forEach((d) => {
+        const data = d.data();
+        const key = `${String(data.warehouseId || '')}__${String(data.itemId || '')}`;
+        inventoryByKey.set(key, Number(data.quantity || 0));
+    });
+    const movementByKey = new Map();
+    movementSnap.docs.forEach((d) => {
+        const data = d.data();
+        const key = `${String(data.warehouseId || '')}__${String(data.itemId || '')}`;
+        movementByKey.set(key, Number(movementByKey.get(key) || 0) + Number(data.quantity || 0));
+    });
+    const mismatches = [];
+    const keys = new Set([...inventoryByKey.keys(), ...movementByKey.keys()]);
+    keys.forEach((key) => {
+        const inventoryQty = Number(inventoryByKey.get(key) || 0);
+        const movementQty = Number(movementByKey.get(key) || 0);
+        if (Math.abs(inventoryQty - movementQty) > 0.0001) {
+            mismatches.push({ key, inventoryQty, movementQty });
+        }
+    });
+    return {
+        ok: mismatches.length === 0,
+        inventoryCount: inventorySnap.size,
+        movementCount: movementSnap.size,
+        mismatchCount: mismatches.length,
+        sample: mismatches.slice(0, 25),
+    };
 });

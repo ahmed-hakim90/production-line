@@ -64,8 +64,8 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'raw-materials', label: 'المواد الخام', icon: 'science', path: '/products/raw-materials', permission: 'products.rawMaterials.view' },
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
-      { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'employees.view', activePatterns: ['/supervisors/'] },
-      { key: 'production-workers', label: 'عمال الإنتاج', icon: 'construction', path: '/production-workers', permission: 'employees.view', activePatterns: ['/production-workers/'] },
+      { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'supervisors.view', activePatterns: ['/supervisors/'] },
+      { key: 'production-workers', label: 'عمال الإنتاج', icon: 'construction', path: '/production-workers', permission: 'productionWorkers.view', activePatterns: ['/production-workers/'] },
       { key: 'line-workers', label: 'ربط العمالة بالخطوط', icon: 'group_work', path: '/line-workers', permission: 'lineWorkers.view' },
     ],
   },
@@ -134,6 +134,7 @@ export const MENU_CONFIG: MenuGroup[] = [
     label: 'النظام',
     icon: 'tune',
     children: [
+      { key: 'users', label: 'المستخدمون', icon: 'manage_accounts', path: '/system/users', permission: 'users.manage' },
       { key: 'roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings', path: '/roles', permission: 'roles.manage' },
       { key: 'activity', label: 'سجل النشاط', icon: 'history', path: '/activity-log', permission: 'activityLog.view' },
       { key: 'settings', label: 'الإعدادات', icon: 'settings', path: '/settings', permission: 'settings.view' },

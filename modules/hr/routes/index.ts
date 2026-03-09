@@ -1,4 +1,4 @@
-﻿import type { AppRouteDef } from '../../shared/routes';
+import type { AppRouteDef } from '../../shared/routes';
 import { HRDashboard } from '../pages/HRDashboard';
 import { Employees } from '../pages/Employees';
 import { EmployeeProfile } from '../pages/EmployeeProfile';
@@ -20,7 +20,7 @@ import { HRSettings } from '../pages/HRSettings';
 export const HR_ROUTES: AppRouteDef[] = [
   { path: '/hr-dashboard', permission: 'hrDashboard.view', component: HRDashboard },
   { path: '/employees', permission: 'employees.view', component: Employees },
-  { path: '/employees/import', permission: 'import', component: HRImport },
+  { path: '/employees/import', permission: 'employees.create', component: HRImport },
   { path: '/employees/:id', permission: 'employees.viewDetails', component: EmployeeProfile },
   { path: '/organization', permission: 'hrSettings.view', component: Organization },
   { path: '/self-service', permission: 'selfService.view', component: EmployeeSelfService },
