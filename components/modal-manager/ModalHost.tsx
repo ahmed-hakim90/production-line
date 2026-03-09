@@ -18,6 +18,7 @@ import { GlobalSystemRoleModal } from './modals/GlobalSystemRoleModal';
 import { GlobalCostCenterModal } from './modals/GlobalCostCenterModal';
 import { GlobalCreateVehicleModal } from './modals/GlobalCreateVehicleModal';
 import { GlobalOrganizationModal } from './modals/GlobalOrganizationModal';
+import { GlobalDailyWelcomeModal } from './modals/GlobalDailyWelcomeModal';
 
 /**
  * Central host for modal UX layer.
@@ -46,6 +47,7 @@ export const ModalHost: React.FC = () => {
       <GlobalCostCenterModal />
       <GlobalCreateVehicleModal />
       <GlobalOrganizationModal />
+      <GlobalDailyWelcomeModal />
     </>
   );
 };

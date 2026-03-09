@@ -17,8 +17,6 @@ const AUTOMATION_RUNS_COLLECTION = 'automation_runs';
 const USER_DEVICES_COLLECTION = 'user_devices';
 const USERS_COLLECTION = 'users';
 const ROLES_COLLECTION = 'roles';
-const INVENTORY_COLLECTION = 'inventory';
-const INVENTORY_MOVEMENTS_COLLECTION = 'inventory_movements';
 const toNumber = (value) => {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -263,6 +261,9 @@ export const sendPushOnNotificationCreate = onDocumentWritten({
                 icon: '/icons/pwa-icon-192.png',
                 badge: '/icons/pwa-icon-192.png',
                 requireInteraction: false,
+                silent: false,
+                vibrate: [150, 50, 150],
+                tag: notificationId,
             },
             headers: {
                 Urgency: 'high',
@@ -484,49 +485,4 @@ export const adminUpdateUserCredentials = onCall({
         }
     }
     return { ok: true, targetUid };
-});
-export const validateInventoryParity = onCall({
-    region: 'us-central1',
-    memory: '256MiB',
-}, async (request) => {
-    const requesterUid = String(request.auth?.uid || '').trim();
-    if (!requesterUid) {
-        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
-    }
-    const permitted = await hasManageUsersPermission(requesterUid);
-    if (!permitted) {
-        throw new HttpsError('permission-denied', 'لا تملك صلاحية التحقق من التكامل.');
-    }
-    const [inventorySnap, movementSnap] = await Promise.all([
-        db.collection(INVENTORY_COLLECTION).get(),
-        db.collection(INVENTORY_MOVEMENTS_COLLECTION).get(),
-    ]);
-    const inventoryByKey = new Map();
-    inventorySnap.docs.forEach((d) => {
-        const data = d.data();
-        const key = `${String(data.warehouseId || '')}__${String(data.itemId || '')}`;
-        inventoryByKey.set(key, Number(data.quantity || 0));
-    });
-    const movementByKey = new Map();
-    movementSnap.docs.forEach((d) => {
-        const data = d.data();
-        const key = `${String(data.warehouseId || '')}__${String(data.itemId || '')}`;
-        movementByKey.set(key, Number(movementByKey.get(key) || 0) + Number(data.quantity || 0));
-    });
-    const mismatches = [];
-    const keys = new Set([...inventoryByKey.keys(), ...movementByKey.keys()]);
-    keys.forEach((key) => {
-        const inventoryQty = Number(inventoryByKey.get(key) || 0);
-        const movementQty = Number(movementByKey.get(key) || 0);
-        if (Math.abs(inventoryQty - movementQty) > 0.0001) {
-            mismatches.push({ key, inventoryQty, movementQty });
-        }
-    });
-    return {
-        ok: mismatches.length === 0,
-        inventoryCount: inventorySnap.size,
-        movementCount: movementSnap.size,
-        mismatchCount: mismatches.length,
-        sample: mismatches.slice(0, 25),
-    };
 });

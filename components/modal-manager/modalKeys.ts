@@ -1,4 +1,5 @@
 export const MODAL_KEYS = {
+  DAILY_WELCOME: 'system.dailyWelcome',
   REPORTS_CREATE: 'reports.create',
   REPORTS_IMPORT: 'reports.import',
   REPORTS_COMPONENT_SCRAP: 'reports.componentScrap',

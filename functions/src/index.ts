@@ -297,6 +297,9 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
           icon: '/icons/pwa-icon-192.png',
           badge: '/icons/pwa-icon-192.png',
           requireInteraction: false,
+          silent: false,
+          vibrate: [150, 50, 150],
+          tag: notificationId,
         },
         headers: {
           Urgency: 'high',

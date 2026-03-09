@@ -21,6 +21,7 @@ import { getHomeRoute } from './utils/permissions';
 import { eventBus, registerSystemEventListeners, SystemEvents } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from './components/modal-manager/modalKeys';
 import { ModalHost } from './components/modal-manager/ModalHost';
 import { ToastContainer } from './components/Toast';
 import { useJobsStore } from './components/background-jobs/useJobsStore';
@@ -28,6 +29,7 @@ import { presenceService } from './services/presenceService';
 import { pushService } from './services/pushService';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
+const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
 
 const buildCurrentPath = (location: { pathname: string; search: string }) =>
   `${location.pathname}${location.search}`;
@@ -45,6 +47,40 @@ const consumePostLoginRedirect = (): string | null => {
   if (!saved) return null;
   sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
   return shouldPersistRedirect(saved) ? saved : null;
+};
+
+const getTodayYmd = (): string => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const playNotificationTone = () => {
+  const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return;
+
+  try {
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.0001;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    const start = ctx.currentTime;
+    gain.gain.exponentialRampToValueAtTime(0.12, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+    oscillator.start(start);
+    oscillator.stop(start + 0.38);
+    oscillator.onended = () => {
+      void ctx.close().catch(() => {});
+    };
+  } catch {
+    // Browser policy can block audio if user did not interact yet.
+  }
 };
 
 /** Redirects to the role-appropriate dashboard after login */
@@ -134,6 +170,35 @@ const AuthUiStateGuard: React.FC = () => {
       resetJobsUiState();
     }
   }, [isAuthenticated, isPendingApproval, resetAllModals, resetJobsUiState]);
+
+  return null;
+};
+
+const DailyWelcomeLauncher: React.FC = () => {
+  const { openModal, hasModalTarget } = useGlobalModalManager();
+  const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
+  const uid = useAppStore((s) => s.uid);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || loading || !uid) return;
+    const today = getTodayYmd();
+    const storageKey = `${DAILY_WELCOME_STORAGE_PREFIX}_${uid}`;
+    const seenDate = localStorage.getItem(storageKey);
+    if (seenDate === today) return;
+    const openOnce = () => {
+      if (!hasModalTarget(MODAL_KEYS.DAILY_WELCOME)) return false;
+      const opened = openModal(MODAL_KEYS.DAILY_WELCOME, { date: today });
+      if (!opened) return false;
+      localStorage.setItem(storageKey, today);
+      return true;
+    };
+
+    if (openOnce()) return;
+    const timer = window.setTimeout(() => {
+      openOnce();
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, isPendingApproval, loading, uid, openModal, hasModalTarget]);
 
   return null;
 };
@@ -298,6 +363,7 @@ const App: React.FC = () => {
       if (Notification.permission === 'granted') {
         new Notification(title, { body });
       }
+      playNotificationTone();
     }).then((fn) => {
       unsub = fn;
     });
@@ -343,65 +409,30 @@ const App: React.FC = () => {
         </div>
 
         {/* Loading Content */}
-        <div className="erp-auth-container" style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <div className="erp-auth-container erp-auth-loading-wrap">
+          <div className="erp-auth-loading-content">
             {/* App icon with spinning ring */}
-            <div style={{ position: 'relative', display: 'inline-flex', marginBottom: 28 }}>
-              <div
-                style={{
-                  width: 80, height: 80,
-                  borderRadius: 20,
-                  background: 'rgb(79 70 229)',
-                  boxShadow: '0 12px 32px rgba(79,70,229,0.35)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <span className="material-icons-round" style={{ fontSize: 40, color: '#fff' }}>factory</span>
+            <div className="erp-auth-loading-icon-shell">
+              <div className="erp-auth-loading-icon">
+                <span className="material-icons-round">factory</span>
               </div>
               {/* spinning ring around icon */}
-              <div style={{
-                position: 'absolute', inset: -6,
-                border: '2.5px solid rgba(79,70,229,0.15)',
-                borderTopColor: 'rgb(79 70 229)',
-                borderRadius: '50%',
-                animation: 'erp-spin 1s linear infinite',
-              }} />
+              <div className="erp-auth-loading-ring" />
             </div>
 
-            <h2 style={{
-              fontSize: 22, fontWeight: 800,
-              color: '#1e1b4b', marginBottom: 6,
-              fontFamily: 'Cairo, sans-serif',
-            }}>
-              Hakimo ERP
-            </h2>
-            <p style={{
-              fontSize: 13, color: '#6b7280',
-              marginBottom: 32, fontFamily: 'Cairo, sans-serif',
-            }}>
-              جاري تهيئة النظام...
-            </p>
+            <h2 className="erp-auth-loading-title">Hakimo ERP</h2>
+            <p className="erp-auth-loading-subtitle">جاري تهيئة النظام...</p>
 
             {/* Animated dots */}
-            <div className="erp-loading-dots" style={{ justifyContent: 'center', marginBottom: 24 }}>
+            <div className="erp-loading-dots erp-auth-loading-dots">
               <span />
               <span />
               <span />
             </div>
 
             {/* Thin progress bar */}
-            <div style={{
-              width: 200, height: 3,
-              background: 'rgba(79,70,229,0.12)',
-              borderRadius: 99, overflow: 'hidden',
-              margin: '0 auto',
-            }}>
-              <div style={{
-                height: '100%',
-                background: 'linear-gradient(90deg, rgb(79 70 229), rgb(129 140 248))',
-                borderRadius: 99,
-                animation: 'erp-loading-bar 1.6s ease-in-out infinite',
-              }} />
+            <div className="erp-auth-loading-progress">
+              <div className="erp-auth-loading-progress-bar" />
             </div>
           </div>
         </div>
@@ -412,6 +443,7 @@ const App: React.FC = () => {
   return (
     <GlobalModalManagerProvider>
       <AuthUiStateGuard />
+      <DailyWelcomeLauncher />
       <HashRouter>
         <Routes>
           {AUTH_PUBLIC_ROUTES.map((r) => (
