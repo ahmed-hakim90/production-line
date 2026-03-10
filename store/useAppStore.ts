@@ -32,6 +32,9 @@ import {
   WorkOrderScanEvent,
   WorkOrderLiveSummary,
   ReportComponentScrapItem,
+  Asset,
+  AssetDepreciation,
+  AssetDepreciationRunResult,
 } from '../types';
 
 import {
@@ -41,8 +44,9 @@ import {
   registerWithEmail,
   resetPassword,
   auth,
+  runAssetDepreciationCallable,
 } from '../services/firebase';
-import { productService } from '../modules/production/services/productService';
+import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
 import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
@@ -64,9 +68,13 @@ import { scanEventService } from '../modules/production/services/scanEventServic
 import { stockService } from '../modules/inventory/services/stockService';
 import { transferApprovalService } from '../modules/inventory/services/transferApprovalService';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
-import { rawMaterialService } from '../modules/inventory/services/rawMaterialService';
+import { catalogRawMaterialService as rawMaterialService } from '../modules/catalog/services/catalogRawMaterialService';
 import type { StockItemBalance } from '../modules/inventory/types';
 import { productMaterialService } from '../modules/production/services/productMaterialService';
+import { categoryService } from '../modules/catalog/services/categoryService';
+import { assetService } from '../modules/production/services/assetService';
+import { assetDepreciationService } from '../modules/production/services/assetDepreciationService';
+import { assetDepreciationJobService } from '../modules/production/services/assetDepreciationJobService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -149,6 +157,19 @@ function normalizeText(value: string): string {
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
     .replace(/\s+/g, ' ');
+}
+
+function resolveReportType(
+  reportType?: ProductionReport['reportType'],
+): NonNullable<ProductionReport['reportType']> {
+  return reportType === 'component_injection' ? 'component_injection' : 'finished_product';
+}
+
+function hasPermission(
+  permissions: Record<string, boolean>,
+  key: string,
+): boolean {
+  return permissions[key] === true;
 }
 
 function collectHiddenProductIdsFromRawWarehouse(
@@ -234,6 +255,23 @@ async function syncProductAvgDailyProduction(productId: string): Promise<void> {
   await productService.update(productId, { avgDailyProduction });
 }
 
+async function ensureCategoryFromModel(model: string | undefined): Promise<void> {
+  const name = String(model || '').trim();
+  if (!name) return;
+  try {
+    const categories = await categoryService.getAll();
+    const exists = categories.some((category) => String(category.name || '').trim() === name);
+    if (!exists) {
+      await categoryService.create({
+        name,
+        isActive: true,
+      });
+    }
+  } catch {
+    // Keep product save resilient even when category sync fails.
+  }
+}
+
 // ─── State Shape ────────────────────────────────────────────────────────────
 
 interface AppState {
@@ -269,6 +307,8 @@ interface AppState {
   costCenterValues: CostCenterValue[];
   costAllocations: CostAllocation[];
   laborSettings: LaborSettings | null;
+  assets: Asset[];
+  assetDepreciations: AssetDepreciation[];
 
   // System settings (dashboard config, alert thresholds, KPI thresholds)
   systemSettings: SystemSettings;
@@ -387,6 +427,14 @@ interface AppState {
   saveCostCenterValue: (data: Omit<CostCenterValue, 'id'>, existingId?: string) => Promise<void>;
   saveCostAllocation: (data: Omit<CostAllocation, 'id'>, existingId?: string) => Promise<void>;
   updateLaborSettings: (data: Omit<LaborSettings, 'id'>) => Promise<void>;
+  fetchAssets: () => Promise<void>;
+  createAsset: (data: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
+  updateAsset: (id: string, data: Partial<Asset>) => Promise<void>;
+  deleteAsset: (id: string) => Promise<void>;
+  fetchDepreciationReport: (period: string) => Promise<void>;
+  fetchAssetDepreciations: (assetId: string) => Promise<void>;
+  fetchDepreciationYear: (year: string) => Promise<void>;
+  runDepreciationJob: (period?: string) => Promise<AssetDepreciationRunResult>;
 
   // Real-time subscriptions (return unsubscribe fn)
   subscribeToDashboard: () => () => void;
@@ -454,6 +502,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   costCenterValues: [],
   costAllocations: [],
   laborSettings: null,
+  assets: [],
+  assetDepreciations: [],
 
   systemSettings: DEFAULT_SYSTEM_SETTINGS,
 
@@ -603,6 +653,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       costCenterValues: [],
       costAllocations: [],
       laborSettings: null,
+      assets: [],
+      assetDepreciations: [],
       systemSettings: DEFAULT_SYSTEM_SETTINGS,
       roles: [],
       error: null,
@@ -730,7 +782,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: Load all app data (after auth) ────────────────────────────
 
   _loadAppData: async () => {
-    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, systemSettingsRaw] =
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
       await Promise.all([
         productService.getAll(),
         lineService.getAll(),
@@ -742,6 +796,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         costCenterValueService.getAll(),
         costAllocationService.getAll(),
         laborSettingsService.get(),
+        assetService.getAll(),
+        assetDepreciationService.getByPeriod(currentMonth),
         systemSettingsService.get(),
       ]);
 
@@ -803,6 +859,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       costCenterValues,
       costAllocations,
       laborSettings,
+      assets,
+      assetDepreciations,
       systemSettings: mergedSettings,
     });
 
@@ -1025,7 +1083,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createProductionPlan: async (data) => {
     try {
-      const id = await productionPlanService.create(data);
+      const planType = data.planType === 'component_injection' ? 'component_injection' : 'finished_product';
+      const permissions = get().userPermissions;
+      if (planType === 'finished_product' && !hasPermission(permissions, 'plans.create')) {
+        const msg = 'غير مصرح بإنشاء خطة إنتاج.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      if (planType === 'component_injection' && !hasPermission(permissions, 'plans.componentInjection.manage')) {
+        const msg = 'غير مصرح بإنشاء خطة إنتاج لمكونات الحقن.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      const id = await productionPlanService.create({
+        ...data,
+        planType,
+      });
       if (id) await get().fetchProductionPlans();
       return id;
     } catch (error) {
@@ -1065,7 +1138,27 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createWorkOrder: async (data) => {
     try {
-      const id = await workOrderService.create(data);
+      let inferredType: WorkOrder['workOrderType'] = data.workOrderType;
+      if (!inferredType && data.planId) {
+        const linkedPlan = await productionPlanService.getById(data.planId);
+        inferredType = linkedPlan?.planType;
+      }
+      const workOrderType = inferredType === 'component_injection' ? 'component_injection' : 'finished_product';
+      const permissions = get().userPermissions;
+      if (workOrderType === 'finished_product' && !hasPermission(permissions, 'workOrders.create')) {
+        const msg = 'غير مصرح بإنشاء أمر شغل.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      if (workOrderType === 'component_injection' && !hasPermission(permissions, 'workOrders.componentInjection.manage')) {
+        const msg = 'غير مصرح بإنشاء أمر شغل لمكونات الحقن.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      const id = await workOrderService.create({
+        ...data,
+        workOrderType,
+      });
       if (id) {
         await get().fetchWorkOrders();
         const { _rawProducts } = get();
@@ -1215,6 +1308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             employeeId: updatedWorkOrder.supervisorId,
             productId: updatedWorkOrder.productId,
             lineId: updatedWorkOrder.lineId,
+            reportType: updatedWorkOrder.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product',
             date: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
             quantityProduced: Number(
               updatedWorkOrder.actualProducedFromScans ??
@@ -1253,7 +1347,9 @@ export const useAppStore = create<AppState>((set, get) => ({
               itemCode: product.code,
               movementType: 'IN',
               quantity: producedQty,
-              note: `Auto from work order close ${id}`,
+            note: updatedWorkOrder.workOrderType === 'component_injection'
+              ? `Auto component production entry from work order close ${id}`
+              : `Auto from work order close ${id}`,
               createdBy: actorName,
             });
           }
@@ -1409,6 +1505,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createProduct: async (data) => {
     try {
+      await ensureCategoryFromModel(data.model);
       const id = await productService.create(data);
       if (id) await get().fetchProducts();
       return id;
@@ -1420,6 +1517,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateProduct: async (id, data) => {
     try {
+      await ensureCategoryFromModel(data.model);
       await productService.update(id, data);
       await get().fetchProducts();
     } catch (error) {
@@ -1507,6 +1605,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createReport: async (data) => {
     try {
+      const reportType = resolveReportType(data.reportType);
+      const permissions = get().userPermissions;
+      if (reportType === 'finished_product' && !hasPermission(permissions, 'reports.create')) {
+        const msg = 'غير مصرح بإنشاء تقرير إنتاج.';
+        set({ error: msg });
+        return null;
+      }
+      if (reportType === 'component_injection' && !hasPermission(permissions, 'reports.componentInjection.manage')) {
+        const msg = 'غير مصرح بإنشاء تقرير مكونات الحقن.';
+        set({ error: msg });
+        return null;
+      }
       const { systemSettings, laborSettings } = get();
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
       const componentScrapItems = (Array.isArray((data as any).componentScrapItems) ? (data as any).componentScrapItems : [])
@@ -1522,7 +1632,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         (r) =>
           r.lineId === data.lineId &&
           r.employeeId === data.employeeId &&
-          r.productId === data.productId,
+          r.productId === data.productId &&
+          resolveReportType(r.reportType) === reportType,
       );
       if (hasDuplicate) {
         set({ error: REPORT_DUPLICATE_MESSAGE });
@@ -1530,7 +1641,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const activePlans = await productionPlanService.getActiveByLineAndProduct(data.lineId, data.productId);
-      const activePlan = activePlans[0] ?? null;
+      const activePlan = activePlans.find((plan) => {
+        const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
+        return planType === reportType;
+      }) ?? activePlans[0] ?? null;
 
       if (!planSettings.allowReportWithoutPlan && !activePlan) {
         set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
@@ -1547,16 +1661,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       let activeWO: WorkOrder | null = null;
       if (data.workOrderId) {
         const selectedWO = await workOrderService.getById(data.workOrderId);
-        if (selectedWO && (selectedWO.status === 'pending' || selectedWO.status === 'in_progress')) {
+        if (
+          selectedWO &&
+          (selectedWO.status === 'pending' || selectedWO.status === 'in_progress') &&
+          (selectedWO.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product') === reportType
+        ) {
           activeWO = selectedWO;
         }
       }
       if (!activeWO) {
         const activeWOs = await workOrderService.getActiveByLineAndProduct(data.lineId, data.productId);
-        activeWO = activeWOs[0] ?? null;
+        activeWO = activeWOs.find((wo) => (
+          (wo.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product') === reportType
+        )) ?? activeWOs[0] ?? null;
       }
 
-      const reportData = { ...data, workOrderId: activeWO?.id || data.workOrderId || '' };
+      const reportData = { ...data, reportType, workOrderId: activeWO?.id || data.workOrderId || '' };
       const id = await reportService.create(reportData);
       if (!id) {
         set({ error: 'تعذر حفظ التقرير' });
@@ -1578,9 +1698,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         const actorName = get().userDisplayName || get().userEmail || 'System';
         const actorUserId = get().uid || undefined;
         const producedQty = Number(data.quantityProduced || 0);
+        const isComponentInjection = reportType === 'component_injection';
+        const rawMaterials = isComponentInjection ? await rawMaterialService.getAll() : [];
+        const componentMaterial = isComponentInjection
+          ? rawMaterials.find((row) => String(row.id) === String(data.productId))
+          : null;
+        const reportItemType: 'finished_good' | 'raw_material' = isComponentInjection ? 'raw_material' : 'finished_good';
+        const reportItemName = isComponentInjection
+          ? String(componentMaterial?.name || '').trim()
+          : String(product?.name || '').trim();
+        const reportItemCode = isComponentInjection
+          ? String(componentMaterial?.code || '').trim()
+          : String(product?.code || '').trim();
 
         const requiresFinishedApproval = systemSettings.planSettings?.requireFinishedStockApprovalForReports !== false;
-        if (product && routing.finishedReceiveWarehouseId && producedQty > 0) {
+        if (reportItemName && routing.finishedReceiveWarehouseId && producedQty > 0) {
           if (requiresFinishedApproval) {
             await transferApprovalService.createRequest({
               requestType: 'production_entry',
@@ -1588,15 +1720,17 @@ export const useAppStore = create<AppState>((set, get) => ({
               fromWarehouseName: 'تقارير الإنتاج',
               toWarehouseId: routing.finishedReceiveWarehouseId,
               toWarehouseName: 'مخزن تم الصنع',
-              note: `Pending production entry from report ${id}`,
+              note: isComponentInjection
+                ? `Pending component production entry from report ${id}`
+                : `Pending production entry from report ${id}`,
               sourceReportId: id,
               lines: [{
-                itemType: 'finished_good',
+                itemType: reportItemType,
                 itemId: data.productId,
-                itemName: product.name,
-                itemCode: product.code,
+                itemName: reportItemName,
+                itemCode: reportItemCode,
                 quantity: producedQty,
-                minStock: (product as any).minStock ?? 0,
+                minStock: isComponentInjection ? 0 : (product as any)?.minStock ?? 0,
               }],
               createdBy: actorName,
               createdByUserId: actorUserId,
@@ -1604,19 +1738,21 @@ export const useAppStore = create<AppState>((set, get) => ({
           } else {
             await stockService.createMovement({
               warehouseId: routing.finishedReceiveWarehouseId,
-              itemType: 'finished_good',
+              itemType: reportItemType,
               itemId: data.productId,
-              itemName: product.name,
-              itemCode: product.code,
+              itemName: reportItemName,
+              itemCode: reportItemCode,
               movementType: 'IN',
               quantity: producedQty,
-              note: `Auto from production report ${id}`,
+              note: isComponentInjection
+                ? `Auto component production entry from report ${id}`
+                : `Auto from production report ${id}`,
               createdBy: actorName,
             });
           }
         }
 
-        if (routing.decomposedSourceWarehouseId) {
+        if (!isComponentInjection && routing.decomposedSourceWarehouseId) {
           const baseUnits = producedQty;
           if (baseUnits > 0) {
             const [materials, rawMaterials] = await Promise.all([
@@ -1655,6 +1791,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
 
         if (
+          !isComponentInjection &&
           product &&
           product.autoDeductComponentScrapFromDecomposed === true &&
           routing.decomposedSourceWarehouseId &&
@@ -1697,6 +1834,39 @@ export const useAppStore = create<AppState>((set, get) => ({
               note: `Component scrap IN from production report ${id}`,
               createdBy: actorName,
             });
+          }
+        }
+
+        if (isComponentInjection && reportItemName && routing.finishedReceiveWarehouseId && componentScrapItems.length > 0) {
+          for (const scrapItem of componentScrapItems) {
+            const qty = Number(scrapItem.quantity || 0);
+            if (qty <= 0) continue;
+
+            await stockService.createMovement({
+              warehouseId: routing.finishedReceiveWarehouseId,
+              itemType: reportItemType,
+              itemId: data.productId,
+              itemName: reportItemName,
+              itemCode: reportItemCode,
+              movementType: 'OUT',
+              quantity: qty,
+              note: `Component scrap OUT from production report ${id}`,
+              createdBy: actorName,
+            });
+
+            if (routing.wasteReceiveWarehouseId) {
+              await stockService.createMovement({
+                warehouseId: routing.wasteReceiveWarehouseId,
+                itemType: reportItemType,
+                itemId: data.productId,
+                itemName: reportItemName,
+                itemCode: reportItemCode,
+                movementType: 'IN',
+                quantity: qty,
+                note: `Component scrap IN from production report ${id}`,
+                createdBy: actorName,
+              });
+            }
           }
         }
       } catch (error) {
@@ -1757,6 +1927,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             lineId: data.lineId,
             productId: data.productId,
             quantityProduced: data.quantityProduced,
+            reportType,
             workOrderId: activeWO?.id ?? '',
             productionPlanId: activePlan?.id ?? '',
           },
@@ -1786,6 +1957,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateReport: async (id, data) => {
     try {
       const existingReport = await reportService.getById(id);
+      const nextReportType = resolveReportType(data.reportType ?? existingReport?.reportType);
+      if (nextReportType === 'finished_product' && !hasPermission(get().userPermissions, 'reports.edit')) {
+        const msg = 'غير مصرح بتعديل تقارير الإنتاج.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      if (nextReportType === 'component_injection' && !hasPermission(get().userPermissions, 'reports.componentInjection.manage')) {
+        const msg = 'غير مصرح بتعديل تقرير مكونات الحقن.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
       await reportService.update(id, data);
       const affectedProductIds = new Set<string>();
       if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
@@ -2147,6 +2329,93 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ laborSettings });
     } catch (error) {
       set({ error: (error as Error).message });
+    }
+  },
+
+  fetchAssets: async () => {
+    try {
+      const assets = await assetService.getAll();
+      set({ assets });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  createAsset: async (data) => {
+    try {
+      const id = await assetService.create(data);
+      if (id) {
+        await get().fetchAssets();
+      }
+      return id;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      return null;
+    }
+  },
+
+  updateAsset: async (id, data) => {
+    try {
+      await assetService.update(id, data);
+      await get().fetchAssets();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  deleteAsset: async (id) => {
+    try {
+      await assetService.delete(id);
+      await get().fetchAssets();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  fetchDepreciationReport: async (period) => {
+    try {
+      const assetDepreciations = await assetDepreciationService.getByPeriod(period);
+      set({ assetDepreciations });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  fetchAssetDepreciations: async (assetId) => {
+    try {
+      const assetDepreciations = await assetDepreciationService.getByAsset(assetId);
+      set({ assetDepreciations });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  fetchDepreciationYear: async (year) => {
+    try {
+      const assetDepreciations = await assetDepreciationService.getByYear(year);
+      set({ assetDepreciations });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  runDepreciationJob: async (period) => {
+    try {
+      let result: AssetDepreciationRunResult;
+      try {
+        result = await runAssetDepreciationCallable({ period });
+      } catch {
+        // Fallback for local/dev when callable function is not deployed.
+        result = await assetDepreciationJobService.runForPeriod(period);
+      }
+      await Promise.all([
+        get().fetchAssets(),
+        get().fetchDepreciationReport(result.period),
+      ]);
+      return result;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
     }
   },
 

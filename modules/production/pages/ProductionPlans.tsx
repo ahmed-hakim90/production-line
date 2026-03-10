@@ -89,7 +89,8 @@ export const ProductionPlans: React.FC = () => {
   const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
   const { can } = usePermission();
 
-  const canCreate = can('plans.create');
+  const canManageComponentInjectionPlans = can('plans.componentInjection.manage');
+  const canCreate = can('plans.create') || canManageComponentInjectionPlans;
   const canEdit = can('plans.edit');
   const canViewCosts = can('costs.view');
   const canExport = can('export');
@@ -114,8 +115,15 @@ export const ProductionPlans: React.FC = () => {
   const [formQuantity, setFormQuantity] = useState<number>(Number(searchParams.get('quantity')) || 0);
   const [formStartDate, setFormStartDate] = useState(() => getTodayDateString());
   const [formPriority, setFormPriority] = useState<PlanPriority>('medium');
+  const [formPlanType, setFormPlanType] = useState<'finished_product' | 'component_injection'>('finished_product');
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(!!searchParams.get('productId'));
+
+  useEffect(() => {
+    if (!can('plans.create') && canManageComponentInjectionPlans) {
+      setFormPlanType('component_injection');
+    }
+  }, [can, canManageComponentInjectionPlans]);
 
   // ── Capacity warning ──
   const [capacityWarning, setCapacityWarning] = useState<{ show: boolean; load: number; capacity: number }>({ show: false, load: 0, capacity: 0 });
@@ -393,6 +401,7 @@ export const ProductionPlans: React.FC = () => {
     await createProductionPlan({
       productId: formProductId,
       lineId: formLineId,
+      planType: formPlanType,
       plannedQuantity: formQuantity,
       producedQuantity: 0,
       startDate: formStartDate,
@@ -411,6 +420,7 @@ export const ProductionPlans: React.FC = () => {
     setFormLineId('');
     setFormQuantity(0);
     setFormPriority('medium');
+    setFormPlanType('finished_product');
     setSaving(false);
     setFormOpen(false);
     setCapacityWarning({ show: false, load: 0, capacity: 0 });
@@ -620,6 +630,21 @@ export const ProductionPlans: React.FC = () => {
                 {(Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>
                 ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع الخطة</label>
+              <select
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                value={formPlanType}
+                onChange={(e) => setFormPlanType(e.target.value === 'component_injection' ? 'component_injection' : 'finished_product')}
+              >
+                {can('plans.create') && (
+                  <option value="finished_product">خطة منتج نهائي</option>
+                )}
+                {canManageComponentInjectionPlans && (
+                  <option value="component_injection">خطة مكون حقن</option>
+                )}
               </select>
             </div>
 
@@ -1102,7 +1127,7 @@ export const ProductionPlans: React.FC = () => {
                                 </button>
                               </>
                             )}
-                            {can('workOrders.create') && (plan.status === 'planned' || plan.status === 'in_progress') && (
+                            {(can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.status === 'planned' || plan.status === 'in_progress') && (
                               <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
                                 <span className="material-icons-round text-sm">assignment</span>
                               </button>

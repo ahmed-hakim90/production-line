@@ -3,22 +3,19 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 initializeApp();
 
 const db = getFirestore();
 const STATS_ROOT = 'dashboardStats/global';
 const EMPLOYEES_COLLECTION = 'employees';
-const LINES_COLLECTION = 'production_lines';
-const REPORTS_COLLECTION = 'production_reports';
-const ASSIGNMENTS_COLLECTION = 'line_worker_assignments';
-const NOTIFICATIONS_COLLECTION = 'notifications';
-const AUTOMATION_RUNS_COLLECTION = 'automation_runs';
 const USER_DEVICES_COLLECTION = 'user_devices';
 const USERS_COLLECTION = 'users';
 const ROLES_COLLECTION = 'roles';
+const ASSETS_COLLECTION = 'assets';
+const ASSET_DEPRECIATIONS_COLLECTION = 'asset_depreciations';
 
 type ReportLike = {
   date?: string;
@@ -49,24 +46,110 @@ const normalizeReport = (value: ReportLike | undefined): Required<ReportLike> | 
 
 const monthKey = (date: string) => date.slice(0, 7);
 
-const toYmd = (date: Date): string => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+const normalizePeriod = (value?: string): string => {
+  if (value && /^\d{4}-\d{2}$/.test(value)) return value;
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const getOperationalDate = (startHour = 8, now = new Date()): string => {
-  const d = new Date(now);
-  if (d.getHours() < startHour) d.setDate(d.getDate() - 1);
-  return toYmd(d);
+const periodEndDate = (period: string): Date => {
+  const [year, month] = period.split('-').map(Number);
+  return new Date(year, month, 0, 23, 59, 59, 999);
 };
 
-const summarizeNames = (names: string[], maxItems = 5): string => {
-  if (names.length === 0) return '—';
-  const picked = names.slice(0, maxItems);
-  const rest = names.length - picked.length;
-  return rest > 0 ? `${picked.join('، ')} +${rest}` : picked.join('، ');
+const toNumberSafe = (value: unknown, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const calculateMonthlyDepreciationSafe = (
+  purchaseCost: number,
+  salvageValue: number,
+  usefulLifeMonths: number,
+): number => {
+  const safeCost = Math.max(0, toNumberSafe(purchaseCost));
+  const safeSalvage = Math.max(0, toNumberSafe(salvageValue));
+  const safeLife = Math.max(1, Math.floor(toNumberSafe(usefulLifeMonths, 1)));
+  return Math.max(0, safeCost - safeSalvage) / safeLife;
+};
+
+const runAssetDepreciationForPeriod = async (periodInput?: string) => {
+  const period = normalizePeriod(periodInput);
+  const periodEnd = periodEndDate(period);
+  const activeAssetsSnap = await db
+    .collection(ASSETS_COLLECTION)
+    .where('status', '==', 'active')
+    .get();
+
+  let processedAssets = 0;
+  let createdEntries = 0;
+  let skippedEntries = 0;
+
+  for (const assetDoc of activeAssetsSnap.docs) {
+    const asset = assetDoc.data() as {
+      purchaseDate?: string;
+      purchaseCost?: number;
+      salvageValue?: number;
+      usefulLifeMonths?: number;
+      monthlyDepreciation?: number;
+      accumulatedDepreciation?: number;
+    };
+    const purchaseDate = new Date(String(asset.purchaseDate || ''));
+    if (Number.isNaN(purchaseDate.getTime()) || purchaseDate > periodEnd) {
+      skippedEntries += 1;
+      continue;
+    }
+
+    const depDocId = `${assetDoc.id}_${period}`;
+    const depRef = db.collection(ASSET_DEPRECIATIONS_COLLECTION).doc(depDocId);
+    const existing = await depRef.get();
+    if (existing.exists) {
+      skippedEntries += 1;
+      continue;
+    }
+
+    const purchaseCost = Math.max(0, toNumberSafe(asset.purchaseCost));
+    const salvageValue = Math.max(0, toNumberSafe(asset.salvageValue));
+    const usefulLifeMonths = Math.max(1, Math.floor(toNumberSafe(asset.usefulLifeMonths, 1)));
+    const accumulated = Math.max(0, toNumberSafe(asset.accumulatedDepreciation));
+    const fallbackMonthly = calculateMonthlyDepreciationSafe(purchaseCost, salvageValue, usefulLifeMonths);
+    const monthlyDep = Math.max(0, toNumberSafe(asset.monthlyDepreciation || fallbackMonthly, fallbackMonthly));
+    const remaining = Math.max(0, (purchaseCost - salvageValue) - accumulated);
+    const depreciationAmount = Math.min(monthlyDep, remaining);
+    if (depreciationAmount <= 0) {
+      skippedEntries += 1;
+      continue;
+    }
+
+    const nextAccumulated = accumulated + depreciationAmount;
+    const nextBookValue = Math.max(salvageValue, purchaseCost - nextAccumulated);
+
+    const batch = db.batch();
+    batch.set(depRef, {
+      assetId: assetDoc.id,
+      period,
+      depreciationAmount,
+      accumulatedDepreciation: nextAccumulated,
+      bookValue: nextBookValue,
+      createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(assetDoc.ref, {
+      accumulatedDepreciation: nextAccumulated,
+      currentValue: nextBookValue,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+
+    processedAssets += 1;
+    createdEntries += 1;
+  }
+
+  return {
+    period,
+    processedAssets,
+    createdEntries,
+    skippedEntries,
+  };
 };
 
 const hasManageUsersPermission = async (uid: string): Promise<boolean> => {
@@ -80,6 +163,19 @@ const hasManageUsersPermission = async (uid: string): Promise<boolean> => {
   const role = roleSnap.data() as { permissions?: Record<string, boolean> };
   const permissions = role.permissions || {};
   return permissions['users.manage'] === true || permissions['roles.manage'] === true;
+};
+
+const hasAnyPermission = async (uid: string, permissionKeys: string[]): Promise<boolean> => {
+  const userSnap = await db.collection(USERS_COLLECTION).doc(uid).get();
+  if (!userSnap.exists) return false;
+  const user = userSnap.data() as { roleId?: string };
+  const roleId = String(user.roleId || '').trim();
+  if (!roleId) return false;
+  const roleSnap = await db.collection(ROLES_COLLECTION).doc(roleId).get();
+  if (!roleSnap.exists) return false;
+  const role = roleSnap.data() as { permissions?: Record<string, boolean> };
+  const permissions = role.permissions || {};
+  return permissionKeys.some((key) => permissions[key] === true);
 };
 
 const applyDelta = async (report: Required<ReportLike>, factor: 1 | -1) => {
@@ -116,118 +212,6 @@ export const aggregateProductionReports = onDocumentWritten(
     if (after) {
       await applyDelta(after, 1);
     }
-  },
-);
-
-export const notifyDailySupervisorReportCompliance = onSchedule(
-  {
-    schedule: '5 16 * * *',
-    timeZone: 'Africa/Cairo',
-    region: 'us-central1',
-    memory: '256MiB',
-  },
-  async () => {
-    const operationalDate = getOperationalDate(8, new Date());
-    const runRef = db.doc(`${AUTOMATION_RUNS_COLLECTION}/report_compliance_daily_${operationalDate}`);
-
-    const [employeesSnap, linesSnap, assignmentsSnap, reportsSnap] = await Promise.all([
-      db.collection(EMPLOYEES_COLLECTION).get(),
-      db.collection(LINES_COLLECTION).get(),
-      db.collection(ASSIGNMENTS_COLLECTION).where('date', '==', operationalDate).get(),
-      db.collection(REPORTS_COLLECTION).where('date', '==', operationalDate).get(),
-    ]);
-
-    const lineNameById = new Map<string, string>();
-    linesSnap.docs.forEach((docSnap) => {
-      const data = docSnap.data() as { name?: string };
-      lineNameById.set(docSnap.id, String(data.name || '').trim() || docSnap.id);
-    });
-
-    const supervisorsById = new Map<string, { id: string; name: string }>();
-    const recipients: Array<{ id: string; name: string }> = [];
-    employeesSnap.docs.forEach((docSnap) => {
-      const data = docSnap.data() as { name?: string; level?: number; isActive?: boolean };
-      const id = docSnap.id;
-      const level = Number(data.level || 0);
-      const isActive = data.isActive !== false;
-      if (!isActive) return;
-
-      const name = String(data.name || '').trim() || id;
-      if (level === 2) supervisorsById.set(id, { id, name });
-      if (level >= 3) recipients.push({ id, name });
-    });
-
-    const assignedMap = new Map<string, { id: string; name: string; lineNames: string[] }>();
-    assignmentsSnap.docs.forEach((docSnap) => {
-      const data = docSnap.data() as { employeeId?: string; lineId?: string };
-      const employeeId = String(data.employeeId || '').trim();
-      if (!employeeId || !supervisorsById.has(employeeId)) return;
-
-      const existing = assignedMap.get(employeeId) || {
-        id: employeeId,
-        name: supervisorsById.get(employeeId)?.name || employeeId,
-        lineNames: [],
-      };
-      const lineId = String(data.lineId || '').trim();
-      const lineName = lineNameById.get(lineId) || lineId || '—';
-      if (lineName && !existing.lineNames.includes(lineName)) existing.lineNames.push(lineName);
-      assignedMap.set(employeeId, existing);
-    });
-
-    const submittedIds = new Set<string>();
-    reportsSnap.docs.forEach((docSnap) => {
-      const data = docSnap.data() as { employeeId?: string };
-      const employeeId = String(data.employeeId || '').trim();
-      if (employeeId && supervisorsById.has(employeeId)) submittedIds.add(employeeId);
-    });
-
-    const submitted = Array.from(assignedMap.values())
-      .filter((row) => submittedIds.has(row.id))
-      .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-    const missing = Array.from(assignedMap.values())
-      .filter((row) => !submittedIds.has(row.id))
-      .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-
-    const title = `متابعة تقارير المشرفين (${operationalDate})`;
-    const message =
-      `المطلوب: ${assignedMap.size} | بعت: ${submitted.length} | ما بعتش: ${missing.length}` +
-      `\nبعت: ${summarizeNames(submitted.map((row) => row.name))}` +
-      `\nما بعتش: ${summarizeNames(missing.map((row) => row.name))}`;
-
-    let alreadySent = false;
-    await db.runTransaction(async (tx) => {
-      const runSnap = await tx.get(runRef);
-      if (runSnap.exists) {
-        alreadySent = true;
-        return;
-      }
-
-      tx.create(runRef, {
-        operationalDate,
-        assignedSupervisorsCount: assignedMap.size,
-        submittedCount: submitted.length,
-        missingCount: missing.length,
-        submittedSupervisorIds: submitted.map((row) => row.id),
-        missingSupervisorIds: missing.map((row) => row.id),
-        deliveredTo: recipients.map((r) => r.id),
-        createdAt: FieldValue.serverTimestamp(),
-      });
-
-      recipients.forEach((recipient) => {
-        const notifRef = db.collection(NOTIFICATIONS_COLLECTION).doc();
-        tx.create(notifRef, {
-          recipientId: recipient.id,
-          type: 'report_compliance_daily',
-          title,
-          message,
-          referenceId: operationalDate,
-          isRead: false,
-          createdAt: FieldValue.serverTimestamp(),
-        });
-      });
-    });
-
-    if (alreadySent) return;
   },
 );
 
@@ -327,82 +311,6 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
       }, { merge: true });
     });
     await cleanupBatch.commit();
-  },
-);
-
-export const notifySupervisorsMissingDailyReport = onSchedule(
-  {
-    schedule: '30 14 * * *',
-    timeZone: 'Africa/Cairo',
-    region: 'us-central1',
-    memory: '256MiB',
-  },
-  async () => {
-    const operationalDate = getOperationalDate(8, new Date());
-    const runRef = db.doc(`${AUTOMATION_RUNS_COLLECTION}/supervisor_missing_report_${operationalDate}`);
-
-    let alreadySent = false;
-    await db.runTransaction(async (tx) => {
-      const runSnap = await tx.get(runRef);
-      if (runSnap.exists) {
-        alreadySent = true;
-        return;
-      }
-
-      const [employeesSnap, assignmentsSnap, reportsSnap] = await Promise.all([
-        db.collection(EMPLOYEES_COLLECTION).get(),
-        db.collection(ASSIGNMENTS_COLLECTION).where('date', '==', operationalDate).get(),
-        db.collection(REPORTS_COLLECTION).where('date', '==', operationalDate).get(),
-      ]);
-
-      const supervisorsById = new Set<string>();
-      employeesSnap.docs.forEach((d) => {
-        const data = d.data() as { level?: number; isActive?: boolean };
-        if (data.isActive === false) return;
-        if (Number(data.level || 0) === 2) supervisorsById.add(d.id);
-      });
-
-      const assignedSupervisorIds = new Set<string>();
-      assignmentsSnap.docs.forEach((d) => {
-        const data = d.data() as { employeeId?: string };
-        const employeeId = String(data.employeeId || '').trim();
-        if (!employeeId || !supervisorsById.has(employeeId)) return;
-        assignedSupervisorIds.add(employeeId);
-      });
-
-      const submittedSupervisorIds = new Set<string>();
-      reportsSnap.docs.forEach((d) => {
-        const data = d.data() as { employeeId?: string };
-        const employeeId = String(data.employeeId || '').trim();
-        if (!employeeId || !supervisorsById.has(employeeId)) return;
-        submittedSupervisorIds.add(employeeId);
-      });
-
-      const missingSupervisorIds = Array.from(assignedSupervisorIds).filter((id) => !submittedSupervisorIds.has(id));
-      tx.create(runRef, {
-        operationalDate,
-        assignedCount: assignedSupervisorIds.size,
-        submittedCount: submittedSupervisorIds.size,
-        missingCount: missingSupervisorIds.length,
-        missingSupervisorIds,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-
-      missingSupervisorIds.forEach((recipientId) => {
-        const notifRef = db.collection(NOTIFICATIONS_COLLECTION).doc();
-        tx.create(notifRef, {
-          recipientId,
-          type: 'daily_report_missing',
-          title: `تنبيه تقرير الإنتاج (${operationalDate})`,
-          message: 'لم يتم إرسال تقرير الإنتاج اليوم حتى الآن. برجاء الإرسال قبل نهاية الوردية.',
-          referenceId: operationalDate,
-          isRead: false,
-          createdAt: FieldValue.serverTimestamp(),
-        });
-      });
-    });
-
-    if (alreadySent) return;
   },
 );
 
@@ -550,5 +458,42 @@ export const adminUpdateUserCredentials = onCall(
     }
 
     return { ok: true, targetUid };
+  },
+);
+
+export const scheduledAssetDepreciationJob = onSchedule(
+  {
+    schedule: '0 2 1 * *',
+    timeZone: 'Africa/Cairo',
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async () => {
+    await runAssetDepreciationForPeriod();
+  },
+);
+
+export const runAssetDepreciationJob = onCall(
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+
+    const permitted = await hasAnyPermission(requesterUid, [
+      'assets.depreciation.run',
+      'costs.manage',
+      'roles.manage',
+    ]);
+    if (!permitted) {
+      throw new HttpsError('permission-denied', 'ليس لديك صلاحية تشغيل احتساب الإهلاك.');
+    }
+
+    const requestedPeriod = String((request.data as { period?: string } | undefined)?.period || '').trim();
+    return runAssetDepreciationForPeriod(requestedPeriod || undefined);
   },
 );

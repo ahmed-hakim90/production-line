@@ -47,8 +47,8 @@ async function ensureMessaging(): Promise<Messaging | null> {
 }
 
 export const pushService = {
-  async registerDevice(userId: string, employeeId: string): Promise<string | null> {
-    if (!userId || !employeeId) return null;
+  async registerDevice(userId: string, employeeId?: string): Promise<string | null> {
+    if (!userId) return null;
     const messaging = await ensureMessaging();
     if (!messaging) return null;
 
@@ -66,7 +66,7 @@ export const pushService = {
     await setDoc(ref, {
       token,
       userId,
-      employeeId,
+      employeeId: employeeId || '',
       platform: 'web',
       userAgent: navigator.userAgent || '',
       enabled: true,

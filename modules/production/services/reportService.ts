@@ -38,12 +38,16 @@ function isMissingIndexError(error: unknown): boolean {
 const normalizeKeyPart = (value: string) =>
   encodeURIComponent(String(value || '').trim().toLowerCase());
 
-const buildReportUniqueKey = (data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId'>): string =>
+const resolveReportType = (value?: ProductionReport['reportType']): NonNullable<ProductionReport['reportType']> =>
+  value === 'component_injection' ? 'component_injection' : 'finished_product';
+
+const buildReportUniqueKey = (data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType'>): string =>
   [
     normalizeKeyPart(data.date),
     normalizeKeyPart(data.lineId),
     normalizeKeyPart(data.employeeId),
     normalizeKeyPart(data.productId),
+    normalizeKeyPart(resolveReportType(data.reportType)),
   ].join('__');
 
 export type FirestoreCursor = QueryDocumentSnapshot | null;
@@ -203,6 +207,7 @@ export const reportService = {
         lineId: data.lineId,
         employeeId: data.employeeId,
         productId: data.productId,
+        reportType: data.reportType,
       });
       const uniqueRef = doc(db, UNIQUE_COLLECTION, uniqueKey);
 
@@ -214,6 +219,7 @@ export const reportService = {
 
         tx.set(reportRef, {
           ...data,
+          reportType: resolveReportType(data.reportType),
           reportCode,
           workersProductionCount: data.workersProductionCount ?? 0,
           workersPackagingCount: data.workersPackagingCount ?? 0,
@@ -228,6 +234,7 @@ export const reportService = {
           lineId: data.lineId,
           employeeId: data.employeeId,
           productId: data.productId,
+          reportType: resolveReportType(data.reportType),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -276,6 +283,7 @@ export const reportService = {
               lineId: next.lineId,
               employeeId: next.employeeId,
               productId: next.productId,
+              reportType: resolveReportType(next.reportType),
               updatedAt: serverTimestamp(),
             },
             { merge: true },

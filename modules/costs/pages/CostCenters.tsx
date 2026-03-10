@@ -15,6 +15,8 @@ export const CostCenters: React.FC = () => {
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
+  const assets = useAppStore((s) => s.assets);
+  const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const _rawLines = useAppStore((s) => s._rawLines);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const deleteCostCenter = useAppStore((s) => s.deleteCostCenter);
@@ -49,8 +51,24 @@ export const CostCenters: React.FC = () => {
     setDeleteConfirm(null);
   };
 
+  const getCenterMonthlyDepreciation = (centerId: string) => {
+    const centerAssetIds = new Set(
+      assets
+        .filter((asset) => asset.id && asset.centerId === centerId)
+        .map((asset) => String(asset.id))
+    );
+    if (centerAssetIds.size === 0) return 0;
+    return assetDepreciations.reduce((sum, entry) => {
+      if (entry.period !== selectedMonth) return sum;
+      if (!centerAssetIds.has(String(entry.assetId || ''))) return sum;
+      return sum + Number(entry.depreciationAmount || 0);
+    }, 0);
+  };
+
   const getSelectedMonthValue = (centerId: string) => {
-    return costCenterValues.find((v) => v.costCenterId === centerId && v.month === selectedMonth)?.amount ?? 0;
+    const manualValue = costCenterValues.find((v) => v.costCenterId === centerId && v.month === selectedMonth)?.amount ?? 0;
+    const depreciationValue = getCenterMonthlyDepreciation(centerId);
+    return manualValue + depreciationValue;
   };
 
   const handleExportCenters = () => {
@@ -200,6 +218,9 @@ export const CostCenters: React.FC = () => {
                 <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">قيمة الشهر المحدد</p>
                 <p className="text-lg font-bold text-[var(--color-text)]">
                   {getSelectedMonthValue(cc.id!).toLocaleString('en-US')} ج.م
+                </p>
+                <p className="text-[11px] font-medium text-[var(--color-text-muted)] mt-1">
+                  يشمل الإهلاك المرتبط بالمركز لهذا الشهر
                 </p>
               </div>
 

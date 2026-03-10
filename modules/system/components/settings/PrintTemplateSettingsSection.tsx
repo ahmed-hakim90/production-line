@@ -172,7 +172,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">ثيم الطباعة الشامل</p>
-                <p className="text-xs text-slate-400">ينطبق على كل التقارير المطبوعة بما فيها الجداول (ERPNext style)</p>
+                <p className="text-xs text-slate-400">ينطبق على كل التقارير المطبوعة. يُنصح باختيار ERPNext للتقارير الرسمية.</p>
               </div>
             </div>
 
@@ -208,7 +208,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                       : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text-muted)]'
                   }`}
                 >
-                  {label}
+                  <span className="inline-flex items-center gap-1">
+                    {label}
+                    {preset === 'erpnext' && (
+                      <span className="px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-black">
+                        Recommended
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>

@@ -17,16 +17,16 @@ export interface PrintThemePalette {
 const PRESET_PALETTES: Record<PrintThemePreset, Omit<PrintThemePalette, 'preset'>> = {
   // ERPNext-inspired print tone: deep blue headers, strong text contrast.
   erpnext: {
-    primary: '#1f3b74',
-    text: '#1f2937',
-    mutedText: '#475569',
-    border: '#9aa8bf',
-    tableHeaderBg: '#dbe4f2',
-    tableHeaderText: '#1f2937',
-    tableRowAltBg: '#f5f8fc',
-    success: '#166534',
-    warning: '#b45309',
-    danger: '#b91c1c',
+    primary: '#1f2937',
+    text: '#0f172a',
+    mutedText: '#334155',
+    border: '#94a3b8',
+    tableHeaderBg: '#e2e8f0',
+    tableHeaderText: '#0f172a',
+    tableRowAltBg: '#f8fafc',
+    success: '#065f46',
+    warning: '#92400e',
+    danger: '#991b1b',
   },
   classic: {
     primary: '#1392ec',

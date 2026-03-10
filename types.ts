@@ -202,6 +202,7 @@ export interface ProductionReport {
   supervisorIndirectCost?: number;
   notes?: string;
   workOrderId?: string;
+  reportType?: 'finished_product' | 'component_injection';
   componentScrapItems?: ReportComponentScrapItem[];
   createdAt?: any;
 }
@@ -217,6 +218,7 @@ export interface LineStatus {
   lineId: string;
   currentProductId: string;
   targetTodayQty: number;
+  isInjectionLine?: boolean;
   updatedAt?: any;
 }
 
@@ -249,6 +251,7 @@ export interface ProductionPlan {
   priority: PlanPriority;
   estimatedCost: number;
   actualCost: number;
+  planType?: 'finished_product' | 'component_injection';
   status: PlanStatus;
   createdBy: string;
   createdAt?: any;
@@ -278,6 +281,7 @@ export interface WorkOrder {
   targetDate: string;
   estimatedCost: number;
   actualCost: number;
+  workOrderType?: 'finished_product' | 'component_injection';
   status: WorkOrderStatus;
   notes?: string;
   breakStartTime?: string; // HH:mm
@@ -567,6 +571,49 @@ export interface LaborSettings {
   id?: string;
   hourlyRate: number;
   cnyToEgpRate?: number;
+}
+
+// ─── Assets & Depreciation ───────────────────────────────────────────────────
+
+export type AssetDepreciationMethod = 'straight_line' | 'declining_balance';
+export type AssetStatus = 'active' | 'inactive' | 'disposed';
+
+export interface Asset {
+  id?: string;
+  name: string;
+  code: string;
+  category: string;
+  centerId: string;
+  purchaseDate: string; // YYYY-MM-DD
+  purchaseCost: number;
+  salvageValue: number;
+  usefulLifeMonths: number;
+  depreciationMethod: AssetDepreciationMethod;
+  monthlyDepreciation: number;
+  accumulatedDepreciation: number;
+  currentValue: number;
+  status: AssetStatus;
+  notes?: string;
+  createdAt?: any;
+  createdBy?: string;
+  updatedAt?: any;
+}
+
+export interface AssetDepreciation {
+  id?: string;
+  assetId: string;
+  period: string; // YYYY-MM
+  depreciationAmount: number;
+  accumulatedDepreciation: number;
+  bookValue: number;
+  createdAt?: any;
+}
+
+export interface AssetDepreciationRunResult {
+  period: string;
+  processedAssets: number;
+  createdEntries: number;
+  skippedEntries: number;
 }
 
 // ─── Monthly Production Cost ─────────────────────────────────────────────────

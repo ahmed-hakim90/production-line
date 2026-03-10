@@ -7,10 +7,9 @@
  */
 import {
   collection,
+  collectionGroup,
   doc,
   getDocs,
-  setDoc,
-  deleteDoc,
   addDoc,
   serverTimestamp,
   writeBatch,
@@ -98,6 +97,22 @@ const ALL_COLLECTIONS = [
   'quality_rework_orders',
   'quality_capa',
   'quality_print_logs',
+  // Additional collections used by app/runtime
+  'production_report_uniques',
+  'product_categories',
+  'user_devices',
+  'user_presence',
+  'automation_runs',
+  'dashboardStats',
+  'tenants',
+  'backups',
+] as const;
+
+const COLLECTION_GROUPS = [
+  // users/{userId}/preferences/{docId}
+  'preferences',
+  // dashboardStats/{tenantId}/daily/{date}
+  'daily',
 ] as const;
 
 const SETTINGS_COLLECTIONS = [
@@ -135,6 +150,7 @@ export interface BackupMetadata {
 export interface BackupFile {
   metadata: BackupMetadata;
   collections: Record<string, Record<string, any>[]>;
+  collectionGroups?: Record<string, Record<string, any>[]>;
 }
 
 export interface BackupHistoryEntry {
@@ -165,8 +181,28 @@ async function readCollection(name: string): Promise<Record<string, any>[]> {
   return snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
 }
 
+async function readCollectionGroup(
+  name: string
+): Promise<Record<string, any>[]> {
+  const snap = await getDocs(collectionGroup(db, name));
+  return snap.docs.map((d) => ({ _path: d.ref.path, ...d.data() }));
+}
+
 async function clearCollection(name: string): Promise<void> {
   const snap = await getDocs(collection(db, name));
+  const batchSize = 500;
+  const docs = snap.docs;
+
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const batch = writeBatch(db);
+    const chunk = docs.slice(i, i + batchSize);
+    chunk.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+async function clearCollectionGroup(name: string): Promise<void> {
+  const snap = await getDocs(collectionGroup(db, name));
   const batchSize = 500;
   const docs = snap.docs;
 
@@ -197,6 +233,30 @@ async function writeDocuments(
         ? doc(db, collectionName, _docId)
         : doc(collection(db, collectionName));
       batch.set(ref, fields, { merge: mode === 'merge' });
+    });
+    await batch.commit();
+  }
+}
+
+async function writeCollectionGroupDocuments(
+  collectionGroupName: string,
+  documents: Record<string, any>[],
+  mode: RestoreMode
+): Promise<void> {
+  if (mode === 'replace' || mode === 'full_reset') {
+    await clearCollectionGroup(collectionGroupName);
+  }
+
+  const batchSize = 500;
+  for (let i = 0; i < documents.length; i += batchSize) {
+    const batch = writeBatch(db);
+    const chunk = documents.slice(i, i + batchSize);
+    chunk.forEach((docData) => {
+      const { _path, ...fields } = docData;
+      if (typeof _path !== 'string' || !_path.trim()) {
+        return;
+      }
+      batch.set(doc(db, _path), fields, { merge: mode === 'merge' });
     });
     await batch.commit();
   }
@@ -251,13 +311,10 @@ export function validateBackupFile(data: any): {
     return { valid: false, error: 'الملف لا يحتوي على بيانات المجموعات (collections)' };
   }
 
-  const invalidCollections = Object.keys(data.collections).filter(
-    (c) => !ALL_COLLECTIONS.includes(c as any)
-  );
-  if (invalidCollections.length > 0) {
+  if (data.collectionGroups && typeof data.collectionGroups !== 'object') {
     return {
       valid: false,
-      error: `مجموعات غير معروفة: ${invalidCollections.join(', ')}`,
+      error: 'الملف يحتوي collectionGroups بصيغة غير صحيحة',
     };
   }
 
@@ -299,6 +356,7 @@ export const backupService = {
     if (!isConfigured) throw new Error('Firebase not configured');
 
     const collections: Record<string, Record<string, any>[]> = {};
+    const collectionGroups: Record<string, Record<string, any>[]> = {};
     const documentCounts: Record<string, number> = {};
     let totalDocuments = 0;
 
@@ -306,6 +364,13 @@ export const backupService = {
       const docs = await readCollection(name);
       collections[name] = docs;
       documentCounts[name] = docs.length;
+      totalDocuments += docs.length;
+    }
+
+    for (const groupName of COLLECTION_GROUPS) {
+      const docs = await readCollectionGroup(groupName);
+      collectionGroups[groupName] = docs;
+      documentCounts[`group:${groupName}`] = docs.length;
       totalDocuments += docs.length;
     }
 
@@ -320,6 +385,7 @@ export const backupService = {
         createdBy,
       },
       collections,
+      collectionGroups,
     };
 
     const fileName = `backup_full_${getTimestamp()}.json`;
@@ -464,22 +530,17 @@ export const backupService = {
       await this.exportFullBackup(`${createdBy} (auto-before-restore)`);
 
       const collectionNames = Object.keys(file.collections);
+      const collectionGroupNames = Object.keys(file.collectionGroups || {});
       let restored = 0;
-      const total = collectionNames.length;
+      const total = collectionNames.length + collectionGroupNames.length;
+      let currentStep = 0;
 
-      for (let i = 0; i < collectionNames.length; i++) {
+      for (let i = 0; i < collectionNames.length; i++, currentStep++) {
         const name = collectionNames[i];
-
-        if (
-          mode !== 'full_reset' &&
-          !ALL_COLLECTIONS.includes(name as any)
-        ) {
-          continue;
-        }
 
         onProgress?.(
           `استعادة ${name}...`,
-          10 + Math.round((i / total) * 80)
+          10 + Math.round((currentStep / Math.max(total, 1)) * 80)
         );
 
         const docs = file.collections[name];
@@ -491,12 +552,33 @@ export const backupService = {
         }
       }
 
+      for (let i = 0; i < collectionGroupNames.length; i++, currentStep++) {
+        const groupName = collectionGroupNames[i];
+        onProgress?.(
+          `استعادة المجموعة الفرعية ${groupName}...`,
+          10 + Math.round((currentStep / Math.max(total, 1)) * 80)
+        );
+
+        const docs = file.collectionGroups?.[groupName];
+        if (docs && docs.length > 0) {
+          await writeCollectionGroupDocuments(groupName, docs, mode);
+          restored += docs.length;
+        } else if (mode === 'full_reset' || mode === 'replace') {
+          await clearCollectionGroup(groupName);
+        }
+      }
+
       // If full_reset, also clear collections not in the backup
       if (mode === 'full_reset') {
         onProgress?.('تنظيف المجموعات غير المشمولة...', 92);
         for (const name of ALL_COLLECTIONS) {
           if (!collectionNames.includes(name)) {
             await clearCollection(name);
+          }
+        }
+        for (const groupName of COLLECTION_GROUPS) {
+          if (!collectionGroupNames.includes(groupName)) {
+            await clearCollectionGroup(groupName);
           }
         }
       }

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreProduct } from '../../../types';
+import { categoryService } from '../../../modules/catalog/services/categoryService';
 
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
   name: '',
@@ -24,9 +25,49 @@ export const GlobalCreateProductModal: React.FC = () => {
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
   const createProduct = useAppStore((s) => s.createProduct);
+  const rawProducts = useAppStore((s) => s._rawProducts);
   const [form, setForm] = useState(emptyForm);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const fallbackCategoryOptions = useMemo(() => {
+    const unique = new Set<string>();
+    rawProducts.forEach((product) => {
+      const name = String(product.model || '').trim();
+      if (name) unique.add(name);
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
+  }, [rawProducts]);
+
+  const mergedCategoryOptions = useMemo(() => {
+    const unique = new Set<string>([...categoryOptions, ...fallbackCategoryOptions]);
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
+  }, [categoryOptions, fallbackCategoryOptions]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadCategoryOptions = async () => {
+      try {
+        await categoryService.seedFromProductsModel();
+        const rows = await categoryService.getAll();
+        if (cancelled) return;
+        const names = rows
+          .filter((row) => row.isActive !== false)
+          .map((row) => String(row.name || '').trim())
+          .filter(Boolean);
+        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
+      } catch {
+        if (cancelled) return;
+        setCategoryOptions([]);
+      }
+    };
+    void loadCategoryOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
   if (!can('products.create')) return null;
@@ -101,16 +142,18 @@ export const GlobalCreateProductModal: React.FC = () => {
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">الفئة / الموديل *</label>
-              <select
+              <input
+                list="global-products-category-options"
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
                 value={form.model}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
-              >
-                <option value="">اختر الفئة</option>
-                <option value="منزلي">منزلي</option>
-                <option value="سريا">سريا</option>
-                <option value="عناية">عناية</option>
-              </select>
+                placeholder="اختر أو اكتب فئة"
+              />
+              <datalist id="global-products-category-options">
+                {mergedCategoryOptions.map((category) => (
+                  <option key={category} value={category} />
+                ))}
+              </datalist>
             </div>
           </div>
 

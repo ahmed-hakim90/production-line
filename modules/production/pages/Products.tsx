@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
@@ -24,6 +24,7 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { PageHeader } from '../../../components/PageHeader';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { Warehouse } from '../../inventory/types';
+import { categoryService } from '../../catalog/services/categoryService';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -79,6 +80,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
 
 export const Products: React.FC = () => {
   const { openModal } = useGlobalModalManager();
+  const location = useLocation();
   const products = useAppStore((s) => s.products);
   const createProduct = useAppStore((s) => s.createProduct);
   const updateProduct = useAppStore((s) => s.updateProduct);
@@ -147,6 +149,7 @@ export const Products: React.FC = () => {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState('');
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
@@ -308,6 +311,14 @@ export const Products: React.FC = () => {
     openModal(MODAL_KEYS.PRODUCTS_CREATE, { source: 'products.page' });
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') !== 'create') return;
+    if (!can('products.create')) return;
+    openCreate();
+    navigate('/products', { replace: true });
+  }, [location.search, can, navigate]);
+
   const openEdit = (id: string) => {
     const product = products.find((p) => p.id === id);
     if (!product) return;
@@ -358,6 +369,41 @@ export const Products: React.FC = () => {
   // ── Import from Excel ──────────────────────────────────────────────────
 
   const _rawProducts = useAppStore((s) => s._rawProducts);
+  const fallbackCategoryOptions = useMemo(() => {
+    const unique = new Set<string>();
+    _rawProducts.forEach((product) => {
+      const name = String(product.model || '').trim();
+      if (name) unique.add(name);
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
+  }, [_rawProducts]);
+  const mergedCategoryOptions = useMemo(() => {
+    const unique = new Set<string>([...categoryOptions, ...fallbackCategoryOptions]);
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
+  }, [categoryOptions, fallbackCategoryOptions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCategoryOptions = async () => {
+      try {
+        await categoryService.seedFromProductsModel();
+        const rows = await categoryService.getAll();
+        if (cancelled) return;
+        const names = rows
+          .filter((row) => row.isActive !== false)
+          .map((row) => String(row.name || '').trim())
+          .filter(Boolean);
+        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
+      } catch {
+        if (cancelled) return;
+        setCategoryOptions([]);
+      }
+    };
+    void loadCategoryOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -475,7 +521,7 @@ export const Products: React.FC = () => {
         ? {
             ...p,
             stockLevel: Number(warehouseStock || 0),
-            stockStatus: Number(warehouseStock || 0) > 0 ? 'available' : 'out',
+            stockStatus: (Number(warehouseStock || 0) > 0 ? 'available' : 'out') as 'available' | 'out',
           }
         : p;
       const raw = _rawProducts.find((r) => r.id === p.id);
@@ -626,9 +672,9 @@ export const Products: React.FC = () => {
         <div className="erp-filter-sep" />
         <select className={`erp-filter-select${categoryFilter ? ' active' : ''}`} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">كل الفئات</option>
-          <option value="منزلي">منزلي</option>
-          <option value="سريا">سريا</option>
-          <option value="عناية">عناية</option>
+          {mergedCategoryOptions.map((category) => (
+            <option key={category} value={category}>{category}</option>
+          ))}
         </select>
         <select className={`erp-filter-select${stockFilter ? ' active' : ''}`} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
           <option value="">حالة المخزون</option>
@@ -967,16 +1013,18 @@ export const Products: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">الفئة / الموديل</label>
-                  <select
+                  <input
+                    list="products-category-options"
                     className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.model}
                     onChange={(e) => setForm({ ...form, model: e.target.value })}
-                  >
-                    <option value="">اختر الفئة</option>
-                    <option value="منزلي">منزلي</option>
-                    <option value="سريا">سريا</option>
-                    <option value="عناية">عناية</option>
-                  </select>
+                    placeholder="اختر أو اكتب فئة"
+                  />
+                  <datalist id="products-category-options">
+                    {mergedCategoryOptions.map((category) => (
+                      <option key={category} value={category} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
               <div className="space-y-2">

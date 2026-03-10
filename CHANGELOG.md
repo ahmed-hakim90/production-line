@@ -8,10 +8,14 @@
 - تحويل هيكل المشروع إلى Modules جديدة: `auth`, `costs`, `dashboards`, `production`, `quality`, `shared`, `system`.
 - إضافة ملفات Routes/Services/Hooks/Components لكل Module.
 - إضافة ملفات خدمات جديدة مثل `services/imageCompression.ts`, `services/storageService.ts`, و `storage.rules`.
+- إضافة نظام إدارة الأصول والإهلاك داخل موديول الإنتاج (`assets`, `asset_depreciations`) مع صفحات `AssetsList`, `AssetDetails`, `DepreciationReport`.
+- إضافة Job إهلاك شهري عبر Cloud Scheduler + تشغيل يدوي عبر Callable Function (`runAssetDepreciationJob`).
 
 ### Changed
 - تحديثات كبيرة على `App.tsx`, `types.ts`, `vite.config.ts`, و `store/useAppStore.ts`.
 - نقل صفحات كثيرة من `pages/` إلى `modules/*/pages/` مع إعادة تنظيم المسارات.
+- ربط تكلفة الإهلاك بحسابات تكلفة الإنتاج وتوزيعها حتى مستوى الخط/المنتج ضمن خدمات وحسابات التكاليف.
+- تحديث الصلاحيات، القائمة، والمسارات لدعم إدارة الأصول وتقارير الإهلاك.
 
 ### Removed
 - إزالة صفحات قديمة من مجلد `pages/` بعد نقلها للهيكل المعياري الجديد.
@@ -302,3 +306,7 @@
 ## [4.0.52] - 2026-03-09
 
 - Users
+
+## [4.0.53] - 2026-03-09
+
+- daily Welcome

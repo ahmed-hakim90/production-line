@@ -102,6 +102,27 @@ const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
   thermal: { width: '80mm', minHeight: 'auto' },
 };
 
+const PRINT_SPACING = {
+  regular: {
+    pagePadding: '10mm 12mm',
+    sectionGap: '5mm',
+    tableHeaderPadding: '3.2mm 3.4mm',
+    tableCellPadding: '2.8mm 3.4mm',
+    tableFontSize: '10pt',
+    tableHeaderFontSize: '9pt',
+    signatureTopMargin: '11mm',
+  },
+  thermal: {
+    pagePadding: '4mm 3mm',
+    sectionGap: '3mm',
+    tableHeaderPadding: '1.8mm 2mm',
+    tableCellPadding: '1.6mm 2mm',
+    tableFontSize: '7.3pt',
+    tableHeaderFontSize: '7pt',
+    signatureTopMargin: '0',
+  },
+} as const;
+
 function fmtNum(value: number, decimalPlaces: number): string {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: decimalPlaces,
@@ -128,12 +149,18 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
+    const spacing = isThermal ? PRINT_SPACING.thermal : PRINT_SPACING.regular;
 
     const showWaste    = ps.showWaste;
     const showEmployee = ps.showEmployee;
     const showCosts    = ps.showCosts && rows.some((r) => r.costPerUnit != null && r.costPerUnit > 0);
     const showWO       = ps.showWorkOrder && rows.some((r) => !!r.workOrderNumber);
     const showNotes    = rows.some((r) => !!r.notes?.trim());
+    const headerColSpan =
+      4 +
+      (showEmployee ? 1 : 0) +
+      (showWO ? 1 : 0) +
+      (showNotes ? 1 : 0);
 
     return (
       <div
@@ -143,7 +170,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
           width: paper.width,
           minHeight: paper.minHeight,
-          padding: isThermal ? '4mm 3mm' : '12mm 15mm',
+          padding: spacing.pagePadding,
           background: '#fff',
           color: palette.text,
           ['--print-text' as any]: palette.text,
@@ -152,13 +179,13 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           ['--print-th-bg' as any]: palette.tableHeaderBg,
           ['--print-th-text' as any]: palette.tableHeaderText,
           ['--print-row-alt' as any]: palette.tableRowAltBg,
-          fontSize: isThermal ? '8pt' : '11pt',
-          lineHeight: 1.5,
+          fontSize: isThermal ? '8pt' : '10.5pt',
+          lineHeight: 1.55,
           boxSizing: 'border-box',
         }}
       >
         {/* ── Factory Header ── */}
-        <div style={{ textAlign: 'center', marginBottom: isThermal ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '6mm' }}>
+        <div style={{ textAlign: 'center', marginBottom: spacing.sectionGap, borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '5mm' }}>
           {ps.logoUrl && (
             <img
               src={ps.logoUrl}
@@ -175,14 +202,30 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
         </div>
 
         {/* ── Report Title ── */}
-        <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
+        <div style={{ marginBottom: spacing.sectionGap }}>
           <h2 style={{ margin: 0, fontSize: isThermal ? '10pt' : '16pt', fontWeight: 800, color: '#0f172a' }}>{title}</h2>
           {subtitle && <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText }}>{subtitle}</p>}
-          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '6pt' : '9pt', color: palette.mutedText }}>تاريخ الطباعة: {now}</p>
+          <div
+            style={{
+              marginTop: '2.2mm',
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '2mm',
+              fontSize: isThermal ? '6pt' : '9pt',
+              color: palette.mutedText,
+              border: `1px solid ${palette.border}`,
+              borderRadius: '2mm',
+              padding: isThermal ? '1mm 1.3mm' : '1.4mm 1.8mm',
+              background: palette.tableRowAltBg,
+            }}
+          >
+            <span>تاريخ الطباعة: {now}</span>
+            <span>عدد السجلات: {rows.length}</span>
+          </div>
         </div>
 
         {/* ── Summary Cards ── */}
-        <div style={{ display: 'flex', gap: isThermal ? '2mm' : '4mm', marginBottom: isThermal ? '3mm' : '6mm', flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isThermal ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: isThermal ? '1.5mm' : '3mm', marginBottom: spacing.sectionGap }}>
           <SummaryBox label="الكمية المنتجة"  value={fmtNum(t.totalProduced, dp)} unit="وحدة" color={ps.primaryColor} small={isThermal} />
           {showWaste && (
             <>
@@ -199,23 +242,25 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           style={{
             width: '100%',
             borderCollapse: 'collapse',
-            fontSize: isThermal ? '7pt' : '9.5pt',
-            marginBottom: isThermal ? '3mm' : '8mm',
+            tableLayout: 'fixed',
+            fontSize: spacing.tableFontSize,
+            marginBottom: spacing.sectionGap,
+            border: `1px solid ${palette.border}`,
           }}
         >
           <thead>
-                    <tr style={{ background: palette.tableHeaderBg }}>
+            <tr style={{ background: palette.tableHeaderBg }}>
               <Th>#</Th>
               <Th>التاريخ</Th>
               <Th>خط الإنتاج</Th>
-              <Th>المنتج</Th>
+              <Th wrap>المنتج</Th>
               {showEmployee && <Th>المشرف</Th>}
               {showWO       && <Th>أمر شغل</Th>}
-              {showNotes    && <Th>ملاحظة</Th>}
+              {showNotes    && <Th wrap>ملاحظة</Th>}
               <Th align="center">الكمية المنتجة</Th>
               {showWaste    && <Th align="center">الهالك</Th>}
               <Th align="center">عدد العمال</Th>
-              <Th>تفصيل العمالة</Th>
+              <Th wrap>تفصيل العمالة</Th>
               <Th align="center">ساعات العمل</Th>
               {showCosts    && <Th align="center">تكلفة الوحدة</Th>}
             </tr>
@@ -226,14 +271,14 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
                 <Td>{i + 1}</Td>
                 <Td>{row.date}</Td>
                 <Td>{row.lineName}</Td>
-                <Td>{shortProductName(row.productName)}</Td>
+                <Td wrap>{shortProductName(row.productName)}</Td>
                 {showEmployee && <Td>{row.employeeName}</Td>}
                 {showWO       && <Td>{row.workOrderNumber || '—'}</Td>}
-                {showNotes    && <Td>{row.notes?.trim() || '—'}</Td>}
+                {showNotes    && <Td wrap>{row.notes?.trim() || '—'}</Td>}
                 <Td align="center" bold color="#059669">{fmtNum(row.quantityProduced, dp)}</Td>
                 {showWaste    && <Td align="center" bold>{fmtNum(row.wasteQuantity, dp)}</Td>}
                 <Td align="center">{row.workersCount}</Td>
-                <Td>
+                <Td wrap>
                   إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
                 </Td>
                 <Td align="center">{fmtNum(row.workHours, dp)}</Td>
@@ -247,7 +292,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
 
             {/* Totals Row */}
             <tr style={{ background: palette.tableHeaderBg, fontWeight: 800 }}>
-              <Td colSpan={(showEmployee ? 5 : 4) + (showWO ? 1 : 0) + (showNotes ? 1 : 0)}>الإجمالي</Td>
+              <Td colSpan={headerColSpan} bold>الإجمالي</Td>
               <Td align="center" bold color="#059669">{fmtNum(t.totalProduced, dp)}</Td>
               {showWaste && <Td align="center" bold color="#f43f5e">{fmtNum(t.totalWaste, dp)}</Td>}
               <Td align="center">{fmtNum(t.totalWorkers, dp)}</Td>
@@ -264,7 +309,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
 
         {/* ── Signature Section ── */}
         {!isThermal && (
-          <div style={{ marginTop: '15mm', display: 'flex', justifyContent: 'space-between', gap: '20mm' }}>
+          <div style={{ marginTop: spacing.signatureTopMargin, display: 'flex', justifyContent: 'space-between', gap: '14mm' }}>
             <SignatureBlock label="مدير المصنع" />
             {showEmployee && <SignatureBlock label="مدير الخط" />}
             <SignatureBlock label="مراقب الجودة" />
@@ -272,7 +317,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
         )}
 
         {/* ── Footer ── */}
-        <div style={{ marginTop: isThermal ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
+        <div style={{ marginTop: isThermal ? '2.8mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '2.8mm', textAlign: 'center' }}>
           {ps.showQRCode && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
@@ -317,6 +362,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const wasteRatio = total > 0 ? ((report.wasteQuantity / total) * 100).toFixed(dp) : '0';
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
+    const spacing = isThermal ? PRINT_SPACING.thermal : PRINT_SPACING.regular;
 
     const reportLink =
       report.reportId && typeof window !== 'undefined'
@@ -331,7 +377,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
           width: paper.width,
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
-          padding: isThermal ? '4mm 3mm' : '12mm 15mm',
+          padding: spacing.pagePadding,
           background: '#fff',
           color: palette.text,
           ['--print-text' as any]: palette.text,
@@ -341,12 +387,12 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           ['--print-th-text' as any]: palette.tableHeaderText,
           ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
-          lineHeight: 1.6,
+          lineHeight: 1.55,
           boxSizing: 'border-box',
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: isThermal ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '6mm' }}>
+        <div style={{ textAlign: 'center', marginBottom: spacing.sectionGap, borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '5mm' }}>
           {ps.logoUrl && (
             <img
               src={ps.logoUrl}
@@ -360,6 +406,23 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           <h2 style={{ margin: '2mm 0 0', fontSize: isThermal ? '9pt' : '14pt', fontWeight: 700, color: palette.mutedText }}>
             تقرير إنتاج
           </h2>
+          <div
+            style={{
+              marginTop: '2mm',
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '2mm',
+              fontSize: isThermal ? '6pt' : '9pt',
+              color: palette.mutedText,
+              border: `1px solid ${palette.border}`,
+              borderRadius: '2mm',
+              padding: isThermal ? '1mm 1.2mm' : '1.3mm 1.8mm',
+              background: palette.tableRowAltBg,
+            }}
+          >
+            <span>تاريخ الطباعة: {now}</span>
+            <span>الكود: {report.reportId || '—'}</span>
+          </div>
         </div>
 
         {/* Report Details */}
@@ -368,7 +431,8 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
             width: '100%',
             borderCollapse: 'collapse',
             fontSize: isThermal ? '7.5pt' : '10.5pt',
-            marginBottom: isThermal ? '3mm' : '8mm',
+            marginBottom: spacing.sectionGap,
+            border: `1px solid ${palette.border}`,
           }}
         >
           <tbody>
@@ -404,7 +468,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
 
         {/* Signature Section */}
         {!isThermal && (
-          <div style={{ marginTop: '20mm', display: 'flex', justifyContent: 'space-between', gap: '20mm' }}>
+          <div style={{ marginTop: spacing.signatureTopMargin, display: 'flex', justifyContent: 'space-between', gap: '14mm' }}>
             <SignatureBlock label="مدير المصنع" />
             {ps.showEmployee && <SignatureBlock label="مدير الخط" />}
             <SignatureBlock label="مراقب الجودة" />
@@ -412,7 +476,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         )}
 
         {/* Footer */}
-        <div style={{ marginTop: isThermal ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
+        <div style={{ marginTop: isThermal ? '2.8mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '2.8mm', textAlign: 'center' }}>
           {ps.showQRCode && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
@@ -472,6 +536,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
     const now = new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
+    const spacing = isThermal ? PRINT_SPACING.thermal : PRINT_SPACING.regular;
     const progress = data.quantity > 0 ? Math.min((data.producedQuantity / data.quantity) * 100, 100) : 0;
 
     return (
@@ -482,7 +547,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
           fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
           width: paper.width,
           minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
-          padding: isThermal ? '4mm 3mm' : '12mm 15mm',
+          padding: spacing.pagePadding,
           background: '#fff',
           color: palette.text,
           ['--print-text' as any]: palette.text,
@@ -492,12 +557,12 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
           ['--print-th-text' as any]: palette.tableHeaderText,
           ['--print-row-alt' as any]: palette.tableRowAltBg,
           fontSize: isThermal ? '8pt' : '11pt',
-          lineHeight: 1.6,
+          lineHeight: 1.55,
           boxSizing: 'border-box',
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: isThermal ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '6mm' }}>
+        <div style={{ textAlign: 'center', marginBottom: spacing.sectionGap, borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '5mm' }}>
           {ps.logoUrl && (
             <img src={ps.logoUrl} alt="logo" style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }} />
           )}
@@ -510,7 +575,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
         </div>
 
         {/* Progress Bar */}
-        <div style={{ marginBottom: isThermal ? '3mm' : '8mm' }}>
+        <div style={{ marginBottom: spacing.sectionGap }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8pt', color: palette.mutedText, marginBottom: '1mm' }}>
             <span>نسبة الإنجاز</span>
             <span style={{ fontWeight: 800, color: progress >= 100 ? '#059669' : ps.primaryColor }}>{progress.toFixed(0)}%</span>
@@ -521,7 +586,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
         </div>
 
         {/* Details Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7.5pt' : '10.5pt', marginBottom: isThermal ? '3mm' : '8mm' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7.5pt' : '10.5pt', marginBottom: spacing.sectionGap, border: `1px solid ${palette.border}` }}>
           <tbody>
             <DetailRow label="رقم أمر الشغل"             value={data.workOrderNumber} />
             <DetailRow label="المنتج"                     value={data.productName}     even />
@@ -545,7 +610,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
 
         {/* Signature Section */}
         {!isThermal && (
-          <div style={{ marginTop: '20mm', display: 'flex', justifyContent: 'space-between', gap: '20mm' }}>
+          <div style={{ marginTop: spacing.signatureTopMargin, display: 'flex', justifyContent: 'space-between', gap: '14mm' }}>
             <SignatureBlock label="مدير المصنع" />
             <SignatureBlock label="المشرف" />
             <SignatureBlock label="مراقب الجودة" />
@@ -553,7 +618,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
         )}
 
         {/* Footer */}
-        <div style={{ marginTop: isThermal ? '3mm' : '10mm', borderTop: '1px solid #e2e8f0', paddingTop: '3mm', textAlign: 'center' }}>
+        <div style={{ marginTop: isThermal ? '2.8mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '2.8mm', textAlign: 'center' }}>
           {ps.showQRCode && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
@@ -588,23 +653,23 @@ const DetailRow: React.FC<{
   <tr style={{ background: even ? '#f8fafc' : '#fff' }}>
     <td
       style={{
-        padding: '3mm 4mm',
+        padding: '2.5mm 3mm',
         fontWeight: 700,
         color: 'var(--print-muted-text, #475569)',
         borderBottom: '1px solid var(--print-border, #e2e8f0)',
         width: '35%',
-        fontSize: '10pt',
+        fontSize: '9.5pt',
       }}
     >
       {label}
     </td>
     <td
       style={{
-        padding: '3mm 4mm',
+        padding: '2.5mm 3mm',
         fontWeight: highlight ? 800 : 400,
         color: highlight || 'var(--print-text, #0f172a)',
         borderBottom: '1px solid var(--print-border, #e2e8f0)',
-        fontSize: highlight ? '12pt' : '10.5pt',
+        fontSize: highlight ? '11.5pt' : '10pt',
       }}
     >
       {value}
@@ -613,7 +678,7 @@ const DetailRow: React.FC<{
 );
 
 const SummaryBox: React.FC<{ label: string; value: string; unit?: string; color: string; small?: boolean }> = ({ label, value, unit, color, small }) => (
-  <div style={{ flex: '1 1 0', minWidth: small ? '18mm' : '30mm', border: '1px solid var(--print-border, #e2e8f0)', borderRadius: '3mm', padding: small ? '1.5mm 2mm' : '3mm 4mm', textAlign: 'center' }}>
+  <div style={{ minWidth: small ? '18mm' : '30mm', border: '1px solid var(--print-border, #e2e8f0)', borderRadius: '2.5mm', padding: small ? '1.3mm 1.8mm' : '2.2mm 2.8mm', textAlign: 'center', background: '#fff' }}>
     <p style={{ margin: 0, fontSize: small ? '6pt' : '8pt', color: 'var(--print-muted-text, #64748b)', fontWeight: 600 }}>{label}</p>
     <p style={{ margin: '1mm 0 0', fontSize: small ? '10pt' : '14pt', fontWeight: 900, color }}>
       {value}
@@ -622,34 +687,37 @@ const SummaryBox: React.FC<{ label: string; value: string; unit?: string; color:
   </div>
 );
 
-const Th: React.FC<{ children: React.ReactNode; align?: string }> = ({ children, align }) => (
+const Th: React.FC<{ children: React.ReactNode; align?: string; wrap?: boolean }> = ({ children, align, wrap }) => (
   <th
     style={{
-      padding: '2.5mm 3mm',
+      padding: '3.2mm 3.4mm',
       textAlign: (align || 'right') as React.CSSProperties['textAlign'],
       fontWeight: 800,
-      fontSize: '8.5pt',
+      fontSize: '9pt',
       color: 'var(--print-th-text, #475569)',
       borderBottom: '2px solid var(--print-border, #cbd5e1)',
-      whiteSpace: 'nowrap',
+      whiteSpace: wrap ? 'normal' : 'nowrap',
+      lineHeight: 1.35,
     }}
   >
     {children}
   </th>
 );
 
-const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; color?: string; colSpan?: number }> = ({
-  children, align, bold, color, colSpan,
+const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; color?: string; colSpan?: number; wrap?: boolean }> = ({
+  children, align, bold, color, colSpan, wrap,
 }) => (
   <td
     colSpan={colSpan}
     style={{
-      padding: '2mm 3mm',
+      padding: '2.8mm 3.4mm',
       textAlign: (align || 'right') as React.CSSProperties['textAlign'],
       fontWeight: bold ? 700 : 400,
       color: color || 'var(--print-text, #334155)',
       borderBottom: '1px solid var(--print-border, #e2e8f0)',
-      whiteSpace: 'nowrap',
+      whiteSpace: wrap ? 'normal' : 'nowrap',
+      lineHeight: 1.45,
+      wordBreak: wrap ? 'break-word' : 'normal',
     }}
   >
     {children}

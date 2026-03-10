@@ -29,3 +29,6 @@ export { lineAssignmentService } from './services/lineAssignmentService';
 export { monthlyProductionCostService } from './services/monthlyProductionCostService';
 export { productMaterialService } from './services/productMaterialService';
 export { storageService } from './services/storageService';
+export { assetService } from './services/assetService';
+export { assetDepreciationService } from './services/assetDepreciationService';
+export { assetDepreciationJobService } from './services/assetDepreciationJobService';

@@ -39,8 +39,11 @@ import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { stockService } from '../../inventory/services/stockService';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
+import { categoryService } from '../../catalog/services/categoryService';
+import { catalogRawMaterialService } from '../../catalog/services/catalogRawMaterialService';
 
 const emptyForm = {
+  reportType: 'finished_product' as 'finished_product' | 'component_injection',
   employeeId: '',
   productId: '',
   lineId: '',
@@ -67,6 +70,7 @@ type FactoryGeneralRow = {
   lineId: string;
   supervisorId: string;
   productId: string;
+  reportType: ProductionReport['reportType'];
   lineName: string;
   supervisorName: string;
   productName: string;
@@ -121,6 +125,7 @@ export const Reports: React.FC = () => {
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
+  const lineStatuses = useAppStore((s) => s.lineStatuses);
   const uid = useAppStore((s) => s.uid);
   const saveErrorFromStore = useAppStore((s) => s.error);
   const createReport = useAppStore((s) => s.createReport);
@@ -148,6 +153,9 @@ export const Reports: React.FC = () => {
 
   const { can } = usePermission();
   const canViewCosts = can('reports.viewCost');
+  const canCreateFinishedReports = can('reports.create');
+  const canManageComponentInjectionReports = can('reports.componentInjection.manage');
+  const canChooseReportType = canCreateFinishedReports && canManageComponentInjectionReports;
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'reports'),
     [exportImportSettings]
@@ -251,6 +259,8 @@ export const Reports: React.FC = () => {
   const [factorySortDirection, setFactorySortDirection] = useState<'asc' | 'desc'>('desc');
   const [stockBalances, setStockBalances] = useState<StockItemBalance[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string }>>([]);
 
   // Line & supervisor filters
   const [filterLineId, setFilterLineId] = useState('');
@@ -273,6 +283,10 @@ export const Reports: React.FC = () => {
     });
     setShowModal(true);
   }, []);
+
+  const openCreateComponent = useCallback(() => {
+    openModal(MODAL_KEYS.REPORTS_CREATE, { source: 'reports.page', reportType: 'component_injection' });
+  }, [openModal]);
 
   const openImport = useCallback(() => {
     openModal(MODAL_KEYS.REPORTS_IMPORT, { source: 'reports.page' });
@@ -336,6 +350,51 @@ export const Reports: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    catalogRawMaterialService.getAll()
+      .then((rows) => {
+        if (!mounted) return;
+        setRawMaterialOptions(
+          rows
+            .filter((row) => Boolean(row.id))
+            .map((row) => ({
+              id: String(row.id),
+              name: String(row.name || '').trim(),
+              code: String(row.code || '').trim(),
+            })),
+        );
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setRawMaterialOptions([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    categoryService.seedFromProductsModel()
+      .then(() => categoryService.getAll())
+      .then((rows) => {
+        if (!mounted) return;
+        const names = rows
+          .filter((row) => row.isActive !== false)
+          .map((row) => String(row.name || '').trim())
+          .filter(Boolean);
+        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCategoryOptions([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const loadRangeReports = useCallback(
     async (from: string, to: string, append = false) => {
       setRangeLoading(true);
@@ -363,20 +422,33 @@ export const Reports: React.FC = () => {
 
   const fetchReports = useCallback(
     async (from: string, to: string) => {
-      await loadRangeReports(from, to, false);
+      setRangeLoading(true);
+      setRangeError(null);
+      try {
+        const rows = await reportService.getByDateRange(from, to);
+        useAppStore.setState({ productionReports: rows });
+        setRangeCursor(null);
+        setRangeHasMore(false);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
+        setRangeError(message);
+      } finally {
+        setRangeLoading(false);
+      }
     },
-    [loadRangeReports],
+    [],
   );
 
   const allReports = viewMode === 'today' ? todayReports : productionReports;
   const productCategoryOptions = useMemo(() => {
     const unique = new Set<string>();
+    categoryOptions.forEach((category) => unique.add(category));
     _rawProducts.forEach((p: any) => {
       const category = String(p?.model ?? '').trim();
       if (category) unique.add(category);
     });
     return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
-  }, [_rawProducts]);
+  }, [_rawProducts, categoryOptions]);
   const productCategoryByProductId = useMemo(() => {
     const map = new Map<string, string>();
     _rawProducts.forEach((p: any) => {
@@ -385,16 +457,19 @@ export const Reports: React.FC = () => {
     });
     return map;
   }, [_rawProducts]);
-  const displayedReports = useMemo(() => {
+  const applyReportFilters = useCallback((source: ProductionReport[]) => {
     let list = myEmployeeId
-      ? allReports.filter((r) => r.employeeId === myEmployeeId)
-      : allReports;
+      ? source.filter((r) => r.employeeId === myEmployeeId)
+      : source;
     if (filterLineId) list = list.filter((r) => r.lineId === filterLineId);
     if (filterProductCategory) {
       list = list.filter((r) => (productCategoryByProductId.get(r.productId) || '') === filterProductCategory);
     }
     if (filterEmployeeId) list = list.filter((r) => r.employeeId === filterEmployeeId);
+    return list;
+  }, [myEmployeeId, filterLineId, filterProductCategory, filterEmployeeId, productCategoryByProductId]);
 
+  const sortReports = useCallback((source: ProductionReport[]) => {
     const getRegisteredAtMs = (report: ProductionReport): number => {
       const createdAt = report.createdAt as any;
       if (createdAt?.toDate) return createdAt.toDate().getTime();
@@ -407,12 +482,35 @@ export const Reports: React.FC = () => {
       return Number.isNaN(dateOnlyMs) ? 0 : dateOnlyMs;
     };
 
-    return [...list].sort((a, b) => {
+    return [...source].sort((a, b) => {
       const byCreatedAt = getRegisteredAtMs(b) - getRegisteredAtMs(a);
       if (byCreatedAt !== 0) return byCreatedAt;
       return (b.date || '').localeCompare(a.date || '');
     });
-  }, [allReports, myEmployeeId, filterLineId, filterProductCategory, filterEmployeeId, productCategoryByProductId]);
+  }, []);
+
+  const displayedReports = useMemo(
+    () => sortReports(applyReportFilters(allReports)),
+    [allReports, applyReportFilters, sortReports],
+  );
+
+  const categoryUsageCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    const scoped = myEmployeeId
+      ? allReports.filter((r) => r.employeeId === myEmployeeId)
+      : allReports;
+    const filteredByLineAndEmployee = scoped.filter((r) => {
+      if (filterLineId && r.lineId !== filterLineId) return false;
+      if (filterEmployeeId && r.employeeId !== filterEmployeeId) return false;
+      return true;
+    });
+    filteredByLineAndEmployee.forEach((report) => {
+      const category = (productCategoryByProductId.get(report.productId) || '').trim();
+      if (!category) return;
+      counts.set(category, (counts.get(category) || 0) + 1);
+    });
+    return counts;
+  }, [allReports, myEmployeeId, filterLineId, filterEmployeeId, productCategoryByProductId]);
 
   const linkedReportId = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -526,8 +624,13 @@ export const Reports: React.FC = () => {
   // ── Lookups ────────────────────────────────────────────────────────────────
 
   const getProductName = useCallback(
-    (pid: string) => _rawProducts.find((p) => p.id === pid)?.name ?? '—',
-    [_rawProducts]
+    (pid: string, reportType?: ProductionReport['reportType']) => {
+      if (reportType === 'component_injection') {
+        return rawMaterialOptions.find((m) => m.id === pid)?.name ?? '—';
+      }
+      return _rawProducts.find((p) => p.id === pid)?.name ?? '—';
+    },
+    [_rawProducts, rawMaterialOptions]
   );
   const getLineName = useCallback(
     (lid: string) => _rawLines.find((l) => l.id === lid)?.name ?? '—',
@@ -544,6 +647,7 @@ export const Reports: React.FC = () => {
       lineId: string;
       supervisorId: string;
       productId: string;
+      reportType: ProductionReport['reportType'];
       totalProducedQty: number;
       totalProductionWorkers: number;
       totalWorkersCount: number;
@@ -556,11 +660,13 @@ export const Reports: React.FC = () => {
       const lineId = String(report.lineId || '');
       const supervisorId = String(report.employeeId || '');
       const productId = String(report.productId || '');
-      const key = `${lineId}__${supervisorId}__${productId}`;
+      const reportType = report.reportType === 'component_injection' ? 'component_injection' : 'finished_product';
+      const key = `${lineId}__${supervisorId}__${productId}__${reportType}`;
       const current = grouped.get(key) || {
         lineId,
         supervisorId,
         productId,
+        reportType,
         totalProducedQty: 0,
         totalProductionWorkers: 0,
         totalWorkersCount: 0,
@@ -590,13 +696,14 @@ export const Reports: React.FC = () => {
       };
       const unitCost = row.totalProducedQty > 0 ? row.totalCost / row.totalProducedQty : 0;
       return {
-        key: `${row.lineId}__${row.supervisorId}__${row.productId}`,
+        key: `${row.lineId}__${row.supervisorId}__${row.productId}__${row.reportType || 'finished_product'}`,
         lineId: row.lineId,
         supervisorId: row.supervisorId,
         productId: row.productId,
+        reportType: row.reportType,
         lineName: getLineName(row.lineId),
         supervisorName: getEmployeeName(row.supervisorId),
-        productName: getProductName(row.productId),
+        productName: getProductName(row.productId, row.reportType),
         totalProducedQty: row.totalProducedQty,
         productionWorkers: row.totalProductionWorkers,
         avgWorkersPerReport: row.reportsCount > 0 ? row.totalWorkersCount / row.reportsCount : 0,
@@ -719,7 +826,7 @@ export const Reports: React.FC = () => {
         reportId: rid,
         date: report.date,
         lineName: getLineName(report.lineId),
-        productName: getProductName(report.productId),
+        productName: getProductName(report.productId, report.reportType),
         employeeName: getEmployeeName(report.employeeId),
         quantityProduced: report.quantityProduced || 0,
         wasteQuantity: deriveReportWaste(report as ProductionReport),
@@ -878,6 +985,10 @@ export const Reports: React.FC = () => {
     setViewMode('general');
   };
 
+  const handleBackToReports = () => {
+    setViewMode('range');
+  };
+
   const activeFilterCount = (filterLineId ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
   const handleLoadMoreRange = async () => {
     if (viewMode !== 'range' || rangeLoading || !rangeHasMore) return;
@@ -911,12 +1022,6 @@ export const Reports: React.FC = () => {
           onClick={handleShowMonthly}
         >
           شهري
-        </button>
-        <button
-          className={`erp-date-seg-btn${viewMode === 'general' ? ' active' : ''}`}
-          onClick={handleShowGeneralMonthly}
-        >
-          تقرير عام
         </button>
       </div>
 
@@ -960,7 +1065,9 @@ export const Reports: React.FC = () => {
       >
         <option value="">كل الفئات</option>
         {productCategoryOptions.map((category) => (
-          <option key={category} value={category}>{category}</option>
+          <option key={category} value={category}>
+            {category} ({categoryUsageCount.get(category) || 0})
+          </option>
         ))}
       </select>
 
@@ -995,6 +1102,7 @@ export const Reports: React.FC = () => {
     setEditId(report.id!);
     setSaveToast(null);
     setForm({
+      reportType: report.reportType === 'component_injection' ? 'component_injection' : 'finished_product',
       employeeId: report.employeeId,
       productId: report.productId,
       lineId: report.lineId,
@@ -1019,6 +1127,36 @@ export const Reports: React.FC = () => {
     [form.componentScrapItems],
   );
 
+  const injectionLineIds = useMemo(
+    () => new Set(lineStatuses.filter((status) => status.isInjectionLine).map((status) => status.lineId)),
+    [lineStatuses],
+  );
+
+  const selectableLines = useMemo(
+    () => (
+      form.reportType === 'component_injection'
+        ? _rawLines.filter((line) => line.id && injectionLineIds.has(line.id))
+        : _rawLines
+    ),
+    [form.reportType, _rawLines, injectionLineIds],
+  );
+
+  const selectableProducts = useMemo(
+    () => (
+      form.reportType === 'component_injection'
+        ? rawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
+        : _rawProducts.map((p) => ({ value: p.id!, label: p.name }))
+    ),
+    [form.reportType, rawMaterialOptions, _rawProducts],
+  );
+
+  useEffect(() => {
+    if (form.reportType !== 'component_injection') return;
+    if (form.lineId && !injectionLineIds.has(form.lineId)) {
+      setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
+    }
+  }, [form.reportType, form.lineId, injectionLineIds]);
+
   const openComponentScrapModal = useCallback(() => {
     if (!form.productId) {
       setSaveToastType('error');
@@ -1038,7 +1176,7 @@ export const Reports: React.FC = () => {
 
   const hasDuplicateLineSupervisorReport = useCallback(
     async (
-      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId'>,
+      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType'>,
       excludeReportId?: string | null,
     ) => {
       const sameDayReports = await reportService.getByDateRange(payload.date, payload.date);
@@ -1047,6 +1185,7 @@ export const Reports: React.FC = () => {
           r.lineId === payload.lineId &&
           r.employeeId === payload.employeeId &&
           r.productId === payload.productId &&
+          (r.reportType === 'component_injection' ? 'component_injection' : 'finished_product') === payload.reportType &&
           r.id !== excludeReportId,
       );
     },
@@ -1055,9 +1194,21 @@ export const Reports: React.FC = () => {
 
   const handleSave = async (printAfterSave = false) => {
     if (!form.lineId || !form.productId || !form.employeeId) return;
+    if (form.reportType === 'component_injection' && !canManageComponentInjectionReports) {
+      setSaveToastType('error');
+      setSaveToast('غير مصرح بإنشاء أو تعديل تقرير مكون الحقن');
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
     const payload = { ...form, workersCount: formWorkersTotal };
     const duplicated = await hasDuplicateLineSupervisorReport(
-      { date: payload.date, lineId: payload.lineId, employeeId: payload.employeeId, productId: payload.productId },
+      {
+        date: payload.date,
+        lineId: payload.lineId,
+        employeeId: payload.employeeId,
+        productId: payload.productId,
+        reportType: payload.reportType === 'component_injection' ? 'component_injection' : 'finished_product',
+      },
       editId,
     );
     if (duplicated) {
@@ -1089,7 +1240,12 @@ export const Reports: React.FC = () => {
         return;
       }
       setSaving(false);
-      setForm({ ...emptyForm, date: form.date, lineId: form.lineId });
+      setForm({
+        ...emptyForm,
+        reportType: form.reportType === 'component_injection' ? 'component_injection' : 'finished_product',
+        date: form.date,
+        lineId: form.lineId,
+      });
       setSaveToastType('success');
       setSaveToast('تم حفظ التقرير بنجاح');
       setTimeout(() => setSaveToast(null), 3000);
@@ -1483,7 +1639,7 @@ export const Reports: React.FC = () => {
       },
       { header: 'التاريخ', render: (r) => <span className="font-bold text-[var(--color-text)]">{r.date}</span> },
       { header: 'خط الإنتاج', render: (r) => <span className="font-medium">{getLineName(r.lineId)}</span> },
-      { header: 'المنتج', render: (r) => <span className="font-medium">{getProductName(r.productId)}</span> },
+      { header: 'المنتج', render: (r) => <span className="font-medium">{getProductName(r.productId, r.reportType)}</span> },
       { header: 'الموظف', render: (r) => <span className="font-medium">{getEmployeeName(r.employeeId)}</span> },
       {
         header: 'الكمية المنتجة',
@@ -1740,6 +1896,54 @@ export const Reports: React.FC = () => {
     </div>
   );
 
+  const handleExportFilteredReports = useCallback(async () => {
+    if (!canExportFromPage) return;
+    const from = viewMode === 'today' ? getOperationalDateString(8) : startDate;
+    const to = viewMode === 'today' ? getOperationalDateString(8) : endDate;
+    setExporting(true);
+    try {
+      const allRangeReports = await reportService.getByDateRange(from, to);
+      const filtered = sortReports(applyReportFilters(allRangeReports));
+      if (filtered.length === 0) {
+        setSaveToastType('error');
+        setSaveToast('لا توجد بيانات مطابقة للتصدير');
+        setTimeout(() => setSaveToast(null), 3000);
+        return;
+      }
+      const exportCosts = canViewCosts
+        ? buildReportsCosts(
+            filtered,
+            laborSettings?.hourlyRate ?? 0,
+            costCenters,
+            costCenterValues,
+            costAllocations,
+            supervisorHourlyRates,
+          )
+        : undefined;
+      exportReportsByDateRange(filtered, from, to, lookups, exportCosts);
+    } catch (error) {
+      setSaveToastType('error');
+      setSaveToast((error as Error)?.message || 'تعذر التصدير. حاول مرة أخرى.');
+      setTimeout(() => setSaveToast(null), 3500);
+    } finally {
+      setExporting(false);
+    }
+  }, [
+    canExportFromPage,
+    viewMode,
+    startDate,
+    endDate,
+    sortReports,
+    applyReportFilters,
+    canViewCosts,
+    laborSettings,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    supervisorHourlyRates,
+    lookups,
+  ]);
+
   const reportTableFooter = (
     <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between">
       <span className="text-sm text-[var(--color-text-muted)] font-bold">إجمالي <span className="text-primary">{displayedReports.length}</span> تقرير</span>
@@ -1813,6 +2017,11 @@ export const Reports: React.FC = () => {
         title="تقارير الإنتاج"
         subtitle="إنشاء ومراجعة تقارير الإنتاج اليومية"
         icon="bar_chart"
+        secondaryAction={can('reports.edit') ? {
+          label: 'عرض التقرير العام الشهري',
+          icon: 'insights',
+          onClick: () => { void handleShowGeneralMonthly(); },
+        } : undefined}
         primaryAction={can('reports.create') ? {
           label: 'إنشاء تقرير',
           icon: 'add',
@@ -1821,10 +2030,11 @@ export const Reports: React.FC = () => {
         } : undefined}
         moreActions={[
           {
-            label: 'عرض التقرير العام الشهري',
-            icon: 'insights',
-            group: 'أدوات',
-            onClick: () => { void handleShowGeneralMonthly(); },
+            label: 'إنشاء تقرير مكون حقن',
+            icon: 'add_circle',
+            group: 'التقارير',
+            hidden: !canManageComponentInjectionReports,
+            onClick: openCreateComponent,
           },
           {
             label: 'تقرير المصنع العام Excel',
@@ -1838,7 +2048,7 @@ export const Reports: React.FC = () => {
             icon: 'table_chart',
             group: 'تصدير',
             hidden: !canExportFromPage || displayedReports.length === 0,
-            onClick: () => exportReportsByDateRange(displayedReports, startDate, endDate, lookups, canViewCosts ? reportCosts : undefined),
+            onClick: () => { void handleExportFilteredReports(); },
           },
           {
             label: 'أوامر الشغل Excel',
@@ -1924,6 +2134,10 @@ export const Reports: React.FC = () => {
       {viewMode === 'general' ? (
         <Card className="!p-0 overflow-hidden">
           <div className="p-4 border-b border-[var(--color-border)] bg-[#f8f9fa]/40 flex flex-col md:flex-row md:items-center gap-3">
+            <Button variant="secondary" onClick={handleBackToReports}>
+              <span className="material-icons-round text-sm">arrow_forward</span>
+              رجوع إلى التقارير
+            </Button>
             <input
               className="w-full md:max-w-md rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)]"
               value={factorySearch}
@@ -2048,14 +2262,18 @@ export const Reports: React.FC = () => {
       </div>
 
       {/* ══ Create / Edit Report Modal ══ */}
-      {showModal && (can("reports.create") || can("reports.edit")) && (
+      {showModal && (can("reports.create") || can("reports.edit") || canManageComponentInjectionReports) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div
             className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-              <h3 className="text-lg font-bold">{editId ? 'تعديل تقرير إنتاج' : 'إنشاء تقرير إنتاج'}</h3>
+              <h3 className="text-lg font-bold">
+                {editId
+                  ? (form.reportType === 'component_injection' ? 'تعديل تقرير مكون حقن' : 'تعديل تقرير إنتاج')
+                  : (form.reportType === 'component_injection' ? 'إنشاء تقرير مكون حقن' : 'إنشاء تقرير إنتاج')}
+              </h3>
               <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
@@ -2070,10 +2288,30 @@ export const Reports: React.FC = () => {
                   </button>
                 </div>
               )}
+              {canChooseReportType && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع التقرير</label>
+                  <select
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
+                    value={form.reportType}
+                    onChange={(e) => {
+                      const nextType = e.target.value === 'component_injection' ? 'component_injection' : 'finished_product';
+                      if (nextType === 'component_injection' && !canManageComponentInjectionReports) return;
+                      setForm({ ...form, reportType: nextType, workOrderId: '' });
+                    }}
+                  >
+                    <option value="finished_product">تقرير إنتاج عادي</option>
+                    <option value="component_injection">تقرير مكون حقن</option>
+                  </select>
+                </div>
+              )}
               {/* Work Order Selector */}
               {!editId && can('workOrders.view') && (() => {
                 const activeWOs = workOrders.filter((w) => {
                   if (w.status !== 'pending' && w.status !== 'in_progress') return false;
+                  const woType = w.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
+                  const formType = form.reportType === 'component_injection' ? 'component_injection' : 'finished_product';
+                  if (woType !== formType) return false;
                   if (!isSupervisorReporter || !currentEmployee?.id) return true;
                   return w.supervisorId === currentEmployee.id;
                 });
@@ -2098,6 +2336,7 @@ export const Reports: React.FC = () => {
                           workOrderId: wo.id ?? '',
                           lineId: wo.lineId,
                           productId: wo.productId,
+                          reportType: wo.workOrderType === 'component_injection' ? 'component_injection' : form.reportType,
                           employeeId: isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
                         });
                       }}
@@ -2148,19 +2387,23 @@ export const Reports: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                    {form.reportType === 'component_injection' ? 'الخط *' : 'خط الإنتاج *'}
+                  </label>
                   <SearchableSelect
                     placeholder="اختر الخط"
-                    options={_rawLines.map((l) => ({ value: l.id!, label: l.name }))}
+                    options={selectableLines.map((l) => ({ value: l.id!, label: l.name }))}
                     value={form.lineId}
                     onChange={(v) => setForm({ ...form, lineId: v, workOrderId: '' })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                    {form.reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}
+                  </label>
                   <SearchableSelect
-                    placeholder="اختر المنتج"
-                    options={_rawProducts.map((p) => ({ value: p.id!, label: p.name }))}
+                    placeholder={form.reportType === 'component_injection' ? 'اختر المكون' : 'اختر المنتج'}
+                    options={selectableProducts}
                     value={form.productId}
                     onChange={(v) => setForm({ ...form, productId: v, workOrderId: '' })}
                   />

@@ -37,6 +37,7 @@ const DEFAULT_WORKDAY_END = '16:00';
 
 const EMPTY_FORM = {
   planId: '',
+  workOrderType: 'finished_product' as 'finished_product' | 'component_injection',
   productId: '',
   lineId: '',
   supervisorId: '',
@@ -54,6 +55,8 @@ export const WorkOrders: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const navigate = useNavigate();
   const { can } = usePermission();
+  const canManageComponentInjectionWorkOrders = can('workOrders.componentInjection.manage');
+  const canCreateWorkOrder = can('workOrders.create') || canManageComponentInjectionWorkOrders;
   const {
     currentEmployee,
     _rawProducts,
@@ -115,6 +118,12 @@ export const WorkOrders: React.FC = () => {
   const [workOrdersHasMore, setWorkOrdersHasMore] = useState(false);
   const [workOrdersLoading, setWorkOrdersLoading] = useState(false);
   const workOrdersCursorRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!can('workOrders.create') && canManageComponentInjectionWorkOrders) {
+      setForm((prev) => ({ ...prev, workOrderType: 'component_injection' }));
+    }
+  }, [can, canManageComponentInjectionWorkOrders]);
 
   const loadWorkOrders = useCallback(async (append = false) => {
     setWorkOrdersLoading(true);
@@ -235,6 +244,7 @@ export const WorkOrders: React.FC = () => {
     setEditingId(wo.id!);
     setForm({
       planId: wo.planId || '',
+      workOrderType: wo.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product',
       productId: wo.productId,
       lineId: wo.lineId,
       supervisorId: wo.supervisorId,
@@ -254,12 +264,17 @@ export const WorkOrders: React.FC = () => {
 
   const handleSave = useCallback(async () => {
     if (!form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0) return;
+    if (form.workOrderType === 'component_injection' && !canManageComponentInjectionWorkOrders) {
+      setSaveError('غير مصرح بإنشاء أو تعديل أمر شغل مكون الحقن.');
+      return;
+    }
     setSaving(true);
     setSaveToast(null);
     setSaveError(null);
     try {
       if (editingId) {
         await updateWorkOrder(editingId, {
+          workOrderType: form.workOrderType,
           productId: form.productId,
           lineId: form.lineId,
           supervisorId: form.supervisorId,
@@ -287,6 +302,7 @@ export const WorkOrders: React.FC = () => {
         const createdId = await createWorkOrder({
           workOrderNumber: woNumber,
           ...(form.planId ? { planId: form.planId } : {}),
+          workOrderType: form.workOrderType,
           productId: form.productId,
           lineId: form.lineId,
           supervisorId: form.supervisorId,
@@ -329,6 +345,7 @@ export const WorkOrders: React.FC = () => {
     createWorkOrder,
     updateWorkOrder,
     loadWorkOrders,
+    canManageComponentInjectionWorkOrders,
   ]);
 
   const handleDelete = useCallback(async (id: string) => {
@@ -499,7 +516,7 @@ export const WorkOrders: React.FC = () => {
         title="أوامر الشغل"
         subtitle="إدارة ومتابعة أوامر التشغيل لخطوط الإنتاج"
         icon="assignment"
-        primaryAction={can('workOrders.create') ? {
+        primaryAction={canCreateWorkOrder ? {
           label: 'أمر شغل جديد',
           icon: 'add',
           onClick: openCreate,
@@ -844,6 +861,7 @@ export const WorkOrders: React.FC = () => {
                   setForm((f) => ({
                     ...f,
                     planId: e.target.value,
+                    workOrderType: plan?.planType === 'component_injection' ? 'component_injection' : f.workOrderType,
                     productId: plan?.productId || f.productId,
                   }));
                 }} className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold">
@@ -853,6 +871,25 @@ export const WorkOrders: React.FC = () => {
                       {shortProductName(p.productId)} — {formatNumber(p.plannedQuantity)} وحدة
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع أمر الشغل</label>
+                <select
+                  value={form.workOrderType}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
+                  }))}
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+                >
+                  {can('workOrders.create') && (
+                    <option value="finished_product">أمر شغل منتج نهائي</option>
+                  )}
+                  {canManageComponentInjectionWorkOrders && (
+                    <option value="component_injection">أمر شغل مكون حقن</option>
+                  )}
                 </select>
               </div>
 

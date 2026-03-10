@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -14,6 +14,7 @@ const DEFAULT_WORKDAY_END = '16:00';
 
 type WorkOrderFormState = {
   planId: string;
+  workOrderType: 'finished_product' | 'component_injection';
   productId: string;
   lineId: string;
   supervisorId: string;
@@ -29,6 +30,7 @@ type WorkOrderFormState = {
 
 const emptyForm = (): WorkOrderFormState => ({
   planId: '',
+  workOrderType: 'finished_product',
   productId: '',
   lineId: '',
   supervisorId: '',
@@ -59,6 +61,8 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canCreateFinishedWorkOrders = can('workOrders.create');
+  const canManageComponentInjectionWorkOrders = can('workOrders.componentInjection.manage');
 
   const supervisors = useMemo(
     () => employees.filter((e) => e.level === 2 && e.isActive),
@@ -100,8 +104,15 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     [selectedPlan],
   );
 
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders) {
+      setForm((prev) => ({ ...prev, workOrderType: 'component_injection' }));
+    }
+  }, [isOpen, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
+
   if (!isOpen) return null;
-  if (!can('workOrders.create')) return null;
+  if (!canCreateFinishedWorkOrders && !canManageComponentInjectionWorkOrders) return null;
 
   const handleClose = () => {
     if (saving) return;
@@ -112,6 +123,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0) return;
+    if (form.workOrderType === 'component_injection' && !canManageComponentInjectionWorkOrders) {
+      setError('غير مصرح بإنشاء أمر شغل مكون الحقن');
+      return;
+    }
     setSaving(true);
     setMessage(null);
     setError(null);
@@ -132,6 +147,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       const createdId = await createWorkOrder({
         workOrderNumber: woNumber,
         ...(form.planId ? { planId: form.planId } : {}),
+        workOrderType: form.workOrderType,
         productId: form.productId,
         lineId: form.lineId,
         supervisorId: form.supervisorId,
@@ -194,6 +210,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                 setForm((f) => ({
                   ...f,
                   planId: value,
+                  workOrderType: plan?.planType === 'component_injection' ? 'component_injection' : f.workOrderType,
                   productId: plan?.productId || f.productId,
                   lineId: plan?.lineId || f.lineId,
                 }));
@@ -210,6 +227,25 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                 {lines.find((l) => l.id === selectedPlan.lineId)?.name || 'خط غير معروف'}
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع أمر الشغل</label>
+            <select
+              value={form.workOrderType}
+              onChange={(e) => setForm((f) => ({
+                ...f,
+                workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
+              }))}
+              className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+            >
+              {canCreateFinishedWorkOrders && (
+                <option value="finished_product">أمر شغل منتج نهائي</option>
+              )}
+              {canManageComponentInjectionWorkOrders && (
+                <option value="component_injection">أمر شغل مكون حقن</option>
+              )}
+            </select>
           </div>
 
           <div>

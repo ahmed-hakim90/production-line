@@ -16,23 +16,25 @@ import { useAppStore } from '../store/useAppStore';
 export type Permission =
   | 'dashboard.view'
   | 'products.view' | 'products.create' | 'products.edit' | 'products.delete' | 'products.createRawMaterial' | 'products.rawMaterials.view'
+  | 'catalog.categories.view' | 'catalog.categories.create' | 'catalog.categories.edit' | 'catalog.categories.delete'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
   | 'inventory.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
   | 'lineWorkers.view'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost'
+  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
+  | 'assets.view' | 'assets.create' | 'assets.edit' | 'assets.delete' | 'assets.depreciation.run' | 'assets.depreciation.view'
   | 'settings.view' | 'settings.edit'
   | 'users.manage'
   | 'roles.view' | 'roles.manage'
   | 'activityLog.view'
   | 'quickAction.view'
   | 'costs.view' | 'costs.manage' | 'costs.closePeriod'
-  | 'plans.view' | 'plans.create' | 'plans.edit'
-  | 'workOrders.view' | 'workOrders.create' | 'workOrders.edit' | 'workOrders.delete' | 'workOrders.viewCost'
+  | 'plans.view' | 'plans.create' | 'plans.edit' | 'plans.componentInjection.manage'
+  | 'workOrders.view' | 'workOrders.create' | 'workOrders.edit' | 'workOrders.delete' | 'workOrders.viewCost' | 'workOrders.componentInjection.manage'
   | 'quality.view' | 'quality.inspect' | 'quality.approve' | 'quality.print' | 'quality.manageWorkers'
   | 'quality.settings.view' | 'quality.settings.manage'
   | 'quality.workers.view' | 'quality.workers.manage'
@@ -80,8 +82,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     ],
   },
   {
-    key: 'production',
-    label: 'الإنتاج',
+    key: 'catalog',
+    label: 'الكتالوج',
     permissions: [
       { key: 'products.view', label: 'عرض المنتجات' },
       { key: 'products.rawMaterials.view', label: 'عرض صفحة المواد الخام (الإنتاج)' },
@@ -89,6 +91,16 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'products.createRawMaterial', label: 'إضافة مادة خام' },
       { key: 'products.edit', label: 'تعديل المنتجات' },
       { key: 'products.delete', label: 'حذف المنتجات' },
+      { key: 'catalog.categories.view', label: 'عرض فئات الكتالوج' },
+      { key: 'catalog.categories.create', label: 'إنشاء فئة كتالوج' },
+      { key: 'catalog.categories.edit', label: 'تعديل فئات الكتالوج' },
+      { key: 'catalog.categories.delete', label: 'حذف فئات الكتالوج' },
+    ],
+  },
+  {
+    key: 'production',
+    label: 'الإنتاج',
+    permissions: [
       { key: 'lines.view', label: 'عرض خطوط الإنتاج' },
       { key: 'lines.create', label: 'إنشاء خط إنتاج' },
       { key: 'lines.edit', label: 'تعديل خطوط الإنتاج' },
@@ -99,6 +111,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'plans.view', label: 'عرض خطط الإنتاج' },
       { key: 'plans.create', label: 'إنشاء خطة إنتاج' },
       { key: 'plans.edit', label: 'تعديل خطط الإنتاج' },
+      { key: 'plans.componentInjection.manage', label: 'إدارة خطط إنتاج مكونات الحقن' },
       { key: 'workOrders.view', label: 'عرض أوامر الشغل' },
       { key: 'workOrders.create', label: 'إنشاء أمر شغل' },
       { key: 'workOrders.edit', label: 'تعديل أمر شغل' },
@@ -109,6 +122,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.edit', label: 'تعديل التقارير' },
       { key: 'reports.delete', label: 'حذف التقارير' },
       { key: 'reports.viewCost', label: 'عرض عمود التكلفة' },
+      { key: 'reports.componentInjection.manage', label: 'إدارة تقارير مكونات الحقن' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
@@ -195,6 +209,12 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'costs.view', label: 'عرض التكاليف' },
       { key: 'costs.manage', label: 'إدارة التكاليف' },
       { key: 'costs.closePeriod', label: 'إغلاق الفترة المحاسبية' },
+      { key: 'assets.view', label: 'عرض الأصول' },
+      { key: 'assets.create', label: 'إنشاء أصل' },
+      { key: 'assets.edit', label: 'تعديل أصل' },
+      { key: 'assets.delete', label: 'حذف أصل' },
+      { key: 'assets.depreciation.view', label: 'عرض تقرير الإهلاك' },
+      { key: 'assets.depreciation.run', label: 'تشغيل احتساب الإهلاك' },
     ],
   },
   {
@@ -223,6 +243,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
 const PERMISSION_GROUP_ORDER: string[] = [
   // Dashboards
   'dashboards',
+  // Catalog
+  'catalog',
   // Production
   'production',
   // Inventory
@@ -282,10 +304,18 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
     ],
   },
   {
+    key: 'catalog',
+    label: 'الكتالوج',
+    items: [
+      { path: '/products', icon: 'inventory_2', label: 'المنتجات', permission: 'products.view' },
+      { path: '/products/raw-materials', icon: 'science', label: 'المواد الخام', permission: 'products.rawMaterials.view' },
+      { path: '/catalog/categories', icon: 'category', label: 'الفئات', permission: 'catalog.categories.view' },
+    ],
+  },
+  {
     key: 'production',
     label: 'الإنتاج',
     items: [
-      { path: '/products', icon: 'inventory_2', label: 'المنتجات', permission: 'products.view' },
       { path: '/lines', icon: 'precision_manufacturing', label: 'خطوط الإنتاج', permission: 'lines.view' },
       { path: '/production-plans', icon: 'event_note', label: 'خطط الإنتاج', permission: 'plans.view' },
       { path: '/work-orders', icon: 'assignment', label: 'أوامر الشغل', permission: 'workOrders.view' },
@@ -335,6 +365,8 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
     items: [
       { path: '/cost-centers', icon: 'account_balance', label: 'مراكز التكلفة', permission: 'costs.view' },
       { path: '/cost-settings', icon: 'payments', label: 'إعدادات التكلفة', permission: 'costs.manage' },
+      { path: '/costs/assets', icon: 'precision_manufacturing', label: 'الأصول', permission: 'assets.view' },
+      { path: '/costs/depreciation-report', icon: 'receipt_long', label: 'تقرير الإهلاك', permission: 'assets.depreciation.view' },
     ],
   },
   {
@@ -364,6 +396,7 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
 
 const SIDEBAR_GROUP_ORDER: string[] = [
   'dashboards',
+  'catalog',
   'production',
   'inventory',
   'quality',
@@ -374,11 +407,12 @@ const SIDEBAR_GROUP_ORDER: string[] = [
 
 const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   dashboards: ['/', '/employee-dashboard', '/factory-dashboard', '/admin-dashboard'],
-  production: ['/products', '/lines', '/production-plans', '/work-orders', '/supervisors', '/production-workers', '/reports', '/quick-action'],
+  catalog: ['/products', '/products/raw-materials', '/catalog/categories'],
+  production: ['/lines', '/production-plans', '/work-orders', '/supervisors', '/production-workers', '/reports', '/quick-action'],
   inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/inventory/movements', '/inventory/counts'],
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
   hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
-  costs: ['/cost-centers', '/cost-settings'],
+  costs: ['/cost-centers', '/cost-settings', '/costs/assets', '/costs/depreciation-report'],
   system: ['/system/users', '/roles', '/activity-log', '/settings'],
 };
 
@@ -416,6 +450,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/products': 'products.view',
   '/products/raw-materials': 'products.rawMaterials.view',
   '/products/:id': 'products.view',
+  '/catalog/categories': 'catalog.categories.view',
   '/inventory': 'inventory.view',
   '/inventory/balances': 'inventory.view',
   '/inventory/transactions': 'inventory.view',
@@ -434,6 +469,9 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/self-service': 'selfService.view',
   '/reports': 'reports.view',
   '/quick-action': 'quickAction.view',
+  '/costs/assets': 'assets.view',
+  '/costs/assets/:id': 'assets.view',
+  '/costs/depreciation-report': 'assets.depreciation.view',
   '/activity-log': 'activityLog.view',
   '/production-plans': 'plans.view',
   '/work-orders': 'workOrders.view',
@@ -520,7 +558,16 @@ export function checkPermission(
   if (permission === 'users.manage') {
     return permissions['roles.manage'] === true;
   }
-
+  if (permission === 'catalog.categories.view') {
+    return permissions['products.view'] === true;
+  }
+  if (
+    permission === 'catalog.categories.create' ||
+    permission === 'catalog.categories.edit' ||
+    permission === 'catalog.categories.delete'
+  ) {
+    return permissions['products.edit'] === true || permissions['products.create'] === true;
+  }
   return false;
 }
 

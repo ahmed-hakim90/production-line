@@ -7,6 +7,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Dashboard } from './modules/dashboards/pages/Dashboard';
 import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
 import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
+import { CATALOG_ROUTES } from './modules/catalog/routes';
 import { PRODUCTION_ROUTES } from './modules/production/routes';
 import { QUALITY_ROUTES } from './modules/quality/routes';
 import { HR_ROUTES } from './modules/hr/routes';
@@ -105,6 +106,7 @@ const HomeRedirect: React.FC = () => {
 
 const PROTECTED_ROUTES: AppRouteDef[] = [
   ...DASHBOARD_ROUTES,
+  ...CATALOG_ROUTES,
   ...PRODUCTION_ROUTES,
   ...QUALITY_ROUTES,
   ...HR_ROUTES,
@@ -353,8 +355,8 @@ const App: React.FC = () => {
   ]);
 
   useEffect(() => {
-    if (!isAuthenticated || isPendingApproval || !uid || !currentEmployeeId) return;
-    void pushService.registerDevice(uid, currentEmployeeId);
+    if (!isAuthenticated || isPendingApproval || !uid) return;
+    void pushService.registerDevice(uid, currentEmployeeId || '');
   }, [isAuthenticated, isPendingApproval, uid, currentEmployeeId]);
 
   useEffect(() => {

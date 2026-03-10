@@ -38,6 +38,9 @@ export const MonthlyProductionCosts: React.FC = () => {
     costAllocations,
     laborSettings,
     systemSettings,
+    assets,
+    assetDepreciations,
+    fetchDepreciationReport,
   } = useShallowStore((s) => ({
     products: s.products,
     _rawProducts: s._rawProducts,
@@ -47,6 +50,9 @@ export const MonthlyProductionCosts: React.FC = () => {
     costAllocations: s.costAllocations,
     laborSettings: s.laborSettings,
     systemSettings: s.systemSettings,
+    assets: s.assets,
+    assetDepreciations: s.assetDepreciations,
+    fetchDepreciationReport: s.fetchDepreciationReport,
   }));
 
   const supervisorHourlyRates = useMemo(
@@ -122,7 +128,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         if (!indirectCache.has(cacheKey)) {
           indirectCache.set(
             cacheKey,
-            calculateDailyIndirectCost(r.lineId, reportMonth, costCenters, costCenterValues, costAllocations)
+            calculateDailyIndirectCost(r.lineId, reportMonth, costCenters, costCenterValues, costAllocations, assets, assetDepreciations)
           );
         }
         const lineIndirect = indirectCache.get(cacheKey) || 0;
@@ -151,9 +157,12 @@ export const MonthlyProductionCosts: React.FC = () => {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [month, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates]);
+  }, [month, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates, assets, assetDepreciations]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
+  useEffect(() => {
+    void fetchDepreciationReport(month);
+  }, [month, fetchDepreciationReport]);
 
   const productNameMap = new Map(products.map((p) => [p.id, p.name]));
   const productCodeMap = new Map(products.map((p) => [p.id, p.code || '']));
@@ -210,7 +219,9 @@ export const MonthlyProductionCosts: React.FC = () => {
         costCenters,
         costCenterValues,
         costAllocations,
-        supervisorHourlyRates
+        supervisorHourlyRates,
+        assets,
+        assetDepreciations,
       );
       await fetchRecords();
     } catch {

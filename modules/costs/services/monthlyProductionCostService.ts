@@ -15,6 +15,8 @@ import type {
   CostCenter,
   CostCenterValue,
   CostAllocation,
+  Asset,
+  AssetDepreciation,
 } from '../../../types';
 import {
   buildSupervisorIndirectShareMap,
@@ -76,6 +78,8 @@ export const monthlyProductionCostService = {
     costCenterValues: CostCenterValue[],
     costAllocations: CostAllocation[],
     supervisorHourlyRates?: Map<string, number>,
+    assets: Asset[] = [],
+    assetDepreciations: AssetDepreciation[] = [],
   ): Promise<MonthlyProductionCost | null> {
     if (!isConfigured) return null;
 
@@ -133,7 +137,7 @@ export const monthlyProductionCostService = {
       if (!indirectCache.has(cacheKey)) {
         indirectCache.set(
           cacheKey,
-          calculateDailyIndirectCost(r.lineId, rMonth, costCenters, costCenterValues, costAllocations),
+          calculateDailyIndirectCost(r.lineId, rMonth, costCenters, costCenterValues, costAllocations, assets, assetDepreciations),
         );
       }
       const lineIndirect = indirectCache.get(cacheKey) || 0;
@@ -178,6 +182,8 @@ export const monthlyProductionCostService = {
     costCenterValues: CostCenterValue[],
     costAllocations: CostAllocation[],
     supervisorHourlyRates?: Map<string, number>,
+    assets: Asset[] = [],
+    assetDepreciations: AssetDepreciation[] = [],
   ): Promise<MonthlyProductionCost[]> {
     const results: MonthlyProductionCost[] = [];
     for (const pid of productIds) {
@@ -189,6 +195,8 @@ export const monthlyProductionCostService = {
         costCenterValues,
         costAllocations,
         supervisorHourlyRates,
+        assets,
+        assetDepreciations,
       );
       if (result) results.push(result);
     }

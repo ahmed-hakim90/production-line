@@ -171,3 +171,22 @@ export const updateUserCredentialsHard = async (input: {
     throw normalizeCallableError(error);
   }
 };
+
+export const runAssetDepreciationCallable = async (input?: { period?: string }): Promise<{
+  period: string;
+  processedAssets: number;
+  createdEntries: number;
+  skippedEntries: number;
+}> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { period?: string } | undefined,
+    { period: string; processedAssets: number; createdEntries: number; skippedEntries: number }
+  >(functionsClient, 'runAssetDepreciationJob');
+  try {
+    const result = await callable(input);
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};

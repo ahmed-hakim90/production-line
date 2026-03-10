@@ -107,7 +107,7 @@ export const Lines: React.FC = () => {
 
   // ── Set Target Modal ──
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);
-  const [targetForm, setTargetForm] = useState({ currentProductId: '', targetTodayQty: 0 });
+  const [targetForm, setTargetForm] = useState({ currentProductId: '', targetTodayQty: 0, isInjectionLine: false });
   const [targetSaving, setTargetSaving] = useState(false);
 
   const normalizeLineCode = (value: string) => value.trim().toUpperCase();
@@ -131,6 +131,7 @@ export const Lines: React.FC = () => {
     setTargetForm({
       currentProductId: existing?.currentProductId ?? '',
       targetTodayQty: existing?.targetTodayQty ?? 0,
+      isInjectionLine: Boolean(existing?.isInjectionLine),
     });
     setTargetModal({ lineId, lineName });
   };
@@ -143,12 +144,14 @@ export const Lines: React.FC = () => {
       await updateLineStatus(existing.id, {
         currentProductId: targetForm.currentProductId,
         targetTodayQty: targetForm.targetTodayQty,
+        isInjectionLine: targetForm.isInjectionLine,
       });
     } else {
       await createLineStatus({
         lineId: targetModal.lineId,
         currentProductId: targetForm.currentProductId,
         targetTodayQty: targetForm.targetTodayQty,
+        isInjectionLine: targetForm.isInjectionLine,
       });
     }
     setTargetSaving(false);
@@ -999,6 +1002,17 @@ export const Lines: React.FC = () => {
                   placeholder="مثال: 500"
                 />
               </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">إعدادات خط الحقن</label>
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
+                  <input
+                    type="checkbox"
+                    checked={targetForm.isInjectionLine}
+                    onChange={(e) => setTargetForm({ ...targetForm, isInjectionLine: e.target.checked })}
+                  />
+                  هذا الخط يعتبر خط حقن (يظهر فقط في تقرير مكون الحقن)
+                </label>
+              </div>
               {targetForm.currentProductId && targetForm.targetTodayQty > 0 && (
                 <div className="bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
                   <span className="material-icons-round text-primary text-lg">info</span>
@@ -1014,7 +1028,7 @@ export const Lines: React.FC = () => {
               <Button
                 variant="primary"
                 onClick={handleSaveTarget}
-                disabled={targetSaving || !targetForm.currentProductId || !targetForm.targetTodayQty}
+                disabled={targetSaving}
               >
                 {targetSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
                 <span className="material-icons-round text-sm">flag</span>

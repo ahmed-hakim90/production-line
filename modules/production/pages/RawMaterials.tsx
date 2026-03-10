@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/UI';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { RawMaterial } from '../../inventory/types';
@@ -86,6 +87,8 @@ const normalizeText = (value: string) =>
 export const RawMaterials: React.FC = () => {
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [rows, setRows] = useState<RawMaterial[]>([]);
   const [usageByMaterialId, setUsageByMaterialId] = useState<Record<string, UsageInfo>>({});
   const [loading, setLoading] = useState(false);
@@ -205,6 +208,14 @@ export const RawMaterials: React.FC = () => {
     };
     openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE, payload);
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') !== 'create') return;
+    if (!can('inventory.items.manage')) return;
+    openCreateModal();
+    navigate('/products/raw-materials', { replace: true });
+  }, [location.search, can, navigate]);
 
   const openEditModal = (rawMaterial: RawMaterial) => {
     setFeedback(null);

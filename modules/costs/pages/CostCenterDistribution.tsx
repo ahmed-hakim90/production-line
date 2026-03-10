@@ -14,6 +14,8 @@ export const CostCenterDistribution: React.FC = () => {
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
+  const assets = useAppStore((s) => s.assets);
+  const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const _rawLines = useAppStore((s) => s._rawLines);
   const saveCostCenterValue = useAppStore((s) => s.saveCostCenterValue);
   const saveCostAllocation = useAppStore((s) => s.saveCostAllocation);
@@ -24,6 +26,7 @@ export const CostCenterDistribution: React.FC = () => {
   const [monthlyAmount, setMonthlyAmount] = useState<number>(0);
   const [workingDays, setWorkingDays] = useState<number>(0);
   const [allocations, setAllocations] = useState<Record<string, number>>({});
+  const [selectedLineId, setSelectedLineId] = useState('');
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState('');
   const [editMode, setEditMode] = useState(false);
@@ -58,10 +61,16 @@ export const CostCenterDistribution: React.FC = () => {
   React.useEffect(() => {
     const map: Record<string, number> = {};
     _rawLines.forEach((l) => { map[l.id!] = 0; });
+    let initialSelectedLineId = '';
     if (existingAllocation) {
-      existingAllocation.allocations.forEach((a) => { map[a.lineId] = a.percentage; });
+      const firstAllocation = existingAllocation.allocations[0];
+      if (firstAllocation?.lineId) {
+        map[firstAllocation.lineId] = firstAllocation.percentage;
+        initialSelectedLineId = firstAllocation.lineId;
+      }
     }
     setAllocations(map);
+    setSelectedLineId(initialSelectedLineId);
   }, [existingAllocation, _rawLines]);
 
   React.useEffect(() => {
@@ -82,11 +91,27 @@ export const CostCenterDistribution: React.FC = () => {
     setCopyNotice(null);
   }, [selectedMonth]);
 
-  const totalPercentage = useMemo(
-    () => Object.values(allocations).reduce((s: number, v: number) => s + (v || 0), 0),
-    [allocations]
+  const selectedLine = useMemo(
+    () => _rawLines.find((line) => line.id === selectedLineId) ?? null,
+    [_rawLines, selectedLineId]
   );
+  const selectedLinePercentage = allocations[selectedLineId] || 0;
+  const totalPercentage = selectedLine ? selectedLinePercentage : 0;
   const remainingPercentage = 100 - totalPercentage;
+  const centerMonthlyDepreciation = useMemo(() => {
+    if (!id) return 0;
+    const assetById = new Map(
+      assets
+        .filter((asset) => asset.id && asset.centerId === id)
+        .map((asset) => [String(asset.id), asset])
+    );
+    return assetDepreciations.reduce((sum, entry) => {
+      if (entry.period !== selectedMonth) return sum;
+      if (!assetById.has(String(entry.assetId || ''))) return sum;
+      return sum + Number(entry.depreciationAmount || 0);
+    }, 0);
+  }, [assetDepreciations, assets, id, selectedMonth]);
+  const effectiveMonthlyAmount = monthlyAmount + centerMonthlyDepreciation;
   const monthDays = getDaysInMonth(selectedMonth);
   const normalizedWorkingDays = Number.isFinite(workingDays) ? Math.round(workingDays) : 0;
   const appliedWorkingDays = normalizedWorkingDays > 0 ? normalizedWorkingDays : monthDays;
@@ -104,9 +129,9 @@ export const CostCenterDistribution: React.FC = () => {
   const handleSaveAll = async () => {
     if (!id || totalPercentage > 100) return;
     setSaving(true);
-    const allocs = Object.entries(allocations)
-      .filter(([, pct]) => (pct as number) > 0)
-      .map(([lineId, percentage]) => ({ lineId, percentage: percentage as number }));
+    const allocs = selectedLineId && selectedLinePercentage > 0
+      ? [{ lineId: selectedLineId, percentage: selectedLinePercentage }]
+      : [];
     await saveCostCenterValue(
       { costCenterId: id, month: selectedMonth, amount: monthlyAmount, workingDays: Math.min(31, Math.max(1, appliedWorkingDays)) },
       existingValue?.id
@@ -139,9 +164,13 @@ export const CostCenterDistribution: React.FC = () => {
       copied[line.id!] = 0;
     });
     if (sourceAllocation) {
-      sourceAllocation.allocations.forEach((allocation) => {
-        copied[allocation.lineId] = Number(allocation.percentage) || 0;
-      });
+      const firstAllocation = sourceAllocation.allocations[0];
+      if (firstAllocation?.lineId) {
+        copied[firstAllocation.lineId] = Number(firstAllocation.percentage) || 0;
+        setSelectedLineId(firstAllocation.lineId);
+      } else {
+        setSelectedLineId('');
+      }
       setAllocations(copied);
     }
 
@@ -301,7 +330,7 @@ export const CostCenterDistribution: React.FC = () => {
           <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center w-full sm:w-auto sm:min-w-[120px]">
             <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">يومي ({appliedWorkingDays} يوم)</p>
             <p className="text-lg font-bold text-primary">
-              {monthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(monthlyAmount / appliedWorkingDays) : '—'}
+              {effectiveMonthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(effectiveMonthlyAmount / appliedWorkingDays) : '—'}
             </p>
           </div>
           {canManage && (
@@ -311,6 +340,9 @@ export const CostCenterDistribution: React.FC = () => {
             </Button>
           )}
         </div>
+        <p className="mt-2 text-xs font-bold text-[var(--color-text-muted)]">
+          الإهلاك المرتبط بالأصول لنفس المركز في هذا الشهر: <span className="text-primary">{formatCost(centerMonthlyDepreciation)} ج.م</span> (يضاف تلقائيًا في الحسابات)
+        </p>
       </Card>
   {/* Summary */}
   <div className="mt-4 flex items-center justify-between flex-wrap gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)]">
@@ -330,11 +362,28 @@ export const CostCenterDistribution: React.FC = () => {
                   <div>
                     <p className="text-[11px] font-bold text-slate-400">المبلغ الموزع</p>
                     <p className="text-lg font-bold text-primary">
-                      {formatCost(monthlyAmount * (totalPercentage / 100))} ج.م
+                      {formatCost(effectiveMonthlyAmount * (totalPercentage / 100))} ج.م
                     </p>
                   </div>
                 </div>
-               
+                {center.type === 'indirect' && _rawLines.length > 0 && (
+                  <div className="w-full sm:w-auto sm:min-w-[260px]">
+                    <label className="block text-[11px] font-bold text-slate-400 mb-1">اختيار خط الإنتاج</label>
+                    <select
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm p-2.5 outline-none focus:border-primary bg-white"
+                      value={selectedLineId}
+                      onChange={(e) => setSelectedLineId(e.target.value)}
+                      disabled={!canManage}
+                    >
+                      <option value="">اختر خط إنتاج</option>
+                      {_rawLines.map((line) => (
+                        <option key={line.id} value={line.id}>
+                          {line.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
       {copyNotice && (
         <p className="text-xs font-bold text-emerald-600 -mt-2 flex items-center gap-1">
@@ -360,34 +409,42 @@ export const CostCenterDistribution: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
-                    {_rawLines.map((line) => {
-                      const pct = allocations[line.id!] || 0;
-                      const allocated = monthlyAmount * (pct / 100);
-                      const daily = appliedWorkingDays > 0 ? allocated / appliedWorkingDays : 0;
-                      return (
-                        <tr key={line.id} className="hover:bg-[#f8f9fa]/50/50">
-                          <td className="px-4 py-3 font-bold text-[var(--color-text)]">{line.name}</td>
-                          <td className="px-4 py-3 text-center">
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              step={0.1}
-                              className="w-20 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm text-center p-2 outline-none focus:border-primary"
-                              value={pct || ''}
-                              onChange={(e) => setAllocations({ ...allocations, [line.id!]: Number(e.target.value) })}
-                              disabled={!canManage}
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-center font-bold text-[var(--color-text-muted)]">
-                            {formatCost(allocated)}
-                          </td>
-                          <td className="px-4 py-3 text-center font-bold text-primary">
-                            {formatCost(daily)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {selectedLine ? (
+                      (() => {
+                        const pct = selectedLinePercentage;
+                        const allocated = effectiveMonthlyAmount * (pct / 100);
+                        const daily = appliedWorkingDays > 0 ? allocated / appliedWorkingDays : 0;
+                        return (
+                          <tr key={selectedLine.id} className="hover:bg-[#f8f9fa]/50/50">
+                            <td className="px-4 py-3 font-bold text-[var(--color-text)]">{selectedLine.name}</td>
+                            <td className="px-4 py-3 text-center">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={0.1}
+                                className="w-20 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm text-center p-2 outline-none focus:border-primary"
+                                value={pct || ''}
+                                onChange={(e) => setAllocations({ ...allocations, [selectedLine.id!]: Number(e.target.value) })}
+                                disabled={!canManage}
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-center font-bold text-[var(--color-text-muted)]">
+                              {formatCost(allocated)}
+                            </td>
+                            <td className="px-4 py-3 text-center font-bold text-primary">
+                              {formatCost(daily)}
+                            </td>
+                          </tr>
+                        );
+                      })()
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
+                          اختر خط إنتاج لإضافته إلى قائمة التوزيع
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

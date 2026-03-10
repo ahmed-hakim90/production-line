@@ -1,6 +1,4 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { Products } from '../pages/Products';
-import { ProductDetails } from '../pages/ProductDetails';
 import { Lines } from '../pages/Lines';
 import { LineDetails } from '../pages/LineDetails';
 import { ProductionPlans } from '../pages/ProductionPlans';
@@ -13,12 +11,8 @@ import { ProductionWorkerDetails } from '../pages/ProductionWorkerDetails';
 import { Reports } from '../pages/Reports';
 import { QuickAction } from '../pages/QuickAction';
 import { LineWorkerAssignment } from '../pages/LineWorkerAssignment';
-import { RawMaterials } from '../pages/RawMaterials';
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
-  { path: '/products', permission: 'products.view', component: Products },
-  { path: '/products/raw-materials', permission: 'products.rawMaterials.view', component: RawMaterials },
-  { path: '/products/:id', permission: 'products.view', component: ProductDetails },
   { path: '/lines', permission: 'lines.view', component: Lines },
   { path: '/lines/:id', permission: 'lines.view', component: LineDetails },
   { path: '/production-plans', permission: 'plans.view', component: ProductionPlans },
@@ -31,5 +25,8 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/reports', permission: 'reports.view', component: Reports },
   { path: '/quick-action', permission: 'quickAction.view', component: QuickAction },
   { path: '/line-workers', permission: 'lineWorkers.view', component: LineWorkerAssignment },
+  { path: '/production/assets', redirectTo: '/costs/assets' },
+  { path: '/production/assets/:id', redirectTo: '/costs/assets' },
+  { path: '/production/depreciation-report', redirectTo: '/costs/depreciation-report' },
   { path: '/users', redirectTo: '/employees' },
 ];

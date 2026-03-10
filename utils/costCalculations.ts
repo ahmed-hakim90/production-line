@@ -5,6 +5,8 @@ import type {
   CostAllocation,
   LaborSettings,
   FirestoreEmployee,
+  Asset,
+  AssetDepreciation,
 } from '../types';
 
 export interface LineCostData {
@@ -54,7 +56,9 @@ export const calculateDailyIndirectCost = (
   month: string,
   costCenters: CostCenter[],
   costCenterValues: CostCenterValue[],
-  costAllocations: CostAllocation[]
+  costAllocations: CostAllocation[],
+  assets: Asset[] = [],
+  assetDepreciations: AssetDepreciation[] = [],
 ): number => {
   let totalDaily = 0;
 
@@ -79,6 +83,29 @@ export const calculateDailyIndirectCost = (
     const monthlyAllocated = value.amount * (lineAlloc.percentage / 100);
     const workingDays = getWorkingDaysForMonth(value, month);
     totalDaily += workingDays > 0 ? monthlyAllocated / workingDays : 0;
+  }
+
+  if (assets.length > 0 && assetDepreciations.length > 0) {
+    const depByCenter = new Map<string, number>();
+    const assetById = new Map(assets.map((asset) => [String(asset.id || ''), asset]));
+    assetDepreciations.forEach((entry) => {
+      if (entry.period !== month) return;
+      const asset = assetById.get(String(entry.assetId || ''));
+      const centerId = String(asset?.centerId || '');
+      if (!centerId) return;
+      depByCenter.set(centerId, (depByCenter.get(centerId) || 0) + Number(entry.depreciationAmount || 0));
+    });
+    depByCenter.forEach((monthlyDep, centerId) => {
+      if (monthlyDep <= 0) return;
+      const allocation = costAllocations.find((a) => a.costCenterId === centerId && a.month === month);
+      if (!allocation) return;
+      const lineAlloc = allocation.allocations.find((a) => a.lineId === lineId);
+      if (!lineAlloc || lineAlloc.percentage <= 0) return;
+      const value = costCenterValues.find((v) => v.costCenterId === centerId && v.month === month);
+      const workingDays = getWorkingDaysForMonth(value, month);
+      const lineMonthlyDep = monthlyDep * (lineAlloc.percentage / 100);
+      totalDaily += workingDays > 0 ? lineMonthlyDep / workingDays : 0;
+    });
   }
 
   return totalDaily;

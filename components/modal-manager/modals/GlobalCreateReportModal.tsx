@@ -6,8 +6,10 @@ import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
+import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
 
 type ReportFormState = {
+  reportType: 'finished_product' | 'component_injection';
   employeeId: string;
   productId: string;
   lineId: string;
@@ -30,6 +32,7 @@ type FeedbackState = {
 };
 
 const emptyForm = (): ReportFormState => ({
+  reportType: 'finished_product',
   employeeId: '',
   productId: '',
   lineId: '',
@@ -47,7 +50,7 @@ const emptyForm = (): ReportFormState => ({
 });
 
 export const GlobalCreateReportModal: React.FC = () => {
-  const { isOpen, close } = useManagedModalController(MODAL_KEYS.REPORTS_CREATE);
+  const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.REPORTS_CREATE);
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const employees = useAppStore((s) => s.employees);
@@ -55,11 +58,16 @@ export const GlobalCreateReportModal: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const lines = useAppStore((s) => s._rawLines);
   const products = useAppStore((s) => s._rawProducts);
+  const lineStatuses = useAppStore((s) => s.lineStatuses);
   const workOrders = useAppStore((s) => s.workOrders);
   const [form, setForm] = useState<ReportFormState>(emptyForm());
+  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [showErrorOverlay, setShowErrorOverlay] = useState(false);
+  const canCreateFinishedReports = can('reports.create');
+  const canManageComponentInjectionReports = can('reports.componentInjection.manage');
+  const canChooseReportType = canCreateFinishedReports && canManageComponentInjectionReports;
 
   const currentEmployee = useMemo(
     () => rawEmployees.find((e) => e.userId === uid) ?? null,
@@ -71,10 +79,12 @@ export const GlobalCreateReportModal: React.FC = () => {
     () =>
       workOrders.filter((w) => {
         if (w.status !== 'pending' && w.status !== 'in_progress') return false;
+        const woType = w.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
+        if (woType !== form.reportType) return false;
         if (!isSupervisorReporter || !currentEmployee?.id) return true;
         return w.supervisorId === currentEmployee.id;
       }),
-    [workOrders, isSupervisorReporter, currentEmployee?.id],
+    [workOrders, isSupervisorReporter, currentEmployee?.id, form.reportType],
   );
 
   const workersTotal = useMemo(() => (
@@ -91,6 +101,29 @@ export const GlobalCreateReportModal: React.FC = () => {
     form.workersExternalCount,
   ]);
 
+  const injectionLineIds = useMemo(
+    () => new Set(lineStatuses.filter((status) => status.isInjectionLine).map((status) => status.lineId)),
+    [lineStatuses],
+  );
+
+  const selectableLines = useMemo(
+    () => (
+      form.reportType === 'component_injection'
+        ? lines.filter((line) => line.id && injectionLineIds.has(line.id))
+        : lines
+    ),
+    [form.reportType, lines, injectionLineIds],
+  );
+
+  const selectableProducts = useMemo(
+    () => (
+      form.reportType === 'component_injection'
+        ? rawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
+        : products.map((p) => ({ value: p.id!, label: p.name }))
+    ),
+    [form.reportType, rawMaterialOptions, products],
+  );
+
   useEffect(() => {
     if (!isOpen || !isSupervisorReporter || !currentEmployee?.id) return;
     setForm((prev) => (
@@ -100,8 +133,55 @@ export const GlobalCreateReportModal: React.FC = () => {
     ));
   }, [isOpen, isSupervisorReporter, currentEmployee?.id]);
 
+  useEffect(() => {
+    let mounted = true;
+    catalogRawMaterialService.getAll()
+      .then((rows) => {
+        if (!mounted) return;
+        setRawMaterialOptions(
+          rows
+            .filter((row) => Boolean(row.id))
+            .map((row) => ({
+              id: String(row.id),
+              name: String(row.name || '').trim(),
+              code: String(row.code || '').trim(),
+            })),
+        );
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setRawMaterialOptions([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (form.reportType !== 'component_injection') return;
+    if (form.lineId && !injectionLineIds.has(form.lineId)) {
+      setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
+    }
+  }, [form.reportType, form.lineId, injectionLineIds]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const requestedType = payload?.reportType === 'component_injection' ? 'component_injection' : 'finished_product';
+    if (requestedType === 'component_injection') {
+      setForm((prev) => ({ ...prev, reportType: 'component_injection' }));
+      return;
+    }
+    if (canCreateFinishedReports) {
+      setForm((prev) => ({ ...prev, reportType: 'finished_product' }));
+      return;
+    }
+    if (canManageComponentInjectionReports) {
+      setForm((prev) => ({ ...prev, reportType: 'component_injection' }));
+    }
+  }, [isOpen, payload?.reportType, canCreateFinishedReports, canManageComponentInjectionReports]);
+
   if (!isOpen) return null;
-  if (!can('reports.create') && !can('reports.edit')) return null;
+  if (!canCreateFinishedReports && !can('reports.edit') && !canManageComponentInjectionReports) return null;
 
   const closeModal = () => {
     setFeedback(null);
@@ -125,6 +205,10 @@ export const GlobalCreateReportModal: React.FC = () => {
 
   const handleSave = async () => {
     if (saving) return;
+    if (form.reportType === 'component_injection' && !canManageComponentInjectionReports) {
+      openErrorOverlay('غير مصرح بإنشاء تقرير مكونات الحقن');
+      return;
+    }
     if (!form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || workersTotal <= 0 || !form.workHours) {
       openErrorOverlay('أكمل الحقول المطلوبة أولاً');
       return;
@@ -178,7 +262,9 @@ export const GlobalCreateReportModal: React.FC = () => {
         )}
 
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">إنشاء تقرير إنتاج</h3>
+          <h3 className="text-lg font-bold">
+            {form.reportType === 'component_injection' ? 'إنشاء تقرير مكون حقن' : 'إنشاء تقرير إنتاج'}
+          </h3>
           <button onClick={closeModal} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <span className="material-icons-round">close</span>
           </button>
@@ -207,6 +293,22 @@ export const GlobalCreateReportModal: React.FC = () => {
               </p>
             </div>
           )}
+          {canChooseReportType && (
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع التقرير</label>
+              <select
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
+                value={form.reportType}
+                onChange={(e) => {
+                  const nextType = e.target.value === 'component_injection' ? 'component_injection' : 'finished_product';
+                  setForm((prev) => ({ ...prev, reportType: nextType, workOrderId: '' }));
+                }}
+              >
+                <option value="finished_product">تقرير إنتاج عادي</option>
+                <option value="component_injection">تقرير مكون حقن</option>
+              </select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">أمر شغل (اختياري)</label>
@@ -222,6 +324,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 setForm((prev) => ({
                   ...prev,
                   workOrderId: wo.id ?? '',
+                  reportType: wo.workOrderType === 'component_injection' ? 'component_injection' : prev.reportType,
                   lineId: wo.lineId,
                   productId: wo.productId,
                   employeeId: isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
@@ -269,19 +372,23 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                {form.reportType === 'component_injection' ? 'الخط *' : 'خط الإنتاج *'}
+              </label>
               <SearchableSelect
                 placeholder="اختر الخط"
-                options={lines.map((l) => ({ value: l.id!, label: l.name }))}
+                options={selectableLines.map((l) => ({ value: l.id!, label: l.name }))}
                 value={form.lineId}
                 onChange={(v) => setForm((prev) => ({ ...prev, lineId: v, workOrderId: '' }))}
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                {form.reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}
+              </label>
               <SearchableSelect
-                placeholder="اختر المنتج"
-                options={products.map((p) => ({ value: p.id!, label: p.name }))}
+                placeholder={form.reportType === 'component_injection' ? 'اختر المكون' : 'اختر المنتج'}
+                options={selectableProducts}
                 value={form.productId}
                 onChange={(v) => setForm((prev) => ({ ...prev, productId: v, workOrderId: '' }))}
               />
