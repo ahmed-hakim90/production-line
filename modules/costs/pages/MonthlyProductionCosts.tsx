@@ -5,7 +5,13 @@ import { useShallowStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
 import { reportService } from '@/modules/production/services/reportService';
-import { getCurrentMonth, formatCost, calculateDailyIndirectCost, buildSupervisorHourlyRatesMap } from '../../../utils/costCalculations';
+import {
+  getCurrentMonth,
+  formatCost,
+  calculateDailyIndirectCost,
+  buildSupervisorHourlyRatesMap,
+  buildSupervisorIndirectShareMap,
+} from '../../../utils/costCalculations';
 import { productMaterialService } from '../../production/services/productMaterialService';
 import type { MonthlyProductionCost } from '../../../types';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
@@ -25,6 +31,25 @@ const shortProductName = (name: string): string => {
   const parts = name.trim().split(/\s+/);
   if (parts.length <= 2) return name;
   return `${parts[0]} ${parts[1]}`;
+};
+
+const formatEta = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 'أقل من دقيقة';
+  if (seconds < 60) return `حوالي ${Math.ceil(seconds)} ثانية`;
+  const minutes = Math.floor(seconds / 60);
+  const remainSeconds = Math.ceil(seconds % 60);
+  if (minutes < 60) return remainSeconds > 0 ? `${minutes}د ${remainSeconds}ث` : `${minutes}د`;
+  const hours = Math.floor(minutes / 60);
+  const remainMinutes = minutes % 60;
+  return remainMinutes > 0 ? `${hours}س ${remainMinutes}د` : `${hours}س`;
+};
+
+const getPreviousMonth = (month: string): string => {
+  const [year, mon] = month.split('-').map(Number);
+  if (!year || !mon) return month;
+  const date = new Date(year, mon - 1, 1);
+  date.setMonth(date.getMonth() - 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
 
 export const MonthlyProductionCosts: React.FC = () => {
@@ -74,6 +99,8 @@ export const MonthlyProductionCosts: React.FC = () => {
   const [breakdownMap, setBreakdownMap] = useState<Record<string, { directCost: number; indirectCost: number }>>({});
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
+  const [calculateProgress, setCalculateProgress] = useState({ done: 0, total: 0, productId: '' });
+  const [calculateStartedAt, setCalculateStartedAt] = useState<number | null>(null);
   const [closingMonth, setClosingMonth] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [showColumnsModal, setShowColumnsModal] = useState(false);
@@ -90,6 +117,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     }
   });
   const [materialsTotalMap, setMaterialsTotalMap] = useState<Record<string, number>>({});
+  const [prevMonthAvgMap, setPrevMonthAvgMap] = useState<Record<string, number>>({});
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -101,6 +129,8 @@ export const MonthlyProductionCosts: React.FC = () => {
     setLoading(true);
     try {
       const data = await monthlyProductionCostService.getByMonth(month);
+      const previousMonth = getPreviousMonth(month);
+      const previousMonthData = await monthlyProductionCostService.getByMonth(previousMonth);
       const hourlyRate = laborSettings?.hourlyRate ?? 0;
       const startDate = `${month}-01`;
       const [y, m] = month.split('-').map(Number);
@@ -117,6 +147,11 @@ export const MonthlyProductionCosts: React.FC = () => {
       });
 
       const indirectCache = new Map<string, number>();
+      const supervisorShareMap = buildSupervisorIndirectShareMap(
+        allReports,
+        supervisorHourlyRates,
+        hourlyRate,
+      );
       const nextBreakdown: Record<string, { directCost: number; indirectCost: number }> = {};
       allReports.forEach((r) => {
         if (!r.quantityProduced || r.quantityProduced <= 0) return;
@@ -143,13 +178,21 @@ export const MonthlyProductionCosts: React.FC = () => {
             current.indirectCost += lineIndirect * (r.quantityProduced / lineDateTotalQty);
           }
         }
-        current.indirectCost += (supervisorHourlyRates.get(r.employeeId) || 0) * (r.workHours || 0);
+        if (r.id) {
+          current.indirectCost += supervisorShareMap.get(r.id) || 0;
+        }
 
         nextBreakdown[r.productId] = current;
       });
 
       if (mountedRef.current) {
         setRecords(data);
+        setPrevMonthAvgMap(
+          previousMonthData.reduce<Record<string, number>>((acc, row) => {
+            acc[row.productId] = row.averageUnitCost || 0;
+            return acc;
+          }, {})
+        );
         setBreakdownMap(nextBreakdown);
       }
     } catch {
@@ -209,9 +252,24 @@ export const MonthlyProductionCosts: React.FC = () => {
 
   const handleCalculateAll = async () => {
     if (!laborSettings) return;
+    const startDate = `${month}-01`;
+    const [y, m] = month.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+    const monthReports = await reportService.getByDateRange(startDate, endDate);
+    const productIds = Array.from(
+      new Set(
+        monthReports
+          .filter((r) => (r.quantityProduced || 0) > 0)
+          .map((r) => String(r.productId || '').trim())
+          .filter((pid) => pid.length > 0)
+      )
+    );
+    if (productIds.length === 0) return;
+    setCalculateProgress({ done: 0, total: productIds.length, productId: '' });
+    setCalculateStartedAt(Date.now());
     setCalculating(true);
     try {
-      const productIds = products.map((p) => p.id).filter(Boolean) as string[];
       await monthlyProductionCostService.calculateAll(
         productIds,
         month,
@@ -222,12 +280,19 @@ export const MonthlyProductionCosts: React.FC = () => {
         supervisorHourlyRates,
         assets,
         assetDepreciations,
+        (progress) => {
+          if (!mountedRef.current) return;
+          setCalculateProgress(progress);
+        },
       );
       await fetchRecords();
     } catch {
       // error handled silently
     } finally {
-      if (mountedRef.current) setCalculating(false);
+      if (mountedRef.current) {
+        setCalculating(false);
+        setCalculateStartedAt(null);
+      }
     }
   };
 
@@ -249,7 +314,7 @@ export const MonthlyProductionCosts: React.FC = () => {
 
   const allClosed = records.length > 0 && records.every((r) => r.isClosed);
   const tableRecords = useMemo(
-    () => records.filter((r) => (r.averageUnitCost || 0) > 0),
+    () => records.filter((r) => (r.totalProducedQty || 0) > 0),
     [records]
   );
   const categoryOptions = useMemo(
@@ -289,15 +354,44 @@ export const MonthlyProductionCosts: React.FC = () => {
   const totalDirect = displayRecords.reduce((s, r) => s + getNormalizedBreakdown(r).directCost, 0);
   const totalIndirect = displayRecords.reduce((s, r) => s + getNormalizedBreakdown(r).indirectCost, 0);
   const overallAvg = totalQty > 0 ? totalCost / totalQty : 0;
-  const staleProductsCount = useMemo(() => {
-    return records.filter((r) => {
-      if (!r.totalProducedQty || r.totalProducedQty <= 0) return false;
-      const breakdown = breakdownMap[r.productId];
-      if (!breakdown) return false;
-      const liveComputedTotal = (breakdown.directCost || 0) + (breakdown.indirectCost || 0);
-      return Math.abs((r.totalProductionCost || 0) - liveComputedTotal) > 0.01;
-    }).length;
-  }, [records, breakdownMap]);
+  const staleProducts = useMemo(() => {
+    return records
+      .filter((r) => {
+        if (!r.totalProducedQty || r.totalProducedQty <= 0) return false;
+        const breakdown = breakdownMap[r.productId];
+        if (!breakdown) return false;
+        const liveComputedTotal = (breakdown.directCost || 0) + (breakdown.indirectCost || 0);
+        return Math.abs((r.totalProductionCost || 0) - liveComputedTotal) > 0.01;
+      })
+      .map((r) => {
+        const liveComputedTotal = (breakdownMap[r.productId]?.directCost || 0) + (breakdownMap[r.productId]?.indirectCost || 0);
+        return {
+          productId: r.productId,
+          productCode: productCodeMap.get(r.productId) || '',
+          productName: productNameMap.get(r.productId) || r.productId,
+          delta: liveComputedTotal - (r.totalProductionCost || 0),
+        };
+      })
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  }, [records, breakdownMap, productCodeMap, productNameMap]);
+  const staleProductsCount = staleProducts.length;
+  const stalePreview = useMemo(() => {
+    return staleProducts.slice(0, 8);
+  }, [staleProducts]);
+  const calculateProgressPercent = calculateProgress.total > 0
+    ? Math.min(100, Math.round((calculateProgress.done / calculateProgress.total) * 100))
+    : 0;
+  const currentCalculatingProductName = calculateProgress.productId
+    ? (productNameMap.get(calculateProgress.productId) || calculateProgress.productId)
+    : '';
+  const calculateEtaText = useMemo(() => {
+    if (!calculating || !calculateStartedAt || calculateProgress.done <= 0 || calculateProgress.total <= 0) return '';
+    const elapsedSeconds = (Date.now() - calculateStartedAt) / 1000;
+    if (elapsedSeconds <= 0) return '';
+    const avgSecondsPerItem = elapsedSeconds / calculateProgress.done;
+    const remainingItems = Math.max(0, calculateProgress.total - calculateProgress.done);
+    return formatEta(avgSecondsPerItem * remainingItems);
+  }, [calculating, calculateStartedAt, calculateProgress.done, calculateProgress.total]);
 
   const handleExport = () => {
     const rows = displayRecords.map((r) => {
@@ -305,6 +399,9 @@ export const MonthlyProductionCosts: React.FC = () => {
       const directCost = normalized.directCost;
       const indirectCost = normalized.indirectCost;
       const qty = r.totalProducedQty;
+      const prevAvg = prevMonthAvgMap[r.productId] ?? 0;
+      const deviationAmount = r.averageUnitCost - prevAvg;
+      const deviationPercent = prevAvg > 0 ? (deviationAmount / prevAvg) * 100 : 0;
       const raw = rawProductMap.get(r.productId);
       const chinese = raw?.chineseUnitCost ?? 0;
       const inner = raw?.innerBoxCost ?? 0;
@@ -325,6 +422,9 @@ export const MonthlyProductionCosts: React.FC = () => {
       'غير مباشر': indirectCost,
       'غير مباشر / قطعة': qty > 0 ? indirectCost / qty : 0,
       'متوسط تكلفة الوحدة': r.averageUnitCost,
+      'متوسط تكلفة الشهر السابق': prevAvg,
+      'الانحراف عن الشهر السابق (ج.م/وحدة)': deviationAmount,
+      'الانحراف عن الشهر السابق (%)': prevAvg > 0 ? deviationPercent : '—',
       'الحالة': r.isClosed ? 'مغلق' : 'مفتوح',
       };
       if (extraColumns.materialsAndPackaging) row['إجمالي تكلفة المواد والتغليف (ج.م/وحدة)'] = materialsAndPackaging;
@@ -343,6 +443,11 @@ export const MonthlyProductionCosts: React.FC = () => {
     const [y, m] = month.split('-').map(Number);
     return new Date(y, m - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
   })();
+  const previousMonthLabel = (() => {
+    const prev = getPreviousMonth(month);
+    const [y, m] = prev.split('-').map(Number);
+    return new Date(y, m - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
+  })();
 
   return (
     <div className="space-y-6">
@@ -352,7 +457,9 @@ export const MonthlyProductionCosts: React.FC = () => {
         subtitle="حساب ومراجعة تكلفة الإنتاج لكل منتج حسب الشهر"
         icon="price_check"
         primaryAction={canManage ? {
-          label: calculating ? 'جاري الحساب...' : 'حساب الكل',
+          label: calculating
+            ? `جاري الحساب... ${calculateProgress.done}/${calculateProgress.total || products.length}`
+            : 'حساب الكل',
           icon: 'calculate',
           onClick: handleCalculateAll,
           disabled: calculating,
@@ -408,19 +515,62 @@ export const MonthlyProductionCosts: React.FC = () => {
         </div>
       )}
       {!allClosed && staleProductsCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <span className="material-icons-round text-amber-600">warning</span>
-            <p className="text-sm font-semibold text-amber-700">
+        <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="material-icons-round text-amber-600">warning</span>
+              <p className="text-sm font-semibold text-amber-700">
               تم تعديل مدخلات التكلفة بعد آخر حساب في {staleProductsCount} منتج — برجاء إعادة حساب الكل لتحديث القيم.
-            </p>
+              </p>
+            </div>
+            {canManage && (
+              <Button onClick={handleCalculateAll} disabled={calculating}>
+                <span className="material-icons-round text-[18px] ml-1">refresh</span>
+                {calculating
+                  ? `جاري الحساب... ${calculateProgress.done}/${calculateProgress.total || products.length}`
+                  : 'إعادة حساب الكل'}
+              </Button>
+            )}
           </div>
-          {canManage && (
-            <Button onClick={handleCalculateAll} disabled={calculating}>
-              <span className="material-icons-round text-[18px] ml-1">refresh</span>
-              {calculating ? 'جاري الحساب...' : 'إعادة حساب الكل'}
-            </Button>
-          )}
+          <div className="rounded-[var(--border-radius-base)] border border-amber-200/80 bg-white/60 p-3">
+            <div className="text-xs font-bold text-amber-700 mb-2">المنتجات المتأثرة:</div>
+            <div className="flex flex-wrap gap-2">
+              {stalePreview.map((item) => (
+                <span
+                  key={item.productId}
+                  className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-xs font-semibold"
+                  title={`فرق التكلفة: ${formatCost(item.delta)} ج.م`}
+                >
+                  {item.productCode ? `${item.productCode} - ` : ''}{shortProductName(item.productName)}
+                </span>
+              ))}
+              {staleProductsCount > stalePreview.length && (
+                <span className="inline-flex items-center rounded-full bg-amber-200 text-amber-900 px-2.5 py-1 text-xs font-bold">
+                  +{staleProductsCount - stalePreview.length} منتج
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {calculating && calculateProgress.total > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-[var(--border-radius-lg)] p-4 space-y-2">
+          <div className="flex items-center justify-between gap-2 text-sm font-semibold text-blue-700">
+            <span>يتم حساب تكاليف الشهر الآن</span>
+            <span>{calculateProgress.done}/{calculateProgress.total} ({calculateProgressPercent}%)</span>
+          </div>
+          <div className="w-full h-2.5 rounded-full bg-blue-100 overflow-hidden">
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${calculateProgressPercent}%` }}
+            />
+          </div>
+          <p className="text-xs text-blue-700/90">
+            {currentCalculatingProductName
+              ? `المنتج الحالي: ${shortProductName(currentCalculatingProductName)}`
+              : 'جاري بدء الحساب...'}
+            {calculateEtaText ? ` - الوقت المتبقي التقريبي: ${calculateEtaText}` : ''}
+          </p>
         </div>
       )}
 
@@ -428,7 +578,7 @@ export const MonthlyProductionCosts: React.FC = () => {
       <Card>
         {tableRecords.length > 0 && (
           <div className="p-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center gap-3">
-            <div className="flex items-center gap-2 md:ml-auto">
+            <div className="flex items-center gap-2 w-full md:w-auto md:ml-auto">
               <span className="material-icons-round text-[var(--color-text-muted)] text-sm">search</span>
               <input
                 type="text"
@@ -441,7 +591,7 @@ export const MonthlyProductionCosts: React.FC = () => {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:ring-2 focus:ring-primary/50"
+              className="h-10 w-full md:w-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:ring-2 focus:ring-primary/50"
             >
               <option value="">كل الفئات</option>
               {categoryOptions.map((c) => (
@@ -464,7 +614,7 @@ export const MonthlyProductionCosts: React.FC = () => {
             )}
           </div>
         )}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto erp-table-scroll">
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full" />
@@ -486,6 +636,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                   <th className="erp-th">إجمالي التكلفة</th>
                   <th className="erp-th">مباشر / غير مباشر</th>
                   <th className="erp-th">متوسط تكلفة الوحدة</th>
+                  <th className="erp-th">الانحراف عن {previousMonthLabel}</th>
                   {extraColumns.materialsAndPackaging && (
                     <th className="erp-th">إجمالي تكلفة المواد والتغليف</th>
                   )}
@@ -539,6 +690,18 @@ export const MonthlyProductionCosts: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 font-mono font-bold text-primary">
                       {formatCost(r.averageUnitCost)}
+                    </td>
+                    <td className="py-3 px-4 font-mono font-bold">
+                      {(() => {
+                        const prevAvg = prevMonthAvgMap[r.productId] ?? 0;
+                        if (prevAvg <= 0) return <span className="text-[var(--color-text-muted)]">—</span>;
+                        const diff = r.averageUnitCost - prevAvg;
+                        return (
+                          <span className={diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                            {diff >= 0 ? '+' : ''}{formatCost(diff)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     {extraColumns.materialsAndPackaging && (
                       <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">
@@ -598,6 +761,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                     </div>
                   </td>
                   <td className="py-3 px-4 font-mono text-primary">{formatCost(overallAvg)}</td>
+                  <td className="py-3 px-4 font-mono text-[var(--color-text-muted)]">—</td>
                   {extraColumns.materialsAndPackaging && (
                     <td className="py-3 px-4 font-mono text-[var(--color-text)]">
                       {formatCost(displayRecords.reduce((s, r) => {
@@ -655,7 +819,7 @@ export const MonthlyProductionCosts: React.FC = () => {
               إغلاق فترة {monthLabel}
             </Button>
           ) : (
-            <div className="flex items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-[var(--border-radius-lg)] p-4">
+            <div className="flex flex-wrap items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-[var(--border-radius-lg)] p-4">
               <span className="material-icons-round text-red-500">warning</span>
               <p className="text-sm text-red-700 dark:text-red-400 font-semibold">
                 سيتم إغلاق الفترة ولن يمكن إعادة الحساب. متأكد؟

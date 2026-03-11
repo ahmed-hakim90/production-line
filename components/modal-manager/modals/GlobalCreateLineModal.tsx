@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Button } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -8,6 +8,7 @@ import { MODAL_KEYS } from '../modalKeys';
 
 const statusOptions: { value: ProductionLineStatus; label: string }[] = [
   { value: ProductionLineStatus.ACTIVE, label: 'يعمل' },
+  { value: ProductionLineStatus.INJECTION, label: 'حقن' },
   { value: ProductionLineStatus.MAINTENANCE, label: 'صيانة' },
   { value: ProductionLineStatus.IDLE, label: 'متوقف' },
   { value: ProductionLineStatus.WARNING, label: 'تنبيه' },

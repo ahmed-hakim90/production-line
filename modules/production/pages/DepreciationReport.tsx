@@ -31,6 +31,8 @@ export const DepreciationReport: React.FC = () => {
     costCenters,
     costAllocations,
     productionReports,
+    _rawLines,
+    _rawProducts,
     fetchDepreciationReport,
     fetchDepreciationYear,
     fetchReports,
@@ -40,6 +42,8 @@ export const DepreciationReport: React.FC = () => {
     costCenters: s.costCenters,
     costAllocations: s.costAllocations,
     productionReports: s.productionReports,
+    _rawLines: s._rawLines,
+    _rawProducts: s._rawProducts,
     fetchDepreciationReport: s.fetchDepreciationReport,
     fetchDepreciationYear: s.fetchDepreciationYear,
     fetchReports: s.fetchReports,
@@ -56,6 +60,14 @@ export const DepreciationReport: React.FC = () => {
   }, [mode, month, year, fetchDepreciationReport, fetchDepreciationYear, fetchReports]);
 
   const assetMap = useMemo(() => new Map(assets.map((a) => [String(a.id), a])), [assets]);
+  const lineNameMap = useMemo(
+    () => new Map(_rawLines.map((line) => [String(line.id || ''), String(line.name || '')])),
+    [_rawLines],
+  );
+  const productNameMap = useMemo(
+    () => new Map(_rawProducts.map((product) => [String(product.id || ''), String(product.name || '')])),
+    [_rawProducts],
+  );
 
   const totalDepreciation = useMemo(
     () => assetDepreciations.reduce((sum, row) => sum + Number(row.depreciationAmount || 0), 0),
@@ -234,7 +246,7 @@ export const DepreciationReport: React.FC = () => {
                 <tbody>
                   {lineBreakdown.map((row) => (
                     <tr key={row.lineId} className="border-t border-[var(--color-border)]">
-                      <td className="py-3 px-4">{row.lineId}</td>
+                      <td className="py-3 px-4">{lineNameMap.get(row.lineId) || row.lineId}</td>
                       <td className="py-3 px-4 tabular-nums">{row.amount.toFixed(2)}</td>
                     </tr>
                   ))}
@@ -262,8 +274,8 @@ export const DepreciationReport: React.FC = () => {
                 <tbody>
                   {productBreakdown.map((row, idx) => (
                     <tr key={`${row.lineId}_${row.productId}_${idx}`} className="border-t border-[var(--color-border)]">
-                      <td className="py-3 px-4">{row.lineId}</td>
-                      <td className="py-3 px-4">{row.productId}</td>
+                      <td className="py-3 px-4">{lineNameMap.get(row.lineId) || row.lineId}</td>
+                      <td className="py-3 px-4">{productNameMap.get(row.productId) || row.productId}</td>
                       <td className="py-3 px-4 tabular-nums">{row.amount.toFixed(2)}</td>
                     </tr>
                   ))}

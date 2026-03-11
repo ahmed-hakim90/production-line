@@ -655,7 +655,7 @@ export const Products: React.FC = () => {
 
       {/* ── Search & Filters ── */}
       <div className="erp-filter-bar">
-        <div className="erp-search-input" style={{ minWidth: 240, flex: '1 1 240px', maxWidth: 320 }}>
+        <div className="erp-search-input w-full sm:max-w-[320px] sm:flex-[1_1_240px]">
           <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
           <input
             type="text"

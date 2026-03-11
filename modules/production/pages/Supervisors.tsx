@@ -18,6 +18,7 @@ import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
 import { formatNumber, calculateWasteRatio, getOperationalDateString, getReportWaste } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
+import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../../../components/PageHeader';
@@ -125,7 +126,6 @@ export const Supervisors: React.FC = () => {
 
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const productionReports = useAppStore((s) => s.productionReports);
-  const todayReports = useAppStore((s) => s.todayReports);
   const productionLines = useAppStore((s) => s.productionLines);
   const products = useAppStore((s) => s.products);
   const employees = useAppStore((s) => s.employees);
@@ -140,15 +140,13 @@ export const Supervisors: React.FC = () => {
   const [dataLoading, setDataLoading] = useState(true);
 
   const [search, setSearch] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('');
   const [filterLine, setFilterLine] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'' | 'active' | 'inactive'>('');
-  const [filterScoreRange, setFilterScoreRange] = useState<'' | 'high' | 'mid' | 'low'>('');
   const today = getOperationalDateString(8);
   const [viewMode, setViewMode] = useState<ReportsViewMode>('today');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [assignmentMapBySupervisor, setAssignmentMapBySupervisor] = useState<Map<string, string[]>>(new Map());
   const [statFilter, setStatFilter] = useState<StatFilter>('');
   const [hoveredSupervisor, setHoveredSupervisor] = useState<string | null>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
@@ -196,6 +194,27 @@ export const Supervisors: React.FC = () => {
       setRangeError(message);
     }
   }, [fetchReportsFromStore]);
+
+  const loadAssignmentsForDate = useCallback(async (date: string) => {
+    try {
+      const active = await supervisorLineAssignmentService.getActiveByDate(date);
+      const bySupervisor = new Map<string, Set<string>>();
+      active.forEach((row) => {
+        const supervisorId = String(row.supervisorId || '').trim();
+        const lineId = String(row.lineId || '').trim();
+        if (!supervisorId || !lineId) return;
+        const lines = bySupervisor.get(supervisorId) || new Set<string>();
+        lines.add(lineId);
+        bySupervisor.set(supervisorId, lines);
+      });
+      const normalized = new Map<string, string[]>();
+      bySupervisor.forEach((lineIds, supervisorId) => normalized.set(supervisorId, Array.from(lineIds)));
+      setAssignmentMapBySupervisor(normalized);
+    } catch (error) {
+      console.error('loadAssignmentsForDate error:', error);
+      setAssignmentMapBySupervisor(new Map());
+    }
+  }, []);
 
   const handleShowToday = useCallback(() => {
     const operationalToday = getOperationalDateString(8);
@@ -259,7 +278,7 @@ export const Supervisors: React.FC = () => {
   const weekStart = useMemo(() => getWeekStart(), []);
   const lastWeek = useMemo(() => getLastWeekRange(), []);
 
-  const allReports = viewMode === 'today' ? todayReports : productionReports;
+  const allReports = productionReports;
   const productAvgDailyById = useMemo(
     () => new Map(products.filter((p) => Boolean(p.id)).map((p) => [String(p.id), Math.max(0, Number((p as any).avgDailyProduction || 0))])),
     [products],
@@ -382,7 +401,8 @@ export const Supervisors: React.FC = () => {
               ? performanceByLine.reduce((sum, row) => sum + row.performanceScore, 0) / performanceByLine.length
               : clamp(Math.round((throughputPct * 0.75) + (daysCommitmentPct * 0.25)), 0, 100));
         const performanceScore = clamp(Math.round(weightedLineScore), 0, 100);
-        const assignedLines = [...new Set(reports.map((r) => r.lineId))];
+        const assignedLines = assignmentMapBySupervisor.get(String(e.id || '').trim())
+          || [...new Set(reports.map((r) => r.lineId).filter(Boolean))];
         const totalWorkers = reports.length > 0
           ? Math.round(reports.reduce((s, r) => s + (r.workersCount ?? 0), 0) / reports.length)
           : 0;
@@ -411,7 +431,13 @@ export const Supervisors: React.FC = () => {
           lastActivity,
         };
       });
-  }, [_rawEmployees, reportsBySupervisor, today, rangeStart, rangeEnd, totalDaysInRange, productAvgDailyById]);
+  }, [_rawEmployees, reportsBySupervisor, today, rangeStart, rangeEnd, totalDaysInRange, productAvgDailyById, assignmentMapBySupervisor]);
+
+  useEffect(() => {
+    if (!rangeStart || !rangeEnd) return;
+    void loadReportsRange(rangeStart, rangeEnd);
+    void loadAssignmentsForDate(rangeEnd);
+  }, [rangeStart, rangeEnd, loadReportsRange, loadAssignmentsForDate]);
 
   // ── Filtering ───────────────────────────────────────────────────────────────
 
@@ -430,16 +456,10 @@ export const Supervisors: React.FC = () => {
         (e) => e.name?.toLowerCase().includes(q) || (e.code && e.code.toLowerCase().includes(q))
       );
     }
-    if (filterDepartment) list = list.filter((e) => e.departmentId === filterDepartment);
     if (filterLine) list = list.filter((e) => e.assignedLines.includes(filterLine));
-    if (filterStatus === 'active') list = list.filter((e) => e.isActive !== false);
-    if (filterStatus === 'inactive') list = list.filter((e) => e.isActive === false);
-    if (filterScoreRange === 'high') list = list.filter((e) => e.performanceScore >= 85);
-    if (filterScoreRange === 'mid') list = list.filter((e) => e.performanceScore >= 70 && e.performanceScore < 85);
-    if (filterScoreRange === 'low') list = list.filter((e) => e.performanceScore < 70);
 
     return list;
-  }, [supervisors, search, filterDepartment, filterLine, filterStatus, filterScoreRange, statFilter]);
+  }, [supervisors, search, filterLine, statFilter]);
 
   // ── Summary KPIs ────────────────────────────────────────────────────────────
 
@@ -1013,10 +1033,6 @@ export const Supervisors: React.FC = () => {
 
   // ── Unique values for filters ───────────────────────────────────────────────
 
-  const uniqueDepartments = useMemo(
-    () => [...new Set(supervisors.map((s) => s.departmentId).filter(Boolean))],
-    [supervisors]
-  );
   const uniqueLines = useMemo(() => {
     const set = new Set<string>();
     supervisors.forEach((s) => s.assignedLines.forEach((l) => set.add(l)));
@@ -1025,14 +1041,11 @@ export const Supervisors: React.FC = () => {
 
   const clearAllFilters = () => {
     setSearch('');
-    setFilterDepartment('');
     setFilterLine('');
-    setFilterStatus('');
-    setFilterScoreRange('');
     setStatFilter('');
   };
 
-  const hasActiveFilters = search || filterDepartment || filterLine || filterStatus || filterScoreRange || statFilter;
+  const hasActiveFilters = search || filterLine || statFilter;
 
   // ── Loading ─────────────────────────────────────────────────────────────────
 
@@ -1043,7 +1056,7 @@ export const Supervisors: React.FC = () => {
   const toggleStatFilter = (f: StatFilter) => setStatFilter((prev) => prev === f ? '' : f);
 
   return (
-    <div className="space-y-6">
+    <div className="erpnext-supervisors space-y-6">
       {/* Header */}
       <PageHeader
         title="المشرفين"
@@ -1057,8 +1070,8 @@ export const Supervisors: React.FC = () => {
       />
 
       {/* ── Stat Cards (clickable) ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-        <button className="text-right" onClick={() => toggleStatFilter('today')}>
+      <div className="erpnext-kpi-grid grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('today')}>
           <KPIBox
             label="إنتاج اليوم"
             value={formatNumber(stats.todayTotal)}
@@ -1068,7 +1081,7 @@ export const Supervisors: React.FC = () => {
             trendUp={stats.todayChange >= 0}
           />
         </button>
-        <button className="text-right" onClick={() => toggleStatFilter('week')}>
+        <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('week')}>
           <KPIBox
             label="إنتاج الأسبوع"
             value={formatNumber(stats.weekTotal)}
@@ -1078,7 +1091,7 @@ export const Supervisors: React.FC = () => {
             trendUp={stats.weekChange >= 0}
           />
         </button>
-        <button className="text-right" onClick={() => toggleStatFilter('highScrap')}>
+        <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('highScrap')}>
           <KPIBox
             label="نسبة الهالك الكلية"
             value={`${stats.overallScrapRate}%`}
@@ -1086,7 +1099,7 @@ export const Supervisors: React.FC = () => {
             colorClass={statFilter === 'highScrap' ? 'bg-primary text-white' : stats.overallScrapRate > 5 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}
           />
         </button>
-        <button className="text-right" onClick={() => toggleStatFilter('lowScore')}>
+        <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('lowScore')}>
           <KPIBox
             label="متوسط درجة الأداء"
             value={stats.avgScore}
@@ -1094,7 +1107,7 @@ export const Supervisors: React.FC = () => {
             colorClass={statFilter === 'lowScore' ? 'bg-primary text-white' : stats.avgScore >= 85 ? 'bg-emerald-50 text-emerald-600' : stats.avgScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
           />
         </button>
-        <button className="text-right" onClick={() => toggleStatFilter('active')}>
+        <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('active')}>
           <KPIBox
             label="المشرفين النشطين"
             value={stats.activeSupervisors}
@@ -1106,49 +1119,21 @@ export const Supervisors: React.FC = () => {
       </div>
 
       {/* ── Advanced Filters ────────────────────────────────────────────────── */}
-      <Card>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 mb-4">
-          {/* Search */}
-          <div className="relative sm:col-span-2">
-            <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] text-xl">search</span>
-            <input
-              type="text"
-              placeholder="بحث بالاسم أو الرمز..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="erp-filter-input-inner"
-            />
+      <Card className="erpnext-filter-card">
+        <div className="erpnext-filter-head mb-4">
+          <p className="erpnext-filter-title">فلترة المشرفين</p>
+          <div className="flex items-center gap-2">
+            <span className="erpnext-filter-chip">{filtered.length} نتيجة</span>
+            {hasActiveFilters && (
+              <Button variant="outline" className="text-xs !py-1.5 !px-2.5" onClick={clearAllFilters}>
+                <span className="material-icons-round text-sm">filter_alt_off</span>
+                مسح
+              </Button>
+            )}
           </div>
-          {/* Department */}
-          <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}
-            className="erp-filter-select">
-            <option value="">كل الأقسام</option>
-            {uniqueDepartments.map((dId) => <option key={dId} value={dId}>{getDepartmentName(dId)}</option>)}
-          </select>
-          {/* Production line */}
-          <select value={filterLine} onChange={(e) => setFilterLine(e.target.value)}
-            className="erp-filter-select">
-            <option value="">كل الخطوط</option>
-            {uniqueLines.map((lId) => <option key={lId} value={lId}>{getLineName(lId)}</option>)}
-          </select>
-          {/* Status */}
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="erp-filter-select">
-            <option value="">كل الحالات</option>
-            <option value="active">نشط</option>
-            <option value="inactive">غير نشط</option>
-          </select>
-          {/* Performance range */}
-          <select value={filterScoreRange} onChange={(e) => setFilterScoreRange(e.target.value as any)}
-            className="erp-filter-select">
-            <option value="">كل مستويات الأداء</option>
-            <option value="high">ممتاز (85+)</option>
-            <option value="mid">جيد (70–84)</option>
-            <option value="low">ضعيف (&lt;70)</option>
-          </select>
         </div>
-        {/* Reports date scope */}
-        <div className="space-y-3 mb-4">
+
+        <div className="erp-filter-bar erpnext-filter-row mb-4">
           <div className="erp-date-seg">
             <button className={`erp-date-seg-btn${viewMode === 'today' ? ' active' : ''}`} onClick={handleShowToday}>
               اليوم
@@ -1172,32 +1157,45 @@ export const Supervisors: React.FC = () => {
               شهري
             </button>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <span className="material-icons-round text-lg">calendar_month</span>
-              <span className="font-medium">نطاق البيانات:</span>
-            </div>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:border-primary focus:ring-2 focus:ring-primary/12 transition-all"
-            />
-            <span className="text-[var(--color-text-muted)]">—</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:border-primary focus:ring-2 focus:ring-primary/12 transition-all"
-            />
-            <Button variant="outline" onClick={handleApplyDateRange} disabled={!startDate || !endDate || reportsLoading}>
-              {reportsLoading ? 'جارٍ التحميل...' : 'تطبيق النطاق'}
-            </Button>
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold">
-              {filtered.length} نتيجة
-            </span>
+          <div className="erp-filter-date">
+            <span className="erp-filter-label">من</span>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           </div>
+          <div className="erp-filter-date">
+            <span className="erp-filter-label">إلى</span>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+          <button className="erp-filter-apply" onClick={handleApplyDateRange} disabled={!startDate || !endDate || reportsLoading}>
+            {reportsLoading
+              ? <span className="material-icons-round" style={{ fontSize: 14, animation: 'spin 1s linear infinite' }}>refresh</span>
+              : <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
+            }
+            عرض
+          </button>
+
+          <div className="erp-filter-sep" />
+
+          <div className="erp-search-input erp-search-input--table flex-1 min-w-0">
+            <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
+            <input
+              type="text"
+              placeholder="بحث باسم المشرف أو الكود..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <select
+            value={filterLine}
+            onChange={(e) => setFilterLine(e.target.value)}
+            className={`erp-filter-select${filterLine ? ' active' : ''}`}
+          >
+            <option value="">كل الخطوط</option>
+            {uniqueLines.map((lId) => <option key={lId} value={lId}>{getLineName(lId)}</option>)}
+          </select>
+        </div>
+
+        <div className="mb-4 erpnext-date-scope">
           {rangeError && (
             <div className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-[var(--border-radius-base)] px-3 py-2">
               {rangeError}
@@ -1210,6 +1208,7 @@ export const Supervisors: React.FC = () => {
           data={filtered}
           columns={columns}
           getId={(sup) => sup.id!}
+          tableId="production-supervisors-table"
           bulkActions={bulkActions}
           renderActions={renderActions}
           emptyIcon="engineering"

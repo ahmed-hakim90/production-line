@@ -1,0 +1,37 @@
+---
+description: ERPNext UI architecture and fixed formatting standards
+alwaysApply: true
+---
+
+# ERPNext UI Architecture (Project Standard)
+
+- Treat ERPNext styling as the default UI architecture for all pages.
+- Reuse shared classes/components before creating page-specific styling.
+
+## Required layout order
+
+- `PageHeader` first.
+- KPI cards row second (if needed).
+- Unified filter toolbar third.
+- Data table/list as the main content.
+
+## Filter toolbar standard
+
+- Use the shared toolbar pattern: `erp-filter-bar`.
+- Date quick filters must use: `erp-date-seg` + `erp-date-seg-btn`.
+- Range controls must use: `erp-filter-date` + `erp-filter-label`.
+- Apply button must use: `erp-filter-apply`.
+- Search must use: `erp-search-input` (or `erp-search-input--table`).
+- Select filters must use: `erp-filter-select`.
+
+## Responsive rules
+
+- Mobile-first: avoid crowded inline controls.
+- On small screens, wrap controls into clean rows with full-width important inputs.
+- Keep tap targets clear and consistent with ERPNext spacing.
+
+## Consistency guardrails
+
+- Do not invent one-off filter/header systems per page.
+- Prefer existing ERPNext utility classes in `App.css`.
+- If a new shared UI pattern is needed, add it once in shared styles/components, then reuse everywhere.

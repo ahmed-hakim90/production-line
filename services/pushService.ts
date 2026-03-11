@@ -22,6 +22,13 @@ const DEVICE_COLLECTION = 'user_devices';
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
 
 let messagingRef: Messaging | null = null;
+let warnedInvalidVapid = false;
+
+function isLikelyValidVapidKey(key?: string): boolean {
+  if (!key) return false;
+  // Firebase Web Push public key is base64url-like (no spaces/quotes).
+  return /^[A-Za-z0-9_-]{40,}$/.test(key.trim());
+}
 
 function buildFirebaseConfig() {
   return {
@@ -37,7 +44,13 @@ function buildFirebaseConfig() {
 async function ensureMessaging(): Promise<Messaging | null> {
   if (!isConfigured) return null;
   if (!(await isSupported())) return null;
-  if (!VAPID_KEY) return null;
+  if (!isLikelyValidVapidKey(VAPID_KEY)) {
+    if (!warnedInvalidVapid) {
+      warnedInvalidVapid = true;
+      console.warn('Push notifications disabled: VITE_FIREBASE_VAPID_KEY is missing or invalid.');
+    }
+    return null;
+  }
   if (messagingRef) return messagingRef;
 
   const config = buildFirebaseConfig();
@@ -49,43 +62,58 @@ async function ensureMessaging(): Promise<Messaging | null> {
 export const pushService = {
   async registerDevice(userId: string, employeeId?: string): Promise<string | null> {
     if (!userId) return null;
-    const messaging = await ensureMessaging();
-    if (!messaging) return null;
+    try {
+      const messaging = await ensureMessaging();
+      if (!messaging) return null;
 
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return null;
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return null;
 
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    const token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: registration,
-    });
-    if (!token) return null;
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      const token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration,
+      });
+      if (!token) return null;
 
-    const ref = doc(db, DEVICE_COLLECTION, token);
-    await setDoc(ref, {
-      token,
-      userId,
-      employeeId: employeeId || '',
-      platform: 'web',
-      userAgent: navigator.userAgent || '',
-      enabled: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    return token;
+      const ref = doc(db, DEVICE_COLLECTION, token);
+      await setDoc(ref, {
+        token,
+        userId,
+        employeeId: employeeId || '',
+        platform: 'web',
+        userAgent: navigator.userAgent || '',
+        enabled: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      return token;
+    } catch (error) {
+      const name = String((error as { name?: string })?.name || '');
+      const message = String((error as { message?: string })?.message || '');
+      if (name === 'InvalidAccessError' || message.includes('applicationServerKey')) {
+        console.warn('Push notifications disabled: invalid VAPID key configuration.');
+        return null;
+      }
+      console.warn('Push registration skipped:', error);
+      return null;
+    }
   },
 
   async disableCurrentToken(userId: string): Promise<void> {
-    const messaging = await ensureMessaging();
-    if (!messaging || !userId) return;
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-    if (!token) return;
-    await deleteToken(messaging).catch(() => {});
-    await setDoc(doc(db, DEVICE_COLLECTION, token), {
-      enabled: false,
-      updatedAt: serverTimestamp(),
-    }, { merge: true }).catch(() => {});
+    try {
+      const messaging = await ensureMessaging();
+      if (!messaging || !userId) return;
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+      if (!token) return;
+      await deleteToken(messaging).catch(() => {});
+      await setDoc(doc(db, DEVICE_COLLECTION, token), {
+        enabled: false,
+        updatedAt: serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+    } catch {
+      // No-op: device token cleanup should never block app flow.
+    }
   },
 
   async subscribeForeground(onReceive: (title: string, body: string) => void): Promise<() => void> {

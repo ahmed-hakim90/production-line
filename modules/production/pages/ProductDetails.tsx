@@ -699,7 +699,6 @@ export const ProductDetails: React.FC = () => {
             className={`erp-filter-select${reportFilterLineId ? ' active' : ''}`}
             value={reportFilterLineId}
             onChange={(e) => setReportFilterLineId(e.target.value)}
-            style={{ minWidth: 130 }}
           >
             <option value="">كل الخطوط</option>
             {_rawLines.map((l) => (
@@ -711,7 +710,6 @@ export const ProductDetails: React.FC = () => {
             className={`erp-filter-select${reportFilterEmployeeId ? ' active' : ''}`}
             value={reportFilterEmployeeId}
             onChange={(e) => setReportFilterEmployeeId(e.target.value)}
-            style={{ minWidth: 145 }}
           >
             <option value="">كل المشرفين</option>
             {employees.filter((e) => e.level === 2).map((emp) => (

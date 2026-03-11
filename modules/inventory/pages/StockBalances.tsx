@@ -126,24 +126,24 @@ export const StockBalances: React.FC = () => {
         ]}
       />
 
-      <Card className="!p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <Card className="!p-0 overflow-hidden">
+        <div className="erp-filter-bar">
           <input
-            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
+            className="erp-filter-input-inner"
             placeholder="بحث بالاسم أو الكود"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
+          <select className="erp-filter-select" value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
             <option value="">كل المخازن</option>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
-          <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={itemTypeFilter} onChange={(e) => setItemTypeFilter(e.target.value)}>
+          <select className="erp-filter-select" value={itemTypeFilter} onChange={(e) => setItemTypeFilter(e.target.value)}>
             <option value="">كل الأنواع</option>
             <option value="finished_good">منتج نهائي</option>
             <option value="raw_material">مادة خام</option>
           </select>
-          <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <select className="erp-filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">كل الحالات</option>
             <option value="ok">طبيعي</option>
             <option value="low">منخفض</option>
@@ -153,7 +153,7 @@ export const StockBalances: React.FC = () => {
       </Card>
 
       <Card className="!p-0 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto erp-table-scroll">
           <table className="w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>

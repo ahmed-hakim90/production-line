@@ -24,6 +24,11 @@ import {
 } from '../../../utils/costCalculations';
 
 const COLLECTION = 'monthly_production_costs';
+type CalculateAllProgress = {
+  done: number;
+  total: number;
+  productId: string;
+};
 
 function docId(productId: string, month: string): string {
   return `${productId}_${month}`;
@@ -184,8 +189,11 @@ export const monthlyProductionCostService = {
     supervisorHourlyRates?: Map<string, number>,
     assets: Asset[] = [],
     assetDepreciations: AssetDepreciation[] = [],
+    onProgress?: (progress: CalculateAllProgress) => void,
   ): Promise<MonthlyProductionCost[]> {
     const results: MonthlyProductionCost[] = [];
+    const total = productIds.length;
+    let done = 0;
     for (const pid of productIds) {
       const result = await this.calculate(
         pid,
@@ -199,6 +207,8 @@ export const monthlyProductionCostService = {
         assetDepreciations,
       );
       if (result) results.push(result);
+      done += 1;
+      onProgress?.({ done, total, productId: pid });
     }
     return results;
   },

@@ -32,6 +32,10 @@ export const CostCenters: React.FC = () => {
 
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'direct' | 'indirect'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
 
   const lineNameMap = useMemo(
     () => new Map(_rawLines.map((line) => [line.id || '', line.name || ''])),
@@ -70,6 +74,24 @@ export const CostCenters: React.FC = () => {
     const depreciationValue = getCenterMonthlyDepreciation(centerId);
     return manualValue + depreciationValue;
   };
+
+  const filteredCenters = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return costCenters.filter((center) => {
+      const matchSearch = !q
+        || center.name.toLowerCase().includes(q)
+        || String(center.id || '').toLowerCase().includes(q);
+      const matchType = typeFilter === 'all' || center.type === typeFilter;
+      const matchStatus = statusFilter === 'all'
+        || (statusFilter === 'active' ? center.isActive : !center.isActive);
+      return matchSearch && matchType && matchStatus;
+    });
+  }, [costCenters, search, statusFilter, typeFilter]);
+
+  const totalCenterValue = useMemo(
+    () => filteredCenters.reduce((sum, cc) => sum + getSelectedMonthValue(String(cc.id || '')), 0),
+    [filteredCenters, selectedMonth, costCenterValues, assetDepreciations, assets]
+  );
 
   const handleExportCenters = () => {
     const summaryRows = costCenters.map((center) => {
@@ -152,17 +174,19 @@ export const CostCenters: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">مراكز التكلفة</h2>
-          <p className="text-sm text-[var(--color-text-muted)] font-medium">إدارة مراكز التكلفة المباشرة وغير المباشرة.</p>
+      <div className="rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-bold">Costing Workspace</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">مراكز التكلفة</h2>
+            <p className="text-sm text-[var(--color-text-muted)] font-medium">إدارة مراكز التكلفة المباشرة وغير المباشرة بأسلوب ERP.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
           <input
             type="month"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+            className="h-10 w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none sm:w-auto"
           />
           {canExport && costCenters.length > 0 && (
             <Button variant={pageControl.exportVariant} onClick={handleExportCenters}>
@@ -177,19 +201,79 @@ export const CostCenters: React.FC = () => {
             </Button>
           )}
         </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+          <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+            <p className="text-xs text-[var(--color-text-muted)]">إجمالي المراكز</p>
+            <p className="text-2xl font-black text-[var(--color-text)]">{filteredCenters.length}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs text-amber-700">غير مباشر</p>
+            <p className="text-2xl font-black text-amber-600">{filteredCenters.filter((cc) => cc.type === 'indirect').length}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 p-3">
+            <p className="text-xs text-blue-700">قيمة الشهر المحدد</p>
+            <p className="text-xl font-black text-blue-600">{totalCenterValue.toLocaleString('en-US')}</p>
+          </div>
+        </div>
       </div>
 
-      {costCenters.length === 0 ? (
+      <Card>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث باسم المركز أو المعرف..."
+            className="h-10 flex-1 min-w-0 w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 bg-[var(--color-bg)] text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:w-auto"
+          />
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as 'all' | 'direct' | 'indirect')}
+            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 bg-[var(--color-card)] text-sm"
+          >
+            <option value="all">كل الأنواع</option>
+            <option value="indirect">غير مباشر</option>
+            <option value="direct">مباشر</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 bg-[var(--color-card)] text-sm"
+          >
+            <option value="all">كل الحالات</option>
+            <option value="active">مفعل</option>
+            <option value="inactive">معطل</option>
+          </select>
+          <div className="flex items-center rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden sm:ms-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-2 text-xs font-bold ${viewMode === 'table' ? 'bg-primary text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
+            >
+              جدول
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`px-3 py-2 text-xs font-bold ${viewMode === 'cards' ? 'bg-primary text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
+            >
+              بطاقات
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      {filteredCenters.length === 0 ? (
         <Card>
           <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">account_balance</span>
-            <p className="font-bold">لا توجد مراكز تكلفة بعد</p>
+            <p className="font-bold">لا توجد نتائج مطابقة</p>
             {canManage && <p className="text-sm mt-1">أضف مراكز التكلفة لبدء تتبع المصروفات</p>}
           </div>
         </Card>
-      ) : (
+      ) : viewMode === 'cards' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {costCenters.map((cc) => (
+          {filteredCenters.map((cc) => (
             <Card key={cc.id} className="transition-all hover:ring-2 hover:ring-primary/10">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
@@ -256,6 +340,74 @@ export const CostCenters: React.FC = () => {
             </Card>
           ))}
         </div>
+      ) : (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-no-table-enhance="true">
+              <thead className="erp-thead">
+                <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
+                  <th className="erp-th">المركز</th>
+                  <th className="erp-th">النوع</th>
+                  <th className="erp-th">الحالة</th>
+                  <th className="erp-th">القيمة (الشهر)</th>
+                  <th className="erp-th">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCenters.map((cc) => (
+                  <tr key={cc.id} className="border-b border-[var(--color-border)]">
+                    <td className="py-2.5 px-3">
+                      <p className="font-bold text-[var(--color-text)]">{cc.name}</p>
+                      <p className="text-[11px] text-[var(--color-text-muted)]">{cc.id || '—'}</p>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <Badge variant={cc.type === 'indirect' ? 'warning' : 'success'}>
+                        {cc.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
+                      </Badge>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <Badge variant={cc.isActive ? 'success' : 'neutral'}>
+                        {cc.isActive ? 'مفعل' : 'معطل'}
+                      </Badge>
+                    </td>
+                    <td className="py-2.5 px-3 tabular-nums font-bold text-primary">
+                      {getSelectedMonthValue(String(cc.id || '')).toLocaleString('en-US')}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {cc.type === 'indirect' && (
+                          <button
+                            onClick={() => navigate(`/cost-centers/${cc.id}`)}
+                            className="px-2 py-1 text-xs font-bold rounded border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100"
+                          >
+                            توزيع
+                          </button>
+                        )}
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={() => openEdit(cc)}
+                              data-modal-key={MODAL_KEYS.COST_CENTERS_CREATE}
+                              className="px-2 py-1 text-xs font-bold rounded border border-primary/20 text-primary bg-primary/5 hover:bg-primary/10"
+                            >
+                              تعديل
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(cc.id!)}
+                              className="px-2 py-1 text-xs font-bold rounded border border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100"
+                            >
+                              حذف
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {/* Delete Confirm */}

@@ -63,6 +63,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const canCreateFinishedWorkOrders = can('workOrders.create');
   const canManageComponentInjectionWorkOrders = can('workOrders.componentInjection.manage');
+  const canChooseWorkOrderType = canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders;
 
   const supervisors = useMemo(
     () => employees.filter((e) => e.level === 2 && e.isActive),
@@ -229,24 +230,22 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             )}
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع أمر الشغل</label>
-            <select
-              value={form.workOrderType}
-              onChange={(e) => setForm((f) => ({
-                ...f,
-                workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
-              }))}
-              className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
-            >
-              {canCreateFinishedWorkOrders && (
+          {canChooseWorkOrderType && (
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع أمر الشغل</label>
+              <select
+                value={form.workOrderType}
+                onChange={(e) => setForm((f) => ({
+                  ...f,
+                  workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
+                }))}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              >
                 <option value="finished_product">أمر شغل منتج نهائي</option>
-              )}
-              {canManageComponentInjectionWorkOrders && (
                 <option value="component_injection">أمر شغل مكون حقن</option>
-              )}
-            </select>
-          </div>
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المنتج *</label>

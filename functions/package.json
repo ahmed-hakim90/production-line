@@ -13,7 +13,9 @@
     "deploy": "firebase deploy --only functions",
     "lint": "echo \"No function lint configured\"",
     "backfill:dashboardStats:dry": "npm run build && node lib/scripts/backfillDashboardStats.js --dry-run",
-    "backfill:dashboardStats:apply": "npm run build && node lib/scripts/backfillDashboardStats.js --apply"
+    "backfill:dashboardStats:apply": "npm run build && node lib/scripts/backfillDashboardStats.js --apply",
+    "backfill:supervisorAssignments:dry": "npm run build && node lib/scripts/backfillSupervisorLineAssignments.js",
+    "backfill:supervisorAssignments:apply": "npm run build && node lib/scripts/backfillSupervisorLineAssignments.js --apply"
   },
   "dependencies": {
     "firebase-admin": "^13.5.0",

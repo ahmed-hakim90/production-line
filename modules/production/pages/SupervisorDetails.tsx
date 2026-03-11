@@ -600,7 +600,7 @@ export const SupervisorDetails: React.FC = () => {
           {alerts.filter((a) => a.type !== 'info').map((alert, i) => (
             <div
               key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
+              className={`flex items-start sm:items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
                   ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
                   : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
@@ -614,7 +614,7 @@ export const SupervisorDetails: React.FC = () => {
       )}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
           <button
             onClick={() => navigate('/supervisors')}
@@ -656,7 +656,7 @@ export const SupervisorDetails: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0">
           {can('print') && (
             <Button variant="outline" onClick={() => handlePrint()}>
               <span className="material-icons-round text-lg">print</span>
@@ -671,7 +671,7 @@ export const SupervisorDetails: React.FC = () => {
       </div>
 
       <div className="flex items-center justify-end">
-        <div className="erp-date-seg">
+        <div className="erp-date-seg w-full sm:w-auto">
           {PERIOD_OPTIONS.map((opt) => (
             <button
               key={opt.value}
@@ -687,7 +687,7 @@ export const SupervisorDetails: React.FC = () => {
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         {/* <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" /> */}
         <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20" />
         <KPIBox
@@ -752,7 +752,7 @@ export const SupervisorDetails: React.FC = () => {
         />
       </div>
       <Card title="تفصيل العمالة">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
             <p className="text-xs font-bold text-[var(--color-text-muted)]">إنتاج</p>
             <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.production)}</p>
@@ -1052,7 +1052,7 @@ export const SupervisorDetails: React.FC = () => {
                         <span className="material-icons-round">arrow_back</span>
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] p-3 text-center">
                         <p className="text-xs text-emerald-600 font-medium mb-1">الإنتاج</p>
                         <p className="text-lg font-bold text-emerald-700">{formatNumber(line.produced)}</p>
@@ -1114,7 +1114,7 @@ export const SupervisorDetails: React.FC = () => {
           {alerts.map((alert, i) => (
             <div
               key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
+              className={`flex items-start sm:items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
                   ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
                   : alert.type === 'warning'

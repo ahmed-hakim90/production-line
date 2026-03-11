@@ -1021,6 +1021,108 @@ button {
 .erp-kpi-change.down { background: #fce4ec; color: #c62828; }
 .erp-kpi-change.flat { background: #f0f2f5; color: var(--color-text-muted); }
 
+/* ───────────────── ERPNext style: Supervisors page ───────────────── */
+.erpnext-supervisors .erp-card {
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.erpnext-kpi-btn {
+  border-radius: 12px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.erpnext-kpi-btn:hover {
+  transform: translateY(-1px);
+}
+
+.erpnext-filter-card {
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+}
+
+.erpnext-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.erpnext-filter-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.erpnext-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-primary, #2563eb);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.erpnext-supervisors .erp-filter-select,
+.erpnext-supervisors .erp-filter-input-inner {
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  min-height: 38px;
+}
+
+.erpnext-supervisors .erp-date-seg {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 4px;
+  background: #f8fafc;
+}
+
+.erpnext-supervisors .erp-date-seg-btn {
+  border-radius: 8px;
+}
+
+.erpnext-supervisors .erp-date-seg-btn.active {
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .erpnext-supervisors .erpnext-filter-head {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .erpnext-supervisors .erpnext-filter-row {
+    gap: 10px;
+  }
+
+  .erpnext-supervisors .erp-date-seg {
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 3px;
+  }
+
+  .erpnext-supervisors .erp-date-seg-btn {
+    min-width: 72px;
+    justify-content: center;
+  }
+
+  .erpnext-supervisors .erpnext-date-input {
+    width: calc(50% - 5px);
+  }
+
+  .erpnext-supervisors .erpnext-search-wrap,
+  .erpnext-supervisors .erp-filter-select {
+    width: 100%;
+  }
+
+  .erpnext-supervisors .erpnext-kpi-grid {
+    gap: 10px;
+  }
+}
+
 /* ERPNext-style number summary row */
 .erp-summary-row {
   display: flex;

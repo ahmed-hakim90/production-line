@@ -198,7 +198,7 @@ export const AttendanceList: React.FC = () => {
 
       {/* Filters */}
       <div className="erp-filter-bar">
-        <div className="erp-search-input" style={{ minWidth: 180 }}>
+        <div className="erp-search-input">
           <span className="material-icons-round">search</span>
           <input
             type="text"

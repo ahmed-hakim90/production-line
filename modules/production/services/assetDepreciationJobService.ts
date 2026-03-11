@@ -13,15 +13,37 @@ const toPeriod = (input?: string): string => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
+const periodToDate = (period: string): Date => {
+  const [year, month] = period.split('-').map(Number);
+  return new Date(year, month - 1, 1);
+};
+
+const dateToPeriod = (date: Date): string => (
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+);
+
+const addMonths = (period: string, months: number): string => {
+  const base = periodToDate(period);
+  return dateToPeriod(new Date(base.getFullYear(), base.getMonth() + months, 1));
+};
+
 const periodToLastDay = (period: string): Date => {
   const [year, month] = period.split('-').map(Number);
   return new Date(year, month, 0, 23, 59, 59, 999);
 };
 
+const comparePeriods = (a: string, b: string): number => a.localeCompare(b);
+
 const isAssetEligibleForPeriod = (asset: Asset, period: string): boolean => {
   const purchaseDate = new Date(asset.purchaseDate || '');
   if (Number.isNaN(purchaseDate.getTime())) return false;
   return purchaseDate <= periodToLastDay(period);
+};
+
+const getPurchaseStartPeriod = (asset: Asset): string | null => {
+  const purchaseDate = new Date(asset.purchaseDate || '');
+  if (Number.isNaN(purchaseDate.getTime())) return null;
+  return dateToPeriod(new Date(purchaseDate.getFullYear(), purchaseDate.getMonth(), 1));
 };
 
 const getDepreciationAmount = (asset: Asset): number => {
@@ -45,8 +67,6 @@ export const assetDepreciationJobService = {
   async runForPeriod(periodInput?: string): Promise<AssetDepreciationRunResult> {
     const period = toPeriod(periodInput);
     const activeAssets = await assetService.getActive();
-    const existingEntries = await assetDepreciationService.getByPeriod(period);
-    const existingAssetIds = new Set(existingEntries.map((entry) => String(entry.assetId)));
 
     let processedAssets = 0;
     let createdEntries = 0;
@@ -58,38 +78,65 @@ export const assetDepreciationJobService = {
         skippedEntries += 1;
         continue;
       }
-      if (existingAssetIds.has(asset.id)) {
+      const purchaseStart = getPurchaseStartPeriod(asset);
+      if (!purchaseStart) {
+        skippedEntries += 1;
+        continue;
+      }
+      const startPeriod = purchaseStart;
+      if (comparePeriods(startPeriod, period) > 0) {
         skippedEntries += 1;
         continue;
       }
 
-      const depreciationAmount = getDepreciationAmount(asset);
-      if (depreciationAmount <= 0) {
-        skippedEntries += 1;
-        continue;
-      }
-
-      const nextAccumulated = Math.max(0, toNumber(asset.accumulatedDepreciation) + depreciationAmount);
-      const nextBookValue = Math.max(
-        Math.max(0, toNumber(asset.salvageValue)),
-        Math.max(0, toNumber(asset.purchaseCost)) - nextAccumulated,
-      );
-
-      await assetDepreciationService.upsert({
-        assetId: asset.id,
-        period,
-        depreciationAmount,
-        accumulatedDepreciation: nextAccumulated,
-        bookValue: nextBookValue,
+      let runningAccumulated = 0;
+      let runningBookValue = Math.max(0, toNumber(asset.purchaseCost));
+      let assetHasNewEntries = false;
+      const depreciationAmountPerMonth = getDepreciationAmount({
+        ...asset,
+        accumulatedDepreciation: 0,
       });
 
+      for (let cursor = startPeriod; comparePeriods(cursor, period) <= 0; cursor = addMonths(cursor, 1)) {
+        const depreciationAmount = Math.min(
+          depreciationAmountPerMonth,
+          Math.max(0, toNumber(asset.purchaseCost) - toNumber(asset.salvageValue) - runningAccumulated),
+        );
+        if (depreciationAmount <= 0) {
+          break;
+        }
+
+        const nextAccumulated = Math.max(0, runningAccumulated + depreciationAmount);
+        const nextBookValue = Math.max(
+          Math.max(0, toNumber(asset.salvageValue)),
+          Math.max(0, toNumber(asset.purchaseCost)) - nextAccumulated,
+        );
+
+        await assetDepreciationService.upsert({
+          assetId: asset.id,
+          period: cursor,
+          depreciationAmount,
+          accumulatedDepreciation: nextAccumulated,
+          bookValue: nextBookValue,
+        });
+
+        runningAccumulated = nextAccumulated;
+        runningBookValue = nextBookValue;
+        createdEntries += 1; // Includes updates for existing months to heal sparse schedules.
+        assetHasNewEntries = true;
+      }
+
+      if (!assetHasNewEntries) {
+        skippedEntries += 1;
+        continue;
+      }
+
       await assetService.update(asset.id, {
-        accumulatedDepreciation: nextAccumulated,
-        currentValue: nextBookValue,
+        accumulatedDepreciation: runningAccumulated,
+        currentValue: runningBookValue,
       });
 
       processedAssets += 1;
-      createdEntries += 1;
     }
 
     return {

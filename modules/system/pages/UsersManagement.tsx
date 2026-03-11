@@ -344,8 +344,8 @@ export const UsersManagement: React.FC = () => {
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <div className="grid grid-flow-col auto-cols-[minmax(220px,1fr)] md:grid-flow-row md:grid-cols-4 gap-3 min-w-[920px] md:min-w-0 pb-1">
+      <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           <Card className="p-4">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المستخدمين</p>
             <p className="text-2xl font-bold text-[var(--color-text)]">{rows.length}</p>
@@ -367,7 +367,7 @@ export const UsersManagement: React.FC = () => {
 
       <Card title="قائمة المستخدمين">
         <div className="erp-filter-bar">
-          <div className="erp-search-input erp-search-input--table max-w-[360px]">
+          <div className="erp-search-input erp-search-input--table w-full sm:max-w-[360px]">
             <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
             <input
               value={query}
@@ -384,8 +384,7 @@ export const UsersManagement: React.FC = () => {
               </button>
             )}
           </div>
-          <div className="hidden sm:block" style={{ flex: 1 }} />
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap sm:ms-auto">
             <button
               className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${statusFilter === 'all' ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'}`}
               onClick={() => setStatusFilter('all')}

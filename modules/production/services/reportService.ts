@@ -419,8 +419,28 @@ export const reportService = {
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
-      console.error('reportService.getByLine error:', error);
-      throw error;
+      const requiresIndex = isMissingIndexError(error);
+      if (!requiresIndex) {
+        console.error('reportService.getByLine error:', error);
+        throw error;
+      }
+
+      // Fallback for environments where lineId+date index is not deployed yet.
+      // Uses index-free query (lineId only), then sorts client-side by date.
+      try {
+        const fallbackQ = query(
+          collection(db, COLLECTION),
+          where('lineId', '==', lineId),
+          limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
+        );
+        const fallbackSnap = await getDocs(fallbackQ);
+        const rows = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+        rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        return rows.slice(0, MAX_PAGE_SIZE);
+      } catch (fallbackError) {
+        console.error('reportService.getByLine fallback error:', fallbackError);
+        throw fallbackError;
+      }
     }
   },
 

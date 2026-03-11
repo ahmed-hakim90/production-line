@@ -52,6 +52,20 @@ const normalizePeriod = (value?: string): string => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
+const periodToDate = (period: string): Date => {
+  const [year, month] = period.split('-').map(Number);
+  return new Date(year, month - 1, 1);
+};
+
+const formatPeriod = (date: Date): string => (
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+);
+
+const addMonthsToPeriod = (period: string, months: number): string => {
+  const base = periodToDate(period);
+  return formatPeriod(new Date(base.getFullYear(), base.getMonth() + months, 1));
+};
+
 const periodEndDate = (period: string): Date => {
   const [year, month] = period.split('-').map(Number);
   return new Date(year, month, 0, 23, 59, 59, 999);
@@ -93,55 +107,70 @@ const runAssetDepreciationForPeriod = async (periodInput?: string) => {
       usefulLifeMonths?: number;
       monthlyDepreciation?: number;
       accumulatedDepreciation?: number;
+      currentValue?: number;
     };
     const purchaseDate = new Date(String(asset.purchaseDate || ''));
     if (Number.isNaN(purchaseDate.getTime()) || purchaseDate > periodEnd) {
       skippedEntries += 1;
       continue;
     }
-
-    const depDocId = `${assetDoc.id}_${period}`;
-    const depRef = db.collection(ASSET_DEPRECIATIONS_COLLECTION).doc(depDocId);
-    const existing = await depRef.get();
-    if (existing.exists) {
-      skippedEntries += 1;
-      continue;
-    }
-
+    const purchaseStartPeriod = formatPeriod(
+      new Date(purchaseDate.getFullYear(), purchaseDate.getMonth(), 1),
+    );
     const purchaseCost = Math.max(0, toNumberSafe(asset.purchaseCost));
     const salvageValue = Math.max(0, toNumberSafe(asset.salvageValue));
     const usefulLifeMonths = Math.max(1, Math.floor(toNumberSafe(asset.usefulLifeMonths, 1)));
-    const accumulated = Math.max(0, toNumberSafe(asset.accumulatedDepreciation));
     const fallbackMonthly = calculateMonthlyDepreciationSafe(purchaseCost, salvageValue, usefulLifeMonths);
     const monthlyDep = Math.max(0, toNumberSafe(asset.monthlyDepreciation || fallbackMonthly, fallbackMonthly));
-    const remaining = Math.max(0, (purchaseCost - salvageValue) - accumulated);
-    const depreciationAmount = Math.min(monthlyDep, remaining);
-    if (depreciationAmount <= 0) {
+    const startPeriod = purchaseStartPeriod;
+    if (startPeriod > period) {
+      skippedEntries += 1;
+      continue;
+    }
+    let runningAccumulated = 0;
+    let runningBookValue = purchaseCost;
+    let assetHasNewEntries = false;
+
+    for (let cursor = startPeriod; cursor <= period; cursor = addMonthsToPeriod(cursor, 1)) {
+      const remaining = Math.max(0, (purchaseCost - salvageValue) - runningAccumulated);
+      const depreciationAmount = Math.min(monthlyDep, remaining);
+      if (depreciationAmount <= 0) {
+        break;
+      }
+
+      const nextAccumulated = runningAccumulated + depreciationAmount;
+      const nextBookValue = Math.max(salvageValue, purchaseCost - nextAccumulated);
+      const depDocId = `${assetDoc.id}_${cursor}`;
+      const depRef = db.collection(ASSET_DEPRECIATIONS_COLLECTION).doc(depDocId);
+
+      const batch = db.batch();
+      batch.set(depRef, {
+        assetId: assetDoc.id,
+        period: cursor,
+        depreciationAmount,
+        accumulatedDepreciation: nextAccumulated,
+        bookValue: nextBookValue,
+        createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      await batch.commit();
+
+      runningAccumulated = nextAccumulated;
+      runningBookValue = nextBookValue;
+      createdEntries += 1;
+      assetHasNewEntries = true;
+    }
+
+    if (!assetHasNewEntries) {
       skippedEntries += 1;
       continue;
     }
 
-    const nextAccumulated = accumulated + depreciationAmount;
-    const nextBookValue = Math.max(salvageValue, purchaseCost - nextAccumulated);
-
-    const batch = db.batch();
-    batch.set(depRef, {
-      assetId: assetDoc.id,
-      period,
-      depreciationAmount,
-      accumulatedDepreciation: nextAccumulated,
-      bookValue: nextBookValue,
-      createdAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    batch.set(assetDoc.ref, {
-      accumulatedDepreciation: nextAccumulated,
-      currentValue: nextBookValue,
+    await assetDoc.ref.set({
+      accumulatedDepreciation: runningAccumulated,
+      currentValue: runningBookValue,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
-    await batch.commit();
-
     processedAssets += 1;
-    createdEntries += 1;
   }
 
   return {

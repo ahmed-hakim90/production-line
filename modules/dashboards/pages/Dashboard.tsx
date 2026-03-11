@@ -279,7 +279,10 @@ export const Dashboard: React.FC = () => {
     const effectiveTime = standardTime > 0 ? standardTime : avgTime;
 
     const activeLines = _rawLines.filter(
-      (l) => l.status === ProductionLineStatus.ACTIVE || l.status === ProductionLineStatus.IDLE
+      (l) =>
+        l.status === ProductionLineStatus.ACTIVE ||
+        l.status === ProductionLineStatus.IDLE ||
+        l.status === ProductionLineStatus.INJECTION
     );
 
     let totalDailyCapacity = 0;
@@ -310,6 +313,7 @@ export const Dashboard: React.FC = () => {
   const getVariant = (status: ProductionLineStatus) => {
     switch (status) {
       case ProductionLineStatus.ACTIVE: return 'success';
+      case ProductionLineStatus.INJECTION: return 'warning';
       case ProductionLineStatus.WARNING: return 'warning';
       case ProductionLineStatus.MAINTENANCE: return 'neutral';
       case ProductionLineStatus.IDLE: return 'neutral';
@@ -320,6 +324,7 @@ export const Dashboard: React.FC = () => {
   const getStatusLabel = (status: ProductionLineStatus) => {
     switch (status) {
       case ProductionLineStatus.ACTIVE: return 'يعمل حالياً';
+      case ProductionLineStatus.INJECTION: return 'خط حقن';
       case ProductionLineStatus.WARNING: return 'تنبيه: سرعة منخفضة';
       case ProductionLineStatus.MAINTENANCE: return 'متوقف (صيانة)';
       case ProductionLineStatus.IDLE: return 'جاهز للتشغيل';

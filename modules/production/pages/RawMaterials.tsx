@@ -42,7 +42,7 @@ function UsagePopover({ count, productNames }: { count: number; productNames: st
       {open && (
         <div
           className="absolute z-50 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] shadow-lg py-1"
-          style={{ minWidth: 220, top: '110%', insetInlineStart: 0 }}
+          style={{ minWidth: 'min(220px, calc(100vw - 32px))', top: '110%', insetInlineStart: 0 }}
         >
           <div className="px-3 py-2 border-b border-[var(--color-border)]">
             <p className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide">

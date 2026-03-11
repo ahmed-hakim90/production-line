@@ -103,6 +103,7 @@ export const ProductionPlans: React.FC = () => {
   const [filterLine, setFilterLine] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
+  const [filterSearch, setFilterSearch] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [sortField, setSortField] = useState<PlanSortField>('');
@@ -252,6 +253,15 @@ export const ProductionPlans: React.FC = () => {
   // ── Filtered plans ──
   const filteredPlans = useMemo(() => {
     return enrichedPlans.filter((p) => {
+      const searchQuery = filterSearch.trim().toLowerCase();
+      if (searchQuery) {
+        const productName = (_rawProducts.find((prod) => prod.id === p.productId)?.name ?? '').toLowerCase();
+        const productCode = (_rawProducts.find((prod) => prod.id === p.productId)?.code ?? '').toLowerCase();
+        const lineName = (_rawLines.find((line) => line.id === p.lineId)?.name ?? '').toLowerCase();
+        if (!productName.includes(searchQuery) && !productCode.includes(searchQuery) && !lineName.includes(searchQuery)) {
+          return false;
+        }
+      }
       if (filterStatus && p.status !== filterStatus) return false;
       if (filterLine && p.lineId !== filterLine) return false;
       if (filterProduct && p.productId !== filterProduct) return false;
@@ -260,7 +270,7 @@ export const ProductionPlans: React.FC = () => {
       if (filterDateTo && (p.plannedStartDate || p.startDate) > filterDateTo) return false;
       return true;
     });
-  }, [enrichedPlans, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo]);
+  }, [enrichedPlans, filterSearch, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo, _rawProducts, _rawLines]);
 
   const sortedPlans = useMemo(() => {
     if (!sortField) return filteredPlans;
@@ -480,7 +490,7 @@ export const ProductionPlans: React.FC = () => {
     setDeletePlanId(null);
   };
 
-  const hasActiveFilters = filterStatus || filterLine || filterProduct || filterPriority || filterDateFrom || filterDateTo;
+  const hasActiveFilters = filterSearch || filterStatus || filterLine || filterProduct || filterPriority || filterDateFrom || filterDateTo;
 
   const handleExportPlans = () => {
     exportProductionPlans(sortedPlans as ProductionPlan[], {
@@ -512,7 +522,7 @@ export const ProductionPlans: React.FC = () => {
           onClick: () => setFormOpen(!formOpen),
         } : undefined}
         extra={
-          <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-base)] p-0.5">
+          <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-base)] p-0.5 overflow-x-auto">
             {([['table', 'view_list'], ['kanban', 'view_kanban'], ['timeline', 'timeline']] as [ViewMode, string][]).map(([mode, icon]) => (
               <button
                 key={mode}
@@ -544,7 +554,7 @@ export const ProductionPlans: React.FC = () => {
       />
 
       {/* KPI Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPIBox label="خطط نشطة" value={kpis.activeCount} icon="event_available" colorClass="bg-blue-100 text-blue-600" />
         <KPIBox label="خطط متأخرة" value={kpis.delayedCount} icon="warning" colorClass="bg-rose-100 text-rose-600" />
         <KPIBox label="الكمية المتبقية" value={formatNumber(kpis.totalRemaining)} icon="inventory_2" colorClass="bg-amber-100 text-amber-600" />
@@ -703,7 +713,7 @@ export const ProductionPlans: React.FC = () => {
             )}
           </div>
 
-          <div className="mt-6 flex items-center justify-end gap-3">
+          <div className="mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3">
             <Button variant="outline" onClick={() => setFormOpen(false)}>إلغاء</Button>
             <Button variant="primary" onClick={handleCreate} disabled={saving || !formProductId || !formLineId || formQuantity <= 0}>
               {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -738,6 +748,15 @@ export const ProductionPlans: React.FC = () => {
 
       {/* Filters */}
       <div className="erp-filter-bar">
+        <div className="erp-search-input erp-search-input--table">
+          <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
+          <input
+            type="search"
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            placeholder="بحث بالخط أو المنتج أو الكود..."
+          />
+        </div>
         <select
           className={`erp-filter-select${filterStatus ? ' active' : ''}`}
           value={filterStatus}
@@ -808,7 +827,15 @@ export const ProductionPlans: React.FC = () => {
         {hasActiveFilters && (
           <button
             className="erp-filter-clear"
-            onClick={() => { setFilterStatus(''); setFilterLine(''); setFilterProduct(''); setFilterPriority(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+            onClick={() => {
+              setFilterSearch('');
+              setFilterStatus('');
+              setFilterLine('');
+              setFilterProduct('');
+              setFilterPriority('');
+              setFilterDateFrom('');
+              setFilterDateTo('');
+            }}
           >
             <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
             مسح
@@ -1281,8 +1308,8 @@ export const ProductionPlans: React.FC = () => {
             const smartColor = smartStatusColors[plan.smartStatus];
 
             return (
-              <div key={plan.id} className="flex items-center gap-4">
-                <div className="w-36 shrink-0 text-right">
+              <div key={plan.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <div className="w-full sm:w-36 shrink-0 text-right">
                   <p className="text-xs font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
                   <p className="text-[10px] text-slate-400">{line?.name ?? '—'}</p>
                 </div>
@@ -1305,7 +1332,7 @@ export const ProductionPlans: React.FC = () => {
           })}
         </div>
 
-        <div className="px-5 pb-4 flex items-center gap-4 text-[10px] text-[var(--color-text-muted)] font-medium">
+        <div className="px-5 pb-4 flex flex-wrap items-center gap-3 sm:gap-4 text-[10px] text-[var(--color-text-muted)] font-medium">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400"></span> اليوم</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> في المسار</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> معرض للخطر</span>

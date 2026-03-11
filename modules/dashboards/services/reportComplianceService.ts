@@ -1,12 +1,14 @@
 import type { FirestoreEmployee } from '../../../types';
 import { getOperationalDateString } from '../../../utils/calculations';
 import { reportService } from '../../production/services/reportService';
-import { lineAssignmentService } from '../../production/services/lineAssignmentService';
+import { supervisorLineAssignmentService } from '../../production/services/supervisorLineAssignmentService';
 
 type CompliancePerson = {
   employeeId: string;
   name: string;
   lineNames: string[];
+  expectedReports: number;
+  submittedReports: number;
 };
 
 export interface ReportComplianceSnapshot {
@@ -14,6 +16,8 @@ export interface ReportComplianceSnapshot {
   isFactoryHoliday: boolean;
   holidayReason: string | null;
   assignedSupervisorsCount: number;
+  expectedReportsCount: number;
+  submittedReportsCount: number;
   submittedCount: number;
   missingCount: number;
   unassignedCount: number;
@@ -69,6 +73,8 @@ export const reportComplianceService = {
         isFactoryHoliday: true,
         holidayReason: 'إجازة المصنع (يوم الجمعة)',
         assignedSupervisorsCount: 0,
+        expectedReportsCount: 0,
+        submittedReportsCount: 0,
         submittedCount: 0,
         missingCount: 0,
         unassignedCount: 0,
@@ -96,12 +102,12 @@ export const reportComplianceService = {
     const reportsEndDate = addDays(dateValue, graceDays);
 
     const [dayAssignments, dayReports] = await Promise.all([
-      lineAssignmentService.getByDate(dateValue),
+      supervisorLineAssignmentService.getActiveByDate(dateValue),
       reportService.getByDateRange(dateValue, reportsEndDate),
     ]);
     const scope = options?.scope ?? 'assigned_only';
 
-    const assignedMap = new Map<string, CompliancePerson>();
+    const assignedMap = new Map<string, CompliancePerson & { lineIds: Set<string> }>();
     if (scope === 'all_active') {
       for (const supervisor of supervisors) {
         const supervisorId = String(supervisor.id || '').trim();
@@ -110,22 +116,32 @@ export const reportComplianceService = {
           employeeId: supervisorId,
           name: toName(supervisor, supervisorId),
           lineNames: [],
+          lineIds: new Set<string>(),
+          expectedReports: 0,
+          submittedReports: 0,
         });
       }
     }
 
     for (const assignment of dayAssignments) {
-      const employeeId = String(assignment.employeeId || '').trim();
+      const employeeId = String(assignment.supervisorId || '').trim();
       if (!employeeId) continue;
       if (!supervisorById.has(employeeId)) continue;
+      const lineId = String(assignment.lineId || '').trim();
+      if (!lineId) continue;
 
       const prev = assignedMap.get(employeeId) || {
         employeeId,
         name: toName(supervisorById.get(employeeId), employeeId),
         lineNames: [],
+        lineIds: new Set<string>(),
+        expectedReports: 0,
+        submittedReports: 0,
       };
-      const lineName = toLineName(String(assignment.lineId || ''), lineById);
+      const lineName = toLineName(lineId, lineById);
       if (lineName && !prev.lineNames.includes(lineName)) prev.lineNames.push(lineName);
+      prev.lineIds.add(lineId);
+      prev.expectedReports = prev.lineIds.size;
       assignedMap.set(employeeId, prev);
     }
 
@@ -134,12 +150,44 @@ export const reportComplianceService = {
         .map((report) => String(report.employeeId || '').trim())
         .filter((employeeId) => supervisorById.has(employeeId)),
     );
+    const reportedPairs = new Set(
+      dayReports
+        .map((report) => `${String(report.employeeId || '').trim()}__${String(report.lineId || '').trim()}`)
+        .filter((pair) => {
+          const [employeeId, lineId] = pair.split('__');
+          return Boolean(employeeId) && Boolean(lineId) && supervisorById.has(employeeId);
+        }),
+    );
 
     const submitted: CompliancePerson[] = [];
     const missing: CompliancePerson[] = [];
     for (const person of assignedMap.values()) {
-      if (reportedSupervisorIds.has(person.employeeId)) submitted.push(person);
-      else missing.push(person);
+      const expectedReports = person.lineIds.size;
+      if (expectedReports === 0) {
+        const row: CompliancePerson = {
+          employeeId: person.employeeId,
+          name: person.name,
+          lineNames: person.lineNames,
+          expectedReports: 0,
+          submittedReports: reportedSupervisorIds.has(person.employeeId) ? 1 : 0,
+        };
+        if (row.submittedReports > 0) submitted.push(row);
+        else missing.push(row);
+        continue;
+      }
+      let submittedReports = 0;
+      person.lineIds.forEach((lineId) => {
+        if (reportedPairs.has(`${person.employeeId}__${lineId}`)) submittedReports += 1;
+      });
+      const row: CompliancePerson = {
+        employeeId: person.employeeId,
+        name: person.name,
+        lineNames: person.lineNames,
+        expectedReports,
+        submittedReports,
+      };
+      if (submittedReports >= expectedReports) submitted.push(row);
+      else missing.push(row);
     }
 
     const assignedIds = new Set(Array.from(assignedMap.keys()));
@@ -151,18 +199,24 @@ export const reportComplianceService = {
           employeeId: String(employee.id),
           name: toName(employee, String(employee.id)),
           lineNames: [],
+          expectedReports: 0,
+          submittedReports: 0,
         }));
 
     const byName = (a: CompliancePerson, b: CompliancePerson) => a.name.localeCompare(b.name, 'ar');
     submitted.sort(byName);
     missing.sort(byName);
     unassigned.sort(byName);
+    const expectedReportsCount = Array.from(assignedMap.values()).reduce((sum, person) => sum + person.lineIds.size, 0);
+    const submittedReportsCount = [...submitted, ...missing].reduce((sum, person) => sum + (person.submittedReports || 0), 0);
 
     return {
       operationalDate: dateValue,
       isFactoryHoliday: false,
       holidayReason: null,
       assignedSupervisorsCount: assignedMap.size,
+      expectedReportsCount,
+      submittedReportsCount,
       submittedCount: submitted.length,
       missingCount: missing.length,
       unassignedCount: unassigned.length,

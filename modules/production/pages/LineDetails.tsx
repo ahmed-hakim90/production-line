@@ -51,6 +51,7 @@ import {
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'neutral' }> = {
   [ProductionLineStatus.ACTIVE]: { label: 'نشط', variant: 'success' },
+  [ProductionLineStatus.INJECTION]: { label: 'حقن', variant: 'warning' },
   [ProductionLineStatus.MAINTENANCE]: { label: 'صيانة', variant: 'warning' },
   [ProductionLineStatus.IDLE]: { label: 'متوقف', variant: 'neutral' },
   [ProductionLineStatus.WARNING]: { label: 'تحذير', variant: 'danger' },
@@ -102,6 +103,8 @@ export const LineDetails: React.FC = () => {
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
+  const assets = useAppStore((s) => s.assets);
+  const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const systemSettings = useAppStore((s) => s.systemSettings);
 
   const [reports, setReports] = useState<ProductionReport[]>([]);
@@ -290,16 +293,47 @@ export const LineDetails: React.FC = () => {
     [activePlan, planActualProduced]
   );
 
+  const costSummaryMonth = useMemo(() => {
+    const currentMonth = getCurrentMonth();
+
+    const currentMonthHasLineAllocation = costAllocations.some((allocation) =>
+      allocation.month === currentMonth
+      && allocation.allocations?.some((entry) => entry.lineId === id && Number(entry.percentage || 0) > 0)
+    );
+    if (currentMonthHasLineAllocation) return currentMonth;
+
+    const latestAllocatedMonthForLine = costAllocations
+      .filter((allocation) =>
+        allocation.allocations?.some((entry) => entry.lineId === id && Number(entry.percentage || 0) > 0)
+      )
+      .map((allocation) => allocation.month)
+      .sort()
+      .at(-1);
+    if (latestAllocatedMonthForLine) return latestAllocatedMonthForLine;
+
+    const sourceReports = periodReports.length > 0 ? periodReports : reports;
+    const latestDate = sourceReports
+      .map((r) => r.date)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+    if (latestDate && latestDate.length >= 7) return latestDate.slice(0, 7);
+
+    return currentMonth;
+  }, [costAllocations, id, periodReports, reports]);
+
   const lineAllocatedCosts = useMemo(() => {
     if (!id) return null;
     return buildLineAllocatedCostSummary(
       id,
-      getCurrentMonth(),
+      costSummaryMonth,
       costCenters,
       costCenterValues,
       costAllocations,
+      assets,
+      assetDepreciations,
     );
-  }, [id, costCenters, costCenterValues, costAllocations]);
+  }, [id, costSummaryMonth, costCenters, costCenterValues, costAllocations, assets, assetDepreciations]);
 
   const employeeHourlyRates = useMemo(() => {
     const rates = new Map<string, number>();
@@ -822,7 +856,7 @@ export const LineDetails: React.FC = () => {
               <span className="material-icons-round text-violet-500">account_balance</span>
               <h3 className="text-lg font-bold">التكاليف المتوزعة على الخط</h3>
             </div>
-            <span className="text-xs font-bold text-violet-500">{lineAllocatedCosts.month}</span>
+            <span className="text-xs font-bold text-violet-500">شهر التكلفة: {lineAllocatedCosts.month}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">

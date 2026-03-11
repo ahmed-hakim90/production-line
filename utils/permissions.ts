@@ -23,7 +23,8 @@ export type Permission =
   | 'supervisors.view'
   | 'productionWorkers.view'
   | 'lineWorkers.view'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage'
+  | 'supervisorAssignments.manage'
+  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
   | 'assets.view' | 'assets.create' | 'assets.edit' | 'assets.delete' | 'assets.depreciation.run' | 'assets.depreciation.view'
@@ -108,6 +109,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'supervisors.view', label: 'عرض المشرفين' },
       { key: 'productionWorkers.view', label: 'عرض عمال الإنتاج' },
       { key: 'lineWorkers.view', label: 'عرض وإدارة ربط العمالة' },
+      { key: 'supervisorAssignments.manage', label: 'إدارة توزيع المشرفين على الخطوط' },
       { key: 'plans.view', label: 'عرض خطط الإنتاج' },
       { key: 'plans.create', label: 'إنشاء خطة إنتاج' },
       { key: 'plans.edit', label: 'تعديل خطط الإنتاج' },
@@ -123,6 +125,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.delete', label: 'حذف التقارير' },
       { key: 'reports.viewCost', label: 'عرض عمود التكلفة' },
       { key: 'reports.componentInjection.manage', label: 'إدارة تقارير مكونات الحقن' },
+      { key: 'reports.componentInjection.only', label: 'وضع حقن فقط (قفل تقرير المنتج العادي)' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
@@ -320,6 +323,7 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
       { path: '/production-plans', icon: 'event_note', label: 'خطط الإنتاج', permission: 'plans.view' },
       { path: '/work-orders', icon: 'assignment', label: 'أوامر الشغل', permission: 'workOrders.view' },
       { path: '/supervisors', icon: 'engineering', label: 'المشرفين', permission: 'supervisors.view' },
+      { path: '/supervisor-line-assignments', icon: 'alt_route', label: 'توزيع المشرفين', permission: 'supervisorAssignments.manage' },
       { path: '/production-workers', icon: 'construction', label: 'عمال الإنتاج', permission: 'productionWorkers.view' },
       { path: '/reports', icon: 'bar_chart', label: 'التقارير', permission: 'reports.view' },
       { path: '/quick-action', icon: 'bolt', label: 'إدخال سريع', permission: 'quickAction.view' },
@@ -408,7 +412,7 @@ const SIDEBAR_GROUP_ORDER: string[] = [
 const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   dashboards: ['/', '/employee-dashboard', '/factory-dashboard', '/admin-dashboard'],
   catalog: ['/products', '/products/raw-materials', '/catalog/categories'],
-  production: ['/lines', '/production-plans', '/work-orders', '/supervisors', '/production-workers', '/reports', '/quick-action'],
+  production: ['/lines', '/production-plans', '/work-orders', '/supervisors', '/supervisor-line-assignments', '/production-workers', '/reports', '/quick-action'],
   inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/inventory/movements', '/inventory/counts'],
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
   hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
@@ -464,6 +468,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/employees/:id': 'employees.viewDetails',
   '/supervisors': 'supervisors.view',
   '/supervisors/:id': 'supervisors.view',
+  '/supervisor-line-assignments': 'supervisorAssignments.manage',
   '/production-workers': 'productionWorkers.view',
   '/production-workers/:id': 'productionWorkers.view',
   '/self-service': 'selfService.view',

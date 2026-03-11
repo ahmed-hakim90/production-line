@@ -6,6 +6,7 @@ import { WorkOrders } from '../pages/WorkOrders';
 import { WorkOrderScanner } from '../pages/WorkOrderScanner';
 import { Supervisors } from '../pages/Supervisors';
 import { SupervisorDetails } from '../pages/SupervisorDetails';
+import { SupervisorLineAssignment } from '../pages/SupervisorLineAssignment';
 import { ProductionWorkers } from '../pages/ProductionWorkers';
 import { ProductionWorkerDetails } from '../pages/ProductionWorkerDetails';
 import { Reports } from '../pages/Reports';
@@ -20,6 +21,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/work-orders/:id/scanner', permission: 'workOrders.view', component: WorkOrderScanner },
   { path: '/supervisors', permission: 'supervisors.view', component: Supervisors },
   { path: '/supervisors/:id', permission: 'supervisors.view', component: SupervisorDetails },
+  { path: '/supervisor-line-assignments', permission: 'supervisorAssignments.manage', component: SupervisorLineAssignment },
   { path: '/production-workers', permission: 'productionWorkers.view', component: ProductionWorkers },
   { path: '/production-workers/:id', permission: 'productionWorkers.view', component: ProductionWorkerDetails },
   { path: '/reports', permission: 'reports.view', component: Reports },

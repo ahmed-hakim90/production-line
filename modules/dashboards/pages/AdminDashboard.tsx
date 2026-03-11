@@ -449,7 +449,12 @@ export const AdminDashboard: React.FC = () => {
     });
 
     const computedTotalCost = totalLaborCost + totalIndirectCost;
-    const totalCost = hasAggregateData ? (rangeAggregate?.totalCost || 0) : computedTotalCost;
+    const aggregateTotalCost = rangeAggregate?.totalCost || 0;
+    // Backward compatibility: some historical dashboardStats docs may miss totalCost.
+    // In that case, prefer live computed cost instead of displaying misleading zero.
+    const totalCost = (hasAggregateData && aggregateTotalCost > 0)
+      ? aggregateTotalCost
+      : computedTotalCost;
     const avgCostPerUnit = totalProduction > 0 ? totalCost / totalProduction : 0;
 
     const standardConfigs = lineProductConfigs;
@@ -1103,7 +1108,7 @@ export const AdminDashboard: React.FC = () => {
             onChange={(e) => { setCustomEnd(e.target.value); setPreset('custom'); }}
           />
         </div>
-        <span className="text-xs text-[var(--color-text-muted)] font-medium me-auto">{dateRange.start} ← {dateRange.end}</span>
+        <span className="text-xs text-[var(--color-text-muted)] font-medium w-full sm:w-auto sm:me-auto">{dateRange.start} ← {dateRange.end}</span>
       </div>
 
       {reportsError && (
@@ -1267,7 +1272,7 @@ export const AdminDashboard: React.FC = () => {
                 <Badge variant="info">{productSummary.length} منتج</Badge>
               </div>
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:mr-auto">
-              <div className="relative flex-1 min-w-[170px] sm:flex-none sm:min-w-0">
+              <div className="relative flex-1 min-w-0 w-full sm:w-auto sm:min-w-[170px]">
                   <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
                   <input
                     type="text"
@@ -1278,7 +1283,7 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
                
-                <div className="relative flex-1 min-w-[150px] sm:flex-none sm:min-w-0">
+                <div className="relative flex-1 min-w-0 w-full sm:w-auto sm:min-w-[150px]">
                   <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
                   <select
                     value={productCategoryFilter}
@@ -1438,13 +1443,13 @@ export const AdminDashboard: React.FC = () => {
 
         return (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-amber-500">assignment</span>
                 <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
                 <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalQty)}</span>
                 <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
               </div>

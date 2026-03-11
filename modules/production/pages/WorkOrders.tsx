@@ -55,8 +55,10 @@ export const WorkOrders: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const navigate = useNavigate();
   const { can } = usePermission();
+  const canCreateFinishedWorkOrders = can('workOrders.create');
   const canManageComponentInjectionWorkOrders = can('workOrders.componentInjection.manage');
-  const canCreateWorkOrder = can('workOrders.create') || canManageComponentInjectionWorkOrders;
+  const canCreateWorkOrder = canCreateFinishedWorkOrders || canManageComponentInjectionWorkOrders;
+  const canChooseWorkOrderType = canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders;
   const {
     currentEmployee,
     _rawProducts,
@@ -120,10 +122,10 @@ export const WorkOrders: React.FC = () => {
   const workOrdersCursorRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!can('workOrders.create') && canManageComponentInjectionWorkOrders) {
+    if (!canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders) {
       setForm((prev) => ({ ...prev, workOrderType: 'component_injection' }));
     }
-  }, [can, canManageComponentInjectionWorkOrders]);
+  }, [canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
 
   const loadWorkOrders = useCallback(async (append = false) => {
     setWorkOrdersLoading(true);
@@ -874,24 +876,22 @@ export const WorkOrders: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع أمر الشغل</label>
-                <select
-                  value={form.workOrderType}
-                  onChange={(e) => setForm((f) => ({
-                    ...f,
-                    workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
-                  }))}
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
-                >
-                  {can('workOrders.create') && (
+              {canChooseWorkOrderType && (
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع أمر الشغل</label>
+                  <select
+                    value={form.workOrderType}
+                    onChange={(e) => setForm((f) => ({
+                      ...f,
+                      workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
+                    }))}
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+                  >
                     <option value="finished_product">أمر شغل منتج نهائي</option>
-                  )}
-                  {canManageComponentInjectionWorkOrders && (
                     <option value="component_injection">أمر شغل مكون حقن</option>
-                  )}
-                </select>
-              </div>
+                  </select>
+                </div>
+              )}
 
               {/* Product */}
               <div>

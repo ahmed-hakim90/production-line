@@ -120,7 +120,9 @@ export const buildLineAllocatedCostSummary = (
   month: string,
   costCenters: CostCenter[],
   costCenterValues: CostCenterValue[],
-  costAllocations: CostAllocation[]
+  costAllocations: CostAllocation[],
+  assets: Asset[] = [],
+  assetDepreciations: AssetDepreciation[] = [],
 ): LineAllocatedCostSummary => {
   if (!lineId) {
     return {
@@ -133,14 +135,24 @@ export const buildLineAllocatedCostSummary = (
   }
 
   const centers: LineAllocatedCenterCost[] = [];
+  const depreciationByCenter = new Map<string, number>();
+
+  if (assets.length > 0 && assetDepreciations.length > 0) {
+    const assetById = new Map(assets.map((asset) => [String(asset.id || ''), asset]));
+    assetDepreciations.forEach((entry) => {
+      if (entry.period !== month) return;
+      const asset = assetById.get(String(entry.assetId || ''));
+      const centerId = String(asset?.centerId || '');
+      if (!centerId) return;
+      depreciationByCenter.set(
+        centerId,
+        (depreciationByCenter.get(centerId) || 0) + Number(entry.depreciationAmount || 0),
+      );
+    });
+  }
 
   for (const center of costCenters) {
     if (center.type !== 'indirect' || !center.isActive || !center.id) continue;
-
-    const value = costCenterValues.find(
-      (v) => v.costCenterId === center.id && v.month === month
-    );
-    if (!value || value.amount <= 0) continue;
 
     const allocation = costAllocations.find(
       (a) => a.costCenterId === center.id && a.month === month
@@ -150,7 +162,14 @@ export const buildLineAllocatedCostSummary = (
     const lineAlloc = allocation.allocations.find((a) => a.lineId === lineId);
     if (!lineAlloc || lineAlloc.percentage <= 0) continue;
 
-    const monthlyAllocated = value.amount * (lineAlloc.percentage / 100);
+    const value = costCenterValues.find(
+      (v) => v.costCenterId === center.id && v.month === month
+    );
+
+    const monthlyAllocatedFromValue = (value?.amount || 0) * (lineAlloc.percentage / 100);
+    const centerMonthlyDep = depreciationByCenter.get(center.id) || 0;
+    const monthlyAllocatedFromDep = centerMonthlyDep * (lineAlloc.percentage / 100);
+    const monthlyAllocated = monthlyAllocatedFromValue + monthlyAllocatedFromDep;
     const workingDays = getWorkingDaysForMonth(value, month);
     if (monthlyAllocated <= 0) continue;
 

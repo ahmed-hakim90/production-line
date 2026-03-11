@@ -1607,13 +1607,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const reportType = resolveReportType(data.reportType);
       const permissions = get().userPermissions;
-      if (reportType === 'finished_product' && !hasPermission(permissions, 'reports.create')) {
+      const canCreateFinishedReports = hasPermission(permissions, 'reports.create');
+      const forceInjectionOnly =
+        hasPermission(permissions, 'reports.componentInjection.only') && !canCreateFinishedReports;
+      const canManageComponentInjection =
+        hasPermission(permissions, 'reports.componentInjection.manage') || forceInjectionOnly;
+      if (reportType === 'finished_product' && (forceInjectionOnly || !canCreateFinishedReports)) {
         const msg = 'غير مصرح بإنشاء تقرير إنتاج.';
         set({ error: msg });
         return null;
       }
-      if (reportType === 'component_injection' && !hasPermission(permissions, 'reports.componentInjection.manage')) {
+      if (reportType === 'component_injection' && !canManageComponentInjection) {
         const msg = 'غير مصرح بإنشاء تقرير مكونات الحقن.';
+        set({ error: msg });
+        return null;
+      }
+      if (Number(data.quantityProduced || 0) <= 0 || Number(data.workHours || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة وساعات عمل.';
+        set({ error: msg });
+        return null;
+      }
+      const detailedWorkersTotal = Number(data.workersProductionCount || 0)
+        + Number(data.workersPackagingCount || 0)
+        + Number(data.workersQualityCount || 0)
+        + Number(data.workersMaintenanceCount || 0)
+        + Number(data.workersExternalCount || 0);
+      if (reportType === 'finished_product' && Number(data.workersCount || 0) <= 0 && detailedWorkersTotal <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون عمالة.';
         set({ error: msg });
         return null;
       }
@@ -1958,12 +1978,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const existingReport = await reportService.getById(id);
       const nextReportType = resolveReportType(data.reportType ?? existingReport?.reportType);
-      if (nextReportType === 'finished_product' && !hasPermission(get().userPermissions, 'reports.edit')) {
+      const permissions = get().userPermissions;
+      const canEditFinishedReports = hasPermission(permissions, 'reports.edit');
+      const forceInjectionOnly =
+        hasPermission(permissions, 'reports.componentInjection.only') && !canEditFinishedReports;
+      const canManageComponentInjection =
+        hasPermission(permissions, 'reports.componentInjection.manage') || forceInjectionOnly;
+      if (nextReportType === 'finished_product' && (forceInjectionOnly || !canEditFinishedReports)) {
         const msg = 'غير مصرح بتعديل تقارير الإنتاج.';
         set({ error: msg });
         throw new Error(msg);
       }
-      if (nextReportType === 'component_injection' && !hasPermission(get().userPermissions, 'reports.componentInjection.manage')) {
+      if (nextReportType === 'component_injection' && !canManageComponentInjection) {
         const msg = 'غير مصرح بتعديل تقرير مكونات الحقن.';
         set({ error: msg });
         throw new Error(msg);

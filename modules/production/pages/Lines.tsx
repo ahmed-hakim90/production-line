@@ -3,13 +3,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
-import { formatNumber, getTodayDateString, calculatePlanProgress, calculateSmartStatus, calculateTimeRatio, calculateProgressRatio, getReportWaste } from '../../../utils/calculations';
-import { formatCost, buildLineAllocatedCostSummary, getCurrentMonth } from '../../../utils/costCalculations';
-import { ProductionLineStatus, FirestoreProductionLine, WorkOrder, ProductionPlan, ProductionReport } from '../../../types';
+import { formatNumber, getTodayDateString } from '../../../utils/calculations';
+import { ProductionLineStatus, FirestoreProductionLine } from '../../../types';
 import type { LineWorkerAssignment } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
-import { reportService } from '@/modules/production/services/reportService';
+import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
@@ -17,6 +16,7 @@ import { PageHeader } from '../../../components/PageHeader';
 
 const statusOptions: { value: ProductionLineStatus; label: string }[] = [
   { value: ProductionLineStatus.ACTIVE, label: 'يعمل' },
+  { value: ProductionLineStatus.INJECTION, label: 'حقن' },
   { value: ProductionLineStatus.MAINTENANCE, label: 'صيانة' },
   { value: ProductionLineStatus.IDLE, label: 'متوقف' },
   { value: ProductionLineStatus.WARNING, label: 'تنبيه' },
@@ -35,68 +35,53 @@ export const Lines: React.FC = () => {
   const productionLines = useAppStore((s) => s.productionLines);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
+  const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const createLine = useAppStore((s) => s.createLine);
   const updateLine = useAppStore((s) => s.updateLine);
   const deleteLine = useAppStore((s) => s.deleteLine);
   const createLineStatus = useAppStore((s) => s.createLineStatus);
   const updateLineStatus = useAppStore((s) => s.updateLineStatus);
-  const workOrders = useAppStore((s) => s.workOrders);
-  const productionPlans = useAppStore((s) => s.productionPlans);
-  const _rawEmployees = useAppStore((s) => s._rawEmployees);
-  const storeTodayReports = useAppStore((s) => s.todayReports);
-  const storeProductionReports = useAppStore((s) => s.productionReports);
-  const costCenters = useAppStore((s) => s.costCenters);
-  const costCenterValues = useAppStore((s) => s.costCenterValues);
-  const costAllocations = useAppStore((s) => s.costAllocations);
 
   const { can } = usePermission();
   const navigate = useNavigate();
 
   const [todayAssignments, setTodayAssignments] = useState<LineWorkerAssignment[]>([]);
-  const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
-  const [recentReportsScoped, setRecentReportsScoped] = useState<ProductionReport[]>([]);
+  const [supervisorNameByLineId, setSupervisorNameByLineId] = useState<Record<string, string>>({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | ProductionLineStatus>('all');
 
   useEffect(() => {
-    lineAssignmentService.getByDate(getTodayDateString()).then(setTodayAssignments).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadScopedReports = async () => {
+    const loadDailyData = async () => {
       const today = getTodayDateString();
-      const now = new Date();
-      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const monthStart = `${month}-01`;
-      const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
       try {
-        const [todayPage, monthPage] = await Promise.all([
-          reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
-          reportService.listByDateRangePaged({ startDate: monthStart, endDate: monthEnd, limit: 100 }),
+        const [workersAssignments, supervisorAssignments] = await Promise.all([
+          lineAssignmentService.getByDate(today),
+          supervisorLineAssignmentService.getActiveByDate(today),
         ]);
-        if (cancelled) return;
-        setTodayReportsScoped(todayPage.items);
-        setRecentReportsScoped(monthPage.items);
+        setTodayAssignments(workersAssignments);
+
+        const nextByLine: Record<string, string> = {};
+        supervisorAssignments.forEach((row) => {
+          const lineId = String(row.lineId || '').trim();
+          const supervisorId = String(row.supervisorId || '').trim();
+          if (!lineId || !supervisorId) return;
+          const supervisorName = _rawEmployees.find((e) => e.id === supervisorId)?.name
+            || row.supervisorName
+            || '—';
+          nextByLine[lineId] = supervisorName;
+        });
+        setSupervisorNameByLineId(nextByLine);
       } catch {
-        if (cancelled) return;
-        setTodayReportsScoped([]);
-        setRecentReportsScoped([]);
+        setTodayAssignments([]);
+        setSupervisorNameByLineId({});
       }
     };
-    void loadScopedReports();
-    return () => { cancelled = true; };
-  }, []);
-
-  const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
-  const productionReports = recentReportsScoped.length > 0 ? recentReportsScoped : storeProductionReports;
+    void loadDailyData();
+  }, [_rawEmployees]);
 
   const getTodayWorkersCount = (lineId: string) =>
     todayAssignments.filter((a) => a.lineId === lineId).length;
-
-  const [showAllLines, setShowAllLines] = useState(false);
-  const LINES_PAGE_SIZE = 4;
-  const [showAllPlans, setShowAllPlans] = useState(false);
-  const PLANS_PAGE_SIZE = 6;
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -161,6 +146,7 @@ export const Lines: React.FC = () => {
   const getVariant = (status: ProductionLineStatus) => {
     switch (status) {
       case ProductionLineStatus.ACTIVE: return 'success' as const;
+      case ProductionLineStatus.INJECTION: return 'warning' as const;
       case ProductionLineStatus.WARNING: return 'warning' as const;
       case ProductionLineStatus.MAINTENANCE: return 'neutral' as const;
       default: return 'neutral' as const;
@@ -170,6 +156,7 @@ export const Lines: React.FC = () => {
   const getStatusLabel = (status: ProductionLineStatus) => {
     switch (status) {
       case ProductionLineStatus.ACTIVE: return 'يعمل حالياً';
+      case ProductionLineStatus.INJECTION: return 'خط حقن';
       case ProductionLineStatus.WARNING: return 'تنبيه';
       case ProductionLineStatus.MAINTENANCE: return 'صيانة';
       case ProductionLineStatus.IDLE: return 'جاهز للتشغيل';
@@ -252,83 +239,22 @@ export const Lines: React.FC = () => {
     });
   }, [productionLines]);
 
-  const latestReportByLine = useMemo(() => {
-    const getReportTime = (r: ProductionReport): number => {
-      const createdAt = r.createdAt as any;
-      if (createdAt?.toDate) return createdAt.toDate().getTime();
-      if (createdAt?.seconds) return createdAt.seconds * 1000;
-      if (createdAt) {
-        const createdAtMs = new Date(createdAt).getTime();
-        if (!Number.isNaN(createdAtMs)) return createdAtMs;
-      }
-      const dateMs = new Date(r.date).getTime();
-      return Number.isNaN(dateMs) ? 0 : dateMs;
-    };
-
-    const merged = [...todayReports, ...productionReports];
-    const unique = new Map<string, ProductionReport>();
-    merged.forEach((r) => {
-      const key = r.id ?? `${r.lineId}_${r.productId}_${r.employeeId}_${r.date}_${r.quantityProduced}_${r.workHours}`;
-      if (!unique.has(key)) unique.set(key, r);
+  const filteredLines = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return sortedLines.filter((line) => {
+      const matchesStatus = statusFilter === 'all' ? true : line.status === statusFilter;
+      const matchesSearch = !query
+        ? true
+        : `${line.name} ${line.code ?? ''}`.toLowerCase().includes(query);
+      return matchesStatus && matchesSearch;
     });
-
-    const byLine = new Map<string, ProductionReport>();
-    unique.forEach((report) => {
-      const current = byLine.get(report.lineId);
-      if (!current || getReportTime(report) > getReportTime(current)) {
-        byLine.set(report.lineId, report);
-      }
-    });
-    return byLine;
-  }, [todayReports, productionReports]);
-
-  const currentCostMonth = useMemo(() => getCurrentMonth(), []);
-  const lineAllocatedCosts = useMemo(() => {
-    const result = new Map<string, ReturnType<typeof buildLineAllocatedCostSummary>>();
-    productionLines.forEach((line) => {
-      result.set(
-        line.id,
-        buildLineAllocatedCostSummary(
-          line.id,
-          currentCostMonth,
-          costCenters,
-          costCenterValues,
-          costAllocations,
-        ),
-      );
-    });
-    return result;
-  }, [productionLines, currentCostMonth, costCenters, costCenterValues, costAllocations]);
-
-  const todaySupervisorCostByLine = useMemo(() => {
-    const maxHoursByLineSupervisor = new Map<string, number>();
-
-    todayReports.forEach((report) => {
-      if (!report.employeeId) return;
-      const key = `${report.lineId}__${report.employeeId}`;
-      const current = maxHoursByLineSupervisor.get(key) || 0;
-      maxHoursByLineSupervisor.set(key, Math.max(current, report.workHours || 0));
-    });
-
-    const result = new Map<string, number>();
-    maxHoursByLineSupervisor.forEach((maxHours, key) => {
-      const [lineId, employeeId] = key.split('__');
-      const hourlyRate = Math.max(
-        0,
-        _rawEmployees.find((e) => e.id === employeeId)?.hourlyRate || 0
-      );
-      const cost = maxHours * hourlyRate;
-      result.set(lineId, (result.get(lineId) || 0) + cost);
-    });
-
-    return result;
-  }, [todayReports, _rawEmployees]);
+  }, [sortedLines, searchTerm, statusFilter]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="خطوط الإنتاج"
-        subtitle="إدارة ومراقبة جميع خطوط الإنتاج في المصنع"
+        subtitle="عرض وإدارة خطوط الإنتاج فقط بأسلوب ERPNext"
         icon="linear_scale"
         primaryAction={can('lines.create') ? {
           label: 'إضافة خط إنتاج',
@@ -338,286 +264,6 @@ export const Lines: React.FC = () => {
         } : undefined}
       />
 
-      {/* Active Production Plans Summary */}
-      {(() => {
-        const activePlans = productionPlans.filter((p) => p.status === 'planned' || p.status === 'in_progress');
-        if (activePlans.length === 0) return null;
-        const totalPlanned = activePlans.reduce((s, p) => s + p.plannedQuantity, 0);
-        const totalProduced = activePlans.reduce((s, p) => s + p.producedQuantity, 0);
-        const overallProgress = totalPlanned > 0 ? Math.round((totalProduced / totalPlanned) * 100) : 0;
-
-        const getPriorityConfig = (priority: ProductionPlan['priority']) => {
-          switch (priority) {
-            case 'urgent': return { label: 'عاجل', color: 'text-rose-600 bg-rose-50' };
-            case 'high': return { label: 'مرتفع', color: 'text-amber-600 bg-amber-50' };
-            case 'medium': return { label: 'متوسط', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' };
-            default: return { label: 'منخفض', color: 'text-slate-500 bg-[#f8f9fa]' };
-          }
-        };
-
-        const getSmartStatusConfig = (plan: ProductionPlan) => {
-          const progressRatio = calculateProgressRatio(plan.producedQuantity, plan.plannedQuantity);
-          const timeRatio = calculateTimeRatio(plan.plannedStartDate, plan.plannedEndDate);
-          const smart = calculateSmartStatus(progressRatio, timeRatio, plan.status);
-          switch (smart) {
-            case 'on_track': return { label: 'على المسار', icon: 'check_circle', color: 'text-emerald-600' };
-            case 'at_risk': return { label: 'معرض للخطر', icon: 'warning', color: 'text-amber-500' };
-            case 'delayed': return { label: 'متأخر', icon: 'schedule', color: 'text-orange-500' };
-            case 'critical': return { label: 'حرج', icon: 'error', color: 'text-rose-500' };
-            case 'completed': return { label: 'مكتمل', icon: 'task_alt', color: 'text-emerald-600' };
-            default: return { label: '—', icon: 'help', color: 'text-slate-400' };
-          }
-        };
-
-        const visiblePlans = showAllPlans ? activePlans : activePlans.slice(0, PLANS_PAGE_SIZE);
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="material-icons-round text-blue-500">event_note</span>
-                <h3 className="text-base font-bold text-[var(--color-text)]">خطط الإنتاج النشطة</h3>
-                <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{activePlans.length}</span>
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-3 text-xs text-slate-500">
-                  <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalPlanned)}</span>
-                  <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
-                </div>
-                <button
-                  onClick={() => navigate('/production-plans')}
-                  className="btn btn-secondary gap-1 text-xs"
-                >
-                  <span className="material-icons-round text-[14px]">open_in_new</span>
-                  عرض كل الخطط
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {visiblePlans.map((plan) => {
-                const product = _rawProducts.find((p) => p.id === plan.productId);
-                const lineName = productionLines.find((l) => l.id === plan.lineId)?.name ?? '—';
-                const progress = calculatePlanProgress(plan.producedQuantity, plan.plannedQuantity);
-                const remaining = plan.plannedQuantity - plan.producedQuantity;
-                const priorityConf = getPriorityConfig(plan.priority);
-                const smartStatus = getSmartStatusConfig(plan);
-
-                return (
-                  <div
-                    key={plan.id}
-                    onClick={() => navigate('/production-plans')}
-                    className={`rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-800 ${plan.status === 'in_progress' ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800/40' : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-icons-round text-blue-500 text-lg">event_note</span>
-                        <span className="text-sm font-bold text-blue-700">خطة إنتاج</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${priorityConf.color}`}>{priorityConf.label}</span>
-                        <Badge variant={plan.status === 'in_progress' ? 'warning' : 'neutral'}>
-                          {plan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
-                      <p className="text-base font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`material-icons-round text-base ${smartStatus.color}`}>{smartStatus.icon}</span>
-                        <span className={`text-sm font-bold ${smartStatus.color}`}>{smartStatus.label}</span>
-                      </div>
-                      {can('costs.view') && plan.estimatedCost > 0 && (
-                        <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
-                          <span className="material-icons-round text-emerald-500 text-sm">payments</span>
-                          <span className="text-sm font-bold text-emerald-600">{formatCost(plan.estimatedCost)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المخطط</p>
-                        <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(plan.plannedQuantity)}</p>
-                      </div>
-                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">تم إنتاجه</p>
-                        <p className="text-lg font-bold text-emerald-600">{formatNumber(plan.producedQuantity)}</p>
-                      </div>
-                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
-                        <p className="text-lg font-bold text-rose-500">{formatNumber(remaining)}</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-[var(--color-text-muted)]">التقدم</span>
-                        <span className={progress >= 80 ? 'text-emerald-600' : progress >= 50 ? 'text-amber-600' : 'text-slate-500'}>{progress}%</span>
-                      </div>
-                      <div className="w-full h-2.5 bg-[var(--color-card)] rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-1000 ${progress >= 80 ? 'bg-emerald-500' : progress >= 50 ? 'bg-amber-500' : 'bg-blue-500'}`}
-                          style={{ width: `${Math.min(progress, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-5 text-xs text-[var(--color-text-muted)] pt-1">
-                      <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">precision_manufacturing</span>
-                        <span className="font-bold">{lineName}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">today</span>
-                        <span className="font-bold">{plan.plannedStartDate}</span>
-                      </div>
-                      <div className="flex items-center gap-1 mr-auto">
-                        <span className="material-icons-round text-sm">event</span>
-                        <span className="font-bold">{plan.plannedEndDate}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {activePlans.length > PLANS_PAGE_SIZE && (
-              <div className="flex justify-center">
-                <button
-                  onClick={() => setShowAllPlans((v) => !v)}
-                  className="btn btn-secondary gap-2"
-                >
-                  <span className="material-icons-round text-[16px]">
-                    {showAllPlans ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
-                  </span>
-                  {showAllPlans
-                    ? 'عرض أقل'
-                    : `عرض المزيد (${activePlans.length - PLANS_PAGE_SIZE} خطط متبقية)`}
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Active Work Orders Summary */}
-      {(() => {
-        const activeWOs = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
-        if (activeWOs.length === 0) return null;
-        const totalQty = activeWOs.reduce((s, w) => s + w.quantity, 0);
-        const totalProduced = activeWOs.reduce((s, w) => s + (w.producedQuantity ?? 0), 0);
-        const totalRemaining = totalQty - totalProduced;
-        const overallProgress = totalQty > 0 ? Math.round((totalProduced / totalQty) * 100) : 0;
-
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="material-icons-round text-amber-500">assignment</span>
-                <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
-                <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalQty)}</span>
-                <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {activeWOs.map((wo) => {
-                const product = _rawProducts.find((p) => p.id === wo.productId);
-                const lineName = productionLines.find((l) => l.id === wo.lineId)?.name ?? '—';
-                const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
-                const progress = wo.quantity > 0 ? Math.round(((wo.producedQuantity ?? 0) / wo.quantity) * 100) : 0;
-                const remaining = wo.quantity - (wo.producedQuantity ?? 0);
-                const estCostPerUnit = wo.quantity > 0 ? wo.estimatedCost / wo.quantity : 0;
-
-                return (
-                  <div key={wo.id} onClick={() => navigate('/work-orders')} className={`rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${wo.status === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40' : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-icons-round text-amber-500 text-lg">assignment</span>
-                        <span className="text-sm font-bold text-amber-700">أمر شغل #{wo.workOrderNumber}</span>
-                      </div>
-                      <Badge variant={wo.status === 'in_progress' ? 'warning' : 'neutral'}>
-                        {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
-                      </Badge>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
-                      <p className="text-base font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-icons-round text-indigo-400 text-base">person</span>
-                        <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
-                      </div>
-                      {can('costs.view') && estCostPerUnit > 0 && (
-                        <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
-                          <span className="material-icons-round text-emerald-500 text-sm">payments</span>
-                          <span className="text-[10px] text-slate-400">التكلفة المتوقعة</span>
-                          <span className="text-sm font-bold text-emerald-600">{formatCost(estCostPerUnit)}</span>
-                          <span className="text-[10px] text-slate-400">/قطعة</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المطلوب</p>
-                        <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
-                      </div>
-                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">تم إنتاجه</p>
-                        <p className="text-lg font-bold text-emerald-600">{formatNumber(wo.producedQuantity ?? 0)}</p>
-                      </div>
-                      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
-                        <p className="text-lg font-bold text-rose-500">{formatNumber(remaining)}</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-[var(--color-text-muted)]">التقدم</span>
-                        <span className={progress >= 80 ? 'text-emerald-600' : progress >= 50 ? 'text-amber-600' : 'text-slate-500'}>{progress}%</span>
-                      </div>
-                      <div className="w-full h-2.5 bg-[var(--color-card)] rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-1000 ${progress >= 80 ? 'bg-emerald-500' : progress >= 50 ? 'bg-amber-500' : 'bg-primary'}`}
-                          style={{ width: `${Math.min(progress, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-5 text-xs text-[var(--color-text-muted)] pt-1">
-                      <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">precision_manufacturing</span>
-                        <span className="font-bold">{lineName}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">groups</span>
-                        <span className="font-bold">{wo.maxWorkers} عامل</span>
-                      </div>
-                      <div className="flex items-center gap-1 mr-auto">
-                        <span className="material-icons-round text-sm">event</span>
-                        <span className="font-bold">{wo.targetDate}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Lines Grid */}
       {productionLines.length === 0 ? (
         <Card>
           <div className="text-center py-12 text-slate-400">
@@ -631,222 +277,124 @@ export const Lines: React.FC = () => {
           </div>
         </Card>
       ) : (
-        <>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {(showAllLines ? sortedLines : sortedLines.slice(0, LINES_PAGE_SIZE)).map((line) => {
-            const raw = _rawLines.find((l) => l.id === line.id);
-            const activeWOs = workOrders.filter((w) => w.lineId === line.id && (w.status === 'pending' || w.status === 'in_progress'));
-            const activeWO: WorkOrder | undefined = activeWOs.find((w) => w.status === 'in_progress') ?? activeWOs[0];
-            const lastLineReport = latestReportByLine.get(line.id);
-            const woProduct = activeWO ? _rawProducts.find((p) => p.id === activeWO.productId) : null;
-            const woProgress = activeWO && activeWO.quantity > 0 ? Math.round((activeWO.producedQuantity / activeWO.quantity) * 100) : 0;
-            const woRemaining = activeWO ? activeWO.quantity - (activeWO.producedQuantity ?? 0) : 0;
-            const woSupervisor = activeWO ? _rawEmployees.find((e) => e.id === activeWO.supervisorId) : null;
-            const woEstCostPerUnit = activeWO && activeWO.quantity > 0 ? activeWO.estimatedCost / activeWO.quantity : 0;
-            const reportProduct = lastLineReport ? _rawProducts.find((p) => p.id === lastLineReport.productId) : null;
-            const reportSupervisor = lastLineReport ? _rawEmployees.find((e) => e.id === lastLineReport.employeeId) : null;
-            const allocated = lineAllocatedCosts.get(line.id);
-            const supervisorDailyCost = todaySupervisorCostByLine.get(line.id) || 0;
-            const totalDailyAllocatedWithSupervisor = (allocated?.totalDailyAllocated || 0) + supervisorDailyCost;
+        <div className="list-view-wrapper">
+          <div className="list-toolbar">
+            <div className="erp-search-input erp-search-input--table">
+              <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="بحث باسم الخط أو الكود..."
+              />
+            </div>
 
-            return (
-              <Card key={line.id} className="transition-all hover:ring-2 hover:ring-primary/10">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h4 className="font-bold text-lg text-[var(--color-text)]">{line.name}</h4>
-                    <p className="text-[11px] font-bold text-primary/80 mt-0.5">كود الخط: {line.code || '—'}</p>
-                    {activeWO && (
-                      <span className="text-[11px] font-bold text-amber-600">أمر شغل #{activeWO.workOrderNumber}</span>
-                    )}
-                  </div>
-                  <Badge variant={getVariant(line.status)} pulse={line.status === ProductionLineStatus.ACTIVE}>
-                    {getStatusLabel(line.status)}
-                  </Badge>
-                </div>
-
-                <div className="space-y-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="material-icons-round text-[var(--color-text-muted)] text-sm">person</span>
-                    <p className="text-xs text-[var(--color-text-muted)] font-bold">المشرف</p>
-                    <p className="text-sm font-bold text-[var(--color-text)] mr-auto">{woSupervisor?.name ?? reportSupervisor?.name ?? line.currentName ?? '—'}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="material-icons-round text-[var(--color-text-muted)] text-sm">inventory_2</span>
-                    <p className="text-xs text-[var(--color-text-muted)] font-bold">المنتج</p>
-                    <p className="text-sm font-bold text-[var(--color-text)] mr-auto truncate max-w-[200px]">{woProduct?.name ?? reportProduct?.name ?? line.currentProduct ?? '—'}</p>
-                  </div>
-                  {can('costs.view') && woEstCostPerUnit > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-emerald-500 text-sm">payments</span>
-                      <p className="text-xs text-[var(--color-text-muted)] font-bold">التكلفة المتوقعة</p>
-                      <p className="text-sm font-bold text-emerald-600 mr-auto">{formatCost(woEstCostPerUnit)} <span className="text-[10px] text-[var(--color-text-muted)] font-medium">/قطعة</span></p>
-                    </div>
-                  )}
-                </div>
-
-                {can('costs.view') && allocated && (
-                  <div className="mb-4 rounded-[var(--border-radius-lg)] border border-violet-200/70 dark:border-violet-800/60 bg-violet-50/70 dark:bg-violet-900/10 p-3 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-bold text-violet-700 dark:text-violet-300">التكاليف المتوزعة على الخط</p>
-                      <span className="text-[10px] font-bold text-violet-500">{allocated.month}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
-                      <span className="material-icons-round text-sm text-violet-500">manage_accounts</span>
-                      <span className="font-bold text-slate-500">المشرف:</span>
-                      <span className="font-bold">{woSupervisor?.name ?? reportSupervisor?.name ?? line.currentName ?? '—'}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-center">
-                      <div className="bg-[var(--color-card)]/80 rounded-[var(--border-radius-base)] p-2">
-                        <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">إجمالي شهري</p>
-                        <p className="text-sm font-bold text-violet-700 dark:text-violet-300">
-                          {allocated.totalMonthlyAllocated > 0 ? formatCost(allocated.totalMonthlyAllocated) : '—'}
-                        </p>
-                      </div>
-                      <div className="bg-[var(--color-card)]/80 rounded-[var(--border-radius-base)] p-2">
-                        <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">موزع يومي + المشرف</p>
-                        <p className="text-sm font-bold text-violet-700 dark:text-violet-300">
-                          {totalDailyAllocatedWithSupervisor > 0 ? formatCost(totalDailyAllocatedWithSupervisor) : '—'}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500">
-                      تكلفة مشرف اليوم: {supervisorDailyCost > 0 ? formatCost(supervisorDailyCost) : '—'}
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      {allocated.centers.length > 0
-                        ? `عدد مراكز التكلفة الموزعة: ${allocated.centers.length}`
-                        : 'لا توجد توزيعات تكلفة مفعلة على هذا الخط في هذا الشهر.'}
-                    </p>
-                  </div>
-                )}
-
-                <div className="mb-4 rounded-[var(--border-radius-lg)] border border-primary/15 bg-primary/5 p-3">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <p className="text-xs font-bold text-primary">آخر تقرير إنتاج</p>
-                    <span className="text-[11px] font-bold text-slate-500">{lastLineReport?.date ?? 'لا يوجد تقرير'}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-center">
-                    <div className="bg-[var(--color-card)]/70 rounded-[var(--border-radius-base)] p-2">
-                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">الإنتاج</p>
-                      <p className="text-sm font-bold text-emerald-600">{lastLineReport ? formatNumber(lastLineReport.quantityProduced || 0) : '—'}</p>
-                    </div>
-                    <div className="bg-[var(--color-card)]/70 rounded-[var(--border-radius-base)] p-2">
-                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">الهالك</p>
-                      <p className="text-sm font-bold text-rose-500">{lastLineReport ? formatNumber(getReportWaste(lastLineReport)) : '—'}</p>
-                    </div>
-                    <div className="bg-[var(--color-card)]/70 rounded-[var(--border-radius-base)] p-2">
-                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">عمالة التقرير</p>
-                      <p className="text-sm font-bold text-[var(--color-text)]">{lastLineReport ? formatNumber(lastLineReport.workersCount || 0) : '—'}</p>
-                    </div>
-                    <div className="bg-[var(--color-card)]/70 rounded-[var(--border-radius-base)] p-2">
-                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">ساعات التقرير</p>
-                      <p className="text-sm font-bold text-primary">{lastLineReport ? formatNumber(lastLineReport.workHours || 0) : '—'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* <div className="grid grid-cols-3 gap-3 mb-4 text-center">
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-3">
-                    <p className="text-xs text-[var(--color-text-muted)] mb-1">المطلوب</p>
-                    <p className={`text-lg font-bold ${activeWO ? 'text-[var(--color-text)]' : 'text-slate-400'}`}>{activeWO ? formatNumber(activeWO.quantity) : '—'}</p>
-                  </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-3">
-                    <p className="text-xs text-[var(--color-text-muted)] mb-1">تم إنتاجه</p>
-                    <p className={`text-lg font-bold ${(activeWO?.producedQuantity ?? 0) > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{activeWO ? formatNumber(activeWO.producedQuantity ?? 0) : '—'}</p>
-                  </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-3">
-                    <p className="text-xs text-[var(--color-text-muted)] mb-1">المتبقي</p>
-                    <p className={`text-lg font-bold ${woRemaining > 0 ? 'text-rose-500' : 'text-slate-400'}`}>{activeWO ? formatNumber(woRemaining) : '—'}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3 mb-4 text-center">
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-3">
-                    <p className="text-xs text-[var(--color-text-muted)] mb-1">ساعات العمل</p>
-                    <p className="text-lg font-bold text-primary">{raw?.dailyWorkingHours ?? 0}</p>
-                  </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-3">
-                    <p className="text-xs text-[var(--color-text-muted)] mb-1">عمالة اليوم</p>
-                    {(() => {
-                      const count = getTodayWorkersCount(line.id);
-                      return (
-                        <p className={`text-lg font-bold ${count > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          {count > 0 ? count : '—'}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-3">
-                    <p className="text-xs text-[var(--color-text-muted)] mb-1">التاريخ المستهدف</p>
-                    <p className="text-sm font-bold text-[var(--color-text-muted)]">{activeWO?.targetDate ?? '—'}</p>
-                  </div>
-                </div> */}
-
-                <div className="space-y-3 mb-5">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-[var(--color-text-muted)]">الإنجاز: {formatNumber(line.achievement)} / {formatNumber(line.target)}</span>
-                    <span className={line.efficiency > 80 ? 'text-emerald-600' : 'text-amber-600'}>{line.efficiency}%</span>
-                  </div>
-                  <div className="w-full h-2.5 bg-[#f0f2f5] rounded-full overflow-hidden shadow-inner">
-                    <div
-                      className={`h-full rounded-full transition-all duration-1000 ${line.status === ProductionLineStatus.WARNING ? 'bg-amber-500' : 'bg-primary shadow-[0_0_10px_rgba(19,146,236,0.3)]'}`}
-                      style={{ width: `${Math.min(line.efficiency, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                {can("lineStatus.edit") && !activeWO && (
-                  <button
-                    onClick={() => openTargetModal(line.id, line.name)}
-                    className="mb-4 w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-[var(--border-radius-base)] transition-all"
-                  >
-                    <span className="material-icons-round text-sm">flag</span>
-                    {line.target > 0 ? `تعديل الهدف (${formatNumber(line.target)})` : 'تعيين هدف اليوم'}
-                  </button>
-                )}
-
-                <div className="flex items-center gap-2 pt-4 border-t border-[var(--color-border)]">
-                  <Button variant="primary" className="flex-1 text-xs py-2" onClick={() => navigate(`/lines/${line.id}`)}>
-                    <span className="material-icons-round text-sm">visibility</span>
-                    التفاصيل
-                  </Button>
-                  {can("lines.edit") && (
-                    <Button variant="outline" className="flex-1 text-xs py-2" onClick={() => openEdit(line.id)}>
-                      <span className="material-icons-round text-sm">edit</span>
-                      تعديل
-                    </Button>
-                  )}
-                  {can("lines.delete") && (
-                    <button
-                      onClick={() => setDeleteConfirmId(line.id)}
-                      className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all"
-                    >
-                      <span className="material-icons-round text-lg">delete</span>
-                    </button>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Show More / Less */}
-        {sortedLines.length > LINES_PAGE_SIZE && (
-          <div className="flex justify-center mt-4">
-            <button
-              onClick={() => setShowAllLines((v) => !v)}
-              className="btn btn-secondary gap-2"
+            <select
+              className="erp-filter-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | ProductionLineStatus)}
             >
-              <span className="material-icons-round text-[16px]">
-                {showAllLines ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
-              </span>
-              {showAllLines
-                ? 'عرض أقل'
-                : `عرض المزيد (${sortedLines.length - LINES_PAGE_SIZE} خطوط متبقية)`}
-            </button>
+              <option value="all">كل الحالات</option>
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+
+            <div className="mr-auto text-xs text-[var(--color-text-muted)] font-bold">
+              إجمالي الخطوط: <span className="text-[var(--color-text)]">{formatNumber(filteredLines.length)}</span>
+            </div>
           </div>
-        )}
-        </>
+
+          <div className="overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>الخط</th>
+                  <th>الحالة</th>
+                  <th>المنتج الحالي</th>
+                  <th>المشرف</th>
+                  <th>عمالة اليوم</th>
+                  <th>الإنجاز</th>
+                  <th>الكفاءة</th>
+                  <th className="text-left">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLines.map((line) => {
+                  const raw = _rawLines.find((l) => l.id === line.id);
+                  const statusRow = lineStatuses.find((s) => s.lineId === line.id);
+                  const currentProductName = _rawProducts.find((p) => p.id === statusRow?.currentProductId)?.name ?? line.currentProduct ?? '—';
+                  const workersCount = getTodayWorkersCount(line.id);
+                  const efficiency = Math.min(Math.max(line.efficiency || 0, 0), 100);
+
+                  return (
+                    <tr key={line.id}>
+                      <td>
+                        <div className="font-bold text-[var(--color-text)]">{line.name}</div>
+                        <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                          {line.code || raw?.code || '—'}
+                        </div>
+                      </td>
+                      <td>
+                        <Badge variant={getVariant(line.status)} pulse={line.status === ProductionLineStatus.ACTIVE}>
+                          {getStatusLabel(line.status)}
+                        </Badge>
+                      </td>
+                      <td className="font-medium">{currentProductName}</td>
+                      <td>{supervisorNameByLineId[line.id] || '—'}</td>
+                      <td>{workersCount > 0 ? formatNumber(workersCount) : '—'}</td>
+                      <td className="font-medium">{formatNumber(line.achievement)} / {formatNumber(line.target)}</td>
+                      <td className="min-w-[140px]">
+                        <div className="flex items-center gap-2">
+                          <div className="erp-progress-wrap flex-1">
+                            <div className={`erp-progress-bar ${efficiency >= 80 ? 'success' : ''}`} style={{ width: `${efficiency}%` }} />
+                          </div>
+                          <span className={`text-xs font-bold ${efficiency >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {efficiency}%
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          <Button variant="primary" className="text-xs py-1.5 px-2.5" onClick={() => navigate(`/lines/${line.id}`)}>
+                            <span className="material-icons-round text-sm">visibility</span>
+                          </Button>
+                          {can("lineStatus.edit") && (
+                            <Button variant="outline" className="text-xs py-1.5 px-2.5" onClick={() => openTargetModal(line.id, line.name)}>
+                              <span className="material-icons-round text-sm">flag</span>
+                            </Button>
+                          )}
+                          {can("lines.edit") && (
+                            <Button variant="outline" className="text-xs py-1.5 px-2.5" onClick={() => openEdit(line.id)}>
+                              <span className="material-icons-round text-sm">edit</span>
+                            </Button>
+                          )}
+                          {can("lines.delete") && (
+                            <button
+                              onClick={() => setDeleteConfirmId(line.id)}
+                              className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all"
+                              title="حذف"
+                            >
+                              <span className="material-icons-round text-lg">delete</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredLines.length === 0 && (
+            <div className="empty-state border-t border-[var(--color-border)]">
+              <span className="material-icons-round">search_off</span>
+              <p className="empty-state-title">لا توجد نتائج مطابقة</p>
+              <p className="empty-state-sub">جرّب تغيير البحث أو فلتر الحالة</p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── Add / Edit Modal ── */}

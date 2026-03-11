@@ -3,7 +3,8 @@ export enum ProductionLineStatus {
   ACTIVE = 'active',
   MAINTENANCE = 'maintenance',
   IDLE = 'idle',
-  WARNING = 'warning'
+  WARNING = 'warning',
+  INJECTION = 'injection',
 }
 
 // ─── UI Types (consumed by components — do NOT change) ──────────────────────
@@ -231,6 +232,22 @@ export interface LineWorkerAssignment {
   date: string;
   assignedAt?: any;
   assignedBy?: string;
+}
+
+export type SupervisorLineAssignmentReason = 'assign' | 'reassign' | 'remove' | 'migrate';
+
+export interface SupervisorLineAssignment {
+  id?: string;
+  lineId: string;
+  supervisorId: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  isActive: boolean;
+  lineName?: string;
+  supervisorName?: string;
+  changedBy?: string;
+  changedAt?: any;
+  reason?: SupervisorLineAssignmentReason;
 }
 
 export type PlanPriority = 'low' | 'medium' | 'high' | 'urgent';

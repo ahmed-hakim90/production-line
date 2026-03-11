@@ -76,6 +76,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'supervisors.view', activePatterns: ['/supervisors/'] },
+      { key: 'supervisor-line-assignments', label: 'توزيع المشرفين', icon: 'alt_route', path: '/supervisor-line-assignments', permission: 'supervisorAssignments.manage' },
       { key: 'production-workers', label: 'عمال الإنتاج', icon: 'construction', path: '/production-workers', permission: 'productionWorkers.view', activePatterns: ['/production-workers/'] },
       { key: 'line-workers', label: 'ربط العمالة بالخطوط', icon: 'group_work', path: '/line-workers', permission: 'lineWorkers.view' },
     ],
