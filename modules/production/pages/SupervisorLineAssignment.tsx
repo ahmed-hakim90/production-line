@@ -4,6 +4,7 @@ import { Card, Badge, Button, SearchableSelect } from '../components/UI';
 import { getTodayDateString } from '../../../utils/calculations';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import type { SupervisorLineAssignment as SupervisorLineAssignmentRecord } from '../../../types';
+import { PageHeader } from '../../../components/PageHeader';
 
 const isActiveForDate = (item: SupervisorLineAssignmentRecord, date: string): boolean => {
   const from = String(item.effectiveFrom || '');
@@ -28,6 +29,7 @@ export const SupervisorLineAssignment: React.FC = () => {
   const [draftByLine, setDraftByLine] = useState<Record<string, string>>({});
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [lineSearch, setLineSearch] = useState('');
 
   const supervisors = useMemo(
     () => employees.filter((e) => e.level === 2 && e.isActive !== false && e.id),
@@ -91,6 +93,29 @@ export const SupervisorLineAssignment: React.FC = () => {
   }, [supervisors]);
 
   const actorName = String(userDisplayName || userEmail || 'system').trim();
+  const today = getTodayDateString();
+  const yesterday = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
+  const filteredLines = useMemo(() => {
+    const q = lineSearch.trim().toLowerCase();
+    if (!q) return lines;
+    return lines.filter((line) => {
+      const lineName = String(line.name || '').toLowerCase();
+      const currentSupervisor = line.id ? getSupervisorName(currentByLine.get(line.id)?.supervisorId || '') : '';
+      return lineName.includes(q) || currentSupervisor.toLowerCase().includes(q);
+    });
+  }, [lineSearch, lines, currentByLine, getSupervisorName]);
+
+  const assignedCount = useMemo(
+    () => lines.filter((line) => line.id && currentByLine.has(line.id)).length,
+    [lines, currentByLine],
+  );
+  const totalLines = lines.length;
+  const unassignedCount = Math.max(totalLines - assignedCount, 0);
 
   const handleAssign = async (lineId: string) => {
     const supervisorId = String(draftByLine[lineId] || '').trim();
@@ -135,12 +160,26 @@ export const SupervisorLineAssignment: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">توزيع المشرفين على الخطوط</h2>
-          <p className="page-subtitle">تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط.</p>
-        </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="توزيع المشرفين على الخطوط"
+        subtitle="تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط."
+        icon="assignment_ind"
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card>
+          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">إجمالي الخطوط</p>
+          <p className="text-2xl font-extrabold text-[var(--color-text)] tabular-nums">{totalLines}</p>
+        </Card>
+        <Card>
+          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">تم تعيين مشرف</p>
+          <p className="text-2xl font-extrabold text-emerald-600 tabular-nums">{assignedCount}</p>
+        </Card>
+        <Card>
+          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">بدون مشرف</p>
+          <p className="text-2xl font-extrabold text-amber-600 tabular-nums">{unassignedCount}</p>
+        </Card>
       </div>
 
       {feedback && (
@@ -155,26 +194,51 @@ export const SupervisorLineAssignment: React.FC = () => {
         </div>
       )}
 
-      <Card>
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-          <div className="w-full sm:w-52">
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">تاريخ السريان</label>
+      <Card className="!p-0 overflow-hidden">
+        <div className="erp-filter-bar">
+          <div className="erp-date-seg">
+            <button
+              className={`erp-date-seg-btn${selectedDate === today ? ' active' : ''}`}
+              onClick={() => setSelectedDate(today)}
+            >
+              اليوم
+            </button>
+            <button
+              className={`erp-date-seg-btn${selectedDate === yesterday ? ' active' : ''}`}
+              onClick={() => setSelectedDate(yesterday)}
+            >
+              أمس
+            </button>
+          </div>
+
+          <div className="erp-filter-date">
+            <span className="erp-filter-label">تاريخ السريان</span>
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm font-medium"
             />
           </div>
-          <Button variant="outline" onClick={() => void loadAssignments()} disabled={loading}>
+
+          <button className="erp-filter-apply" onClick={() => void loadAssignments()} disabled={loading}>
             <span className={`material-icons-round text-sm ${loading ? 'animate-spin' : ''}`}>refresh</span>
             تحديث
-          </Button>
+          </button>
+
+          <div className="erp-search-input erp-search-input--table flex-1 min-w-0">
+            <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
+            <input
+              type="text"
+              placeholder="بحث بالخط أو المشرف الحالي"
+              value={lineSearch}
+              onChange={(e) => setLineSearch(e.target.value)}
+            />
+          </div>
         </div>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {lines.map((line) => {
+        {filteredLines.map((line) => {
           if (!line.id) return null;
           const current = currentByLine.get(line.id);
           const history = historyByLine.get(line.id) || [];
@@ -240,6 +304,11 @@ export const SupervisorLineAssignment: React.FC = () => {
             </Card>
           );
         })}
+        {filteredLines.length === 0 && (
+          <Card>
+            <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد خطوط مطابقة لنتيجة البحث الحالية.</p>
+          </Card>
+        )}
       </div>
     </div>
   );

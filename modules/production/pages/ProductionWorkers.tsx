@@ -12,6 +12,7 @@ import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
 import { formatNumber, calculateWasteRatio, getTodayDateString, getReportWaste } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
+import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../../../components/PageHeader';
@@ -67,6 +68,13 @@ function getLastWeekRange(): { start: string; end: string } {
   return { start: fmt(lastMonday), end: fmt(lastSunday) };
 }
 
+function toDateInputValue(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function countUniqueDaysInRange(reports: ProductionReport[], start: string, end: string): number {
   const dates = new Set<string>();
   for (const r of reports) {
@@ -91,6 +99,14 @@ interface WorkerRow extends FirestoreEmployee {
 type StatFilter = '' | 'today' | 'week' | 'highScrap' | 'lowScore' | 'active';
 
 const WORKER_POSITION_KEYWORDS = ['عامل انتاج', 'عامل إنتاج', 'عامل الانتاج', 'عامل الإنتاج'];
+
+const getWorkerDisplayName = (worker: Pick<WorkerRow, 'name' | 'code' | 'id'>): string => {
+  const name = String(worker.name || '').trim();
+  if (name) return name;
+  const code = String(worker.code || '').trim();
+  if (code) return `(${code})`;
+  return String(worker.id || '—');
+};
 
 export const ProductionWorkers: React.FC = () => {
   const navigate = useNavigate();
@@ -118,11 +134,13 @@ export const ProductionWorkers: React.FC = () => {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [statFilter, setStatFilter] = useState<StatFilter>('');
+  const [assignmentMapByWorker, setAssignmentMapByWorker] = useState<Map<string, string[]>>(new Map());
   const [hoveredWorker, setHoveredWorker] = useState<string | null>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
   const [bulkPrintReports, setBulkPrintReports] = useState<ProductionReport[] | null>(null);
   const bulkPrintRef = useRef<HTMLDivElement>(null);
   const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
+  const today = getTodayDateString();
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'productionWorkers'),
     [exportImportSettings]
@@ -146,6 +164,36 @@ export const ProductionWorkers: React.FC = () => {
   }, []);
 
   useEffect(() => { loadRefData(); }, [loadRefData]);
+
+  const assignmentReferenceDate = useMemo(
+    () => filterDateTo || filterDateFrom || today,
+    [filterDateFrom, filterDateTo, today]
+  );
+
+  const loadAssignmentsForDate = useCallback(async (date: string) => {
+    try {
+      const dayAssignments = await lineAssignmentService.getByDate(date);
+      const byWorker = new Map<string, Set<string>>();
+      dayAssignments.forEach((row) => {
+        const workerId = String(row.employeeId || '').trim();
+        const lineId = String(row.lineId || '').trim();
+        if (!workerId || !lineId) return;
+        const lines = byWorker.get(workerId) || new Set<string>();
+        lines.add(lineId);
+        byWorker.set(workerId, lines);
+      });
+      const normalized = new Map<string, string[]>();
+      byWorker.forEach((lineIds, workerId) => normalized.set(workerId, Array.from(lineIds)));
+      setAssignmentMapByWorker(normalized);
+    } catch (error) {
+      console.error('loadAssignmentsForDate workers error:', error);
+      setAssignmentMapByWorker(new Map());
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAssignmentsForDate(assignmentReferenceDate);
+  }, [assignmentReferenceDate, loadAssignmentsForDate]);
 
   const getDepartmentName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const getJobPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '—';
@@ -171,7 +219,6 @@ export const ProductionWorkers: React.FC = () => {
   );
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
 
-  const today = getTodayDateString();
   const weekStart = useMemo(() => getWeekStart(), []);
   const lastWeek = useMemo(() => getLastWeekRange(), []);
 
@@ -204,8 +251,9 @@ export const ProductionWorkers: React.FC = () => {
   const workers = useMemo<WorkerRow[]>(() => {
     const totalDaysInRange = Math.max(1, Math.ceil((new Date().getTime() - new Date(weekStart).getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
+    const assignedWorkerIds = new Set(Array.from(assignmentMapByWorker.keys()));
     return _rawEmployees
-      .filter((e) => workerPositionIds.has(e.jobPositionId))
+      .filter((e) => workerPositionIds.has(e.jobPositionId) && assignedWorkerIds.has(String(e.id || '').trim()))
       .map((e) => {
         const reports = reportsByEmployee.get(e.id!) ?? [];
         const totalProduced = reports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
@@ -220,7 +268,8 @@ export const ProductionWorkers: React.FC = () => {
         const target = targetByEmployee.get(e.id!) ?? 0;
         const activeDays = countUniqueDaysInRange(reports, weekStart, today);
         const performanceScore = computePerformanceScore(totalProduced, target, scrapRate, activeDays, totalDaysInRange);
-        const assignedLines = [...new Set(reports.map((r) => r.lineId))];
+        const assignedLines = assignmentMapByWorker.get(String(e.id || '').trim())
+          || [...new Set(reports.map((r) => r.lineId))];
         const lastActivity = reports.length > 0
           ? reports.reduce((latest, r) => (r.date > latest ? r.date : latest), reports[0].date)
           : '—';
@@ -239,7 +288,7 @@ export const ProductionWorkers: React.FC = () => {
           lastActivity,
         };
       });
-  }, [_rawEmployees, workerPositionIds, reportsByEmployee, targetByEmployee, today, weekStart]);
+  }, [_rawEmployees, workerPositionIds, reportsByEmployee, targetByEmployee, today, weekStart, assignmentMapByWorker]);
 
   const filtered = useMemo(() => {
     let list = workers;
@@ -317,7 +366,7 @@ export const ProductionWorkers: React.FC = () => {
 
   const exportSelectedCSV = useCallback((items: WorkerRow[]) => {
     const rows = items.map((s) => ({
-      'الاسم': s.name,
+      'الاسم': getWorkerDisplayName(s),
       'الرمز': s.code ?? '',
       'القسم': getDepartmentName(s.departmentId ?? ''),
       'المنصب': getJobPositionTitle(s.jobPositionId ?? ''),
@@ -372,7 +421,7 @@ export const ProductionWorkers: React.FC = () => {
             <span className="material-icons-round text-lg text-teal-600">construction</span>
           </div>
           <div className="min-w-0">
-            <span className="font-bold text-[var(--color-text)] block truncate">{w.name}</span>
+            <span className="font-bold text-[var(--color-text)] block truncate">{getWorkerDisplayName(w)}</span>
             {w.code && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-sm)] bg-[#f0f2f5] text-[var(--color-text-muted)] text-[10px] font-mono font-bold mt-0.5">{w.code}</span>
             )}
@@ -384,7 +433,7 @@ export const ProductionWorkers: React.FC = () => {
                   <span className="material-icons-round text-teal-600 text-sm">construction</span>
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-[var(--color-text)]">{w.name}</p>
+                  <p className="font-bold text-sm text-[var(--color-text)]">{getWorkerDisplayName(w)}</p>
                   <p className="text-[10px] text-slate-400">{getDepartmentName(w.departmentId ?? '')}</p>
                 </div>
               </div>
@@ -551,6 +600,34 @@ export const ProductionWorkers: React.FC = () => {
     setStatFilter('');
   };
 
+  const handleShowToday = () => {
+    setFilterDateFrom(today);
+    setFilterDateTo(today);
+  };
+
+  const handleShowYesterday = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterday = toDateInputValue(d);
+    setFilterDateFrom(yesterday);
+    setFilterDateTo(yesterday);
+  };
+
+  const handleShowWeekly = () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    setFilterDateFrom(toDateInputValue(start));
+    setFilterDateTo(toDateInputValue(end));
+  };
+
+  const handleShowMonthly = () => {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    setFilterDateFrom(toDateInputValue(start));
+    setFilterDateTo(toDateInputValue(end));
+  };
+
   const hasActiveFilters = search || filterDepartment || filterLine || filterStatus || filterScoreRange || filterDateFrom || filterDateTo || statFilter;
 
   if (dataLoading) {
@@ -624,56 +701,81 @@ export const ProductionWorkers: React.FC = () => {
 
       {/* Advanced Filters */}
       <Card>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 mb-4">
-          <div className="relative sm:col-span-2">
-            <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] text-xl">search</span>
+        <div className="erp-filter-bar mb-4">
+          <div className="erp-date-seg">
+            <button
+              className={`erp-date-seg-btn${filterDateFrom === today && filterDateTo === today ? ' active' : ''}`}
+              onClick={handleShowToday}
+            >
+              اليوم
+            </button>
+            <button
+              className={`erp-date-seg-btn${filterDateFrom === filterDateTo && filterDateFrom !== today && filterDateFrom !== '' ? ' active' : ''}`}
+              onClick={handleShowYesterday}
+            >
+              أمس
+            </button>
+            <button
+              className={`erp-date-seg-btn${filterDateFrom !== '' && filterDateTo !== '' && filterDateFrom !== filterDateTo ? ' active' : ''}`}
+              onClick={handleShowWeekly}
+            >
+              أسبوعي
+            </button>
+            <button
+              className={`erp-date-seg-btn${filterDateFrom.endsWith('-01') && filterDateTo !== '' ? ' active' : ''}`}
+              onClick={handleShowMonthly}
+            >
+              شهري
+            </button>
+          </div>
+          <div className="erp-filter-date">
+            <span className="erp-filter-label">من</span>
+            <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} />
+          </div>
+          <div className="erp-filter-date">
+            <span className="erp-filter-label">إلى</span>
+            <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} />
+          </div>
+          <button className="erp-filter-apply" onClick={() => undefined}>
+            <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
+            عرض
+          </button>
+          <div className="erp-filter-sep" />
+          <div className="erp-search-input erp-search-input--table flex-1 min-w-0">
+            <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
             <input
               type="text"
               placeholder="بحث بالاسم أو الرمز..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pr-10 pl-4 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
             />
           </div>
-          <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}
-            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
-            <option value="">كل الأقسام</option>
-            {uniqueDepartments.map((dId) => <option key={dId} value={dId}>{getDepartmentName(dId)}</option>)}
-          </select>
-          <select value={filterLine} onChange={(e) => setFilterLine(e.target.value)}
-            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+          <select
+            value={filterLine}
+            onChange={(e) => setFilterLine(e.target.value)}
+            className={`erp-filter-select${filterLine ? ' active' : ''}`}
+          >
             <option value="">كل الخطوط</option>
             {uniqueLines.map((lId) => <option key={lId} value={lId}>{getLineName(lId)}</option>)}
           </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+          <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className="erp-filter-select">
+            <option value="">كل الأقسام</option>
+            {uniqueDepartments.map((dId) => <option key={dId} value={dId}>{getDepartmentName(dId)}</option>)}
+          </select>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="erp-filter-select">
             <option value="">كل الحالات</option>
             <option value="active">نشط</option>
             <option value="inactive">غير نشط</option>
           </select>
-          <select value={filterScoreRange} onChange={(e) => setFilterScoreRange(e.target.value as any)}
-            className="px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all">
+          <select value={filterScoreRange} onChange={(e) => setFilterScoreRange(e.target.value as any)} className="erp-filter-select">
             <option value="">كل مستويات الأداء</option>
             <option value="high">ممتاز (85+)</option>
             <option value="mid">جيد (70–84)</option>
             <option value="low">ضعيف (&lt;70)</option>
           </select>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <span className="material-icons-round text-lg">calendar_month</span>
-            <span className="font-medium">فترة التقارير:</span>
-          </div>
-          <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-            className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
-          <span className="text-[var(--color-text-muted)]">—</span>
-          <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-            className="px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" />
-          {hasActiveFilters && (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-teal-500/10 text-teal-600 text-xs font-bold">
-              {filtered.length} نتيجة
-            </span>
-          )}
         </div>
 
         <SelectableTable
@@ -684,7 +786,7 @@ export const ProductionWorkers: React.FC = () => {
           renderActions={renderActions}
           emptyIcon="construction"
           emptyTitle="لا يوجد عمال إنتاج"
-          emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لم يتم العثور على عمال بمنصب "عامل إنتاج"'}
+          emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لا يوجد عمال توزيع مرتبطين بخط إنتاج في تاريخ العرض'}
           pageSize={15}
         />
       </Card>

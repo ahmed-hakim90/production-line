@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
@@ -375,7 +375,7 @@ export const HRImport: React.FC = () => {
                   قم بتحميل ملف Excel نموذجي يحتوي على الأعمدة المطلوبة (3 أوراق: الأقسام، المناصب، الموظفين)
                 </p>
               </div>
-              <Button variant="outline" onClick={downloadHRTemplate} className="shrink-0">
+              <Button variant="outline" onClick={() => downloadHRTemplate(lookups ?? undefined)} className="shrink-0">
                 <span className="material-icons-round text-sm">download</span>
                 تحميل القالب
               </Button>

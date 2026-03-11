@@ -181,7 +181,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             selectedComplianceDate,
             _rawEmployees,
             _rawLines,
-            { scope: 'all_active' },
+            { scope: 'assigned_only' },
           ),
         ]);
         if (!cancelled) {
@@ -960,11 +960,11 @@ export const FactoryManagerDashboard: React.FC = () => {
                 <p className="text-2xl font-black text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
-                <p className="text-xs text-emerald-700 font-bold mb-1">بعت تقرير</p>
+                <p className="text-xs text-emerald-700 font-bold mb-1">تم ارسال تقرير</p>
                 <p className="text-2xl font-black text-emerald-600">{yesterdayCompliance?.submittedCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
-                <p className="text-xs text-rose-700 font-bold mb-1">ما بعتش تقرير</p>
+                <p className="text-xs text-rose-700 font-bold mb-1">لم يرسل تقرير</p>
                 <p className="text-2xl font-black text-rose-600">{yesterdayCompliance?.missingCount ?? 0}</p>
               </div>
             </div>
@@ -981,12 +981,20 @@ export const FactoryManagerDashboard: React.FC = () => {
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-bold text-[var(--color-text)] leading-snug">{row.name}</p>
                         <Badge variant={row.submitted ? 'success' : 'danger'}>
-                          {row.submitted ? 'بعت' : 'ما بعتش'}
+                          {row.submitted ? 'تم ارسال' : 'لم يرسل'}
                         </Badge>
                       </div>
                       <div className="text-xs text-[var(--color-text-muted)]">
-                        <span className="font-bold">الخطوط: </span>
-                        <span>{row.lineNames.length > 0 ? row.lineNames.join('، ') : '—'}</span>
+                        <span className="font-bold">التقارير: </span>
+                        <span>{row.submittedReports} / {row.expectedReports}</span>
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)]">
+                        <span className="font-bold">تم الإرسال: </span>
+                        <span>{row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—'}</span>
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)]">
+                        <span className="font-bold">غير مرسل: </span>
+                        <span>{row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—'}</span>
                       </div>
                     </div>
                   ))}
@@ -996,7 +1004,9 @@ export const FactoryManagerDashboard: React.FC = () => {
                     <thead className="erp-thead">
                       <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
                         <th className="erp-th">المشرف</th>
-                        <th className="erp-th">الخطوط</th>
+                        <th className="erp-th">التقارير</th>
+                        <th className="erp-th">تم الإرسال</th>
+                        <th className="erp-th">غير مرسل</th>
                         <th className="erp-th">الحالة</th>
                       </tr>
                     </thead>
@@ -1007,10 +1017,12 @@ export const FactoryManagerDashboard: React.FC = () => {
                       ].map((row) => (
                         <tr key={row.employeeId} className="border-b border-[var(--color-border)]">
                           <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.name}</td>
-                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.lineNames.length > 0 ? row.lineNames.join('، ') : '—'}</td>
+                          <td className="py-2.5 px-3 text-[var(--color-text-muted)] font-bold">{row.submittedReports} / {row.expectedReports}</td>
+                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—'}</td>
+                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—'}</td>
                           <td className="py-2.5 px-3">
                             <Badge variant={row.submitted ? 'success' : 'danger'}>
-                              {row.submitted ? 'بعت' : 'ما بعتش'}
+                              {row.submitted ? 'تم ارسال' : 'لم يرسل'}
                             </Badge>
                           </td>
                         </tr>

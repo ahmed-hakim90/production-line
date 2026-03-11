@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '../types';
 
 export function downloadProductsTemplate() {
   const wb = XLSX.utils.book_new();
@@ -135,16 +136,65 @@ function getTodayForTemplate(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function downloadHRTemplate() {
+export interface HRTemplateLookups {
+  departments: Array<{ id?: string; name: string; code?: string }>;
+  positions: Array<{ id?: string; title: string; departmentId?: string; level?: number }>;
+  employees: Array<{
+    name: string;
+    code?: string;
+    phone?: string;
+    departmentId?: string;
+    jobPositionId?: string;
+    level?: number;
+    employmentType?: EmploymentType;
+    baseSalary?: number;
+    hourlyRate?: number;
+    shiftId?: string;
+    vehicleId?: string;
+    email?: string;
+    isActive?: boolean;
+    hasSystemAccess?: boolean;
+  }>;
+  shifts: Array<{ id?: string; name: string }>;
+  vehicles: Array<{ id?: string; name: string }>;
+}
+
+export function downloadHRTemplate(lookups?: HRTemplateLookups) {
   const wb = XLSX.utils.book_new();
+  const hasSystemLookups = !!lookups && lookups.employees.length > 0;
+
+  const departments = hasSystemLookups
+    ? lookups!.departments
+    : [
+        { name: 'قسم الإنتاج', code: 'PRD' },
+        { name: 'قسم الجودة', code: 'QA' },
+        { name: 'قسم الصيانة', code: 'MNT' },
+        { name: 'قسم المخازن', code: 'WH' },
+      ];
+  const departmentNameById = new Map(departments.map((d) => [d.id ?? '', d.name]));
+
+  const positions = hasSystemLookups
+    ? lookups!.positions
+    : [
+        { title: 'مشغل آلة', departmentId: '', level: 1 },
+        { title: 'مشرف خط', departmentId: '', level: 2 },
+        { title: 'مدير الإنتاج', departmentId: '', level: 3 },
+        { title: 'فاحص جودة', departmentId: '', level: 1 },
+        { title: 'مشرف الجودة', departmentId: '', level: 2 },
+        { title: 'فني صيانة', departmentId: '', level: 1 },
+        { title: 'أمين مخزن', departmentId: '', level: 1 },
+      ];
+  const positionTitleById = new Map(positions.map((p) => [p.id ?? '', p.title]));
+  const shiftNameById = new Map((lookups?.shifts ?? []).map((s) => [s.id ?? '', s.name]));
+  const vehicleNameById = new Map((lookups?.vehicles ?? []).map((v) => [v.id ?? '', v.name]));
 
   // Sheet 1: الأقسام
   const deptAoa: (string | number)[][] = [
     ['اسم القسم', 'الرمز'],
-    ['قسم الإنتاج', 'PRD'],
-    ['قسم الجودة', 'QA'],
-    ['قسم الصيانة', 'MNT'],
-    ['قسم المخازن', 'WH'],
+    ...departments.slice(0, 12).map((dept) => [
+      dept.name,
+      dept.code?.trim() || dept.name.substring(0, 3).toUpperCase(),
+    ]),
   ];
   const wsDept = XLSX.utils.aoa_to_sheet(deptAoa);
   wsDept['!cols'] = [{ wch: 24 }, { wch: 12 }];
@@ -153,25 +203,51 @@ export function downloadHRTemplate() {
   // Sheet 2: المناصب
   const posAoa: (string | number)[][] = [
     ['المنصب', 'القسم', 'المستوى'],
-    ['مشغل آلة', 'قسم الإنتاج', 1],
-    ['مشرف خط', 'قسم الإنتاج', 2],
-    ['مدير الإنتاج', 'قسم الإنتاج', 3],
-    ['فاحص جودة', 'قسم الجودة', 1],
-    ['مشرف الجودة', 'قسم الجودة', 2],
-    ['فني صيانة', 'قسم الصيانة', 1],
-    ['أمين مخزن', 'قسم المخازن', 1],
+    ...positions.slice(0, 20).map((pos) => [
+      pos.title,
+      departmentNameById.get(pos.departmentId ?? '') || departments[0]?.name || '',
+      Number(pos.level) || 1,
+    ]),
   ];
   const wsPos = XLSX.utils.aoa_to_sheet(posAoa);
   wsPos['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, wsPos, 'المناصب');
 
   // Sheet 3: الموظفين
+  const employeeRowsFromSystem: (string | number)[][] = hasSystemLookups
+    ? lookups!.employees
+        .filter((emp) => String(emp.name || '').trim().length > 0)
+        .slice(0, 6)
+        .map((emp) => [
+          emp.name,
+          emp.code || '',
+          emp.phone || '',
+          departmentNameById.get(emp.departmentId ?? '') || '',
+          positionTitleById.get(emp.jobPositionId ?? '') || '',
+          Number(emp.level) || 1,
+          EMPLOYMENT_TYPE_LABELS[(emp.employmentType ?? 'full_time') as EmploymentType] || 'دوام كامل',
+          Number(emp.baseSalary) || 0,
+          Number(emp.hourlyRate) || 0,
+          shiftNameById.get(emp.shiftId ?? '') || '',
+          vehicleNameById.get(emp.vehicleId ?? '') || '',
+          emp.email || '',
+          emp.isActive === false ? 'غير نشط' : 'نشط',
+          emp.hasSystemAccess ? 'نعم' : 'لا',
+        ])
+    : [];
+
   const empAoa: (string | number | string)[][] = [
     ['اسم الموظف', 'الرمز', 'رقم الهاتف', 'القسم', 'المنصب', 'المستوى', 'نوع التوظيف', 'الراتب الأساسي', 'أجر الساعة', 'الوردية', 'المركبة', 'البريد الإلكتروني', 'الحالة', 'صلاحية النظام'],
-    ['أحمد محمد', 'EMP-001', '201001112233', 'قسم الإنتاج', 'مشغل آلة', 1, 'دوام كامل', 3000, 18.75, 'وردية صباحية', 'سيارة نقل 1', 'ahmed@company.com', 'نشط', 'لا'],
-    ['سعيد علي', 'EMP-002', '201009998877', 'قسم الإنتاج', 'مشرف خط', 2, 'دوام كامل', 4500, 28.13, 'وردية صباحية', '', 'saeed@company.com', 'نشط', 'نعم'],
-    ['خالد إبراهيم', 'EMP-003', '01012345678', 'قسم الجودة', 'فاحص جودة', 1, 'دوام كامل', 3200, 20, 'وردية صباحية', '', '', 'نشط', 'لا'],
-    ['محمود حسن', 'EMP-004', '', 'قسم الصيانة', 'فني صيانة', 1, 'عقد', 2800, 17.5, '', '', '', 'نشط', 'لا'],
+    ...(employeeRowsFromSystem.length > 0
+      ? employeeRowsFromSystem
+      : [
+          ['أحمد محمد', 'EMP-001', '201001112233', 'قسم الإنتاج', 'مشغل آلة', 1, 'دوام كامل', 3000, 18.75, 'وردية صباحية', 'سيارة نقل 1', 'ahmed@company.com', 'نشط', 'لا'],
+          ['سعيد علي', 'EMP-002', '201009998877', 'قسم الإنتاج', 'مشرف خط', 2, 'دوام كامل', 4500, 28.13, 'وردية صباحية', '', 'saeed@company.com', 'نشط', 'نعم'],
+          ['خالد إبراهيم', 'EMP-003', '01012345678', 'قسم الجودة', 'فاحص جودة', 1, 'دوام كامل', 3200, 20, 'وردية صباحية', '', '', 'نشط', 'لا'],
+          ['محمود حسن', 'EMP-004', '', 'قسم الصيانة', 'فني صيانة', 1, 'عقد', 2800, 17.5, '', '', '', 'نشط', 'لا'],
+          ['محمد سمير', 'EMP-005', '01055555555', 'قسم المخازن', 'أمين مخزن', 1, 'دوام كامل', 2900, 18, '', '', '', 'نشط', 'لا'],
+          ['سارة عبدالله', 'EMP-006', '01066666666', 'قسم الجودة', 'مشرف الجودة', 2, 'دوام كامل', 4800, 30, '', '', 'sara@company.com', 'نشط', 'نعم'],
+        ]),
   ];
   const wsEmp = XLSX.utils.aoa_to_sheet(empAoa);
   wsEmp['!cols'] = [

@@ -15,8 +15,11 @@ import {
 } from '../components/ProductionReportPrint';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
 export const QuickAction: React.FC = () => {
+  const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const _rawLines = useAppStore((s) => s._rawLines);
@@ -38,6 +41,7 @@ export const QuickAction: React.FC = () => {
   const [workersQuality, setWorkersQuality] = useState('');
   const [workersMaintenance, setWorkersMaintenance] = useState('');
   const [workersExternal, setWorkersExternal] = useState('');
+  const [injectionWorkersCount, setInjectionWorkersCount] = useState('');
   const [hours, setHours] = useState('');
   const [notes, setNotes] = useState('');
   const [componentScrapItems, setComponentScrapItems] = useState<ReportComponentScrapItem[]>([]);
@@ -264,7 +268,7 @@ export const QuickAction: React.FC = () => {
       reportType,
       date: today,
       quantityProduced: Number(quantity),
-      workersCount: requiresWorkers ? workersTotal : 0,
+      workersCount: requiresWorkers ? workersTotal : (Number(injectionWorkersCount) || 0),
       workersProductionCount: requiresWorkers ? (Number(workersProduction) || 0) : 0,
       workersPackagingCount: requiresWorkers ? (Number(workersPackaging) || 0) : 0,
       workersQualityCount: requiresWorkers ? (Number(workersQuality) || 0) : 0,
@@ -314,6 +318,7 @@ export const QuickAction: React.FC = () => {
     setWorkersQuality('');
     setWorkersMaintenance('');
     setWorkersExternal('');
+    setInjectionWorkersCount('');
     setHours('');
     setNotes('');
     setComponentScrapItems([]);
@@ -545,21 +550,44 @@ export const QuickAction: React.FC = () => {
             </div>
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">هالك المكونات</label>
-              <input
-                type="number"
-                min="0"
-                value={totalComponentScrapQty || ''}
-                onChange={(e) => {
-                  const qty = Number(e.target.value || 0);
-                  if (qty > 0) {
-                    setComponentScrapItems([{ materialId: '__total__', materialName: 'هالك مكونات', quantity: qty }]);
-                    return;
-                  }
-                  setComponentScrapItems([]);
-                }}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
-                placeholder="0"
-              />
+              {reportType === 'component_injection' ? (
+                <input
+                  type="number"
+                  min="0"
+                  value={totalComponentScrapQty || ''}
+                  onChange={(e) => {
+                    const qty = Number(e.target.value || 0);
+                    if (qty > 0) {
+                      setComponentScrapItems([{ materialId: '__total__', materialName: 'هالك مكونات', quantity: qty }]);
+                      return;
+                    }
+                    setComponentScrapItems([]);
+                  }}
+                  className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                  placeholder="0"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!productId) return;
+                    openModal(MODAL_KEYS.REPORTS_COMPONENT_SCRAP, {
+                      productId,
+                      items: componentScrapItems,
+                      onSave: (items: ReportComponentScrapItem[]) => setComponentScrapItems(items),
+                    });
+                  }}
+                  disabled={!productId}
+                  className="w-full px-4 py-2.5 bg-[#f8f9fa] hover:bg-[#f0f2f5] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between gap-2"
+                >
+                  <span className="truncate text-right">
+                    {totalComponentScrapQty > 0
+                      ? `إجمالي الهالك: ${totalComponentScrapQty}`
+                      : (productId ? 'تحديد هالك المكونات' : 'اختر المنتج أولاً')}
+                  </span>
+                  <span className="material-icons-round text-base">open_in_new</span>
+                </button>
+              )}
             </div>
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ساعات العمل *</label>
@@ -573,7 +601,19 @@ export const QuickAction: React.FC = () => {
                 step="0.5"
               />
             </div>
-            {reportType !== 'component_injection' && (
+            {reportType === 'component_injection' ? (
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">إجمالي العمالة</label>
+              <input
+                type="number"
+                min="0"
+                value={injectionWorkersCount}
+                onChange={(e) => setInjectionWorkersCount(e.target.value)}
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                placeholder="0"
+              />
+            </div>
+            ) : (
             <div className="md:col-span-2 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="text-sm font-bold text-[var(--color-text-muted)] block">تفصيل العمالة </label>
@@ -785,28 +825,30 @@ export const QuickAction: React.FC = () => {
                     <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workHours}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إنتاج</p>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersProductionCount || 0}</p>
+                {reportType !== 'component_injection' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                      <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إنتاج</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersProductionCount || 0}</p>
+                    </div>
+                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                      <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">تغليف</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersPackagingCount || 0}</p>
+                    </div>
+                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                      <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">جودة</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersQualityCount || 0}</p>
+                    </div>
+                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                      <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">صيانة</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersMaintenanceCount || 0}</p>
+                    </div>
+                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                      <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">خارجية</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersExternalCount || 0}</p>
+                    </div>
                   </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">تغليف</p>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersPackagingCount || 0}</p>
-                  </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">جودة</p>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersQualityCount || 0}</p>
-                  </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">صيانة</p>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersMaintenanceCount || 0}</p>
-                  </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">خارجية</p>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersExternalCount || 0}</p>
-                  </div>
-                </div>
+                )}
                 {printReport.notes?.trim() && (
                   <div className="bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-lg)] p-3 border border-amber-100 dark:border-amber-900/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملحوظة</p>

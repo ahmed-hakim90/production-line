@@ -83,6 +83,7 @@ export const lineAssignmentService = {
     lineId?: string,
     assignedBy?: string,
     activeEmployeeIds?: Set<string>,
+    employeeDirectory?: Map<string, { name?: string; code?: string }>,
   ): Promise<number> {
     if (!isConfigured) return 0;
     try {
@@ -105,8 +106,8 @@ export const lineAssignmentService = {
         await addDoc(collection(db, COLLECTION), {
           lineId: a.lineId,
           employeeId: a.employeeId,
-          employeeCode: a.employeeCode,
-          employeeName: a.employeeName,
+          employeeCode: String(a.employeeCode || employeeDirectory?.get(a.employeeId)?.code || '').trim(),
+          employeeName: String(a.employeeName || employeeDirectory?.get(a.employeeId)?.name || '').trim(),
           date: targetDate,
           assignedAt: serverTimestamp(),
           assignedBy: assignedBy || '',

@@ -7,6 +7,8 @@ type CompliancePerson = {
   employeeId: string;
   name: string;
   lineNames: string[];
+  submittedLineNames: string[];
+  missingLineNames: string[];
   expectedReports: number;
   submittedReports: number;
 };
@@ -116,6 +118,8 @@ export const reportComplianceService = {
           employeeId: supervisorId,
           name: toName(supervisor, supervisorId),
           lineNames: [],
+          submittedLineNames: [],
+          missingLineNames: [],
           lineIds: new Set<string>(),
           expectedReports: 0,
           submittedReports: 0,
@@ -134,6 +138,8 @@ export const reportComplianceService = {
         employeeId,
         name: toName(supervisorById.get(employeeId), employeeId),
         lineNames: [],
+        submittedLineNames: [],
+        missingLineNames: [],
         lineIds: new Set<string>(),
         expectedReports: 0,
         submittedReports: 0,
@@ -168,6 +174,8 @@ export const reportComplianceService = {
           employeeId: person.employeeId,
           name: person.name,
           lineNames: person.lineNames,
+          submittedLineNames: reportedSupervisorIds.has(person.employeeId) ? person.lineNames.slice(0, 1) : [],
+          missingLineNames: reportedSupervisorIds.has(person.employeeId) ? [] : person.lineNames,
           expectedReports: 0,
           submittedReports: reportedSupervisorIds.has(person.employeeId) ? 1 : 0,
         };
@@ -176,13 +184,23 @@ export const reportComplianceService = {
         continue;
       }
       let submittedReports = 0;
+      const submittedLineNames: string[] = [];
+      const missingLineNames: string[] = [];
       person.lineIds.forEach((lineId) => {
-        if (reportedPairs.has(`${person.employeeId}__${lineId}`)) submittedReports += 1;
+        const lineName = toLineName(lineId, lineById);
+        if (reportedPairs.has(`${person.employeeId}__${lineId}`)) {
+          submittedReports += 1;
+          submittedLineNames.push(lineName);
+        } else {
+          missingLineNames.push(lineName);
+        }
       });
       const row: CompliancePerson = {
         employeeId: person.employeeId,
         name: person.name,
         lineNames: person.lineNames,
+        submittedLineNames,
+        missingLineNames,
         expectedReports,
         submittedReports,
       };
@@ -199,6 +217,8 @@ export const reportComplianceService = {
           employeeId: String(employee.id),
           name: toName(employee, String(employee.id)),
           lineNames: [],
+          submittedLineNames: [],
+          missingLineNames: [],
           expectedReports: 0,
           submittedReports: 0,
         }));

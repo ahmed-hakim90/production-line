@@ -75,6 +75,15 @@ function extractSortableText(node: React.ReactNode): string {
   return '';
 }
 
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function SelectableTable<T>({
   data,
   columns,
@@ -126,9 +135,17 @@ export function SelectableTable<T>({
     [columns, tableId],
   );
 
+  const resolvedTableId = useMemo(() => {
+    if (tableId) return tableId;
+    const signature = columns
+      .map((column, index) => `${column.id ?? index}:${column.header}`)
+      .join('|');
+    return `table-${hashString(signature)}`;
+  }, [tableId, columns]);
+
   return (
     <DataTable<T>
-      tableId={tableId ?? 'global-table'}
+      tableId={resolvedTableId}
       userId={userId}
       data={data}
       columns={mappedColumns}

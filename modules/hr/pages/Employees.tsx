@@ -39,6 +39,14 @@ const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   code: '',
 };
 
+const getEmployeeDisplayName = (employee: Partial<Pick<FirestoreEmployee, 'name' | 'code' | 'id'>>): string => {
+  const name = String(employee.name || '').trim();
+  if (name) return name;
+  const code = String(employee.code || '').trim();
+  if (code) return `(${code})`;
+  return String(employee.id || '—');
+};
+
 export const Employees: React.FC = () => {
   const navigate = useNavigate();
   const { can, canManageUsers } = usePermission();
@@ -509,14 +517,14 @@ export const Employees: React.FC = () => {
   const employeeColumns = useMemo<TableColumn<FirestoreEmployee>[]>(() => [
     {
       header: 'الاسم',
-      sortKey: (emp) => emp.code || emp.name,
+      sortKey: (emp) => emp.code || getEmployeeDisplayName(emp),
       render: (emp) => (
         <div className="flex items-center gap-2">
           <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${emp.isActive !== false ? 'bg-primary/10' : 'bg-[#f0f2f5]'}`}>
             <span className={`material-icons-round text-base ${emp.isActive !== false ? 'text-primary' : 'text-slate-400'}`}>person</span>
           </div>
           <div className="min-w-0">
-            <span className="font-bold text-[var(--color-text)] block truncate">{emp.name}</span>
+            <span className="font-bold text-[var(--color-text)] block truncate">{getEmployeeDisplayName(emp)}</span>
             {emp.code && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-[10px] font-mono font-bold">{emp.code}</span>
             )}
@@ -649,7 +657,7 @@ export const Employees: React.FC = () => {
   const handleBulkExport = useCallback((items: FirestoreEmployee[]) => {
     const headers = ['الاسم', 'الكود', 'القسم', 'المنصب', 'المستوى', 'نوع التوظيف', 'الحالة', 'دخول النظام'];
     const rows = items.map((emp) => [
-      emp.name,
+      getEmployeeDisplayName(emp),
       emp.code || '—',
       getDepartmentName(emp.departmentId ?? ''),
       getJobPositionTitle(emp.jobPositionId ?? ''),
@@ -1278,7 +1286,7 @@ export const Employees: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold mb-2">تعطيل الموظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
-              سيتم تعطيل <span className="font-bold text-[var(--color-text)]">{_rawEmployees.find((e) => e.id === deleteConfirmId)?.name}</span> وإيقاف حساب الدخول المرتبط به.
+              سيتم تعطيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === deleteConfirmId))}</span> وإيقاف حساب الدخول المرتبط به.
             </p>
             <p className="text-xs text-[var(--color-text-muted)] mb-6">يمكنك إعادة تفعيله لاحقاً. البيانات والتقارير السابقة ستبقى محفوظة.</p>
             <div className="flex items-center justify-center gap-3">
@@ -1304,7 +1312,7 @@ export const Employees: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold mb-2">حذف نهائي</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
-              سيتم حذف <span className="font-bold text-rose-600">{_rawEmployees.find((e) => e.id === permanentDeleteId)?.name}</span> نهائياً مع بيانات حسابه.
+              سيتم حذف <span className="font-bold text-rose-600">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === permanentDeleteId))}</span> نهائياً مع بيانات حسابه.
             </p>
             <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 mb-4 text-right">
               <p className="text-xs font-bold text-rose-600 flex items-center gap-1">
@@ -1338,7 +1346,7 @@ export const Employees: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold mb-2">إعادة تفعيل الموظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">
-              سيتم إعادة تفعيل <span className="font-bold text-[var(--color-text)]">{_rawEmployees.find((e) => e.id === toggleConfirmId)?.name}</span> وتفعيل حساب الدخول المرتبط به.
+              سيتم إعادة تفعيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === toggleConfirmId))}</span> وتفعيل حساب الدخول المرتبط به.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setToggleConfirmId(null)}>إلغاء</Button>

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Badge, Button } from '../components/UI';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
@@ -208,12 +208,18 @@ export const LineWorkerAssignment: React.FC = () => {
       const activeIds = new Set(
         _rawEmployees.filter((e) => e.isActive !== false).map((e) => e.id!)
       );
+      const employeeDirectory = new Map(
+        _rawEmployees
+          .filter((e) => Boolean(e.id))
+          .map((e) => [String(e.id), { name: e.name, code: e.code }])
+      );
       const count = await lineAssignmentService.copyFromDate(
         sourceDate,
         selectedDate,
         selectedLineId || undefined,
         uid || '',
-        activeIds
+        activeIds,
+        employeeDirectory,
       );
       if (count > 0) {
         showFeedback('success', `تم نسخ ${count} عامل من ${sourceDate}`);
@@ -252,6 +258,20 @@ export const LineWorkerAssignment: React.FC = () => {
 
   const getEmployeeInfo = (employeeId: string) => {
     return _rawEmployees.find((e) => e.id === employeeId);
+  };
+
+  const getAssignmentEmployeeName = (assignment: LWA): string => {
+    const fromAssignment = String(assignment.employeeName || '').trim();
+    if (fromAssignment) return fromAssignment;
+    const employee = getEmployeeInfo(assignment.employeeId);
+    return String(employee?.name || '').trim() || assignment.employeeId || '—';
+  };
+
+  const getAssignmentEmployeeCode = (assignment: LWA): string => {
+    const fromAssignment = String(assignment.employeeCode || '').trim();
+    if (fromAssignment) return fromAssignment;
+    const employee = getEmployeeInfo(assignment.employeeId);
+    return String(employee?.code || '').trim() || '—';
   };
 
   const workerPositionIds = useMemo(() => {
@@ -486,10 +506,10 @@ export const LineWorkerAssignment: React.FC = () => {
                       >
                         <td className="py-2.5 px-3">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-xs font-mono font-bold">
-                            {a.employeeCode}
+                            {getAssignmentEmployeeCode(a)}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{a.employeeName}</td>
+                        <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{getAssignmentEmployeeName(a)}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getDeptName(emp.departmentId) : '—'}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getPositionTitle(emp.jobPositionId) : '—'}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] text-xs">{formatTime(a.assignedAt)}</td>
@@ -570,9 +590,9 @@ export const LineWorkerAssignment: React.FC = () => {
                             <div key={w.id} className="flex items-center justify-between py-2 text-sm">
                               <div className="flex items-center gap-3">
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-xs font-mono font-bold">
-                                  {w.employeeCode}
+                                  {getAssignmentEmployeeCode(w)}
                                 </span>
-                                <span className="font-medium">{w.employeeName}</span>
+                                <span className="font-medium">{getAssignmentEmployeeName(w)}</span>
                                 {emp && (
                                   <span className="text-xs text-[var(--color-text-muted)] hidden sm:inline">
                                     {getDeptName(emp.departmentId)}

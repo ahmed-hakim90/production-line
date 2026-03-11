@@ -16,6 +16,24 @@ function sortByName<T extends { name?: string }>(items: T[]): T[] {
   );
 }
 
+function getEmployeeDisplayName(employee?: Partial<Pick<FirestoreEmployee, 'name' | 'code' | 'id'>> | null): string {
+  const name = String(employee?.name || '').trim();
+  if (name) return name;
+  const code = String(employee?.code || '').trim();
+  if (code) return `(${code})`;
+  return String(employee?.id || '—');
+}
+
+function getUserDisplayName(row: UserManagementRow): string {
+  const displayName = String(row.user.displayName || '').trim();
+  if (displayName) return displayName;
+  const employeeName = getEmployeeDisplayName(row.employee);
+  if (employeeName !== '—') return employeeName;
+  const email = String(row.user.email || '').trim();
+  if (email) return email.split('@')[0] || email;
+  return '—';
+}
+
 export const UsersManagement: React.FC = () => {
   const createUser = useAppStore((s) => s.createUser);
   const currentUid = useAppStore((s) => s.uid);
@@ -73,8 +91,8 @@ export const UsersManagement: React.FC = () => {
       if (statusFilter === 'not_created' && row.user.isActive) return false;
       if (!needle) return true;
       const email = String(row.user.email || '').toLowerCase();
-      const displayName = String(row.user.displayName || '').toLowerCase();
-      const employeeName = String(row.employee?.name || '').toLowerCase();
+      const displayName = getUserDisplayName(row).toLowerCase();
+      const employeeName = getEmployeeDisplayName(row.employee).toLowerCase();
       return (
         email.includes(needle) ||
         displayName.includes(needle) ||
@@ -88,7 +106,7 @@ export const UsersManagement: React.FC = () => {
       .filter((employee) => !employee.userId)
       .map((employee) => ({
         value: String(employee.id || ''),
-        label: `${employee.name}${employee.code ? ` (${employee.code})` : ''}`,
+        label: `${getEmployeeDisplayName(employee)}${employee.code ? ` (${employee.code})` : ''}`,
       }));
   }, [employees]);
 
@@ -213,10 +231,10 @@ export const UsersManagement: React.FC = () => {
   const pendingCount = rows.filter((row) => !row.user.isActive).length;
   const exportRows = rows.map((row, index) => ({
     '#': index + 1,
-    'الاسم': row.user.displayName || '—',
+    'الاسم': getUserDisplayName(row),
     'البريد الإلكتروني': row.user.email || '—',
     'الدور': row.role?.name || roleById.get(row.user.roleId)?.name || '—',
-    'الموظف المرتبط': row.employee?.name || 'غير مربوط',
+    'الموظف المرتبط': row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط',
     'الحالة': row.user.isActive ? 'مفعّل' : 'بانتظار الموافقة',
   }));
 
@@ -258,7 +276,7 @@ export const UsersManagement: React.FC = () => {
       .filter((employee) => !employee.userId || employee.userId === currentUserId)
       .map((employee) => ({
         value: String(employee.id || ''),
-        label: `${employee.name}${employee.code ? ` (${employee.code})` : ''}`,
+        label: `${getEmployeeDisplayName(employee)}${employee.code ? ` (${employee.code})` : ''}`,
       }));
 
     openModal(MODAL_KEYS.SYSTEM_USERS_MANAGE, {
@@ -434,10 +452,10 @@ export const UsersManagement: React.FC = () => {
                       key={rowId}
                       className="border-b border-[var(--color-border)] transition-colors hover:bg-[#f8f9fa]"
                     >
-                      <td className="py-2.5 px-3 font-medium">{row.user.displayName || '—'}</td>
+                      <td className="py-2.5 px-3 font-medium">{getUserDisplayName(row)}</td>
                       <td className="py-2.5 px-3">{row.user.email}</td>
                       <td className="py-2.5 px-3">{row.role?.name || roleById.get(row.user.roleId)?.name || '—'}</td>
-                      <td className="py-2.5 px-3">{row.employee?.name || 'غير مربوط'}</td>
+                      <td className="py-2.5 px-3">{row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط'}</td>
                       <td className="py-2.5 px-3">
                         <Badge variant={row.user.isActive ? 'success' : 'warning'}>
                           {row.user.isActive ? 'مفعّل' : 'بانتظار الموافقة'}

@@ -2432,27 +2432,55 @@ export const Reports: React.FC = () => {
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
-                  <input
-                    type="number"
-                    min={0}
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    value={totalComponentScrapQty || ''}
-                    onChange={(e) => {
-                      const qty = Number(e.target.value || 0);
-                      if (qty > 0) {
-                        setForm((prev) => ({
-                          ...prev,
-                          componentScrapItems: [{ materialId: '__total__', materialName: 'هالك مكونات', quantity: qty }],
-                        }));
-                        return;
-                      }
-                      setForm((prev) => ({ ...prev, componentScrapItems: [] }));
-                    }}
-                    placeholder="0"
-                  />
-                </div>
+                {form.reportType === 'component_injection' ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                      value={totalComponentScrapQty || ''}
+                      onChange={(e) => {
+                        const qty = Number(e.target.value || 0);
+                        if (qty > 0) {
+                          setForm((prev) => ({
+                            ...prev,
+                            componentScrapItems: [{ materialId: '__total__', materialName: 'هالك مكونات', quantity: qty }],
+                          }));
+                          return;
+                        }
+                        setForm((prev) => ({ ...prev, componentScrapItems: [] }));
+                      }}
+                      placeholder="0"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!form.productId) return;
+                        openModal(MODAL_KEYS.REPORTS_COMPONENT_SCRAP, {
+                          productId: form.productId,
+                          items: form.componentScrapItems,
+                          onSave: (items: ReportComponentScrapItem[]) => {
+                            setForm((prev) => ({ ...prev, componentScrapItems: items }));
+                          },
+                        });
+                      }}
+                      disabled={!form.productId}
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa] hover:bg-[#f0f2f5] disabled:opacity-60 disabled:cursor-not-allowed text-sm p-3.5 outline-none font-bold transition-all flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate text-right">
+                        {totalComponentScrapQty > 0
+                          ? `إجمالي الهالك: ${totalComponentScrapQty}`
+                          : (form.productId ? 'تحديد هالك المكونات' : 'اختر المنتج أولاً')}
+                      </span>
+                      <span className="material-icons-round text-base">open_in_new</span>
+                    </button>
+                  </div>
+                )}
               </div>
               {form.reportType === 'component_injection' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
