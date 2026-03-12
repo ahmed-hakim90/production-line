@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardSlice } from '../../../store/selectors';
+import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
@@ -17,12 +18,18 @@ import {
   getExecutionDeviationTone,
   getTodayDateString,
 } from '../../../utils/calculations';
-import { exportProductSummary } from '../../../utils/exportExcel';
+import { exportProductSummary, exportProductionPlanShortages } from '../../../utils/exportExcel';
 import {
   formatCost,
   getCurrentMonth,
   calculateDailyIndirectCost,
 } from '../../../utils/costCalculations';
+import {
+  emptyWorkOrderCardMetricsData,
+  getWorkOrderCardMetrics,
+  loadWorkOrderCardMetricsData,
+  type WorkOrderCardMetricsData,
+} from '../utils/workOrderCardMetrics';
 import {
   getAlertSettings,
   getKPIThreshold,
@@ -259,10 +266,13 @@ export const AdminDashboard: React.FC = () => {
     costCenters,
     costCenterValues,
     costAllocations,
+    assets,
+    assetDepreciations,
     laborSettings,
     lineProductConfigs,
     systemSettings,
   } = useDashboardSlice();
+  const productionPlanFollowUps = useAppStore((s) => s.productionPlanFollowUps);
   const pageControl = useMemo(
     () => getExportImportPageControl(systemSettings.exportImport, 'adminDashboard'),
     [systemSettings.exportImport]
@@ -299,6 +309,9 @@ export const AdminDashboard: React.FC = () => {
   const [yesterdayComplianceError, setYesterdayComplianceError] = useState<string | null>(null);
   const [selectedComplianceDate, setSelectedComplianceDate] = useState(() => getComplianceDefaultDate(Date.now()));
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [workOrderCardMetricsData, setWorkOrderCardMetricsData] = useState<WorkOrderCardMetricsData>(
+    () => emptyWorkOrderCardMetricsData(),
+  );
 
   const dateRange = useMemo(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -320,6 +333,29 @@ export const AdminDashboard: React.FC = () => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const activeWorkOrders = useMemo(
+    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress'),
+    [workOrders],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (activeWorkOrders.length === 0) {
+      setWorkOrderCardMetricsData(emptyWorkOrderCardMetricsData());
+      return;
+    }
+    loadWorkOrderCardMetricsData(activeWorkOrders)
+      .then((data) => {
+        if (!cancelled) setWorkOrderCardMetricsData(data);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkOrderCardMetricsData(emptyWorkOrderCardMetricsData());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkOrders]);
 
   // Fetch production reports by date range
   useEffect(() => {
@@ -624,6 +660,26 @@ export const AdminDashboard: React.FC = () => {
       .slice(0, 5);
   }, [reports, _rawProducts]);
 
+  const topSupervisors = useMemo(() => {
+    const map = new Map<string, { production: number; reports: number }>();
+    reports.forEach((report) => {
+      const key = report.employeeId;
+      const prev = map.get(key) || { production: 0, reports: 0 };
+      prev.production += Number(report.quantityProduced || 0);
+      prev.reports += 1;
+      map.set(key, prev);
+    });
+    return Array.from(map.entries())
+      .map(([employeeId, value]) => ({
+        id: employeeId,
+        name: _rawEmployees.find((employee) => employee.id === employeeId)?.name || employeeId,
+        production: value.production,
+        reports: value.reports,
+      }))
+      .sort((a, b) => b.production - a.production)
+      .slice(0, 5);
+  }, [reports, _rawEmployees]);
+
   // ── Roles chart data ──────────────────────────────────────────────────────
 
   const rolesChartData = useMemo(() => {
@@ -654,6 +710,39 @@ export const AdminDashboard: React.FC = () => {
       })
       .slice(0, 6);
   }, [costCenters, costCenterValues, costAllocations]);
+
+  const monthlyDepreciationSummary = useMemo(() => {
+    const currentMonth = getCurrentMonth();
+    const byCenter = new Map<string, { amount: number; assetsCount: number }>();
+    const activeAssetIds = new Set(
+      assets
+        .filter((asset) => asset.status === 'active' && asset.id)
+        .map((asset) => String(asset.id)),
+    );
+    assetDepreciations
+      .filter((entry) => entry.period === currentMonth && activeAssetIds.has(String(entry.assetId)))
+      .forEach((entry) => {
+        const centerId = assets.find((asset) => String(asset.id) === String(entry.assetId))?.centerId || '';
+        if (!centerId) return;
+        const prev = byCenter.get(centerId) || { amount: 0, assetsCount: 0 };
+        prev.amount += Number(entry.depreciationAmount || 0);
+        prev.assetsCount += 1;
+        byCenter.set(centerId, prev);
+      });
+
+    const rows = Array.from(byCenter.entries())
+      .map(([centerId, value]) => ({
+        centerId,
+        centerName: costCenters.find((center) => center.id === centerId)?.name || '—',
+        amount: value.amount,
+        assetsCount: value.assetsCount,
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 8);
+    const total = rows.reduce((sum, row) => sum + row.amount, 0);
+
+    return { month: currentMonth, rows, total };
+  }, [assetDepreciations, assets, costCenters]);
 
   const liveScanKpis = useMemo(() => {
     const activeWorkOrderIds = new Set(
@@ -869,6 +958,44 @@ export const AdminDashboard: React.FC = () => {
       : byCategory;
   }, [productSummary, productSearch, productCategoryFilter]);
 
+  const weightedAvgProductCost = useMemo(() => {
+    const totalQty = filteredProductSummary.reduce((sum, product) => sum + product.qty, 0);
+    if (totalQty <= 0) return 0;
+    const weightedTotal = filteredProductSummary.reduce((sum, product) => sum + (product.avgCost * product.qty), 0);
+    return weightedTotal / totalQty;
+  }, [filteredProductSummary]);
+
+  const getProductCostTrend = useCallback((avgCost: number) => {
+    if (!canViewCosts || weightedAvgProductCost <= 0) {
+      return {
+        label: '—',
+        direction: 'flat' as 'up' | 'down' | 'flat',
+        delta: 0,
+      };
+    }
+    const delta = avgCost - weightedAvgProductCost;
+    const absDelta = Math.abs(delta);
+    if (absDelta < 0.01) {
+      return {
+        label: 'مطابق للمتوسط',
+        direction: 'flat' as 'up' | 'down' | 'flat',
+        delta: 0,
+      };
+    }
+    if (delta > 0) {
+      return {
+        label: `أعلى ${formatCost(absDelta)} ج.م`,
+        direction: 'up' as 'up' | 'down' | 'flat',
+        delta,
+      };
+    }
+    return {
+      label: `أقل ${formatCost(absDelta)} ج.م`,
+      direction: 'down' as 'up' | 'down' | 'flat',
+      delta,
+    };
+  }, [canViewCosts, weightedAvgProductCost]);
+
   const quickActions = useMemo(() => {
     const configured = (systemSettings?.quickActions ?? [])
       .slice()
@@ -878,6 +1005,23 @@ export const AdminDashboard: React.FC = () => {
       return !item.permission || can(item.permission as any);
     });
   }, [systemSettings, can, canExportFromPage]);
+
+  const shortageRows = useMemo(() => {
+    return productionPlanFollowUps
+      .slice()
+      .sort((a, b) => {
+        const aTime = a.createdAt?.seconds || 0;
+        const bTime = b.createdAt?.seconds || 0;
+        return bTime - aTime;
+      })
+      .map((row) => ({
+        id: row.id || `${row.planId}-${row.componentId}`,
+        productName: _rawProducts.find((p) => p.id === row.productId)?.name || '—',
+        componentName: row.componentName || '—',
+        shortageQty: Number(row.shortageQty || 0),
+        note: row.note || '',
+      }));
+  }, [productionPlanFollowUps, _rawProducts]);
 
   const runQuickAction = useCallback((action: QuickActionItem) => {
     if (action.actionType === 'navigate' && action.target) {
@@ -1029,7 +1173,7 @@ export const AdminDashboard: React.FC = () => {
 
   if (loading && reports.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="erp-dashboard-theme space-y-6">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-rose-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
             <span className="material-icons-round text-rose-600 text-2xl">shield</span>
@@ -1041,7 +1185,7 @@ export const AdminDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="erp-dashboard-theme space-y-6">
       {/* ── Alerts ──────────────────────────────────────────────────────────── */}
       {isVisible('alerts') && alerts.length > 0 && (
         <div className="space-y-1.5">
@@ -1272,30 +1416,30 @@ export const AdminDashboard: React.FC = () => {
 {productSummary.length > 0 && (() => {
         return (
           <Card>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+            <div className="flex flex-col gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">inventory_2</span>
                 <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
                 <Badge variant="info">{productSummary.length} منتج</Badge>
               </div>
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:mr-auto">
-              <div className="relative flex-1 min-w-0 w-full sm:w-auto sm:min-w-[170px]">
+              <div className="erp-filter-bar w-full">
+              <div className="relative flex-1 min-w-0 w-full md:w-auto md:min-w-[250px]">
                   <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
                   <input
                     type="text"
                     placeholder="بحث بالكود أو الاسم..."
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-56 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                    className="erp-search-input--table pr-9 w-full md:min-w-[240px]"
                   />
                 </div>
                
-                <div className="relative flex-1 min-w-0 w-full sm:w-auto sm:min-w-[150px]">
+                <div className="relative flex-1 min-w-0 w-full md:w-auto md:min-w-[190px]">
                   <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
                   <select
                     value={productCategoryFilter}
                     onChange={(e) => setProductCategoryFilter(e.target.value)}
-                    className="pr-9 pl-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold w-full sm:w-44 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all appearance-none"
+                    className="erp-filter-select pr-9 w-full appearance-none"
                   >
                     <option value="all">كل الفئات</option>
                     {productSummaryCategories.map((category) => (
@@ -1306,7 +1450,7 @@ export const AdminDashboard: React.FC = () => {
                 {canExportFromPage && (
                 <button
                   onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold text-[var(--color-text-muted)] hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all w-full sm:w-auto"
+                  className="erp-filter-apply flex items-center justify-center gap-1.5 w-full md:w-auto md:mr-auto"
                   title="تصدير Excel"
                 >
                   <span className="material-icons-round text-sm">download</span>
@@ -1325,36 +1469,56 @@ export const AdminDashboard: React.FC = () => {
                   {filteredProductSummary.map((p, i) => (
                     <div key={p.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
                       <div className="flex items-start justify-between gap-2">
-                        <button
-                          onClick={() => navigate(`/products/${p.id}`)}
-                          className="text-sm font-bold text-primary text-right leading-snug hover:underline"
-                        >
-                          {p.name}
-                        </button>
+                        <div className="min-w-0 flex-1">
+                          <button
+                            onClick={() => navigate(`/products/${p.id}`)}
+                            className="text-sm font-bold text-primary text-right leading-snug hover:underline line-clamp-2"
+                          >
+                            {p.name}
+                          </button>
+                          <p className="text-[11px] font-mono text-[var(--color-text-muted)] mt-1">{p.code || '—'}</p>
+                        </div>
                         <span className="text-[11px] font-mono text-[var(--color-text-muted)]">#{i + 1}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                        <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2">
                           {canViewCosts ? (
                             <>
                               <p className="text-[var(--color-text-muted)] mb-0.5">متوسط تكلفة الوحدة</p>
-                              <p className="font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</p>
+                              <p className="font-mono font-bold text-[var(--color-text)]">{formatCost(p.avgCost)} ج.م</p>
                             </>
                           ) : (
                             <>
-                              <p className="text-[var(--color-text-muted)] mb-0.5">الكود</p>
-                              <p className="font-mono font-bold text-[var(--color-text)]">{p.code || '—'}</p>
+                              <p className="text-[var(--color-text-muted)] mb-0.5">الحالة</p>
+                              <p className="font-bold text-[var(--color-text)]">—</p>
                             </>
                           )}
                         </div>
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                        <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2">
                           <p className="text-[var(--color-text-muted)] mb-0.5">الكمية</p>
                           <p className="font-mono font-bold text-primary">{formatNumber(p.qty)}</p>
                         </div>
                       </div>
+                      {canViewCosts && (() => {
+                        const trend = getProductCostTrend(p.avgCost);
+                        return (
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-[var(--color-text-muted)] font-bold">الاتجاه</span>
+                            <span className={`font-bold ${
+                              trend.direction === 'up'
+                                ? 'text-rose-500'
+                                : trend.direction === 'down'
+                                  ? 'text-emerald-600'
+                                  : 'text-[var(--color-text-muted)]'
+                            }`}>
+                              {trend.label}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
-                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60 px-3 py-2.5 flex items-center justify-between">
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 flex items-center justify-between">
                     <span className="text-sm font-bold text-[var(--color-text-muted)]">الإجمالي</span>
                     <span className="font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</span>
                   </div>
@@ -1372,18 +1536,21 @@ export const AdminDashboard: React.FC = () => {
                     {canViewCosts && (
                       <th className="erp-th">متوسط تكلفة الوحدة</th>
                     )}
+                    {canViewCosts && (
+                      <th className="erp-th">الاتجاه</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProductSummary.length === 0 ? (
                     <tr>
-                      <td colSpan={canViewCosts ? 5 : 4} className="py-8 text-center text-[var(--color-text-muted)] text-sm">
+                      <td colSpan={canViewCosts ? 6 : 4} className="py-8 text-center text-[var(--color-text-muted)] text-sm">
                         لا توجد نتائج مطابقة للفلاتر الحالية
                       </td>
                     </tr>
                   ) : (
                     filteredProductSummary.map((p, i) => (
-                      <tr key={i} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                      <tr key={i} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                         <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs">{i + 1}</td>
                         <td className="py-3 px-4 font-bold">
                           <button
@@ -1394,24 +1561,46 @@ export const AdminDashboard: React.FC = () => {
                         <td className="py-3 px-4 font-mono text-xs text-slate-500">{p.code}</td>
                         <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(p.qty)}</td>
                         {canViewCosts && (
-                          <td className="py-3 px-4 font-mono font-bold text-amber-600">{formatCost(p.avgCost)} ج.م</td>
+                          <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">{formatCost(p.avgCost)} ج.م</td>
                         )}
+                        {canViewCosts && (() => {
+                          const trend = getProductCostTrend(p.avgCost);
+                          return (
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] text-[11px] font-bold ${
+                                trend.direction === 'up'
+                                  ? 'bg-rose-50 text-rose-600'
+                                  : trend.direction === 'down'
+                                    ? 'bg-emerald-50 text-emerald-600'
+                                    : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
+                              }`}>
+                                <span className="material-icons-round text-[13px]">
+                                  {trend.direction === 'up' ? 'trending_up' : trend.direction === 'down' ? 'trending_down' : 'drag_handle'}
+                                </span>
+                                <span>{trend.label}</span>
+                              </span>
+                            </td>
+                          );
+                        })()}
                       </tr>
                     ))
                   )}
                 </tbody>
                 {filteredProductSummary.length > 0 && (
                   <tfoot>
-                    <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50">
+                    <tr className="border-t-2 border-[var(--color-border)] bg-[var(--color-bg)]">
                       <td colSpan={3} className="py-3 px-4 font-bold text-[var(--color-text-muted)]">الإجمالي</td>
                       <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(filteredProductSummary.reduce((s, p) => s + p.qty, 0))}</td>
                       {canViewCosts && (
-                        <td className="py-3 px-4 font-mono font-bold text-amber-600">
+                        <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">
                           {formatCost(filteredProductSummary.reduce((s, p) => s + p.qty, 0) > 0
                             ? filteredProductSummary.reduce((s, p) => s + p.avgCost * p.qty, 0) / filteredProductSummary.reduce((s, p) => s + p.qty, 0)
                             : 0
                           )} ج.م
                         </td>
+                      )}
+                      {canViewCosts && (
+                        <td className="py-3 px-4 text-[var(--color-text-muted)] font-bold">—</td>
                       )}
                     </tr>
                   </tfoot>
@@ -1421,6 +1610,55 @@ export const AdminDashboard: React.FC = () => {
           </Card>
         );
       })()}
+
+      <Card>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-icons-round text-amber-600">report_problem</span>
+            <h3 className="text-sm font-bold text-[var(--color-text)]">نواقص المكونات</h3>
+            <Badge variant="warning">{shortageRows.length}</Badge>
+          </div>
+          {canExportFromPage && shortageRows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => exportProductionPlanShortages(shortageRows)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+            >
+              <span className="material-icons-round text-sm">download</span>
+              <span>Excel</span>
+            </button>
+          )}
+        </div>
+        {shortageRows.length === 0 ? (
+          <div className="erp-alert erp-alert-info">
+            <span className="material-icons-round text-[18px] shrink-0">info</span>
+            <span>لا توجد نواقص مكونات مسجلة حاليًا.</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-no-table-enhance="true">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">المنتج</th>
+                  <th className="erp-th">المكون</th>
+                  <th className="erp-th">الكمية</th>
+                  <th className="erp-th">الملحوظة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shortageRows.map((row) => (
+                  <tr key={row.id} className="border-b border-[var(--color-border)]">
+                    <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.productName}</td>
+                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.componentName}</td>
+                    <td className="py-2.5 px-3 font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</td>
+                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.note || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
       <Card>
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
@@ -1555,7 +1793,7 @@ export const AdminDashboard: React.FC = () => {
 
 {/* ── Active Work Orders (same visual style) ─────────────────────────── */}
 {(() => {
-        const activeWOs = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
+        const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
         const totalQty = activeWOs.reduce((s, w) => s + w.quantity, 0);
         const totalProduced = activeWOs.reduce((s, w) => {
@@ -1589,7 +1827,19 @@ export const AdminDashboard: React.FC = () => {
                 const producedNow = producedFromLive ?? wo.actualProducedFromScans ?? wo.producedQuantity ?? 0;
                 const progress = wo.quantity > 0 ? Math.round((producedNow / wo.quantity) * 100) : 0;
                 const remaining = wo.quantity - producedNow;
-                const estCostPerUnit = wo.quantity > 0 ? wo.estimatedCost / wo.quantity : 0;
+                const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {
+                  producedNowRaw: producedNow,
+                  lineDailyWorkingHours: Number(_rawLines.find((l) => l.id === wo.lineId)?.dailyWorkingHours || 0),
+                  supervisorHourlyRate: Number(supervisor?.hourlyRate || laborSettings?.hourlyRate || 0),
+                  hourlyRate: Number(laborSettings?.hourlyRate || 0),
+                  costCenters,
+                  costCenterValues,
+                  costAllocations,
+                  reportDate: wo.targetDate,
+                });
+                const avgWorkersLabel = metrics.averageWorkers !== null
+                  ? `${metrics.averageWorkers.toFixed(1)} عامل`
+                  : '—';
 
                 return (
                   <div
@@ -1613,7 +1863,7 @@ export const AdminDashboard: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
-                      <p className="text-base font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
@@ -1621,12 +1871,24 @@ export const AdminDashboard: React.FC = () => {
                         <span className="material-icons-round text-indigo-400 text-base">person</span>
                         <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
                       </div>
-                      {canViewCosts && estCostPerUnit > 0 && (
-                        <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
-                          <span className="material-icons-round text-emerald-500 text-sm">payments</span>
-                          <span className="text-[10px] text-slate-400">التكلفة المتوقعة</span>
-                          <span className="text-sm font-bold text-emerald-600">{formatCost(estCostPerUnit)}</span>
-                          <span className="text-[10px] text-slate-400">/قطعة</span>
+                      {canViewCosts && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
+                            <span className="material-icons-round text-emerald-500 text-sm">payments</span>
+                            <span className="text-[10px] text-slate-400">التكلفة المقدرة</span>
+                            <span className="text-sm font-bold text-emerald-600">
+                              {metrics.estimatedUnitCost !== null ? formatCost(metrics.estimatedUnitCost) : '—'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">/قطعة</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
+                            <span className="material-icons-round text-primary text-sm">calculate</span>
+                            <span className="text-[10px] text-slate-400">التكلفة الفعلية</span>
+                            <span className="text-sm font-bold text-primary">
+                              {metrics.actualUnitCostToDate !== null ? formatCost(metrics.actualUnitCostToDate) : '—'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">/قطعة</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1666,12 +1928,42 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="material-icons-round text-sm">groups</span>
-                        <span className="font-bold">{wo.maxWorkers} عامل</span>
+                        <span className="font-bold">متوسط العمالة: {avgWorkersLabel}</span>
                       </div>
                       <div className="flex items-center gap-1 mr-auto">
                         <span className="material-icons-round text-sm">event</span>
                         <span className="font-bold">{wo.targetDate}</span>
                       </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-muted)]">
+                      <div className="flex items-center gap-1">
+                        <span className="material-icons-round text-sm">calendar_month</span>
+                        <span className="font-bold">
+                          أيام تشغيل (بدون الجمعة): {metrics.estimatedWorkDays !== null ? metrics.estimatedWorkDays : '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="material-icons-round text-sm">schedule</span>
+                        <span className="font-bold">
+                          أيام متبقية (مقدر): {metrics.remainingDaysByBenchmark !== null ? metrics.remainingDaysByBenchmark.toFixed(1) : '—'}
+                        </span>
+                      </div>
+                      {canViewCosts && (
+                        <div className="flex items-center gap-1">
+                          <span className="material-icons-round text-sm">payments</span>
+                          <span className="font-bold">
+                            تكلفة الأيام المقدرة: {metrics.estimatedTotalCost !== null ? `${formatCost(metrics.estimatedTotalCost)} ج.م` : '—'}
+                          </span>
+                        </div>
+                      )}
+                      {canViewCosts && (
+                        <div className="flex items-center gap-1 mr-auto">
+                          <span className="material-icons-round text-sm">request_quote</span>
+                          <span className="font-bold">
+                            تكلفة متبقية (مقدرة): {metrics.estimatedRemainingCost !== null ? `${formatCost(metrics.estimatedRemainingCost)} ج.م` : '—'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1952,10 +2244,56 @@ export const AdminDashboard: React.FC = () => {
             )}
           </Card>
         )}
+
+        {isVisible('monthly_depreciation_summary') && canViewCosts && (
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="material-icons-round text-violet-500">event_repeat</span>
+              <h3 className="text-lg font-bold">ملخص الاهلاكات الشهرية</h3>
+              <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">{monthlyDepreciationSummary.month}</span>
+            </div>
+            {monthlyDepreciationSummary.rows.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">مركز التكلفة</th>
+                      <th className="erp-th">عدد الأصول</th>
+                      <th className="erp-th">قيمة الإهلاك</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyDepreciationSummary.rows.map((row) => (
+                      <tr key={row.centerId} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-sm text-[var(--color-text)]">{row.centerName}</td>
+                        <td className="py-2.5 px-3 text-sm font-bold text-[var(--color-text-muted)]">{formatNumber(row.assetsCount)}</td>
+                        <td className="py-2.5 px-3 text-sm font-bold text-violet-600">{formatCost(row.amount)} ج.م</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-[var(--color-border)] bg-[#f8f9fa]/60">
+                      <td className="py-2.5 px-3 font-bold text-[var(--color-text-muted)]">الإجمالي</td>
+                      <td className="py-2.5 px-3 text-sm font-bold text-[var(--color-text-muted)]">
+                        {formatNumber(monthlyDepreciationSummary.rows.reduce((sum, row) => sum + row.assetsCount, 0))}
+                      </td>
+                      <td className="py-2.5 px-3 text-sm font-bold text-violet-600">{formatCost(monthlyDepreciationSummary.total)} ج.م</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
+                <span className="material-icons-round text-3xl mb-2 block opacity-30">event_repeat</span>
+                لا توجد اهلاكات مسجلة لهذا الشهر
+              </div>
+            )}
+          </Card>
+        )}
       </div>
 
       {/* ── Top Lines & Products ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Top 5 Lines */}
         {isVisible('top_lines') && <Card>
           <div className="flex items-center gap-2 mb-4">
@@ -1996,6 +2334,31 @@ export const AdminDashboard: React.FC = () => {
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
                   <Tooltip content={<ChartTooltip />} />
                   <Bar dataKey="production" name="الإنتاج" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={18} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
+              لا توجد بيانات
+            </div>
+          )}
+        </Card>}
+
+        {/* Top 5 Supervisors */}
+        {isVisible('top_supervisors') && <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-icons-round text-amber-500">supervisor_account</span>
+            <h3 className="text-lg font-bold">أعلى 5 مشرفين في الأداء</h3>
+          </div>
+          {topSupervisors.length > 0 ? (
+            <div style={{ direction: 'ltr' }} className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topSupervisors} layout="vertical" margin={{ left: 70 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="production" name="الإنتاج" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={18} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

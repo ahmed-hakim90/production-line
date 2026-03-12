@@ -22,6 +22,26 @@ interface OperationSnapshot {
   errorMessage?: string;
 }
 
+interface SessionEventItem {
+  id: string;
+  atMs: number;
+  operation: string;
+  module: string;
+  status: 'started' | 'succeeded' | 'failed';
+  description: string;
+}
+
+interface SessionGroup {
+  sessionId: string;
+  title: string;
+  userName: string;
+  module: string;
+  startedAtMs: number;
+  endedAtMs: number;
+  durationMs: number;
+  events: SessionEventItem[];
+}
+
 const toMillis = (value: unknown): number => {
   if (!value) return 0;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -66,6 +86,69 @@ const getOperationKind = (operation: string): 'business' | 'session' | 'ui' => {
   if (operation.startsWith('session.')) return 'session';
   if (operation === 'navigate' || operation === 'click') return 'ui';
   return 'business';
+};
+
+const getRowStatus = (row: AuditRecord): 'started' | 'succeeded' | 'failed' => {
+  if (row.status === 'started' || row.status === 'failed' || row.status === 'succeeded') return row.status;
+  return 'succeeded';
+};
+
+const getSessionId = (row: AuditRecord): string | null => {
+  const metadata = row.metadata as Record<string, unknown> | undefined;
+  const value = metadata?.sessionId;
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  return value;
+};
+
+const buildSessionGroups = (events: AuditRecord[]): SessionGroup[] => {
+  const grouped = new Map<string, AuditRecord[]>();
+
+  events.forEach((row) => {
+    const sessionId = getSessionId(row);
+    if (!sessionId) return;
+    const bucket = grouped.get(sessionId) ?? [];
+    bucket.push(row);
+    grouped.set(sessionId, bucket);
+  });
+
+  const groups: SessionGroup[] = [];
+  grouped.forEach((rows, sessionId) => {
+    const sorted = [...rows].sort((a, b) => {
+      const aMs = toMillis(a.startedAt || a.timestamp);
+      const bMs = toMillis(b.startedAt || b.timestamp);
+      return aMs - bMs;
+    });
+    if (sorted.length === 0) return;
+
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const startedAtMs = toMillis(first.startedAt || first.timestamp);
+    const endedAtMs = toMillis(last.endedAt || last.timestamp || last.startedAt);
+    const durationMs = Math.max(0, (endedAtMs || startedAtMs) - startedAtMs);
+    const userName = String(first.userName || first.performedBy || 'Unknown');
+    const module = String(first.module || 'unknown');
+    const title = `Session ${sessionId.slice(0, 8)}`;
+
+    groups.push({
+      sessionId,
+      title,
+      userName,
+      module,
+      startedAtMs,
+      endedAtMs: endedAtMs || startedAtMs,
+      durationMs,
+      events: sorted.map((row, idx) => ({
+        id: row.id || `${sessionId}_${idx}`,
+        atMs: toMillis(row.startedAt || row.timestamp),
+        operation: String(row.operation || row.action || 'unknown.operation'),
+        module: String(row.module || 'unknown'),
+        status: getRowStatus(row),
+        description: String(row.description || row.action || 'No description'),
+      })),
+    });
+  });
+
+  return groups.sort((a, b) => b.startedAtMs - a.startedAtMs);
 };
 
 const extractSnapshots = (events: AuditRecord[]): OperationSnapshot[] => {
@@ -120,6 +203,7 @@ export const OperationsMonitorPage: React.FC = () => {
   const [kindFilter, setKindFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [openSessionIds, setOpenSessionIds] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,25 +232,40 @@ export const OperationsMonitorPage: React.FC = () => {
     () => (kindFilter ? snapshots.filter((row) => row.kind === kindFilter) : snapshots),
     [kindFilter, snapshots],
   );
+  const sessionGroups = useMemo(() => buildSessionGroups(events), [events]);
+  const filteredSessionGroups = useMemo(() => {
+    if (!kindFilter) return sessionGroups;
+    return sessionGroups.filter((session) =>
+      session.events.some((event) => getOperationKind(event.operation) === kindFilter),
+    );
+  }, [kindFilter, sessionGroups]);
   const activeFilterCount = useMemo(
     () => [moduleFilter, statusFilter, operationFilter, kindFilter, fromDate, toDate].filter(Boolean).length,
     [fromDate, kindFilter, moduleFilter, operationFilter, statusFilter, toDate],
   );
 
   const now = Date.now();
-  const delayed = useMemo(
-    () => filteredSnapshots.filter((row) => row.status === 'started' && row.startedAtMs > 0 && now - row.startedAtMs >= DELAY_THRESHOLD_MS),
-    [filteredSnapshots, now],
-  );
+  const delayed = useMemo(() => {
+    const startedSessions = filteredSessionGroups.filter((session) => {
+      const latest = session.events[session.events.length - 1];
+      return latest?.status === 'started';
+    });
+    return startedSessions.filter(
+      (session) => session.startedAtMs > 0 && now - session.startedAtMs >= DELAY_THRESHOLD_MS,
+    );
+  }, [filteredSessionGroups, now]);
 
   const kpis = useMemo(() => {
-    const total = filteredSnapshots.length;
+    const total = filteredSessionGroups.length;
     const succeeded = filteredSnapshots.filter((row) => row.status === 'succeeded').length;
     const failed = filteredSnapshots.filter((row) => row.status === 'failed').length;
-    const open = filteredSnapshots.filter((row) => row.status === 'started').length;
-    const closedDurations = filteredSnapshots
-      .filter((row) => row.status !== 'started' && typeof row.durationMs === 'number')
-      .map((row) => Number(row.durationMs || 0));
+    const open = filteredSessionGroups.filter((session) => {
+      const latest = session.events[session.events.length - 1];
+      return latest?.status === 'started';
+    }).length;
+    const closedDurations = filteredSessionGroups
+      .filter((session) => session.durationMs >= 0)
+      .map((session) => Number(session.durationMs || 0));
     const avgDuration = closedDurations.length
       ? closedDurations.reduce((sum, value) => sum + value, 0) / closedDurations.length
       : null;
@@ -177,7 +276,10 @@ export const OperationsMonitorPage: React.FC = () => {
       open,
       avgDuration,
     };
-  }, [filteredSnapshots]);
+  }, [filteredSessionGroups, filteredSnapshots]);
+  const toggleSession = (sessionId: string) => {
+    setOpenSessionIds((prev) => ({ ...prev, [sessionId]: !prev[sessionId] }));
+  };
   const clearFilters = () => {
     setModuleFilter('');
     setStatusFilter('');
@@ -269,16 +371,16 @@ export const OperationsMonitorPage: React.FC = () => {
         onClear={clearFilters}
       />
 
-      <Card title={`عمليات متأخرة (${delayed.length})`}>
+      <Card title={`جلسات متأخرة (${delayed.length})`}>
         {delayed.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">لا توجد عمليات متأخرة الآن.</p>
+          <p className="text-sm text-[var(--color-text-muted)]">لا توجد جلسات متأخرة الآن.</p>
         ) : (
           <div className="space-y-2">
-            {delayed.slice(0, 10).map((row) => (
-              <div key={row.correlationId} className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-sm font-bold text-[var(--color-text)]">{row.operation}</p>
+            {delayed.slice(0, 10).map((session) => (
+              <div key={session.sessionId} className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2">
+                <p className="text-sm font-bold text-[var(--color-text)]">{session.title}</p>
                 <p className="text-xs text-[var(--color-text-muted)]">
-                  {row.module} - {row.userName} - منذ {formatDuration(now - row.startedAtMs)}
+                  {session.module} - {session.userName} - منذ {formatDuration(now - session.startedAtMs)}
                 </p>
               </div>
             ))}
@@ -286,60 +388,78 @@ export const OperationsMonitorPage: React.FC = () => {
         )}
       </Card>
 
-      <Card title={`آخر العمليات (${filteredSnapshots.length})`}>
+      <Card title={`الجلسات (${filteredSessionGroups.length})`}>
         {loading ? (
-          <LoadingSkeleton rows={8} type="table" />
-        ) : filteredSnapshots.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">لا توجد بيانات عمليات في الفلاتر الحالية.</p>
+          <LoadingSkeleton rows={6} type="card" />
+        ) : filteredSessionGroups.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)]">لا توجد جلسات في الفلاتر الحالية.</p>
         ) : (
-          <div className="erp-table-scroll">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-right text-[var(--color-text-muted)] border-b border-[var(--color-border)] bg-[#f8f9fa]">
-                  <th className="py-2 px-2">العملية</th>
-                  <th className="py-2 px-2">النوع</th>
-                  <th className="py-2 px-2">الموديول</th>
-                  <th className="py-2 px-2">الحالة</th>
-                  <th className="py-2 px-2">المدة</th>
-                  <th className="py-2 px-2">البداية</th>
-                  <th className="py-2 px-2">النهاية</th>
-                  <th className="py-2 px-2">Session</th>
-                  <th className="py-2 px-2">المستخدم</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSnapshots.slice(0, 100).map((row) => (
-                  <tr key={row.correlationId} className="border-b border-[var(--color-border)]">
-                    <td className="py-2 px-2 font-semibold">{row.operation}</td>
-                    <td className="py-2 px-2">{row.kind}</td>
-                    <td className="py-2 px-2">{row.module}</td>
-                    <td className="py-2 px-2">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${
-                        row.status === 'succeeded'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : row.status === 'failed'
-                            ? 'bg-rose-100 text-rose-700'
-                            : 'bg-amber-100 text-amber-700'
-                      }`}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-2 px-2">{formatDuration(row.durationMs)}</td>
-                    <td className="py-2 px-2">{formatDateTime(row.startedAtMs)}</td>
-                    <td className="py-2 px-2">{formatDateTime(row.endedAtMs)}</td>
-                    <td className="py-2 px-2 font-mono text-xs">{row.sessionId ?? '—'}</td>
-                    <td className="py-2 px-2">
-                      <div>{row.userName}</div>
-                      {row.errorMessage && (
-                        <div className="text-[11px] text-rose-600 max-w-[280px] truncate" title={row.errorMessage}>
-                          {row.errorMessage}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {filteredSessionGroups.slice(0, 100).map((session) => {
+              const isOpen = Boolean(openSessionIds[session.sessionId]);
+              return (
+                <div key={session.sessionId} className="rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+                  <button
+                    type="button"
+                    onClick={() => toggleSession(session.sessionId)}
+                    className="w-full px-4 py-3 text-right hover:bg-[#f8f9fa] transition-colors"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-bold text-[var(--color-text)]">{session.title}</p>
+                        <p className="text-xs text-[var(--color-text-muted)] font-mono">{session.sessionId}</p>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-[var(--color-text-muted)]">
+                        <div><span className="font-semibold text-[var(--color-text)]">المستخدم:</span> {session.userName}</div>
+                        <div><span className="font-semibold text-[var(--color-text)]">الموديول:</span> {session.module}</div>
+                        <div><span className="font-semibold text-[var(--color-text)]">المدة:</span> {formatDuration(session.durationMs)}</div>
+                        <div><span className="font-semibold text-[var(--color-text)]">التاريخ:</span> {formatDateTime(session.startedAtMs)}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+                      <span>اضغط لعرض/إخفاء تفاصيل الجلسة</span>
+                      <span className="material-icons-round text-base">{isOpen ? 'expand_less' : 'expand_more'}</span>
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-[var(--color-border)] px-4 py-3">
+                      <p className="text-sm font-bold text-[var(--color-text)] mb-3">Diagram الجلسة</p>
+                      <div className="space-y-0">
+                        {session.events.map((event, idx) => (
+                          <div key={event.id} className="grid grid-cols-[20px_1fr] gap-2">
+                            <div className="flex flex-col items-center">
+                              <span
+                                className={`mt-1 inline-block h-2.5 w-2.5 rounded-full ${
+                                  event.status === 'succeeded'
+                                    ? 'bg-emerald-500'
+                                    : event.status === 'failed'
+                                      ? 'bg-rose-500'
+                                      : 'bg-amber-500'
+                                }`}
+                              />
+                              {idx < session.events.length - 1 && (
+                                <span className="mt-1 block w-px flex-1 bg-[var(--color-border)]" />
+                              )}
+                            </div>
+                            <div className="pb-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-[var(--color-text)]">{event.operation}</span>
+                                <span className="text-[11px] rounded-full px-2 py-0.5 bg-[#eef2f7] text-[var(--color-text-muted)]">
+                                  {event.module}
+                                </span>
+                                <span className="text-[11px] text-[var(--color-text-muted)]">{formatDateTime(event.atMs)}</span>
+                              </div>
+                              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{event.description}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>

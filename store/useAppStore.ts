@@ -32,6 +32,7 @@ import {
   WorkOrderScanEvent,
   WorkOrderLiveSummary,
   ReportComponentScrapItem,
+  ProductionPlanFollowUp,
   Asset,
   AssetDepreciation,
   AssetDepreciationRunResult,
@@ -54,6 +55,7 @@ import { reportService } from '../modules/production/services/reportService';
 import { lineStatusService } from '../modules/production/services/lineStatusService';
 import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
 import { productionPlanService } from '../modules/production/services/productionPlanService';
+import { productionPlanFollowUpService } from '../modules/production/services/productionPlanFollowUpService';
 import { workOrderService } from '../modules/production/services/workOrderService';
 import { notificationService } from '../services/notificationService';
 import { costCenterService } from '../modules/costs/services/costCenterService';
@@ -89,6 +91,7 @@ import { eventBus, SystemEvents } from '../shared/events';
 import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
 import { REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
+import { estimateReportCost } from '../utils/costCalculations';
 
 // ─── Helper: build full admin permissions map (fallback) ─────────────────────
 
@@ -167,6 +170,38 @@ function normalizeText(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
+function calculateIndustrialReportTotalCost(params: {
+  workersCount: number;
+  workHours: number;
+  quantityProduced: number;
+  lineId: string;
+  reportDate?: string;
+  employeeId: string;
+  laborSettings: LaborSettings | null;
+  costCenters: CostCenter[];
+  costCenterValues: CostCenterValue[];
+  costAllocations: CostAllocation[];
+  employees: FirestoreEmployee[];
+}): number {
+  const hourlyRate = Number(params.laborSettings?.hourlyRate ?? 0);
+  const supervisorHourlyRate = Number(
+    params.employees.find((employee) => employee.id === params.employeeId)?.hourlyRate ?? hourlyRate,
+  );
+  const estimate = estimateReportCost(
+    Number(params.workersCount || 0),
+    Number(params.workHours || 0),
+    Number(params.quantityProduced || 0),
+    hourlyRate,
+    supervisorHourlyRate,
+    params.lineId,
+    params.reportDate,
+    params.costCenters,
+    params.costCenterValues,
+    params.costAllocations,
+  );
+  return Number(estimate.totalCost || 0);
+}
+
 function resolveReportType(
   reportType?: ProductionReport['reportType'],
 ): NonNullable<ProductionReport['reportType']> {
@@ -228,6 +263,47 @@ function pickBestAutoLinkedWorkOrder(
   });
 
   return ranked[0] ?? null;
+}
+
+function deriveProductionPlanAutoPatch(
+  plan: ProductionPlan,
+  reports: ProductionReport[],
+): Partial<ProductionPlan> | null {
+  const plannedQty = Number(plan.plannedQuantity || 0);
+  const producedQty = Number(plan.producedQuantity || 0);
+  const hasReportProgress = reports.some((report) => Number(report.quantityProduced || 0) > 0);
+  const hasProgress = producedQty > 0 || hasReportProgress;
+
+  let nextStatus = plan.status;
+  if (plannedQty > 0 && producedQty >= plannedQty && plan.status !== 'completed') {
+    nextStatus = 'completed';
+  } else if (plan.status === 'planned' && hasProgress) {
+    nextStatus = 'in_progress';
+  }
+
+  const firstReportDate = reports
+    .filter((report) => Number(report.quantityProduced || 0) > 0 && Boolean(report.date))
+    .map((report) => report.date)
+    .sort((a, b) => a.localeCompare(b))[0];
+
+  const patch: Partial<ProductionPlan> = {};
+  if (nextStatus !== plan.status) {
+    patch.status = nextStatus;
+  }
+  if (hasProgress && firstReportDate) {
+    const currentStart = String(plan.startDate || '');
+    const currentPlannedStart = String(plan.plannedStartDate || '');
+    if (
+      !currentStart
+      || currentStart > firstReportDate
+      || (currentPlannedStart && currentPlannedStart > firstReportDate)
+    ) {
+      patch.startDate = firstReportDate;
+      patch.plannedStartDate = firstReportDate;
+    }
+  }
+
+  return Object.keys(patch).length > 0 ? patch : null;
 }
 
 function hasPermission(
@@ -358,6 +434,7 @@ interface AppState {
   lineStatuses: LineStatus[];
   lineProductConfigs: LineProductConfig[];
   productionPlans: ProductionPlan[];
+  productionPlanFollowUps: ProductionPlanFollowUp[];
   planReports: Record<string, ProductionReport[]>;
 
   // Work Orders & Notifications
@@ -431,6 +508,7 @@ interface AppState {
   fetchLineStatuses: () => Promise<void>;
   fetchLineProductConfigs: () => Promise<void>;
   fetchProductionPlans: () => Promise<void>;
+  fetchProductionPlanFollowUps: (planId?: string) => Promise<void>;
 
   // Mutations — Products
   createProduct: (data: Omit<FirestoreProduct, 'id'>) => Promise<string | null>;
@@ -495,6 +573,8 @@ interface AppState {
   createProductionPlan: (data: Omit<ProductionPlan, 'id' | 'createdAt'>) => Promise<string | null>;
   updateProductionPlan: (id: string, data: Partial<ProductionPlan>) => Promise<void>;
   deleteProductionPlan: (id: string) => Promise<void>;
+  createProductionPlanFollowUp: (data: Omit<ProductionPlanFollowUp, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
+  updateProductionPlanFollowUp: (id: string, data: Partial<ProductionPlanFollowUp>) => Promise<void>;
 
   // Mutations — Work Orders
   fetchWorkOrders: () => Promise<void>;
@@ -583,6 +663,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   lineStatuses: [],
   lineProductConfigs: [],
   productionPlans: [],
+  productionPlanFollowUps: [],
   planReports: {},
 
   workOrders: [],
@@ -736,6 +817,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       lineStatuses: [],
       lineProductConfigs: [],
       productionPlans: [],
+      productionPlanFollowUps: [],
       planReports: {},
       workOrders: [],
       notifications: [],
@@ -877,13 +959,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   _loadAppData: async () => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
+    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, productionPlanFollowUps, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
       await Promise.all([
         productService.getAll(),
         lineService.getAll(),
         employeeService.getAll(),
         lineProductConfigService.getAll(),
         productionPlanService.getAll(),
+        productionPlanFollowUpService.getAll(),
         workOrderService.getAll(),
         costCenterService.getAll(),
         costCenterValueService.getAll(),
@@ -906,20 +989,33 @@ export const useAppStore = create<AppState>((set, get) => ({
       (p) => p.status === 'in_progress' || p.status === 'planned'
     );
     const planReports: Record<string, ProductionReport[]> = {};
-        const planReportResults = await Promise.allSettled(
-          activePlans.map(async (plan) => {
-            const key = `${plan.lineId}_${plan.productId}`;
-            const reports = await reportService.getByLineAndProduct(
-              plan.lineId, plan.productId, plan.startDate
-            );
-            return { key, reports };
-          })
+    const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
+    const planReportResults = await Promise.allSettled(
+      activePlans.map(async (plan) => {
+        const key = `${plan.lineId}_${plan.productId}`;
+        const reports = await reportService.getByLineAndProduct(
+          plan.lineId,
+          plan.productId,
+          plan.startDate,
         );
-        planReportResults.forEach((result) => {
-          if (result.status === 'fulfilled') {
-            planReports[result.value.key] = result.value.reports;
-          }
-        });
+        return { plan, key, reports };
+      }),
+    );
+    planReportResults.forEach((result) => {
+      if (result.status !== 'fulfilled') return;
+      const { plan, key, reports } = result.value;
+      planReports[key] = reports;
+      if (!plan.id) return;
+      const patch = deriveProductionPlanAutoPatch(plan, reports);
+      if (!patch) return;
+      planAutoPatches.push({ id: plan.id, patch });
+      Object.assign(plan, patch);
+    });
+    if (planAutoPatches.length > 0) {
+      await Promise.allSettled(
+        planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
+      );
+    }
 
     const mergedSettings = systemSettingsRaw
       ? { ...DEFAULT_SYSTEM_SETTINGS, ...systemSettingsRaw }
@@ -946,6 +1042,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       productionReports: [],
       lineStatuses,
       productionPlans,
+      productionPlanFollowUps,
       planReports,
       workOrders,
       costCenters,
@@ -1153,20 +1250,44 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchProductionPlans: async () => {
     try {
       const productionPlans = await productionPlanService.getAll();
+      const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
       const activePlans = productionPlans.filter(
         (p) => p.status === 'in_progress' || p.status === 'planned'
       );
       const planReports: Record<string, ProductionReport[]> = {};
+      const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
       await Promise.all(
         activePlans.map(async (plan) => {
           const key = `${plan.lineId}_${plan.productId}`;
-          planReports[key] = await reportService.getByLineAndProduct(
+          const reports = await reportService.getByLineAndProduct(
             plan.lineId, plan.productId, plan.startDate
           );
+          planReports[key] = reports;
+          if (!plan.id) return;
+          const patch = deriveProductionPlanAutoPatch(plan, reports);
+          if (!patch) return;
+          planAutoPatches.push({ id: plan.id, patch });
+          Object.assign(plan, patch);
         })
       );
-      set({ productionPlans, planReports });
+      if (planAutoPatches.length > 0) {
+        await Promise.allSettled(
+          planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
+        );
+      }
+      set({ productionPlans, productionPlanFollowUps, planReports });
       get()._rebuildLines();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  fetchProductionPlanFollowUps: async (planId) => {
+    try {
+      const productionPlanFollowUps = planId
+        ? await productionPlanFollowUpService.getByPlan(planId)
+        : await productionPlanFollowUpService.getAll();
+      set({ productionPlanFollowUps });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -1213,6 +1334,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await productionPlanService.delete(id);
       await get().fetchProductionPlans();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  createProductionPlanFollowUp: async (data) => {
+    try {
+      const id = await productionPlanFollowUpService.create(data);
+      if (id) await get().fetchProductionPlanFollowUps();
+      return id;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      return null;
+    }
+  },
+
+  updateProductionPlanFollowUp: async (id, data) => {
+    try {
+      await productionPlanFollowUpService.update(id, data);
+      await get().fetchProductionPlanFollowUps();
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -1457,7 +1598,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             throw new Error('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
           }
 
-          const autoCloseReportId = await reportService.create({
+          await reportService.create({
             employeeId: updatedWorkOrder.supervisorId,
             productId: updatedWorkOrder.productId,
             lineId: updatedWorkOrder.lineId,
@@ -1482,6 +1623,29 @@ export const useAppStore = create<AppState>((set, get) => ({
             notes: updatedWorkOrder.notes ?? '',
             workOrderId: id,
           });
+
+          const autoCloseIndustrialCost = calculateIndustrialReportTotalCost({
+            workersCount: Number(
+              updatedWorkOrder.actualWorkersCount ??
+              updatedWorkOrder.maxWorkers ??
+              0,
+            ),
+            workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
+            quantityProduced: Number(
+              updatedWorkOrder.actualProducedFromScans ??
+              updatedWorkOrder.producedQuantity ??
+              0,
+            ),
+            lineId: updatedWorkOrder.lineId,
+            reportDate: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
+            employeeId: updatedWorkOrder.supervisorId,
+            laborSettings: get().laborSettings,
+            costCenters: get().costCenters,
+            costCenterValues: get().costCenterValues,
+            costAllocations: get().costAllocations,
+            employees: get()._rawEmployees,
+          });
+          await workOrderService.incrementProduced(id, 0, autoCloseIndustrialCost);
 
           const routing = await resolveInventoryRouting(get().systemSettings);
           const product = get()._rawProducts.find((p) => p.id === updatedWorkOrder.productId);
@@ -1810,7 +1974,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         return null;
       }
-      const { systemSettings, laborSettings } = get();
+      const {
+        systemSettings,
+        laborSettings,
+        costCenters,
+        costCenterValues,
+        costAllocations,
+        _rawEmployees,
+      } = get();
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
       const componentScrapItems = (Array.isArray((data as any).componentScrapItems) ? (data as any).componentScrapItems : [])
         .map((item: ReportComponentScrapItem) => ({
@@ -1933,7 +2104,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       trackedOperation.batchId = reportData.workOrderId || id;
 
       let postSaveWarning: string | null = null;
-      const laborCost = (laborSettings?.hourlyRate ?? 0) * (data.workHours || 0) * (data.workersCount || 0);
+      const reportIndustrialCost = calculateIndustrialReportTotalCost({
+        workersCount: Number(data.workersCount || 0),
+        workHours: Number(data.workHours || 0),
+        quantityProduced: Number(data.quantityProduced || 0),
+        lineId: data.lineId,
+        reportDate: data.date,
+        employeeId: data.employeeId,
+        laborSettings,
+        costCenters,
+        costCenterValues,
+        costAllocations,
+        employees: _rawEmployees,
+      });
 
       try {
         await syncProductAvgDailyProduction(data.productId);
@@ -2124,7 +2307,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       try {
         if (activeWO?.id) {
-          await workOrderService.incrementProduced(activeWO.id, data.quantityProduced, laborCost);
+          await workOrderService.incrementProduced(activeWO.id, data.quantityProduced, reportIndustrialCost);
           const newProduced = (activeWO.producedQuantity ?? 0) + data.quantityProduced;
           if (newProduced >= activeWO.quantity) {
             await workOrderService.update(activeWO.id, { status: 'completed', completedAt: new Date().toISOString() });
@@ -2134,7 +2317,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
 
         if (activePlan?.id) {
-          await productionPlanService.incrementProduced(activePlan.id, data.quantityProduced, laborCost);
+          if (activePlan.status === 'planned') {
+            await productionPlanService.update(activePlan.id, {
+              status: 'in_progress',
+              startDate: data.date,
+              plannedStartDate: data.date,
+            });
+            activePlan.status = 'in_progress';
+            activePlan.startDate = data.date;
+            activePlan.plannedStartDate = data.date;
+          }
+          await productionPlanService.incrementProduced(activePlan.id, data.quantityProduced, reportIndustrialCost);
           const newProduced = (activePlan.producedQuantity ?? 0) + data.quantityProduced;
           if (newProduced >= activePlan.plannedQuantity) {
             await productionPlanService.update(activePlan.id, { status: 'completed' });

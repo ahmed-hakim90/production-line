@@ -186,6 +186,21 @@ const hideLegacyHeaderCloseButton = (panel: HTMLElement) => {
   });
 };
 
+const triggerLegacyCloseButton = (panel: HTMLElement): boolean => {
+  const header = getModalHeaderElement(panel);
+  if (!header) return false;
+  const closeButton = Array.from(header.querySelectorAll('button')).find((btn) => {
+    const iconEl = btn.querySelector('.material-icons-round');
+    const iconText = normalizeText(iconEl?.textContent || '');
+    const titleText = normalizeText(btn.getAttribute('title') || '');
+    const ariaText = normalizeText(btn.getAttribute('aria-label') || '');
+    return iconText === 'close' || titleText.includes('اغلاق') || titleText.includes('close') || ariaText.includes('اغلاق') || ariaText.includes('close');
+  });
+  if (!closeButton) return false;
+  (closeButton as HTMLButtonElement).click();
+  return true;
+};
+
 export const GlobalModalEnhancer: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const { openModal, hasModalTarget } = useGlobalModalManager();
@@ -561,10 +576,17 @@ export const GlobalModalEnhancer: React.FC = () => {
       upsertWorkspaceItem(title, route, false);
     };
 
-    const closeModal = (id: string) => {
+    const requestCloseById = (id: string) => {
       const overlay = overlaysRef.current.get(id);
-      if (!overlay) return;
-      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const panel = panelsRef.current.get(id);
+      if (!overlay && !panel) return;
+      if (panel && triggerLegacyCloseButton(panel)) {
+        setMinimized((prev) => prev.filter((m) => m.id !== id));
+        return;
+      }
+      if (overlay) {
+        overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      }
       setMinimized((prev) => prev.filter((m) => m.id !== id));
     };
 
@@ -708,7 +730,7 @@ export const GlobalModalEnhancer: React.FC = () => {
         if (!current?.favorite) {
           removeWorkspaceItem(workspaceId);
         }
-        closeModal(id);
+        requestCloseById(id);
       });
       dragHandle.addEventListener('mousedown', (evt) => {
         evt.preventDefault();
@@ -829,8 +851,15 @@ export const GlobalModalEnhancer: React.FC = () => {
 
   const closeEntry = (entryId: string) => {
     const overlay = overlaysRef.current.get(entryId);
-    if (!overlay) return;
-    overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const panel = panelsRef.current.get(entryId);
+    if (!overlay && !panel) return;
+    if (panel && triggerLegacyCloseButton(panel)) {
+      setMinimized((prev) => prev.filter((m) => m.id !== entryId));
+      return;
+    }
+    if (overlay) {
+      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    }
     setMinimized((prev) => prev.filter((m) => m.id !== entryId));
   };
 

@@ -293,6 +293,21 @@ export const exportProductSummary = (
   downloadExcel(rows, 'ملخص المنتجات', `ملخص-المنتجات-${date}`);
 };
 
+export const exportProductionPlanShortages = (
+  data: { productName: string; componentName: string; shortageQty: number; note?: string }[],
+) => {
+  if (data.length === 0) return;
+  const rows = data.map((row, index) => ({
+    '#': index + 1,
+    'المنتج': row.productName || '—',
+    'المكون': row.componentName || '—',
+    'الكمية': Number(row.shortageQty || 0),
+    'الملحوظة': String(row.note || '').trim(),
+  }));
+  const date = new Date().toISOString().slice(0, 10);
+  downloadExcel(rows, 'نواقص المكونات', `نواقص-المكونات-${date}`);
+};
+
 // ─── Products Export ─────────────────────────────────────────────────────────
 
 interface ProductExportData {

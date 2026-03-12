@@ -17,11 +17,18 @@ import {
   getExecutionDeviationTone,
   getTodayDateString,
 } from '../../../utils/calculations';
+import { exportProductionPlanShortages } from '../../../utils/exportExcel';
 import {
   formatCost,
   getCurrentMonth,
   calculateDailyIndirectCost,
 } from '../../../utils/costCalculations';
+import {
+  emptyWorkOrderCardMetricsData,
+  getWorkOrderCardMetrics,
+  loadWorkOrderCardMetricsData,
+  type WorkOrderCardMetricsData,
+} from '../utils/workOrderCardMetrics';
 import {
   getAlertSettings,
   getKPIThreshold,
@@ -87,6 +94,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
+  const canExport = can('export');
 
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawLines = useAppStore((s) => s._rawLines);
@@ -94,6 +102,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   const productionLines = useAppStore((s) => s.productionLines);
   const workOrders = useAppStore((s) => s.workOrders);
   const productionPlans = useAppStore((s) => s.productionPlans);
+  const productionPlanFollowUps = useAppStore((s) => s.productionPlanFollowUps);
   const planReports = useAppStore((s) => s.planReports);
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
@@ -128,6 +137,9 @@ export const FactoryManagerDashboard: React.FC = () => {
     return `${y}-${m}-${day}`;
   });
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [workOrderCardMetricsData, setWorkOrderCardMetricsData] = useState<WorkOrderCardMetricsData>(
+    () => emptyWorkOrderCardMetricsData(),
+  );
 
   const dateRange = useMemo(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -166,6 +178,29 @@ export const FactoryManagerDashboard: React.FC = () => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const activeWorkOrders = useMemo(
+    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress'),
+    [workOrders],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (activeWorkOrders.length === 0) {
+      setWorkOrderCardMetricsData(emptyWorkOrderCardMetricsData());
+      return;
+    }
+    loadWorkOrderCardMetricsData(activeWorkOrders)
+      .then((data) => {
+        if (!cancelled) setWorkOrderCardMetricsData(data);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkOrderCardMetricsData(emptyWorkOrderCardMetricsData());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkOrders]);
 
   useEffect(() => {
     let cancelled = false;
@@ -502,6 +537,23 @@ export const FactoryManagerDashboard: React.FC = () => {
     };
   }, [workOrders, _rawEmployees, _rawProducts]);
 
+  const shortageRows = useMemo(() => {
+    return productionPlanFollowUps
+      .slice()
+      .sort((a, b) => {
+        const aTime = a.createdAt?.seconds || 0;
+        const bTime = b.createdAt?.seconds || 0;
+        return bTime - aTime;
+      })
+      .map((row) => ({
+        id: row.id || `${row.planId}-${row.componentId}`,
+        productName: _rawProducts.find((p) => p.id === row.productId)?.name || '—',
+        componentName: row.componentName || '—',
+        shortageQty: Number(row.shortageQty || 0),
+        note: row.note || '',
+      }));
+  }, [productionPlanFollowUps, _rawProducts]);
+
   // ── Custom Tooltip ──────────────────────────────────────────────────────────
 
   const ChartTooltip = ({ active, payload, label }: any) => {
@@ -522,7 +574,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
   if (loading && reports.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="erp-dashboard-theme space-y-6">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-blue-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
             <span className="material-icons-round text-blue-600 text-2xl">analytics</span>
@@ -538,7 +590,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="erp-dashboard-theme space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         {/* <div className="flex items-center gap-3">
@@ -807,7 +859,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
       {/* ── Active Work Orders ───────────────────────────────────────────────── */}
       {(() => {
-        const activeWOs = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
+        const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
         const totalQty = activeWOs.reduce((s, w) => s + w.quantity, 0);
         const totalProduced = activeWOs.reduce((s, w) => s + (w.producedQuantity ?? 0), 0);
@@ -834,7 +886,20 @@ export const FactoryManagerDashboard: React.FC = () => {
                 const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
                 const progress = wo.quantity > 0 ? Math.round(((wo.producedQuantity ?? 0) / wo.quantity) * 100) : 0;
                 const remaining = wo.quantity - (wo.producedQuantity ?? 0);
-                const estCostPerUnit = wo.quantity > 0 ? wo.estimatedCost / wo.quantity : 0;
+                const producedNow = wo.producedQuantity ?? 0;
+                const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {
+                  producedNowRaw: producedNow,
+                  lineDailyWorkingHours: Number(_rawLines.find((l) => l.id === wo.lineId)?.dailyWorkingHours || 0),
+                  supervisorHourlyRate: Number(supervisor?.hourlyRate || laborSettings?.hourlyRate || 0),
+                  hourlyRate: Number(laborSettings?.hourlyRate || 0),
+                  costCenters,
+                  costCenterValues,
+                  costAllocations,
+                  reportDate: wo.targetDate,
+                });
+                const avgWorkersLabel = metrics.averageWorkers !== null
+                  ? `${metrics.averageWorkers.toFixed(1)} عامل`
+                  : '—';
 
                 return (
                   <div key={wo.id} onClick={() => navigate('/work-orders')} className={`min-w-[280px] max-w-[85vw] sm:min-w-0 sm:max-w-none rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${wo.status === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40' : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'}`}>
@@ -850,7 +915,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
-                      <p className="text-base font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
@@ -858,12 +923,24 @@ export const FactoryManagerDashboard: React.FC = () => {
                         <span className="material-icons-round text-indigo-400 text-base">person</span>
                         <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
                       </div>
-                      {canViewCosts && estCostPerUnit > 0 && (
-                        <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
-                          <span className="material-icons-round text-emerald-500 text-sm">payments</span>
-                          <span className="text-[10px] text-slate-400">التكلفة المتوقعة</span>
-                          <span className="text-sm font-bold text-emerald-600">{formatCost(estCostPerUnit)}</span>
-                          <span className="text-[10px] text-slate-400">/قطعة</span>
+                      {canViewCosts && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
+                            <span className="material-icons-round text-emerald-500 text-sm">payments</span>
+                            <span className="text-[10px] text-slate-400">التكلفة المقدرة</span>
+                            <span className="text-sm font-bold text-emerald-600">
+                              {metrics.estimatedUnitCost !== null ? formatCost(metrics.estimatedUnitCost) : '—'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">/قطعة</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
+                            <span className="material-icons-round text-primary text-sm">calculate</span>
+                            <span className="text-[10px] text-slate-400">التكلفة الفعلية</span>
+                            <span className="text-sm font-bold text-primary">
+                              {metrics.actualUnitCostToDate !== null ? formatCost(metrics.actualUnitCostToDate) : '—'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">/قطعة</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -903,12 +980,42 @@ export const FactoryManagerDashboard: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="material-icons-round text-sm">groups</span>
-                        <span className="font-bold">{wo.maxWorkers} عامل</span>
+                        <span className="font-bold">متوسط العمالة: {avgWorkersLabel}</span>
                       </div>
                       <div className="flex items-center gap-1 mr-auto">
                         <span className="material-icons-round text-sm">event</span>
                         <span className="font-bold">{wo.targetDate}</span>
                       </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-muted)]">
+                      <div className="flex items-center gap-1">
+                        <span className="material-icons-round text-sm">calendar_month</span>
+                        <span className="font-bold">
+                          أيام تشغيل (بدون الجمعة): {metrics.estimatedWorkDays !== null ? metrics.estimatedWorkDays : '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="material-icons-round text-sm">schedule</span>
+                        <span className="font-bold">
+                          أيام متبقية (مقدر): {metrics.remainingDaysByBenchmark !== null ? metrics.remainingDaysByBenchmark.toFixed(1) : '—'}
+                        </span>
+                      </div>
+                      {canViewCosts && (
+                        <div className="flex items-center gap-1">
+                          <span className="material-icons-round text-sm">payments</span>
+                          <span className="font-bold">
+                            تكلفة الأيام المقدرة: {metrics.estimatedTotalCost !== null ? `${formatCost(metrics.estimatedTotalCost)} ج.م` : '—'}
+                          </span>
+                        </div>
+                      )}
+                      {canViewCosts && (
+                        <div className="flex items-center gap-1 mr-auto">
+                          <span className="material-icons-round text-sm">request_quote</span>
+                          <span className="font-bold">
+                            تكلفة متبقية (مقدرة): {metrics.estimatedRemainingCost !== null ? `${formatCost(metrics.estimatedRemainingCost)} ج.م` : '—'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1163,6 +1270,55 @@ export const FactoryManagerDashboard: React.FC = () => {
           </div>
         );
       })()}
+
+      <Card>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-icons-round text-amber-600">report_problem</span>
+            <h3 className="text-sm font-bold text-[var(--color-text)]">نواقص المكونات</h3>
+            <Badge variant="warning">{shortageRows.length}</Badge>
+          </div>
+          {canExport && shortageRows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => exportProductionPlanShortages(shortageRows)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+            >
+              <span className="material-icons-round text-sm">download</span>
+              <span>Excel</span>
+            </button>
+          )}
+        </div>
+        {shortageRows.length === 0 ? (
+          <div className="erp-alert erp-alert-info">
+            <span className="material-icons-round text-[18px] shrink-0">info</span>
+            <span>لا توجد نواقص مكونات مسجلة حاليًا.</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-no-table-enhance="true">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">المنتج</th>
+                  <th className="erp-th">المكون</th>
+                  <th className="erp-th">الكمية</th>
+                  <th className="erp-th">الملحوظة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shortageRows.map((row) => (
+                  <tr key={row.id} className="border-b border-[var(--color-border)]">
+                    <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.productName}</td>
+                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.componentName}</td>
+                    <td className="py-2.5 px-3 font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</td>
+                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.note || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       {/* ── Charts Grid ────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

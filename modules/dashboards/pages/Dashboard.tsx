@@ -334,7 +334,7 @@ export const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="space-y-8">
+      <div className="erp-dashboard-theme space-y-8">
         <div>
           <h2 className="text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
           <p className="text-[var(--color-text-muted)] mt-1 font-medium">جاري تحميل البيانات...</p>
@@ -345,7 +345,7 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
       {/* <div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
         <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>

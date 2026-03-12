@@ -43,8 +43,10 @@ export const DASHBOARD_WIDGETS: Record<string, WidgetDefinition[]> = {
     { id: 'production_cost_chart', label: 'الإنتاج مقابل التكلفة', icon: 'show_chart' },
     { id: 'activity_log', label: 'آخر النشاطات', icon: 'history' },
     { id: 'cost_centers_summary', label: 'ملخص مراكز التكلفة', icon: 'account_balance' },
+    { id: 'monthly_depreciation_summary', label: 'ملخص الاهلاكات الشهرية', icon: 'event_repeat' },
     { id: 'top_lines', label: 'أعلى 5 خطوط إنتاج', icon: 'precision_manufacturing' },
     { id: 'top_products', label: 'أعلى 5 منتجات', icon: 'inventory_2' },
+    { id: 'top_supervisors', label: 'أعلى 5 مشرفين في الأداء', icon: 'supervisor_account' },
     { id: 'product_performance', label: 'ملخص أداء المنتجات', icon: 'table_chart' },
   ],
   factoryDashboard: [

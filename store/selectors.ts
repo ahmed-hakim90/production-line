@@ -13,6 +13,8 @@ export const useDashboardSlice = () =>
     costCenters: s.costCenters,
     costCenterValues: s.costCenterValues,
     costAllocations: s.costAllocations,
+    assets: s.assets,
+    assetDepreciations: s.assetDepreciations,
     laborSettings: s.laborSettings,
     lineProductConfigs: s.lineProductConfigs,
     systemSettings: s.systemSettings,

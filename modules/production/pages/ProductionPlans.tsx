@@ -93,6 +93,7 @@ export const ProductionPlans: React.FC = () => {
   const canManageComponentInjectionPlans = can('plans.componentInjection.manage');
   const canCreate = can('plans.create') || canManageComponentInjectionPlans;
   const canEdit = can('plans.edit');
+  const canAddFollowUp = canEdit || canCreate;
   const canViewCosts = can('costs.view');
   const canExport = can('export');
   const canImport = can('import');
@@ -1230,6 +1231,21 @@ export const ProductionPlans: React.FC = () => {
                             {(can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.status === 'planned' || plan.status === 'in_progress') && (
                               <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
                                 <span className="material-icons-round text-sm">assignment</span>
+                              </button>
+                            )}
+                            {canAddFollowUp && plan.id && (
+                              <button
+                                type="button"
+                                data-modal-key={MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE}
+                                onClick={() => openModal(MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE, {
+                                  planId: plan.id,
+                                  productId: plan.productId,
+                                  lineId: plan.lineId,
+                                })}
+                                className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all"
+                                title="إضافة متابعة نقص"
+                              >
+                                <span className="material-icons-round text-sm">report_problem</span>
                               </button>
                             )}
                             {can('roles.manage') && (

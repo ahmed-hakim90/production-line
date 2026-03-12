@@ -19,6 +19,12 @@ import { usePermission } from '../../../utils/permissions';
 import type { ProductionReport, WorkOrder } from '../../../types';
 import type { InventoryTransferRequest } from '../../inventory/types';
 import { transferApprovalService } from '../../inventory/services/transferApprovalService';
+import {
+  emptyWorkOrderCardMetricsData,
+  getWorkOrderCardMetrics,
+  loadWorkOrderCardMetricsData,
+  type WorkOrderCardMetricsData,
+} from '../utils/workOrderCardMetrics';
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
@@ -96,6 +102,10 @@ export const EmployeeDashboard: React.FC = () => {
     todayReports,
     monthlyReports,
     workOrders,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    laborSettings,
     updateWorkOrder,
     loading,
   } = useShallowStore((s) => ({
@@ -108,6 +118,10 @@ export const EmployeeDashboard: React.FC = () => {
     todayReports: s.todayReports,
     monthlyReports: s.monthlyReports,
     workOrders: s.workOrders,
+    costCenters: s.costCenters,
+    costCenterValues: s.costCenterValues,
+    costAllocations: s.costAllocations,
+    laborSettings: s.laborSettings,
     updateWorkOrder: s.updateWorkOrder,
     loading: s.loading,
   }));
@@ -122,6 +136,9 @@ export const EmployeeDashboard: React.FC = () => {
   const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [pendingProductionEntries, setPendingProductionEntries] = useState<InventoryTransferRequest[]>([]);
+  const [workOrderCardMetricsData, setWorkOrderCardMetricsData] = useState<WorkOrderCardMetricsData>(
+    () => emptyWorkOrderCardMetricsData(),
+  );
 
   const [woPrintData, setWoPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
@@ -158,6 +175,34 @@ export const EmployeeDashboard: React.FC = () => {
     () => _rawEmployees.find((s) => s.userId === uid),
     [_rawEmployees, uid]
   );
+
+  const myActiveWorkOrders = useMemo(() => {
+    if (!employee) return [];
+    const employeeName = (employee.name || '').trim().toLowerCase();
+    return workOrders.filter((wo) => {
+      if (wo.status !== 'pending' && wo.status !== 'in_progress') return false;
+      if (wo.supervisorId === employee.id) return true;
+      return (wo.supervisorId || '').trim().toLowerCase() === employeeName;
+    });
+  }, [employee, workOrders]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (myActiveWorkOrders.length === 0) {
+      setWorkOrderCardMetricsData(emptyWorkOrderCardMetricsData());
+      return;
+    }
+    loadWorkOrderCardMetricsData(myActiveWorkOrders)
+      .then((data) => {
+        if (!cancelled) setWorkOrderCardMetricsData(data);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkOrderCardMetricsData(emptyWorkOrderCardMetricsData());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [myActiveWorkOrders]);
 
   useEffect(() => {
     if (!employee?.id) return;
@@ -366,7 +411,7 @@ export const EmployeeDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="space-y-8">
+      <div className="erp-dashboard-theme space-y-8">
         {/* <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">لوحة الموظف</h2> */}
         <LoadingSkeleton type="card" rows={6} />
       </div>
@@ -383,7 +428,7 @@ export const EmployeeDashboard: React.FC = () => {
           : 'هذا الشهر';
 
   return (
-    <div className="space-y-5">
+    <div className="erp-dashboard-theme space-y-5">
 
       {/* ── ROW 1: Header — greeting + period filter ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -656,12 +701,7 @@ export const EmployeeDashboard: React.FC = () => {
 
             {/* أوامر الشغل — LEFT column */}
             {employee && can('workOrders.view') && (() => {
-              const employeeName = (employee.name || '').trim().toLowerCase();
-              const myWOs = workOrders.filter((w) => {
-                if (w.status !== 'pending' && w.status !== 'in_progress') return false;
-                if (w.supervisorId === employee.id) return true;
-                return (w.supervisorId || '').trim().toLowerCase() === employeeName;
-              });
+              const myWOs = myActiveWorkOrders;
               if (myWOs.length === 0) return null;
               return (
                 <Card className="!p-0 overflow-hidden">
@@ -676,6 +716,20 @@ export const EmployeeDashboard: React.FC = () => {
                         const line = _rawLines.find((l) => l.id === wo.lineId);
                         const prog = wo.quantity > 0 ? Math.min((wo.producedQuantity / wo.quantity) * 100, 100) : 0;
                         const isSupervisor = wo.supervisorId === employee.id;
+                        const producedNow = Number(wo.producedQuantity || 0);
+                        const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {
+                          producedNowRaw: producedNow,
+                          lineDailyWorkingHours: Number(line?.dailyWorkingHours || 0),
+                          supervisorHourlyRate: Number(employee.hourlyRate || laborSettings?.hourlyRate || 0),
+                          hourlyRate: Number(laborSettings?.hourlyRate || 0),
+                          costCenters,
+                          costCenterValues,
+                          costAllocations,
+                          reportDate: wo.targetDate,
+                        });
+                        const avgWorkersLabel = metrics.averageWorkers !== null
+                          ? `${metrics.averageWorkers.toFixed(1)} عامل`
+                          : '—';
                         return (
                           <div key={wo.id} className="px-6 py-4 space-y-3">
                             <div className="flex items-center justify-between gap-2">
@@ -721,7 +775,7 @@ export const EmployeeDashboard: React.FC = () => {
 
                             <div className="flex items-center gap-2">
                               <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
-                              <p className="text-sm font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
+                              <p className="text-xs font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
                               <span className="text-[var(--color-text-muted)] dark:text-slate-600">·</span>
                               <span className="material-icons-round text-[var(--color-text-muted)] text-sm">precision_manufacturing</span>
                               <span className="text-xs font-bold text-slate-500">{line?.name ?? '—'}</span>
@@ -755,16 +809,56 @@ export const EmployeeDashboard: React.FC = () => {
                             <div className="flex items-center gap-4 text-xs text-slate-400">
                               <div className="flex items-center gap-1">
                                 <span className="material-icons-round text-sm">groups</span>
-                                <span className="font-bold">{wo.maxWorkers} عامل</span>
+                                <span className="font-bold">متوسط العمالة: {avgWorkersLabel}</span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <span className="material-icons-round text-sm">event</span>
                                 <span className="font-bold">{wo.targetDate}</span>
                               </div>
-                              {can('workOrders.viewCost') && wo.estimatedCost > 0 && (
+                              {can('workOrders.viewCost') && (
+                                <div className="flex items-center gap-2 mr-auto">
+                                  <div className="flex items-center gap-1">
+                                    <span className="material-icons-round text-sm text-emerald-500">payments</span>
+                                    <span className="font-bold text-emerald-600">
+                                      مقدرة: {metrics.estimatedUnitCost !== null ? `${formatCurrency(metrics.estimatedUnitCost)} /قطعة` : '—'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="material-icons-round text-sm text-primary">calculate</span>
+                                    <span className="font-bold text-primary">
+                                      فعلية: {metrics.actualUnitCostToDate !== null ? `${formatCurrency(metrics.actualUnitCostToDate)} /قطعة` : '—'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                              <div className="flex items-center gap-1">
+                                <span className="material-icons-round text-sm">calendar_month</span>
+                                <span className="font-bold">
+                                  أيام تشغيل (بدون الجمعة): {metrics.estimatedWorkDays !== null ? metrics.estimatedWorkDays : '—'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="material-icons-round text-sm">schedule</span>
+                                <span className="font-bold">
+                                  أيام متبقية (مقدر): {metrics.remainingDaysByBenchmark !== null ? metrics.remainingDaysByBenchmark.toFixed(1) : '—'}
+                                </span>
+                              </div>
+                              {can('workOrders.viewCost') && (
+                                <div className="flex items-center gap-1">
+                                  <span className="material-icons-round text-sm">payments</span>
+                                  <span className="font-bold">
+                                    تكلفة الأيام المقدرة: {metrics.estimatedTotalCost !== null ? formatCurrency(metrics.estimatedTotalCost) : '—'}
+                                  </span>
+                                </div>
+                              )}
+                              {can('workOrders.viewCost') && (
                                 <div className="flex items-center gap-1 mr-auto">
-                                  <span className="material-icons-round text-sm text-emerald-500">payments</span>
-                                  <span className="font-bold text-emerald-600">{formatCurrency(wo.estimatedCost)}</span>
+                                  <span className="material-icons-round text-sm">request_quote</span>
+                                  <span className="font-bold">
+                                    تكلفة متبقية (مقدرة): {metrics.estimatedRemainingCost !== null ? formatCurrency(metrics.estimatedRemainingCost) : '—'}
+                                  </span>
                                 </div>
                               )}
                             </div>

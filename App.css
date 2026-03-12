@@ -2397,6 +2397,36 @@ input[type="radio"] {
 }
 
 /* ══════════════════════════════════════════════════════════
+   ERPNext Dashboard Theme Harmonization
+   ══════════════════════════════════════════════════════════ */
+.erp-dashboard-theme [class*="bg-[#f8f9fa]"],
+.erp-dashboard-theme [class*="bg-[#f8f9fa]/"],
+.erp-dashboard-theme [class*="bg-[#f0f2f5]"],
+.erp-dashboard-theme [class*="bg-[#f0f2f5]/"] {
+  background: color-mix(in srgb, var(--color-card) 84%, var(--color-bg) 16%) !important;
+}
+
+.erp-dashboard-theme [class*="border-slate-200"],
+.erp-dashboard-theme [class*="border-slate-300"] {
+  border-color: var(--color-border) !important;
+}
+
+.erp-dashboard-theme [class*="text-slate-400"],
+.erp-dashboard-theme [class*="text-slate-500"],
+.erp-dashboard-theme [class*="text-slate-600"] {
+  color: var(--color-text-muted) !important;
+}
+
+.erp-dashboard-theme .erp-thead {
+  background: color-mix(in srgb, var(--color-card) 72%, var(--color-bg) 28%);
+}
+
+.erp-dashboard-theme .recharts-cartesian-grid line {
+  stroke: var(--color-border) !important;
+  stroke-opacity: 0.65 !important;
+}
+
+/* ══════════════════════════════════════════════════════════
    ERPNext PRINT STYLES
    ══════════════════════════════════════════════════════════ */
 @media print {

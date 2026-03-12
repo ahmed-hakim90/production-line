@@ -274,6 +274,23 @@ export interface ProductionPlan {
   createdAt?: any;
 }
 
+export type ProductionPlanFollowUpStatus = 'open' | 'in_progress' | 'resolved' | 'cancelled';
+
+export interface ProductionPlanFollowUp {
+  id?: string;
+  planId: string;
+  productId: string;
+  lineId: string;
+  componentId: string;
+  componentName: string;
+  shortageQty: number;
+  note?: string;
+  status: ProductionPlanFollowUpStatus;
+  createdBy: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 // ─── Work Orders ─────────────────────────────────────────────────────────────
 
 export type WorkOrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
