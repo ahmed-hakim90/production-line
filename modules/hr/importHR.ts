@@ -309,13 +309,19 @@ function parseEmployeeSheet(
 
     if (!name && !code) errors.push('اسم الموظف أو الكود مطلوب');
 
-    // Match existing employee by code first, then by name
+    // Match existing employee by code first.
+    // If code is provided but not found, treat as a new employee and do not fallback to name.
+    // Name fallback is used only when code is empty.
     let existingEmp: FirestoreEmployee | undefined;
     if (code) {
       existingEmp = lookups.employees.find((e) => (e.code ?? '').trim().toLowerCase() === code.toLowerCase());
-    }
-    if (!existingEmp && name) {
-      existingEmp = lookups.employees.find((e) => e.name.trim().toLowerCase() === name.toLowerCase());
+    } else if (name) {
+      const sameName = lookups.employees.filter((e) => e.name.trim().toLowerCase() === name.toLowerCase());
+      if (sameName.length === 1) {
+        existingEmp = sameName[0];
+      } else if (sameName.length > 1) {
+        errors.push(`تعذر تحديد الموظف "${name}" للتحديث: الاسم مكرر، استخدم الكود`);
+      }
     }
 
     if (name && seen.has(name.toLowerCase()))
@@ -323,10 +329,7 @@ function parseEmployeeSheet(
     if (name) seen.add(name.toLowerCase());
 
     const dept = departmentName ? matchName(combinedDepts, departmentName) : undefined;
-    if (departmentName && !dept) errors.push(`القسم "${departmentName}" غير موجود`);
-
     const pos = positionTitle ? matchName(combinedPositions, positionTitle) : undefined;
-    if (positionTitle && !pos) errors.push(`المنصب "${positionTitle}" غير موجود`);
 
     const shift = shiftName ? matchName(lookups.shifts.map((s) => ({ ...s, name: s.name })), shiftName) : undefined;
     if (shiftName && !shift) errors.push(`الوردية "${shiftName}" غير موجودة`);

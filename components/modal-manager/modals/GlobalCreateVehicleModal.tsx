@@ -68,8 +68,6 @@ export const GlobalCreateVehicleModal: React.FC = () => {
     }
   }, [isOpen, modalPayload]);
 
-  if (!isOpen) return null;
-
   const activeEmployees = employees
     .filter((e) => e.isActive)
     .map((e) => ({ value: e.id || '', label: `${e.code ? `${e.code} — ` : ''}${e.name}` }));
@@ -81,6 +79,8 @@ export const GlobalCreateVehicleModal: React.FC = () => {
     });
     return m;
   }, [employees]);
+
+  if (!isOpen) return null;
 
   const toggleEmployee = (empId: string) => {
     setForm((prev) => {

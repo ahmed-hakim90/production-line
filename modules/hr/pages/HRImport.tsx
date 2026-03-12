@@ -42,6 +42,39 @@ export const HRImport: React.FC = () => {
   const [importDone, setImportDone] = useState({ depts: 0, positions: 0, employees: 0, updated: 0, errors: 0 });
   const [importErrors, setImportErrors] = useState<string[]>([]);
 
+  const normalize = useCallback((value: string) => value.trim().toLowerCase(), []);
+
+  const buildResult = useCallback((
+    departmentsRows: ParsedDepartmentRow[],
+    positionsRows: ParsedPositionRow[],
+    employeesRows: ParsedEmployeeRow[],
+  ): HRImportResult => {
+    const deptErrors = departmentsRows.filter((r) => r.errors.length > 0).length;
+    const posErrors = positionsRows.filter((r) => r.errors.length > 0).length;
+    const empErrors = employeesRows.filter((r) => r.errors.length > 0).length;
+    const empValidRows = employeesRows.filter((r) => r.errors.length === 0);
+    const updates = empValidRows.filter((r) => !!r.existingId).length;
+
+    return {
+      departments: {
+        rows: departmentsRows,
+        valid: departmentsRows.length - deptErrors,
+        errors: deptErrors,
+      },
+      positions: {
+        rows: positionsRows,
+        valid: positionsRows.length - posErrors,
+        errors: posErrors,
+      },
+      employees: {
+        rows: employeesRows,
+        valid: empValidRows.length,
+        errors: empErrors,
+        updates,
+      },
+    };
+  }, []);
+
   useEffect(() => {
     (async () => {
       setLookupsLoading(true);
@@ -122,8 +155,30 @@ export const HRImport: React.FC = () => {
     const createdPosMap: Record<string, string> = {};
     let deptCount = 0, posCount = 0, empCount = 0;
     let doneOps = 0;
-    // 1. Create departments
-    for (const dept of validDepts) {
+    // 1. Create departments (sheet + employee-derived missing departments)
+    const existingDeptNames = new Set((lookups?.departments ?? []).map((d) => normalize(d.name)));
+    const deptNamesFromSheet = new Set(validDepts.map((d) => normalize(d.name)));
+    const autoDepartmentNames = Array.from(
+      new Set(
+        validEmps
+          .map((emp) => emp.departmentName.trim())
+          .filter((name) => !!name)
+          .filter((name) => !existingDeptNames.has(normalize(name)))
+          .filter((name) => !deptNamesFromSheet.has(normalize(name))),
+      ),
+    );
+
+    const departmentsToCreate = [
+      ...validDepts,
+      ...autoDepartmentNames.map((name) => ({
+        rowIndex: 0,
+        name,
+        code: name.substring(0, 3).toUpperCase(),
+        errors: [],
+      } as ParsedDepartmentRow)),
+    ];
+
+    for (const dept of departmentsToCreate) {
       try {
         const ref = await addDoc(departmentsRef(), {
           name: dept.name,
@@ -150,8 +205,41 @@ export const HRImport: React.FC = () => {
       return existing?.id ?? '';
     };
 
-    // 2. Create positions
-    for (const pos of validPositions) {
+    // 2. Create positions (sheet + employee-derived missing positions)
+    const existingPositionTitles = new Set((lookups?.positions ?? []).map((p) => normalize(p.title)));
+    const positionTitlesFromSheet = new Set(validPositions.map((p) => normalize(p.title)));
+    const autoPositionMap = new Map<string, ParsedPositionRow>();
+    for (const emp of validEmps) {
+      const title = emp.positionTitle.trim();
+      if (!title) continue;
+      const titleKey = normalize(title);
+      if (existingPositionTitles.has(titleKey) || positionTitlesFromSheet.has(titleKey)) continue;
+
+      const existingAuto = autoPositionMap.get(titleKey);
+      if (!existingAuto) {
+        autoPositionMap.set(titleKey, {
+          rowIndex: 0,
+          title,
+          departmentName: emp.departmentName || '',
+          departmentId: '',
+          level: emp.level,
+          errors: [],
+        });
+        continue;
+      }
+
+      const currentDept = normalize(existingAuto.departmentName || '');
+      const newDept = normalize(emp.departmentName || '');
+      if (currentDept && newDept && currentDept !== newDept) {
+        errors.push(`تعذر تعريف المنصب "${title}" تلقائيًا لأن له أكثر من قسم في ملف الموظفين`);
+      } else if (!currentDept && newDept) {
+        existingAuto.departmentName = emp.departmentName;
+      }
+    }
+
+    const positionsToCreate = [...validPositions, ...Array.from(autoPositionMap.values())];
+
+    for (const pos of positionsToCreate) {
       try {
         const departmentId = resolveDeptId(pos.departmentName);
         const ref = await addDoc(jobPositionsRef(), {
@@ -262,7 +350,7 @@ export const HRImport: React.FC = () => {
       completeJob(jobId, { addedRows, failedRows: errors.length, statusText: 'Completed' });
     }
     setImporting(false);
-  }, [result, lookups, addJob, fileName, userDisplayName, startJob, setJobProgress, failJob, completeJob]);
+  }, [result, lookups, addJob, fileName, userDisplayName, startJob, setJobProgress, failJob, completeJob, normalize]);
 
   const handleReset = useCallback(() => {
     setStep('upload');
@@ -283,6 +371,46 @@ export const HRImport: React.FC = () => {
     : 0;
   const totalUpdates = result?.employees.updates ?? 0;
   const totalNew = totalValid - totalUpdates;
+
+  const removeDepartmentRow = useCallback((rowIndex: number) => {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const nextDepartments = prev.departments.rows.filter((row) => row.rowIndex !== rowIndex);
+      return buildResult(nextDepartments, prev.positions.rows, prev.employees.rows);
+    });
+  }, [buildResult]);
+
+  const removePositionRow = useCallback((rowIndex: number) => {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const nextPositions = prev.positions.rows.filter((row) => row.rowIndex !== rowIndex);
+      return buildResult(prev.departments.rows, nextPositions, prev.employees.rows);
+    });
+  }, [buildResult]);
+
+  const removeEmployeeRow = useCallback((rowIndex: number) => {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const nextEmployees = prev.employees.rows.filter((row) => row.rowIndex !== rowIndex);
+      return buildResult(prev.departments.rows, prev.positions.rows, nextEmployees);
+    });
+  }, [buildResult]);
+
+  const removeEmployeeErrors = useCallback(() => {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const nextEmployees = prev.employees.rows.filter((row) => row.errors.length === 0);
+      return buildResult(prev.departments.rows, prev.positions.rows, nextEmployees);
+    });
+  }, [buildResult]);
+
+  const removeEmployeeUpdates = useCallback(() => {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const nextEmployees = prev.employees.rows.filter((row) => !row.existingId || row.errors.length > 0);
+      return buildResult(prev.departments.rows, prev.positions.rows, nextEmployees);
+    });
+  }, [buildResult]);
 
   return (
     <div className="space-y-6">
@@ -479,6 +607,7 @@ export const HRImport: React.FC = () => {
                         <th className="erp-th">الاسم</th>
                         <th className="erp-th">الرمز</th>
                         <th className="erp-th">الحالة</th>
+                        <th className="erp-th">إجراء</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -500,6 +629,15 @@ export const HRImport: React.FC = () => {
                             ) : (
                               <Badge variant="success">صالح</Badge>
                             )}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <Button
+                              variant="ghost"
+                              onClick={() => removeDepartmentRow(row.rowIndex)}
+                              className="!px-2 !py-1 text-rose-600 hover:bg-rose-50"
+                            >
+                              <span className="material-icons-round text-sm">delete</span>
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -525,6 +663,7 @@ export const HRImport: React.FC = () => {
                         <th className="erp-th">القسم</th>
                         <th className="erp-th">المستوى</th>
                         <th className="erp-th">الحالة</th>
+                        <th className="erp-th">إجراء</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -548,6 +687,15 @@ export const HRImport: React.FC = () => {
                               <Badge variant="success">صالح</Badge>
                             )}
                           </td>
+                          <td className="py-2.5 px-3">
+                            <Button
+                              variant="ghost"
+                              onClick={() => removePositionRow(row.rowIndex)}
+                              className="!px-2 !py-1 text-rose-600 hover:bg-rose-50"
+                            >
+                              <span className="material-icons-round text-sm">delete</span>
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -564,6 +712,16 @@ export const HRImport: React.FC = () => {
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات موظفين في الملف (ورقة "الموظفين")</p>
               ) : (
                 <>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <Button variant="outline" onClick={removeEmployeeErrors} disabled={result.employees.errors === 0}>
+                      <span className="material-icons-round text-sm">error</span>
+                      حذف الصفوف بها أخطاء
+                    </Button>
+                    <Button variant="outline" onClick={removeEmployeeUpdates} disabled={result.employees.updates === 0}>
+                      <span className="material-icons-round text-sm">sync_disabled</span>
+                      حذف صفوف التحديث
+                    </Button>
+                  </div>
                   {result.employees.updates > 0 && (
                     <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-base)] p-3 mb-4 flex items-start gap-2">
                       <span className="material-icons-round text-amber-500 text-lg mt-0.5">info</span>
@@ -591,6 +749,7 @@ export const HRImport: React.FC = () => {
                           <th className="erp-th">البريد</th>
                           <th className="erp-th">نشط</th>
                           <th className="erp-th">الأخطاء</th>
+                          <th className="erp-th">إجراء</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -636,6 +795,15 @@ export const HRImport: React.FC = () => {
                                   {row.providedFields.filter((f) => f !== 'name' && f !== 'code').length} {row.existingId ? 'حقل للتحديث' : 'حقل'}
                                 </span>
                               )}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <Button
+                                variant="ghost"
+                                onClick={() => removeEmployeeRow(row.rowIndex)}
+                                className="!px-2 !py-1 text-rose-600 hover:bg-rose-50"
+                              >
+                                <span className="material-icons-round text-sm">delete</span>
+                              </Button>
                             </td>
                           </tr>
                         ))}

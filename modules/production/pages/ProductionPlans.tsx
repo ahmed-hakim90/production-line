@@ -54,6 +54,7 @@ const PRIORITY_CONFIG: Record<PlanPriority, { label: string; color: string; bg: 
 type ViewMode = 'table' | 'kanban' | 'timeline';
 type PlanSortField = '' | 'product' | 'line' | 'priority' | 'plannedQuantity' | 'progress' | 'startDate';
 type SortDirection = 'asc' | 'desc';
+type DateQuickFilter = 'all' | 'today' | 'this_month' | 'custom';
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -106,6 +107,7 @@ export const ProductionPlans: React.FC = () => {
   const [filterSearch, setFilterSearch] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [dateQuick, setDateQuick] = useState<DateQuickFilter>('all');
   const [sortField, setSortField] = useState<PlanSortField>('');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
@@ -492,6 +494,33 @@ export const ProductionPlans: React.FC = () => {
 
   const hasActiveFilters = filterSearch || filterStatus || filterLine || filterProduct || filterPriority || filterDateFrom || filterDateTo;
 
+  const applyDateQuickFilter = (quick: DateQuickFilter) => {
+    setDateQuick(quick);
+    if (quick === 'all') {
+      setFilterDateFrom('');
+      setFilterDateTo('');
+      return;
+    }
+    if (quick === 'today') {
+      const today = getTodayDateString();
+      setFilterDateFrom(today);
+      setFilterDateTo(today);
+      return;
+    }
+    if (quick === 'this_month') {
+      const d = new Date();
+      const first = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      const last = `${d.getFullYear()}-${String(d.getMonth() + 2).padStart(2, '0')}-00`;
+      setFilterDateFrom(first);
+      setFilterDateTo(last);
+    }
+  };
+
+  const handleApplyFilters = () => {
+    // Keep this action explicit for users who expect "تطبيق".
+    setFilterSearch((prev) => prev.trim());
+  };
+
   const handleExportPlans = () => {
     exportProductionPlans(sortedPlans as ProductionPlan[], {
       getProductName: (id) => _rawProducts.find((p) => p.id === id)?.name ?? '—',
@@ -793,6 +822,29 @@ export const ProductionPlans: React.FC = () => {
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
+        <div className="erp-date-seg">
+          <button
+            type="button"
+            className={`erp-date-seg-btn${dateQuick === 'today' ? ' active' : ''}`}
+            onClick={() => applyDateQuickFilter('today')}
+          >
+            اليوم
+          </button>
+          <button
+            type="button"
+            className={`erp-date-seg-btn${dateQuick === 'this_month' ? ' active' : ''}`}
+            onClick={() => applyDateQuickFilter('this_month')}
+          >
+            هذا الشهر
+          </button>
+          <button
+            type="button"
+            className={`erp-date-seg-btn${dateQuick === 'all' ? ' active' : ''}`}
+            onClick={() => applyDateQuickFilter('all')}
+          >
+            الكل
+          </button>
+        </div>
         <div className="erp-filter-sep" />
         <select
           className={`erp-filter-select${sortField ? ' active' : ''}`}
@@ -818,12 +870,30 @@ export const ProductionPlans: React.FC = () => {
         </select>
         <div className="erp-filter-date">
           <span className="erp-filter-label">من</span>
-          <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} />
+          <input
+            type="date"
+            value={filterDateFrom}
+            onChange={(e) => {
+              setDateQuick('custom');
+              setFilterDateFrom(e.target.value);
+            }}
+          />
         </div>
         <div className="erp-filter-date">
           <span className="erp-filter-label">إلى</span>
-          <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} />
+          <input
+            type="date"
+            value={filterDateTo}
+            onChange={(e) => {
+              setDateQuick('custom');
+              setFilterDateTo(e.target.value);
+            }}
+          />
         </div>
+        <button type="button" className="erp-filter-apply" onClick={handleApplyFilters}>
+          <span className="material-icons-round" style={{ fontSize: 14 }}>filter_alt</span>
+          تطبيق
+        </button>
         {hasActiveFilters && (
           <button
             className="erp-filter-clear"
@@ -833,6 +903,7 @@ export const ProductionPlans: React.FC = () => {
               setFilterLine('');
               setFilterProduct('');
               setFilterPriority('');
+              setDateQuick('all');
               setFilterDateFrom('');
               setFilterDateTo('');
             }}
@@ -952,37 +1023,39 @@ export const ProductionPlans: React.FC = () => {
   function TableView({ plans }: { plans: typeof enrichedPlans }) {
     return (
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
-        <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-            <span className="material-icons-round text-blue-600">list_alt</span>
+        <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-blue-600">list_alt</span>
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[var(--color-text)]">جميع الخطط</h3>
+              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{plans.length} خطة {hasActiveFilters ? '(مصفاة)' : ''}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-bold text-[var(--color-text)]">جميع الخطط</h3>
-            <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{plans.length} خطة {hasActiveFilters ? '(مصفاة)' : ''}</p>
-          </div>
+          {canEdit && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-[var(--color-text-muted)] whitespace-nowrap">
+                محدد: {selectedPlanIds.length}
+              </span>
+              <input
+                type="date"
+                className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-xs font-medium outline-none focus:border-primary focus:ring-primary/20"
+                value={bulkStartDate}
+                onChange={(e) => setBulkStartDate(e.target.value)}
+              />
+              <Button
+                variant="outline"
+                onClick={handleBulkDateShift}
+                disabled={bulkSaving || selectedPlanIds.length === 0 || !bulkStartDate}
+              >
+                {bulkSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                <span className="material-icons-round text-sm">event_repeat</span>
+                ترحيل التاريخ للمحدد
+              </Button>
+            </div>
+          )}
         </div>
-        {canEdit && (
-          <div className="px-5 sm:px-6 py-3 border-b border-[var(--color-border)] flex flex-wrap items-center gap-3 bg-[#f8f9fa]/40">
-            <p className="text-xs font-bold text-[var(--color-text-muted)]">
-              محدد: {selectedPlanIds.length}
-            </p>
-            <input
-              type="date"
-              className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-xs font-medium outline-none focus:border-primary focus:ring-primary/20"
-              value={bulkStartDate}
-              onChange={(e) => setBulkStartDate(e.target.value)}
-            />
-            <Button
-              variant="outline"
-              onClick={handleBulkDateShift}
-              disabled={bulkSaving || selectedPlanIds.length === 0 || !bulkStartDate}
-            >
-              {bulkSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              <span className="material-icons-round text-sm">event_repeat</span>
-              ترحيل التاريخ للمحدد
-            </Button>
-          </div>
-        )}
 
         {plans.length === 0 ? (
           <div className="p-12 text-center text-slate-400">

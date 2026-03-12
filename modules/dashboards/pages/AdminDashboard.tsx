@@ -90,6 +90,23 @@ const getPresetRange = (preset: PeriodPreset): { start: string; end: string } =>
   }
 };
 
+const COMPLIANCE_CUTOFF_HOUR = 13;
+
+const formatDateISO = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const getComplianceDefaultDate = (nowMs: number): string => {
+  const d = new Date(nowMs);
+  if (d.getHours() < COMPLIANCE_CUTOFF_HOUR) {
+    d.setDate(d.getDate() - 1);
+  }
+  return formatDateISO(d);
+};
+
 const PIE_COLORS = ['#1392ec', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 const PRESET_LABELS: Record<PeriodPreset, string> = {
@@ -280,14 +297,7 @@ export const AdminDashboard: React.FC = () => {
   const [yesterdayCompliance, setYesterdayCompliance] = useState<ReportComplianceSnapshot | null>(null);
   const [yesterdayComplianceLoading, setYesterdayComplianceLoading] = useState(true);
   const [yesterdayComplianceError, setYesterdayComplianceError] = useState<string | null>(null);
-  const [selectedComplianceDate, setSelectedComplianceDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  });
+  const [selectedComplianceDate, setSelectedComplianceDate] = useState(() => getComplianceDefaultDate(Date.now()));
   const [clockNow, setClockNow] = useState(() => Date.now());
 
   const dateRange = useMemo(() => {
@@ -297,16 +307,13 @@ export const AdminDashboard: React.FC = () => {
     return getPresetRange(preset);
   }, [preset, customStart, customEnd]);
   const isAfterComplianceCutoff = useMemo(
-    () => new Date(clockNow).getHours() >= 16,
+    () => new Date(clockNow).getHours() >= COMPLIANCE_CUTOFF_HOUR,
     [clockNow],
   );
   const yesterdayOperationalDate = useMemo(() => {
     const d = new Date(clockNow);
     d.setDate(d.getDate() - 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    return formatDateISO(d);
   }, [clockNow]);
 
   useEffect(() => {

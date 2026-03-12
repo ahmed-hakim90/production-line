@@ -103,6 +103,13 @@ function emptyPermissions(): Record<string, boolean> {
   return perms;
 }
 
+function isBlockedNotification(notification: AppNotification): boolean {
+  const title = String(notification.title || '').trim();
+  if (notification.type === 'daily_report_missing') return true;
+  if (title.startsWith('متابعة تقارير المشرفين')) return true;
+  return false;
+}
+
 let _cachedProductionWarehouseId: string | null = null;
 
 async function resolveProductionWarehouseId(systemSettings: SystemSettings): Promise<string> {
@@ -1441,11 +1448,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!empId) return;
       const isManager = get().userPermissions['roles.manage'] === true;
       if (isManager) {
-        const notifications = await notificationService.getAll();
+        const notifications = (await notificationService.getAll()).filter((n) => !isBlockedNotification(n));
         set({ notifications });
         return;
       }
-      const notifications = await notificationService.getByRecipient(empId);
+      const notifications = (await notificationService.getByRecipient(empId)).filter((n) => !isBlockedNotification(n));
       const scopedNotifications = notifications.filter((n) => {
         if (!n.type.startsWith('work_order')) return true;
         const linkedWO = get().workOrders.find((w) => w.id === n.referenceId);
@@ -1487,11 +1494,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       : (cb: (notifications: AppNotification[]) => void) =>
           notificationService.subscribeToRecipient(empId, cb);
     return subscribe((notifications) => {
+      const visibleNotifications = notifications.filter((n) => !isBlockedNotification(n));
       if (isManager) {
-        set({ notifications });
+        set({ notifications: visibleNotifications });
         return;
       }
-      const scopedNotifications = notifications.filter((n) => {
+      const scopedNotifications = visibleNotifications.filter((n) => {
         if (!n.type.startsWith('work_order')) return true;
         const linkedWO = get().workOrders.find((w) => w.id === n.referenceId);
         if (!linkedWO) return n.recipientId === empId;

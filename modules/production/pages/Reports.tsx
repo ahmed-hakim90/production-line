@@ -1646,9 +1646,39 @@ export const Reports: React.FC = () => {
         },
       },
       { header: 'التاريخ', render: (r) => <span className="font-bold text-[var(--color-text)]">{r.date}</span> },
-      { header: 'خط الإنتاج', render: (r) => <span className="font-medium">{getLineName(r.lineId)}</span> },
-      { header: 'المنتج', render: (r) => <span className="font-medium">{getProductName(r.productId, r.reportType)}</span> },
-      { header: 'الموظف', render: (r) => <span className="font-medium">{getEmployeeName(r.employeeId)}</span> },
+      {
+        header: 'خط الإنتاج',
+        render: (r) => {
+          const lineName = getLineName(r.lineId);
+          return (
+            <span className="block max-w-[130px] truncate font-medium" title={lineName}>
+              {lineName}
+            </span>
+          );
+        },
+      },
+      {
+        header: 'المنتج',
+        render: (r) => {
+          const productName = getProductName(r.productId, r.reportType);
+          return (
+            <span className="block max-w-[210px] truncate font-medium" title={productName}>
+              {productName}
+            </span>
+          );
+        },
+      },
+      {
+        header: 'الموظف',
+        render: (r) => {
+          const employeeName = getEmployeeName(r.employeeId);
+          return (
+            <span className="block max-w-[140px] truncate font-medium" title={employeeName}>
+              {employeeName}
+            </span>
+          );
+        },
+      },
       {
         header: 'الكمية المنتجة',
         headerClassName: 'text-center',
@@ -1691,7 +1721,7 @@ export const Reports: React.FC = () => {
                   return next;
                 });
               }}
-              className={`text-sm text-right block max-w-[260px] ${shouldTruncate ? 'text-primary hover:underline cursor-pointer' : 'text-slate-600 cursor-default'}`}
+              className={`text-sm text-right block max-w-[220px] ${isExpanded ? 'whitespace-normal' : 'truncate whitespace-nowrap'} ${shouldTruncate ? 'text-primary hover:underline cursor-pointer' : 'text-slate-600 cursor-default'}`}
               title={shouldTruncate ? (isExpanded ? 'اضغط للإخفاء' : 'اضغط للعرض') : note}
             >
               {isExpanded ? note : preview}
@@ -1718,7 +1748,7 @@ export const Reports: React.FC = () => {
       {
         header: 'تفصيل العمالة',
         render: (r) => (
-          <span className="text-xs font-bold text-[var(--color-text-muted)]">
+          <span className="inline-block whitespace-nowrap text-[11px] font-bold text-[var(--color-text-muted)]">
             إ:{r.workersProductionCount ?? 0} | ت:{r.workersPackagingCount ?? 0} | ج:{r.workersQualityCount ?? 0} | ص:{r.workersMaintenanceCount ?? 0} | خ:{r.workersExternalCount ?? 0}
           </span>
         ),
@@ -1752,6 +1782,9 @@ export const Reports: React.FC = () => {
           if (!hasQuality) return <span className="text-xs text-[var(--color-text-muted)]">—</span>;
           const qm = qualityStatusMeta(wo.qualityStatus);
           const qualityCode = getQualityReportCode(wo, r.reportCode);
+          const qualityTitle = wo.qualitySummary
+            ? `عرض تقرير الجودة — ${qualityCode || '—'} — فحص: ${formatNumber(wo.qualitySummary.inspectedUnits)} | فاشل: ${formatNumber(wo.qualitySummary.failedUnits)}`
+            : `عرض تقرير الجودة — ${qualityCode || '—'}`;
           return (
             <button
               type="button"
@@ -1759,20 +1792,15 @@ export const Reports: React.FC = () => {
                 e.stopPropagation();
                 setViewQualityReport(r);
               }}
-              className="text-right space-y-1 hover:bg-primary/5 rounded-[var(--border-radius-base)] px-2 py-1 transition-colors"
-              title="عرض تقرير الجودة"
+              className="inline-flex items-center gap-1.5 hover:bg-primary/5 rounded-[var(--border-radius-base)] px-2 py-1 transition-colors whitespace-nowrap"
+              title={qualityTitle}
             >
               <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full ${qm.className}`}>
                 {qm.label}
               </span>
-              <div className="text-[11px] font-bold text-[var(--color-text-muted)]">
+              <span className="text-[11px] font-bold text-[var(--color-text-muted)]">
                 {qualityCode || '—'}
-              </div>
-              {wo.qualitySummary && (
-                <div className="text-[11px] font-bold text-[var(--color-text-muted)]">
-                  فحص: {formatNumber(wo.qualitySummary.inspectedUnits)} | فاشل: {formatNumber(wo.qualitySummary.failedUnits)}
-                </div>
-              )}
+              </span>
             </button>
           );
         },
@@ -1880,7 +1908,7 @@ export const Reports: React.FC = () => {
   }, [handleBulkPrintSelected, handleBulkPrintSelectedAsSinglePagesPdf, canExportFromPage, startDate, endDate, lookups, canViewCosts, reportCosts]);
 
   const renderReportActions = (report: ProductionReport) => (
-    <div className="flex flex-wrap items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+    <div className="flex min-w-[170px] flex-nowrap items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
       {can("print") && (
         <>
           <button onClick={() => triggerSingleShare(report)} className="p-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all" title="مشاركة عبر واتساب" disabled={exporting}>
