@@ -150,7 +150,7 @@ export const MENU_CONFIG: MenuGroup[] = [
     children: [
       { key: 'users', label: 'المستخدمون', icon: 'manage_accounts', path: '/system/users', permission: 'users.manage' },
       { key: 'roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings', path: '/roles', permission: 'roles.manage' },
-      { key: 'activity', label: 'سجل النشاط', icon: 'history', path: '/activity-log', permission: 'activityLog.view' },
+      { key: 'activity', label: 'سجل النشاط والعمليات', icon: 'monitoring', path: '/activity-log', permission: 'activityLog.view' },
       { key: 'settings', label: 'الإعدادات', icon: 'settings', path: '/settings', permission: 'settings.view' },
     ],
   },

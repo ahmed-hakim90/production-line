@@ -28,6 +28,7 @@ import { ToastContainer } from './components/Toast';
 import { useJobsStore } from './components/background-jobs/useJobsStore';
 import { presenceService } from './services/presenceService';
 import { pushService } from './services/pushService';
+import { sessionTrackerService } from './modules/system/audit';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
@@ -238,6 +239,7 @@ const App: React.FC = () => {
       window.clearTimeout(resolveTimer);
       setAuthResolved(true);
       if (!user) {
+        sessionTrackerService.stop('auth_logout');
         activeSessionUidRef.current = null;
         clearSubscriptions();
         useAppStore.setState({
@@ -283,11 +285,16 @@ const App: React.FC = () => {
         unsubWorkOrders();
         unsubScans();
       };
+      sessionTrackerService.start({
+        uid: user.uid,
+        userName: user.displayName ?? user.email ?? user.uid,
+      });
     });
 
     return () => {
       window.clearTimeout(resolveTimer);
       unsub();
+      sessionTrackerService.stop('app_unmount');
       cleanupSubsRef.current?.();
       cleanupSubsRef.current = null;
     };

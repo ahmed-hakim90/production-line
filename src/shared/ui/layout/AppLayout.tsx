@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SidebarProvider, useSidebar } from './useSidebar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { GlobalBackgroundJobs } from '@/components/background-jobs/GlobalBackgroundJobs';
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -57,6 +58,9 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             </div>
           </div>
         </footer>
+
+        {/* Global jobs panel/history mounted once for the full app layout */}
+        <GlobalBackgroundJobs />
 
       </div>
     </div>

@@ -15,6 +15,14 @@ export interface AuditRecord {
   timestamp: any;
   metadata: AuditMetadata;
   batchId?: string;
+  correlationId?: string;
+  operation?: string;
+  status?: 'started' | 'succeeded' | 'failed';
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 export interface CreateAuditLogInput {
@@ -28,4 +36,12 @@ export interface CreateAuditLogInput {
   userName: string;
   metadata?: AuditMetadata;
   batchId?: string;
+  correlationId?: string;
+  operation?: string;
+  status?: 'started' | 'succeeded' | 'failed';
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
 }

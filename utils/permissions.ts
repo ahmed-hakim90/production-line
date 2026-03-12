@@ -393,6 +393,7 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
       { path: '/system/users', icon: 'manage_accounts', label: 'المستخدمون', permission: 'users.manage' },
       { path: '/roles', icon: 'admin_panel_settings', label: 'الأدوار والصلاحيات', permission: 'roles.manage' },
       { path: '/activity-log', icon: 'history', label: 'سجل النشاط', permission: 'activityLog.view' },
+      { path: '/operations-monitor', icon: 'monitoring', label: 'متابعة العمليات', permission: 'activityLog.view' },
       { path: '/settings', icon: 'settings', label: 'الإعدادات', permission: 'settings.view' },
     ],
   },
@@ -417,7 +418,7 @@ const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
   hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
   costs: ['/cost-centers', '/cost-settings', '/costs/assets', '/costs/depreciation-report'],
-  system: ['/system/users', '/roles', '/activity-log', '/settings'],
+  system: ['/system/users', '/roles', '/activity-log', '/operations-monitor', '/settings'],
 };
 
 const sidebarGroupOrderRank = new Map(
@@ -478,6 +479,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/costs/assets/:id': 'assets.view',
   '/costs/depreciation-report': 'assets.depreciation.view',
   '/activity-log': 'activityLog.view',
+  '/operations-monitor': 'activityLog.view',
   '/production-plans': 'plans.view',
   '/work-orders': 'workOrders.view',
   '/factory-dashboard': 'factoryDashboard.view',

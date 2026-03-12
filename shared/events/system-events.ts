@@ -5,6 +5,7 @@ export const SystemEvents = {
   QC_REJECTED: 'qc.rejected',
   WORK_ORDER_CREATED: 'work-order.created',
   USER_ACTION: 'user.action',
+  OPERATION_STATUS: 'operation.status',
 } as const;
 
 export type SystemEventName = (typeof SystemEvents)[keyof typeof SystemEvents];
@@ -14,6 +15,8 @@ export interface EventActor {
   userName?: string;
 }
 
+export type OperationStatus = 'started' | 'succeeded' | 'failed';
+
 export interface SystemEventBasePayload {
   module?: string;
   entityType?: string;
@@ -22,6 +25,14 @@ export interface SystemEventBasePayload {
   description?: string;
   metadata?: Record<string, unknown>;
   actor?: EventActor;
+  correlationId?: string;
+  operation?: string;
+  status?: OperationStatus;
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 export interface ProductionStartedPayload extends SystemEventBasePayload {
@@ -60,6 +71,13 @@ export interface UserActionPayload extends SystemEventBasePayload {
   action?: string;
 }
 
+export interface OperationStatusPayload extends SystemEventBasePayload {
+  status: OperationStatus;
+  correlationId: string;
+  operation: string;
+  action?: string;
+}
+
 export interface SystemEventPayloadMap {
   [SystemEvents.PRODUCTION_STARTED]: ProductionStartedPayload;
   [SystemEvents.PRODUCTION_CLOSED]: ProductionClosedPayload;
@@ -67,4 +85,5 @@ export interface SystemEventPayloadMap {
   [SystemEvents.QC_REJECTED]: QcRejectedPayload;
   [SystemEvents.WORK_ORDER_CREATED]: WorkOrderCreatedPayload;
   [SystemEvents.USER_ACTION]: UserActionPayload;
+  [SystemEvents.OPERATION_STATUS]: OperationStatusPayload;
 }

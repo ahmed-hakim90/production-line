@@ -11,6 +11,7 @@ import { qualitySettingsService } from '../services/qualitySettingsService';
 import { SingleIPQCPrint } from '../components/QualityReportPrint';
 import { storageService } from '@/services/storageService';
 import { eventBus, SystemEvents } from '@/shared/events';
+import { actionTrackerService } from '@/modules/system/audit';
 
 export const IPQC: React.FC = () => {
   const { can } = usePermission();
@@ -95,6 +96,24 @@ export const IPQC: React.FC = () => {
 
   const onSubmit = async (printAfterSave = false) => {
     if (!selectedWorkOrder || !inspectorId || !canInspect) return;
+    const trackedOperation = actionTrackerService.startOperation({
+      module: 'quality',
+      operation: 'quality.ipqc.submit',
+      action: 'submit',
+      entityType: 'quality_inspection',
+      entityId: selectedWorkOrder.id!,
+      batchId: selectedWorkOrder.id!,
+      actor: {
+        userId: uid ?? currentEmployee?.id ?? undefined,
+        userName: userDisplayName ?? userEmail ?? currentEmployee?.name ?? undefined,
+      },
+      metadata: {
+        inspectionType: 'ipqc',
+        status,
+        workOrderNumber: selectedWorkOrder.workOrderNumber,
+      },
+      description: 'Submit IPQC inspection',
+    });
     const requiresReason = status === 'failed' || status === 'rework';
     if (requiresReason && !reasonCode) {
       setMessage({ type: 'error', text: 'سبب العيب مطلوب عند الفشل أو إعادة التشغيل.' });
@@ -189,6 +208,13 @@ export const IPQC: React.FC = () => {
             type: 'success',
             text: 'تم حفظ تقرير IPQC.',
           });
+          actionTrackerService.succeedOperation(trackedOperation, {
+            metadata: {
+              inspectionType: 'ipqc',
+              status,
+              mode: 'index_fallback',
+            },
+          });
           return;
         }
         throw error;
@@ -264,7 +290,22 @@ export const IPQC: React.FC = () => {
         type: 'success',
         text: printAfterSave ? 'تم حفظ تقرير IPQC وإرسال أمر الطباعة.' : 'تم حفظ تقرير IPQC بنجاح.',
       });
+      actionTrackerService.succeedOperation(trackedOperation, {
+        metadata: {
+          inspectionType: 'ipqc',
+          status,
+          printAfterSave,
+        },
+      });
     } catch (error) {
+      actionTrackerService.failOperation(trackedOperation, {
+        error,
+        metadata: {
+          inspectionType: 'ipqc',
+          status,
+          workOrderId: selectedWorkOrder.id,
+        },
+      });
       setMessage({
         type: 'error',
         text: error instanceof Error ? error.message : 'تعذر حفظ التقرير. حاول مرة أخرى.',

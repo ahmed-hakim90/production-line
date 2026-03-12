@@ -16,6 +16,11 @@ import { presenceService } from '../../../services/presenceService';
 import { notificationComposerService } from '../../../services/notificationComposerService';
 
 const PAGE_SIZE = 15;
+const HIDDEN_ACTIVITY_ACTIONS = new Set<ActivityAction>([
+  'CREATE_REPORT',
+  'UPDATE_REPORT',
+  'DELETE_REPORT',
+]);
 
 const ACTION_LABELS: Partial<Record<ActivityAction, { label: string; icon: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }>> = {
   LOGIN: { label: 'تسجيل دخول', icon: 'login', variant: 'info' },
@@ -125,6 +130,11 @@ export const ActivityLogPage: React.FC = () => {
   const activeRows = useMemo(() => (
     presences.filter((row) => row.state !== 'offline')
   ), [presences]);
+
+  const visibleLogs = useMemo(
+    () => logs.filter((log) => !HIDDEN_ACTIVITY_ACTIONS.has(log.action as ActivityAction)),
+    [logs],
+  );
 
   const employeeOptions = useMemo(
     () =>
@@ -382,7 +392,7 @@ export const ActivityLogPage: React.FC = () => {
       ) : (
         <Card>
           <div className="space-y-0 divide-y divide-[var(--color-border)]">
-            {logs.map((log) => {
+            {visibleLogs.map((log) => {
               const info = getActionInfo(log.action);
               return (
                 <div key={log.id} className="flex items-start gap-4 py-4 px-2">
@@ -413,7 +423,7 @@ export const ActivityLogPage: React.FC = () => {
               );
             })}
 
-            {logs.length === 0 && (
+            {visibleLogs.length === 0 && (
               <div className="py-16 text-center text-slate-400">
                 <span className="material-icons-round text-5xl block mb-3">history</span>
                 <p className="font-bold">لا توجد أنشطة مسجلة</p>
@@ -447,7 +457,7 @@ export const ActivityLogPage: React.FC = () => {
 
       {/* Summary */}
       <div className="text-xs text-[var(--color-text-muted)] font-medium text-center">
-        عرض {logs.length} نشاط {hasMore ? '(يوجد المزيد)' : '(نهاية السجل)'}
+        عرض {visibleLogs.length} نشاط {hasMore ? '(يوجد المزيد)' : '(نهاية السجل)'}
       </div>
     </div>
   );

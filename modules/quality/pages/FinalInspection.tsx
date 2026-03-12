@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -11,6 +11,7 @@ import { qualitySettingsService } from '../services/qualitySettingsService';
 import { SingleFinalInspectionPrint } from '../components/QualityReportPrint';
 import { storageService } from '@/services/storageService';
 import { eventBus, SystemEvents } from '@/shared/events';
+import { actionTrackerService } from '@/modules/system/audit';
 
 export const FinalInspection: React.FC = () => {
   const { can } = usePermission();
@@ -84,6 +85,24 @@ export const FinalInspection: React.FC = () => {
 
   const onSubmit = async (printAfterSave = false) => {
     if (!selectedWorkOrder || !currentEmployee?.id || !canInspect) return;
+    const trackedOperation = actionTrackerService.startOperation({
+      module: 'quality',
+      operation: 'quality.finalInspection.submit',
+      action: 'submit',
+      entityType: 'quality_inspection',
+      entityId: selectedWorkOrder.id!,
+      batchId: selectedWorkOrder.id!,
+      actor: {
+        userId: uid ?? currentEmployee?.id ?? undefined,
+        userName: userDisplayName ?? userEmail ?? currentEmployee?.name ?? undefined,
+      },
+      metadata: {
+        inspectionType: 'final',
+        status,
+        workOrderNumber: selectedWorkOrder.workOrderNumber,
+      },
+      description: 'Submit final inspection',
+    });
     const requiresReason = status === 'failed' || status === 'rework';
     if (requiresReason && !reasonCode) {
       setMessage({ type: 'error', text: 'سبب العيب مطلوب عند الفشل أو إعادة التشغيل.' });
@@ -215,7 +234,22 @@ export const FinalInspection: React.FC = () => {
         type: 'success',
         text: printAfterSave ? 'تم حفظ تقرير الفحص النهائي وإرسال أمر الطباعة.' : 'تم حفظ تقرير الفحص النهائي بنجاح.',
       });
+      actionTrackerService.succeedOperation(trackedOperation, {
+        metadata: {
+          inspectionType: 'final',
+          status,
+          printAfterSave,
+        },
+      });
     } catch (error) {
+      actionTrackerService.failOperation(trackedOperation, {
+        error,
+        metadata: {
+          inspectionType: 'final',
+          status,
+          workOrderId: selectedWorkOrder.id,
+        },
+      });
       setMessage({
         type: 'error',
         text: error instanceof Error ? error.message : 'تعذر حفظ التقرير. حاول مرة أخرى.',

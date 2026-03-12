@@ -1,6 +1,6 @@
 export { RolesManagement } from './pages/RolesManagement';
 export { Settings } from './pages/Settings';
-export { ActivityLogPage } from './pages/ActivityLog';
+export { OperationsMonitorPage } from './pages/OperationsMonitor';
 export * from './components';
 export * from './hooks';
 export * from './services';

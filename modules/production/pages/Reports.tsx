@@ -133,6 +133,8 @@ export const Reports: React.FC = () => {
   const deleteReport = useAppStore((s) => s.deleteReport);
   const fetchReportsFromStore = useAppStore((s) => s.fetchReports);
   const syncMissingProductionEntryTransfers = useAppStore((s) => s.syncMissingProductionEntryTransfers);
+  const backfillUnlinkedReportsWorkOrders = useAppStore((s) => s.backfillUnlinkedReportsWorkOrders);
+  const unlinkReportsWorkOrdersInRange = useAppStore((s) => s.unlinkReportsWorkOrdersInRange);
   const reportsLoading = useAppStore((s) => s.reportsLoading);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const addJob = useJobsStore((s) => s.addJob);
@@ -193,6 +195,8 @@ export const Reports: React.FC = () => {
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [saveToastType, setSaveToastType] = useState<'success' | 'error'>('success');
   const [syncingMissingTransfers, setSyncingMissingTransfers] = useState(false);
+  const [backfillingUnlinkedReports, setBackfillingUnlinkedReports] = useState(false);
+  const [unlinkingReportWorkOrders, setUnlinkingReportWorkOrders] = useState(false);
   const [expandedNoteRows, setExpandedNoteRows] = useState<Set<string>>(new Set());
 
   // Import from Excel state
@@ -1459,6 +1463,166 @@ export const Reports: React.FC = () => {
     }
   }, [syncMissingProductionEntryTransfers, startDate, endDate, syncingMissingTransfers]);
 
+  const handleBackfillUnlinkedReports = useCallback(async () => {
+    if (backfillingUnlinkedReports) return;
+    const confirmed = window.confirm(
+      `سيتم ربط التقارير غير المرتبطة بأوامر الشغل خلال الفترة:\n${startDate} إلى ${endDate}\n\nهل تريد المتابعة؟`,
+    );
+    if (!confirmed) return;
+
+    const jobId = addJob({
+      fileName: `reports-backfill-${startDate}-to-${endDate}`,
+      jobType: 'Reports WorkOrder Backfill',
+      totalRows: 1,
+      startedBy: userDisplayName || 'Current User',
+    });
+    startJob(jobId, 'جاري فحص التقارير غير المرتبطة...');
+
+    setBackfillingUnlinkedReports(true);
+    try {
+      const summary = await backfillUnlinkedReportsWorkOrders(startDate, endDate, {
+        onStart: (totalCandidates) => {
+          setJobProgress(jobId, {
+            processedRows: 0,
+            totalRows: Math.max(1, totalCandidates),
+            statusText: totalCandidates === 0
+              ? 'لا توجد تقارير غير مرتبطة في الفترة المحددة.'
+              : `تم العثور على ${totalCandidates} تقرير غير مرتبط.`,
+            status: 'processing',
+          });
+        },
+        onProgress: ({ processed, total, linked, skipped, failed }) => {
+          setJobProgress(jobId, {
+            processedRows: processed,
+            totalRows: Math.max(1, total),
+            statusText: `جارٍ الربط... ربط: ${linked} | تخطي: ${skipped} | فشل: ${failed}`,
+            status: 'processing',
+          });
+        },
+      });
+
+      if (summary.processed === 0) {
+        completeJob(jobId, {
+          addedRows: 0,
+          failedRows: 0,
+          statusText: 'لا توجد تقارير غير مرتبطة.',
+        });
+      } else if (summary.linked === 0 && summary.failed > 0) {
+        failJob(jobId, 'تعذر ربط كل التقارير المرشحة.', 'Failed');
+      } else {
+        completeJob(jobId, {
+          addedRows: summary.linked,
+          failedRows: summary.failed,
+          statusText: `Completed (Skipped: ${summary.skipped})`,
+        });
+      }
+
+      window.alert(
+        `تمت معالجة الربط بنجاح.\n` +
+        `تم الفحص: ${summary.processed}\n` +
+        `تم الربط: ${summary.linked}\n` +
+        `تم التخطي: ${summary.skipped}\n` +
+        `فشل: ${summary.failed}`,
+      );
+    } catch (error: any) {
+      failJob(jobId, error?.message || 'تعذر تنفيذ ربط التقارير القديمة.', 'Failed');
+      window.alert(error?.message || 'تعذر تنفيذ ربط التقارير القديمة.');
+    } finally {
+      setBackfillingUnlinkedReports(false);
+    }
+  }, [
+    addJob,
+    backfillUnlinkedReportsWorkOrders,
+    backfillingUnlinkedReports,
+    completeJob,
+    endDate,
+    failJob,
+    setJobProgress,
+    startDate,
+    startJob,
+    userDisplayName,
+  ]);
+
+  const handleUnlinkReportWorkOrders = useCallback(async () => {
+    if (unlinkingReportWorkOrders) return;
+    const confirmed = window.confirm(
+      `تحذير: سيتم فك ربط أوامر الشغل من كل التقارير المربوطة في الفترة:\n${startDate} إلى ${endDate}\n\nوسيتم خصم الكميات من أوامر الشغل.\n\nهل تريد المتابعة؟`,
+    );
+    if (!confirmed) return;
+
+    const jobId = addJob({
+      fileName: `reports-unlink-${startDate}-to-${endDate}`,
+      jobType: 'Reports WorkOrder Unlink',
+      totalRows: 1,
+      startedBy: userDisplayName || 'Current User',
+    });
+    startJob(jobId, 'جاري فحص التقارير المربوطة...');
+
+    setUnlinkingReportWorkOrders(true);
+    try {
+      const summary = await unlinkReportsWorkOrdersInRange(startDate, endDate, {
+        onStart: (totalCandidates) => {
+          setJobProgress(jobId, {
+            processedRows: 0,
+            totalRows: Math.max(1, totalCandidates),
+            statusText: totalCandidates === 0
+              ? 'لا توجد تقارير مربوطة في الفترة المحددة.'
+              : `تم العثور على ${totalCandidates} تقرير مربوط.`,
+            status: 'processing',
+          });
+        },
+        onProgress: ({ processed, total, unlinked, skipped, failed }) => {
+          setJobProgress(jobId, {
+            processedRows: processed,
+            totalRows: Math.max(1, total),
+            statusText: `جارٍ فك الربط... مفكوك: ${unlinked} | تخطي: ${skipped} | فشل: ${failed}`,
+            status: 'processing',
+          });
+        },
+      });
+
+      if (summary.processed === 0) {
+        completeJob(jobId, {
+          addedRows: 0,
+          failedRows: 0,
+          statusText: 'لا توجد تقارير مربوطة.',
+        });
+      } else if (summary.unlinked === 0 && summary.failed > 0) {
+        failJob(jobId, 'تعذر فك الربط لكل التقارير المرشحة.', 'Failed');
+      } else {
+        completeJob(jobId, {
+          addedRows: summary.unlinked,
+          failedRows: summary.failed,
+          statusText: `Completed (Skipped: ${summary.skipped})`,
+        });
+      }
+
+      window.alert(
+        `تم تنفيذ فك الربط.\n` +
+        `تم الفحص: ${summary.processed}\n` +
+        `تم فك الربط: ${summary.unlinked}\n` +
+        `تم التخطي: ${summary.skipped}\n` +
+        `فشل: ${summary.failed}`,
+      );
+    } catch (error: any) {
+      failJob(jobId, error?.message || 'تعذر تنفيذ فك الربط.', 'Failed');
+      window.alert(error?.message || 'تعذر تنفيذ فك الربط.');
+    } finally {
+      setUnlinkingReportWorkOrders(false);
+    }
+  }, [
+    addJob,
+    completeJob,
+    endDate,
+    failJob,
+    setJobProgress,
+    startDate,
+    startJob,
+    unlinkReportsWorkOrdersInRange,
+    unlinkingReportWorkOrders,
+    userDisplayName,
+  ]);
+
   // ── Import from Excel ────────────────────────────────────────────────────
 
   function resetImportState() {
@@ -2144,6 +2308,22 @@ export const Reports: React.FC = () => {
             hidden: !can('reports.edit'),
             disabled: syncingMissingTransfers,
             onClick: handleSyncMissingTransfers,
+          },
+          {
+            label: backfillingUnlinkedReports ? 'جاري الربط...' : 'ربط التقارير القديمة',
+            icon: 'auto_fix_high',
+            group: 'أدوات',
+            hidden: !can('reports.edit'),
+            disabled: backfillingUnlinkedReports,
+            onClick: handleBackfillUnlinkedReports,
+          },
+          {
+            label: unlinkingReportWorkOrders ? 'جاري فك الربط...' : 'فك ربط أوامر الشغل',
+            icon: 'link_off',
+            group: 'أدوات',
+            hidden: !can('reports.edit'),
+            disabled: unlinkingReportWorkOrders,
+            onClick: handleUnlinkReportWorkOrders,
           },
         ]}
       />

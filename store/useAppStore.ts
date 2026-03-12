@@ -86,6 +86,7 @@ import {
   getMonthDateRange,
 } from '../utils/calculations';
 import { eventBus, SystemEvents } from '../shared/events';
+import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
 import { REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
 
@@ -170,6 +171,63 @@ function resolveReportType(
   reportType?: ProductionReport['reportType'],
 ): NonNullable<ProductionReport['reportType']> {
   return reportType === 'component_injection' ? 'component_injection' : 'finished_product';
+}
+
+function resolveWorkOrderReportType(
+  workOrderType?: WorkOrder['workOrderType'],
+): NonNullable<ProductionReport['reportType']> {
+  return workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
+}
+
+function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
+  return status === 'pending' || status === 'in_progress';
+}
+
+function getSortableDateMs(value: any): number {
+  if (!value) return 0;
+  if (typeof value?.toDate === 'function') return value.toDate().getTime();
+  if (typeof value?.seconds === 'number') return value.seconds * 1000;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function pickBestAutoLinkedWorkOrder(
+  workOrders: WorkOrder[],
+  criteria: {
+    lineId: string;
+    productId: string;
+    supervisorId?: string;
+    reportType: NonNullable<ProductionReport['reportType']>;
+  },
+): WorkOrder | null {
+  const filtered = workOrders.filter((wo) => (
+    Boolean(wo?.id)
+    && isActiveWorkOrderStatus(wo.status)
+    && wo.productId === criteria.productId
+    && resolveWorkOrderReportType(wo.workOrderType) === criteria.reportType
+  ));
+  if (filtered.length === 0) return null;
+
+  const supervisorId = String(criteria.supervisorId || '').trim();
+  const ranked = [...filtered].sort((a, b) => {
+    const score = (wo: WorkOrder) => {
+      let value = 0;
+      if (wo.lineId === criteria.lineId) value += 8;
+      if (supervisorId && wo.supervisorId === supervisorId) value += 4;
+      if (wo.status === 'in_progress') value += 2;
+      if (wo.status === 'pending') value += 1;
+      return value;
+    };
+    const scoreDiff = score(b) - score(a);
+    if (scoreDiff !== 0) return scoreDiff;
+    const targetDateDiff = String(b.targetDate || '').localeCompare(String(a.targetDate || ''));
+    if (targetDateDiff !== 0) return targetDateDiff;
+    const createdAtDiff = getSortableDateMs(b.createdAt) - getSortableDateMs(a.createdAt);
+    if (createdAtDiff !== 0) return createdAtDiff;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+
+  return ranked[0] ?? null;
 }
 
 function hasPermission(
@@ -397,6 +455,34 @@ interface AppState {
     startDate: string,
     endDate: string
   ) => Promise<{ processed: number; created: number; skipped: number; failed: number }>;
+  backfillUnlinkedReportsWorkOrders: (
+    startDate: string,
+    endDate: string,
+    options?: {
+      onStart?: (totalCandidates: number) => void;
+      onProgress?: (snapshot: {
+        processed: number;
+        total: number;
+        linked: number;
+        skipped: number;
+        failed: number;
+      }) => void;
+    }
+  ) => Promise<{ processed: number; linked: number; skipped: number; failed: number }>;
+  unlinkReportsWorkOrdersInRange: (
+    startDate: string,
+    endDate: string,
+    options?: {
+      onStart?: (totalCandidates: number) => void;
+      onProgress?: (snapshot: {
+        processed: number;
+        total: number;
+        unlinked: number;
+        skipped: number;
+        failed: number;
+      }) => void;
+    }
+  ) => Promise<{ processed: number; unlinked: number; skipped: number; failed: number }>;
 
   // Mutations — Line Status & Config
   updateLineStatus: (id: string, data: Partial<LineStatus>) => Promise<void>;
@@ -1144,6 +1230,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   createWorkOrder: async (data) => {
+    const { uid, userDisplayName, userEmail } = get();
+    const actor = {
+      userId: uid ?? undefined,
+      userName: userDisplayName ?? userEmail ?? undefined,
+    };
+    const trackedOperation = actionTrackerService.startOperation({
+      module: 'production',
+      operation: 'work_order.create',
+      action: 'create',
+      entityType: 'work_order',
+      actor,
+      metadata: {
+        workOrderNumber: data.workOrderNumber,
+        lineId: data.lineId,
+        productId: data.productId,
+        quantity: data.quantity,
+        status: data.status,
+      },
+      description: 'Create work order',
+    });
     try {
       let inferredType: WorkOrder['workOrderType'] = data.workOrderType;
       if (!inferredType && data.planId) {
@@ -1166,6 +1272,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...data,
         workOrderType,
       });
+      trackedOperation.entityId = id ?? trackedOperation.entityId;
+      trackedOperation.batchId = id ?? trackedOperation.batchId;
       if (id) {
         await get().fetchWorkOrders();
         const { _rawProducts } = get();
@@ -1202,14 +1310,58 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         });
       }
+      actionTrackerService.succeedOperation(trackedOperation, {
+        metadata: {
+          workOrderId: id ?? null,
+          status: id ? 'created' : 'empty_id',
+        },
+      });
       return id;
     } catch (error) {
+      actionTrackerService.failOperation(trackedOperation, {
+        error,
+        metadata: {
+          workOrderNumber: data.workOrderNumber,
+          lineId: data.lineId,
+        },
+      });
       set({ error: (error as Error).message });
       return null;
     }
   },
 
   updateWorkOrder: async (id, data) => {
+    const { uid, userDisplayName, userEmail } = get();
+    const operation =
+      data.status === 'completed'
+        ? 'work_order.close'
+        : data.status === 'in_progress'
+          ? 'work_order.start'
+          : 'work_order.update';
+    const action =
+      data.status === 'completed'
+        ? 'close'
+        : data.status === 'in_progress'
+          ? 'start'
+          : 'update';
+    const actor = {
+      userId: uid ?? undefined,
+      userName: userDisplayName ?? userEmail ?? undefined,
+    };
+    const trackedOperation = actionTrackerService.startOperation({
+      module: 'production',
+      operation,
+      action,
+      entityType: 'work_order',
+      entityId: id,
+      batchId: id,
+      actor,
+      metadata: {
+        status: data.status ?? null,
+        supervisorId: data.supervisorId ?? null,
+      },
+      description: `Update work order (${operation})`,
+    });
     try {
       let existing = get().workOrders.find((w) => w.id === id);
       if (data.status === 'completed' && !existing) {
@@ -1251,12 +1403,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       await workOrderService.update(id, data);
       await get().fetchWorkOrders();
       const updatedWorkOrder = get().workOrders.find((w) => w.id === id) ?? (existing ? { ...existing, ...data } : null);
-
-      const { uid, userDisplayName, userEmail } = get();
-      const actor = {
-        userId: uid ?? undefined,
-        userName: userDisplayName ?? userEmail ?? undefined,
-      };
 
       if (existing && data.status && data.status !== existing.status) {
         if (data.status === 'in_progress') {
@@ -1425,7 +1571,19 @@ export const useAppStore = create<AppState>((set, get) => ({
           });
         }
       }
+      actionTrackerService.succeedOperation(trackedOperation, {
+        metadata: {
+          status: data.status ?? null,
+          previousStatus: existing?.status ?? null,
+        },
+      });
     } catch (error) {
+      actionTrackerService.failOperation(trackedOperation, {
+        error,
+        metadata: {
+          status: data.status ?? null,
+        },
+      });
       set({ error: (error as Error).message });
       throw error;
     }
@@ -1612,6 +1770,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Reports (with automatic activity logging) ──
 
   createReport: async (data) => {
+    let trackedOperation: ReturnType<typeof actionTrackerService.startOperation> | null = null;
+    let cachedRawMaterials: Awaited<ReturnType<typeof rawMaterialService.getAll>> | null = null;
+    const getRawMaterialsOnce = async () => {
+      if (cachedRawMaterials) return cachedRawMaterials;
+      cachedRawMaterials = await rawMaterialService.getAll();
+      return cachedRawMaterials;
+    };
     try {
       const reportType = resolveReportType(data.reportType);
       const permissions = get().userPermissions;
@@ -1690,26 +1855,82 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data.workOrderId) {
         const selectedWO = await workOrderService.getById(data.workOrderId);
         if (
-          selectedWO &&
-          (selectedWO.status === 'pending' || selectedWO.status === 'in_progress') &&
-          (selectedWO.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product') === reportType
+          selectedWO
+          && isActiveWorkOrderStatus(selectedWO.status)
+          && resolveWorkOrderReportType(selectedWO.workOrderType) === reportType
         ) {
           activeWO = selectedWO;
         }
       }
       if (!activeWO) {
-        const activeWOs = await workOrderService.getActiveByLineAndProduct(data.lineId, data.productId);
-        activeWO = activeWOs.find((wo) => (
-          (wo.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product') === reportType
-        )) ?? activeWOs[0] ?? null;
+        const candidateMap = new Map<string, WorkOrder>();
+        const upsertCandidate = (wo: WorkOrder | null | undefined) => {
+          if (!wo?.id) return;
+          candidateMap.set(String(wo.id), wo);
+        };
+
+        try {
+          const activeWOs = await workOrderService.getActiveByLineAndProduct(data.lineId, data.productId);
+          activeWOs.forEach(upsertCandidate);
+        } catch {
+          // fallback to cached/all work orders when index/query fails.
+        }
+
+        const cachedActiveWOs = get().workOrders.filter((wo) => (
+          isActiveWorkOrderStatus(wo.status) && wo.productId === data.productId
+        ));
+        cachedActiveWOs.forEach(upsertCandidate);
+
+        if (candidateMap.size === 0) {
+          const allWorkOrders = await workOrderService.getAll();
+          allWorkOrders.forEach(upsertCandidate);
+        }
+
+        activeWO = pickBestAutoLinkedWorkOrder(Array.from(candidateMap.values()), {
+          lineId: data.lineId,
+          productId: data.productId,
+          supervisorId: data.employeeId,
+          reportType,
+        });
       }
 
       const reportData = { ...data, reportType, workOrderId: activeWO?.id || data.workOrderId || '' };
+      const { uid, userDisplayName, userEmail } = get();
+      trackedOperation = actionTrackerService.startOperation({
+        module: 'production',
+        operation: 'production_report.create',
+        action: 'create',
+        entityType: 'production_report',
+        entityId: reportData.workOrderId || undefined,
+        batchId: reportData.workOrderId || undefined,
+        actor: {
+          userId: uid ?? undefined,
+          userName: userDisplayName ?? userEmail ?? undefined,
+        },
+        metadata: {
+          lineId: data.lineId,
+          productId: data.productId,
+          quantityProduced: data.quantityProduced,
+          reportType,
+          workOrderId: activeWO?.id ?? data.workOrderId ?? '',
+          productionPlanId: activePlan?.id ?? '',
+        },
+        description: 'Create production report',
+      });
+
       const id = await reportService.create(reportData);
       if (!id) {
+        if (trackedOperation) {
+          actionTrackerService.failOperation(trackedOperation, {
+            error: new Error('تعذر حفظ التقرير'),
+            errorCode: 'REPORT_CREATE_EMPTY_ID',
+          });
+        }
         set({ error: 'تعذر حفظ التقرير' });
         return null;
       }
+      trackedOperation.entityId = id;
+      trackedOperation.batchId = reportData.workOrderId || id;
 
       let postSaveWarning: string | null = null;
       const laborCost = (laborSettings?.hourlyRate ?? 0) * (data.workHours || 0) * (data.workersCount || 0);
@@ -1727,7 +1948,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const actorUserId = get().uid || undefined;
         const producedQty = Number(data.quantityProduced || 0);
         const isComponentInjection = reportType === 'component_injection';
-        const rawMaterials = isComponentInjection ? await rawMaterialService.getAll() : [];
+        const rawMaterials = isComponentInjection ? await getRawMaterialsOnce() : [];
         const componentMaterial = isComponentInjection
           ? rawMaterials.find((row) => String(row.id) === String(data.productId))
           : null;
@@ -1785,7 +2006,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           if (baseUnits > 0) {
             const [materials, rawMaterials] = await Promise.all([
               productMaterialService.getByProduct(data.productId),
-              rawMaterialService.getAll(),
+              getRawMaterialsOnce(),
             ]);
             const rawById = new Map(
               rawMaterials
@@ -1826,7 +2047,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           routing.wasteReceiveWarehouseId &&
           componentScrapItems.length > 0
         ) {
-          const rawMaterials = await rawMaterialService.getAll();
+          const rawMaterials = await getRawMaterialsOnce();
           const rawById = new Map(
             rawMaterials
               .filter((rm) => Boolean(rm.id))
@@ -1964,25 +2185,52 @@ export const useAppStore = create<AppState>((set, get) => ({
         // keep save flow resilient even if telemetry fails
       }
 
-      try {
-        get()._logActivity('CREATE_REPORT', `إنشاء تقرير إنتاج جديد`, { reportId: id, ...data });
-      } catch {
-        // keep save flow resilient even if activity logging fails
-      }
-
       if (postSaveWarning) {
         console.warn('createReport post-save warning:', postSaveWarning);
       }
       set({ error: null });
+      if (trackedOperation) {
+        actionTrackerService.succeedOperation(trackedOperation, {
+          metadata: {
+            reportId: id,
+            warning: postSaveWarning ?? null,
+          },
+        });
+      }
 
       return id;
     } catch (error) {
+      if (trackedOperation) {
+        actionTrackerService.failOperation(trackedOperation, {
+          error,
+          metadata: {
+            lineId: data.lineId,
+            productId: data.productId,
+          },
+        });
+      }
       set({ error: getReportDuplicateMessage(error, 'تعذر حفظ التقرير') });
       return null;
     }
   },
 
   updateReport: async (id, data) => {
+    const { uid, userDisplayName, userEmail } = get();
+    const trackedOperation = actionTrackerService.startOperation({
+      module: 'production',
+      operation: 'production_report.update',
+      action: 'update',
+      entityType: 'production_report',
+      entityId: id,
+      actor: {
+        userId: uid ?? undefined,
+        userName: userDisplayName ?? userEmail ?? undefined,
+      },
+      metadata: {
+        reportId: id,
+      },
+      description: 'Update production report',
+    });
     try {
       const existingReport = await reportService.getById(id);
       const nextReportType = resolveReportType(data.reportType ?? existingReport?.reportType);
@@ -2021,7 +2269,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       get()._rebuildProducts();
       get()._rebuildLines();
 
-      const { uid, userDisplayName, userEmail } = get();
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
         entityType: 'production_report',
@@ -2037,13 +2284,40 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       });
 
-      get()._logActivity('UPDATE_REPORT', `تعديل تقرير إنتاج`, { reportId: id, changes: data });
+      actionTrackerService.succeedOperation(trackedOperation, {
+        metadata: {
+          reportId: id,
+          changedFields: Object.keys(data || {}),
+        },
+      });
     } catch (error) {
+      actionTrackerService.failOperation(trackedOperation, {
+        error,
+        metadata: {
+          reportId: id,
+        },
+      });
       set({ error: (error as Error).message });
     }
   },
 
   deleteReport: async (id) => {
+    const { uid, userDisplayName, userEmail } = get();
+    const trackedOperation = actionTrackerService.startOperation({
+      module: 'production',
+      operation: 'production_report.delete',
+      action: 'delete',
+      entityType: 'production_report',
+      entityId: id,
+      actor: {
+        userId: uid ?? undefined,
+        userName: userDisplayName ?? userEmail ?? undefined,
+      },
+      metadata: {
+        reportId: id,
+      },
+      description: 'Delete production report',
+    });
     try {
       const reportToDelete = await reportService.getById(id);
       if (!reportToDelete) {
@@ -2126,7 +2400,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       get()._rebuildProducts();
       get()._rebuildLines();
 
-      const { uid, userDisplayName, userEmail } = get();
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
         entityType: 'production_report',
@@ -2142,8 +2415,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       });
 
-      get()._logActivity('DELETE_REPORT', `حذف تقرير إنتاج`, { reportId: id });
+      actionTrackerService.succeedOperation(trackedOperation, {
+        metadata: {
+          reportId: id,
+          productId: reportToDelete.productId,
+        },
+      });
     } catch (error) {
+      actionTrackerService.failOperation(trackedOperation, {
+        error,
+        metadata: {
+          reportId: id,
+        },
+      });
       const message = (error as Error)?.message || 'تعذر حذف التقرير.';
       set({ error: message });
       throw error;
@@ -2227,6 +2511,231 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       return { processed, created, skipped, failed };
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  backfillUnlinkedReportsWorkOrders: async (startDate, endDate, options) => {
+    set({ error: null });
+    let processed = 0;
+    let linked = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    try {
+      const from = String(startDate || '').trim();
+      const to = String(endDate || '').trim();
+      if (!from || !to) {
+        throw new Error('يرجى تحديد فترة صحيحة قبل ربط التقارير القديمة.');
+      }
+
+      const reports = await reportService.getByDateRange(from, to);
+      const candidates = reports.filter((report) => !String(report.workOrderId || '').trim());
+      options?.onStart?.(candidates.length);
+      if (candidates.length === 0) {
+        options?.onProgress?.({ processed: 0, total: 0, linked: 0, skipped: 0, failed: 0 });
+        return { processed: 0, linked: 0, skipped: 0, failed: 0 };
+      }
+
+      const workOrders = await workOrderService.getAll();
+      const workOrderById = new Map(
+        workOrders
+          .filter((wo) => Boolean(wo.id))
+          .map((wo) => [String(wo.id), wo]),
+      );
+      const laborRate = Number(get().laborSettings?.hourlyRate ?? 0);
+
+      for (const report of candidates) {
+        if (!report.id) continue;
+        processed += 1;
+        try {
+          const target = pickBestAutoLinkedWorkOrder(workOrders, {
+            lineId: report.lineId,
+            productId: report.productId,
+            supervisorId: report.employeeId,
+            reportType: resolveReportType(report.reportType),
+          });
+          if (!target?.id) {
+            skipped += 1;
+            continue;
+          }
+
+          await reportService.update(report.id, { workOrderId: target.id });
+
+          const qty = Number(report.quantityProduced || 0);
+          const workers = Number(report.workersCount || 0);
+          const hours = Number(report.workHours || 0);
+          const laborCost = laborRate * hours * workers;
+          if (qty > 0) {
+            await workOrderService.incrementProduced(target.id, qty, laborCost);
+          }
+
+          const cached = workOrderById.get(String(target.id));
+          const currentProduced = Number(cached?.producedQuantity ?? target.producedQuantity ?? 0);
+          const nextProduced = Math.max(0, currentProduced + qty);
+          const targetQty = Number(cached?.quantity ?? target.quantity ?? 0);
+          const previousStatus = cached?.status ?? target.status;
+          const nextStatus: WorkOrder['status'] =
+            nextProduced <= 0
+              ? 'pending'
+              : nextProduced >= targetQty
+                ? 'completed'
+                : 'in_progress';
+
+          if (nextStatus !== previousStatus || (nextStatus === 'completed' && !(cached?.completedAt ?? target.completedAt))) {
+            await workOrderService.update(target.id, {
+              status: nextStatus,
+              completedAt:
+                nextStatus === 'completed'
+                  ? (cached?.completedAt ?? target.completedAt ?? new Date().toISOString())
+                  : null,
+            });
+          }
+
+          if (cached) {
+            cached.producedQuantity = nextProduced;
+            cached.actualCost = Number(cached.actualCost || 0) + (qty > 0 ? laborCost : 0);
+            cached.status = nextStatus;
+            cached.completedAt =
+              nextStatus === 'completed'
+                ? (cached.completedAt ?? new Date().toISOString())
+                : null;
+          }
+          linked += 1;
+        } catch {
+          failed += 1;
+        }
+        options?.onProgress?.({
+          processed,
+          total: candidates.length,
+          linked,
+          skipped,
+          failed,
+        });
+      }
+
+      const today = getOperationalDateString(8);
+      const { start: monthStart, end: monthEnd } = getMonthDateRange();
+      const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
+        reportService.getByDateRange(today, today),
+        reportService.getByDateRange(monthStart, monthEnd),
+        workOrderService.getAll(),
+      ]);
+      set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders: latestWorkOrders });
+      get()._rebuildProducts();
+      get()._rebuildLines();
+
+      return { processed, linked, skipped, failed };
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  unlinkReportsWorkOrdersInRange: async (startDate, endDate, options) => {
+    set({ error: null });
+    let processed = 0;
+    let unlinked = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    try {
+      const from = String(startDate || '').trim();
+      const to = String(endDate || '').trim();
+      if (!from || !to) {
+        throw new Error('يرجى تحديد فترة صحيحة قبل فك الربط.');
+      }
+
+      const reports = await reportService.getByDateRange(from, to);
+      const candidates = reports.filter((report) => String(report.workOrderId || '').trim());
+      options?.onStart?.(candidates.length);
+      if (candidates.length === 0) {
+        options?.onProgress?.({ processed: 0, total: 0, unlinked: 0, skipped: 0, failed: 0 });
+        return { processed: 0, unlinked: 0, skipped: 0, failed: 0 };
+      }
+
+      const laborRate = Number(get().laborSettings?.hourlyRate ?? 0);
+
+      for (const report of candidates) {
+        if (!report.id) continue;
+        processed += 1;
+        try {
+          const reportWorkOrderId = String(report.workOrderId || '').trim();
+          if (!reportWorkOrderId) {
+            skipped += 1;
+            options?.onProgress?.({
+              processed,
+              total: candidates.length,
+              unlinked,
+              skipped,
+              failed,
+            });
+            continue;
+          }
+
+          const linkedWorkOrder = await workOrderService.getById(reportWorkOrderId);
+          if (linkedWorkOrder?.id) {
+            const removedProduced = Math.max(0, Number(report.quantityProduced) || 0);
+            const removedLaborCost = Math.max(
+              0,
+              laborRate * Number(report.workHours || 0) * Number(report.workersCount || 0),
+            );
+
+            const nextProduced = Math.max(
+              0,
+              Number(linkedWorkOrder.producedQuantity || 0) - removedProduced,
+            );
+            const nextActualCost = Math.max(
+              0,
+              Number(linkedWorkOrder.actualCost || 0) - removedLaborCost,
+            );
+            const nextStatus: WorkOrder['status'] =
+              nextProduced <= 0
+                ? 'pending'
+                : nextProduced >= Number(linkedWorkOrder.quantity || 0)
+                  ? 'completed'
+                  : 'in_progress';
+
+            await workOrderService.update(linkedWorkOrder.id, {
+              producedQuantity: nextProduced,
+              actualCost: nextActualCost,
+              status: nextStatus,
+              completedAt:
+                nextStatus === 'completed'
+                  ? (linkedWorkOrder.completedAt ?? new Date().toISOString())
+                  : null,
+            });
+          }
+
+          await reportService.update(report.id, { workOrderId: '' });
+          unlinked += 1;
+        } catch {
+          failed += 1;
+        }
+
+        options?.onProgress?.({
+          processed,
+          total: candidates.length,
+          unlinked,
+          skipped,
+          failed,
+        });
+      }
+
+      const today = getOperationalDateString(8);
+      const { start: monthStart, end: monthEnd } = getMonthDateRange();
+      const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
+        reportService.getByDateRange(today, today),
+        reportService.getByDateRange(monthStart, monthEnd),
+        workOrderService.getAll(),
+      ]);
+      set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders: latestWorkOrders });
+      get()._rebuildProducts();
+      get()._rebuildLines();
+
+      return { processed, unlinked, skipped, failed };
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
