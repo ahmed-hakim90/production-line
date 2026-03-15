@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, KPIBox } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
-import { FilterBar } from '../../../components/FilterBar';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useShallowStore } from '../../../store/useAppStore';
 import { getCurrentMonth, formatCost } from '../../../utils/costCalculations';
 import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
@@ -394,16 +394,13 @@ export const CostDataHealth: React.FC = () => {
         <KPIBox label="مشاكل متوسطة" value={mediumCount} icon="info" colorClass="bg-blue-500/10 text-blue-600" />
       </div>
 
-      <FilterBar
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: 'ابحث داخل عنوان المشكلة أو وصفها...',
-        }}
-        selects={[
+      <SmartFilterBar
+        searchPlaceholder="ابحث داخل عنوان المشكلة أو وصفها..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        quickFilters={[
           {
-            value: severityFilter,
-            onChange: setSeverityFilter,
+            key: 'severity',
             placeholder: 'كل المستويات',
             options: [
               { label: 'حرج', value: 'critical' },
@@ -411,9 +408,13 @@ export const CostDataHealth: React.FC = () => {
               { label: 'متوسط', value: 'medium' },
             ],
           },
+        ]}
+        quickFilterValues={{ severity: severityFilter || 'all' }}
+        onQuickFilterChange={(_, value) => setSeverityFilter(value === 'all' ? '' : value)}
+        advancedFilters={[
           {
-            value: typeFilter,
-            onChange: setTypeFilter,
+            key: 'type',
+            label: 'النوع',
             placeholder: 'كل الأنواع',
             options: [
               { label: 'حسابات', value: 'calc' },
@@ -422,25 +423,32 @@ export const CostDataHealth: React.FC = () => {
             ],
           },
         ]}
-        activeCount={activeFiltersCount}
-        onClear={() => {
-          setSearch('');
-          setSeverityFilter('');
-          setTypeFilter('');
+        advancedFilterValues={{ type: typeFilter || 'all' }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'type') setTypeFilter(value === 'all' ? '' : value);
         }}
+        onApply={() => void fetchMonthHealthData()}
+        applyLabel={loading ? 'جار التحميل...' : 'تحديث الفحص'}
         extra={(
-          <>
-            <div className="erp-filter-date">
-              <span className="erp-filter-label">الشهر</span>
-              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          <div className="inline-flex h-[34px] items-center gap-2">
+            <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
+              <span className="ml-2 text-xs text-slate-500">الشهر</span>
+              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
             </div>
-            <button className="erp-filter-apply" onClick={() => void fetchMonthHealthData()}>
-              <span className="material-icons-round" style={{ fontSize: 14 }}>
-                {loading ? 'refresh' : 'search'}
-              </span>
-              تحديث الفحص
-            </button>
-          </>
+            {activeFiltersCount > 0 && (
+              <button
+                type="button"
+                className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                onClick={() => {
+                  setSearch('');
+                  setSeverityFilter('');
+                  setTypeFilter('');
+                }}
+              >
+                مسح ({activeFiltersCount})
+              </button>
+            )}
+          </div>
         )}
       />
 

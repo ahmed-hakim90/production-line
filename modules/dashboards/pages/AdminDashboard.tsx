@@ -51,7 +51,7 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { Card, KPIBox, Badge } from '../components/UI';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
-import { FilterBar } from '@/src/components/erp/FilterBar';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
@@ -1392,35 +1392,36 @@ export const AdminDashboard: React.FC = () => {
       />
 
       {/* ── Period Filter ───────────────────────────────────────────────────── */}
-      <FilterBar
+      <SmartFilterBar
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
           label: PRESET_LABELS[key],
         }))}
         activePeriod={preset}
         onPeriodChange={(value) => setPreset(value as PeriodPreset)}
+        advancedFilters={[
+          { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+        ]}
+        advancedFilterValues={{
+          dateFrom: customStart || dateRange.start,
+          dateTo: customEnd || dateRange.end,
+        }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'dateFrom') {
+            setCustomStart(value);
+            setPreset('custom');
+          }
+          if (key === 'dateTo') {
+            setCustomEnd(value);
+            setPreset('custom');
+          }
+        }}
+        onApply={() => undefined}
+        applyLabel="عرض"
         extra={(
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ms-auto">
-            <div className="erp-filter-date">
-              <span className="erp-filter-label">من</span>
-              <input
-                type="date"
-                value={customStart || dateRange.start}
-                onChange={(e) => { setCustomStart(e.target.value); setPreset('custom'); }}
-              />
-            </div>
-            <div className="erp-filter-date">
-              <span className="erp-filter-label">إلى</span>
-              <input
-                type="date"
-                value={customEnd || dateRange.end}
-                onChange={(e) => { setCustomEnd(e.target.value); setPreset('custom'); }}
-              />
-            </div>
-            <span className="text-xs font-medium text-[var(--color-text-muted)]">{dateRange.start} ← {dateRange.end}</span>
-            <span className="text-xs font-medium text-[var(--color-text-muted)]">
-              {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
-            </span>
+          <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
+            {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
           </div>
         )}
       />
@@ -1564,47 +1565,35 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
                 <Badge variant="info">{productSummary.length} منتج</Badge>
               </div>
-              <div className="erp-filter-bar w-full">
-              <div className="relative flex-1 min-w-0 w-full md:w-auto md:min-w-[250px]">
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">
-                    {renderDashboardIcon('search', 'text-[var(--color-text-muted)]')}
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="بحث بالكود أو الاسم..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="erp-search-input--table pr-9 w-full md:min-w-[240px]"
-                  />
-                </div>
-               
-                <div className="relative flex-1 min-w-0 w-full md:w-auto md:min-w-[190px]">
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">
-                    {renderDashboardIcon('category', 'text-[var(--color-text-muted)]')}
-                  </span>
-                  <Select value={productCategoryFilter} onValueChange={setProductCategoryFilter}>
-                    <SelectTrigger className="erp-filter-select pr-9 w-full">
-                      <SelectValue placeholder="كل الفئات" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">كل الفئات</SelectItem>
-                      {productSummaryCategories.map((category) => (
-                        <SelectItem key={category} value={category}>{category}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {canExportFromPage && (
-                <button
-                  onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
-                  className="erp-filter-apply flex items-center justify-center gap-1.5 w-full md:w-auto md:mr-auto"
-                  title="تصدير Excel"
-                >
-                  {renderDashboardIcon('download', 'text-sm')}
-                  <span>Excel</span>
-                </button>
-                )}
-              </div>
+              <SmartFilterBar
+                searchPlaceholder="بحث بالكود أو الاسم..."
+                searchValue={productSearch}
+                onSearchChange={setProductSearch}
+                quickFilters={[
+                  {
+                    key: 'category',
+                    placeholder: 'كل الفئات',
+                    options: productSummaryCategories.map((category) => ({ value: category, label: category })),
+                    width: 'w-[200px]',
+                  },
+                ]}
+                quickFilterValues={{ category: productCategoryFilter || 'all' }}
+                onQuickFilterChange={(_, value) => setProductCategoryFilter(value)}
+                onApply={() => undefined}
+                applyLabel="عرض"
+                extra={canExportFromPage ? (
+                  <button
+                    type="button"
+                    onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
+                    className="inline-flex h-[34px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50"
+                    title="تصدير Excel"
+                  >
+                    {renderDashboardIcon('download', 'text-sm')}
+                    <span>Excel</span>
+                  </button>
+                ) : undefined}
+                className="mb-0"
+              />
             </div>
             <div className="md:hidden space-y-2.5">
               {filteredProductSummary.length === 0 ? (

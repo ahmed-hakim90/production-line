@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
 import type { FirestoreEmployee } from '@/types';
 
@@ -72,20 +73,22 @@ export const AttendanceDailyView: React.FC = () => {
         <div className="erp-kpi-card"><div className="erp-kpi-label">غياب</div><div className="erp-kpi-value">{stats.absent}</div></div>
       </div>
 
-      <div className="erp-filter-bar">
-        <div className="erp-filter-date">
-          <span className="erp-filter-label">من</span>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </div>
-        <div className="erp-filter-date">
-          <span className="erp-filter-label">إلى</span>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </div>
-        <button className="erp-filter-apply" onClick={() => void load()}>
-          <span className="material-icons-round" style={{ fontSize: 14 }}>refresh</span>
-          تحديث
-        </button>
-      </div>
+      <SmartFilterBar
+        advancedFilters={[
+          { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+        ]}
+        advancedFilterValues={{
+          dateFrom: startDate,
+          dateTo: endDate,
+        }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'dateFrom') setStartDate(value);
+          if (key === 'dateTo') setEndDate(value);
+        }}
+        onApply={() => void load()}
+        applyLabel={loading ? 'جار التحميل...' : 'تحديث'}
+      />
 
       <div className="card overflow-x-auto">
         <table className="w-full text-right">

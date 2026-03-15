@@ -7,7 +7,7 @@ import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
-import { FilterBar } from '@/src/components/erp/FilterBar';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
@@ -463,10 +463,12 @@ export const EmployeeDashboard: React.FC = () => {
         subtitle={`متابعة الأداء التشغيلي — ${periodLabel}`}
       />
 
-      <FilterBar
+      <SmartFilterBar
         periods={PERIOD_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
         activePeriod={period}
         onPeriodChange={(value) => setPeriod(value as Period)}
+        onApply={() => undefined}
+        applyLabel="عرض"
       />
 
       {/* ── ROW 2: Quick Actions ── */}

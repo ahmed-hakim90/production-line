@@ -77,114 +77,108 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onClear,
   extra,
 }) => {
-  const hasSep = (dateRange || selects?.some((s) => !s.hidden)) && (search || dateSegment);
   const visibleSelects = selects?.filter((s) => !s.hidden) ?? [];
 
   return (
-    <div className="erp-filter-bar" style={{ flexWrap: 'wrap' }}>
-      {/* Quick text search */}
-      {search && (
-        <div className="erp-search-input erp-search-input--table">
-          <Search className="text-[var(--color-text-muted)]" style={{ width: 15, height: 15, flexShrink: 0 }} />
-          <Input
-            value={search.value}
-            onChange={(e) => search.onChange(e.target.value)}
-            placeholder={search.placeholder ?? 'بحث...'}
-            className="!border-0 !bg-transparent !shadow-none !ring-0 focus-visible:!ring-0"
-          />
-          {search.value && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => search.onChange('')}
-              className="h-5 w-5 p-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            >
-              <X style={{ width: 14, height: 14 }} />
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Date segmented control */}
-      {dateSegment && (
-        <div className="erp-date-seg">
-          {dateSegment.options.map((opt) => (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              key={opt.value}
-              className={`erp-date-seg-btn${dateSegment.value === opt.value ? ' active' : ''}`}
-              onClick={() => dateSegment.onChange(opt.value)}
-            >
-              {opt.label}
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {/* Date range */}
-      {dateRange && (
-        <>
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">من</span>
-            <input type="date" value={dateRange.start} onChange={(e) => dateRange.onStartChange(e.target.value)} />
+    <div className="erp-filter-bar">
+      <div className="flex flex-wrap items-center gap-2 w-full">
+        {search && (
+          <div className="erp-search-input erp-search-input--table">
+            <Search className="text-[var(--color-text-muted)]" style={{ width: 15, height: 15, flexShrink: 0 }} />
+            <Input
+              value={search.value}
+              onChange={(e) => search.onChange(e.target.value)}
+              placeholder={search.placeholder ?? 'بحث...'}
+              className="!border-0 !bg-transparent !shadow-none !ring-0 focus-visible:!ring-0"
+            />
+            {search.value && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => search.onChange('')}
+                className="h-5 w-5 p-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              >
+                <X style={{ width: 14, height: 14 }} />
+              </Button>
+            )}
           </div>
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">إلى</span>
-            <input type="date" value={dateRange.end} onChange={(e) => dateRange.onEndChange(e.target.value)} />
-          </div>
-          {dateRange.onApply && (
-            <Button type="button" className="erp-filter-apply" onClick={dateRange.onApply}>
-              {dateRange.loading
-                ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />
-                : <Search style={{ width: 14, height: 14 }} />
-              }
-              عرض
-            </Button>
-          )}
-        </>
-      )}
+        )}
 
-      {/* Separator */}
-      {hasSep && visibleSelects.length > 0 && (
-        <div className="erp-filter-sep" />
-      )}
-
-      {/* Dropdown selects */}
-      {visibleSelects.map((sel, i) => (
-        <Select
-          key={i}
-          value={sel.value || '__all__'}
-          onValueChange={(value) => sel.onChange(value === '__all__' ? '' : value)}
-        >
-          <SelectTrigger
-            className={`erp-filter-select${sel.value ? ' active' : ''}`}
-            style={{ minWidth: sel.minWidth ?? 130 }}
+        {visibleSelects.map((sel, i) => (
+          <Select
+            key={i}
+            value={sel.value || '__all__'}
+            onValueChange={(value) => sel.onChange(value === '__all__' ? '' : value)}
           >
-            <SelectValue placeholder={sel.placeholder ?? 'اختر...'} />
-          </SelectTrigger>
-          <SelectContent>
-            {sel.placeholder && <SelectItem value="__all__">{sel.placeholder}</SelectItem>}
-            {sel.options.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ))}
+            <SelectTrigger
+              className={`erp-filter-select${sel.value ? ' active' : ''}`}
+              style={{ minWidth: sel.minWidth ?? 130 }}
+            >
+              <SelectValue placeholder={sel.placeholder ?? 'اختر...'} />
+            </SelectTrigger>
+            <SelectContent>
+              {sel.placeholder && <SelectItem value="__all__">{sel.placeholder}</SelectItem>}
+              {sel.options.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ))}
+      </div>
 
-      {/* Extra content */}
-      {extra}
+      {(dateSegment || dateRange || extra || (activeCount > 0 && onClear)) && (
+        <div className="flex flex-wrap items-center gap-2 w-full">
+          {dateSegment && (
+            <div className="erp-date-seg">
+              {dateSegment.options.map((opt) => (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  key={opt.value}
+                  className={`erp-date-seg-btn${dateSegment.value === opt.value ? ' active' : ''}`}
+                  onClick={() => dateSegment.onChange(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          )}
 
-      {/* Clear filters */}
-      {activeCount > 0 && onClear && (
-        <button className="erp-filter-clear" onClick={onClear} type="button">
-          <X style={{ width: 13, height: 13 }} />
-          مسح ({activeCount})
-        </button>
+          {dateRange && (
+            <>
+              <div className="erp-filter-date">
+                <span className="erp-filter-label">من</span>
+                <input type="date" value={dateRange.start} onChange={(e) => dateRange.onStartChange(e.target.value)} />
+              </div>
+              <div className="erp-filter-date">
+                <span className="erp-filter-label">إلى</span>
+                <input type="date" value={dateRange.end} onChange={(e) => dateRange.onEndChange(e.target.value)} />
+              </div>
+              {dateRange.onApply && (
+                <Button type="button" className="erp-filter-apply" onClick={dateRange.onApply}>
+                  {dateRange.loading
+                    ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />
+                    : <Search style={{ width: 14, height: 14 }} />
+                  }
+                  عرض
+                </Button>
+              )}
+            </>
+          )}
+
+          {extra}
+
+          {activeCount > 0 && onClear && (
+            <button className="erp-filter-clear" onClick={onClear} type="button">
+              <X style={{ width: 13, height: 13 }} />
+              مسح ({activeCount})
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

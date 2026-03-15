@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
 import { PageHeader } from '@/components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { employeeService } from '../employeeService';
 import { getPayrollMonth, getPayrollRecords } from '../payroll';
 import type { FirestorePayrollMonth, FirestorePayrollRecord } from '../payroll/types';
@@ -113,37 +114,32 @@ export const EmployeeFinancialOverview: React.FC = () => {
         }}
       />
 
-      <div className="erp-filter-bar">
-        <div className="erp-search-input">
-          <span className="material-icons-round">search</span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث باسم الموظف..."
-          />
-        </div>
-        <input
-          type="month"
-          className="erp-filter-select"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-        />
-        <select
-          className="erp-filter-select"
-          value={departmentFilter}
-          onChange={(e) => setDepartmentFilter(e.target.value)}
-        >
-          <option value="">كل الأقسام</option>
-          {departmentOptions.map((deptId) => (
-            <option key={deptId} value={deptId}>
-              {deptNameById[deptId] || deptId}
-            </option>
-          ))}
-        </select>
-        <button className="erp-filter-apply" onClick={loadData} disabled={loading}>
-          تطبيق
-        </button>
-      </div>
+      <SmartFilterBar
+        searchPlaceholder="بحث باسم الموظف..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        quickFilters={[
+          {
+            key: 'department',
+            placeholder: 'كل الأقسام',
+            options: departmentOptions.map((deptId) => ({
+              value: deptId,
+              label: deptNameById[deptId] || deptId,
+            })),
+            width: 'w-[180px]',
+          },
+        ]}
+        quickFilterValues={{ department: departmentFilter || 'all' }}
+        onQuickFilterChange={(_, value) => setDepartmentFilter(value === 'all' ? '' : value)}
+        onApply={loadData}
+        applyLabel={loading ? 'جار التحميل...' : 'تطبيق'}
+        extra={(
+          <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
+            <span className="ml-2 text-xs text-slate-500">الشهر</span>
+            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
+          </div>
+        )}
+      />
 
       {error && (
         <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 text-rose-700 text-sm font-bold">

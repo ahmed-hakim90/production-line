@@ -1712,10 +1712,11 @@ table tbody tr[data-selected="true"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-card);
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #fff;
   min-width: 0;
 }
 
@@ -1738,16 +1739,18 @@ table tbody tr[data-selected="true"] {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  padding: 0 10px;
   border-radius: var(--border-radius-base);
   border: 1px solid var(--color-border);
   background: #f8f9fa;
   transition: all 150ms;
-  min-width: 180px;
+  min-width: 160px;
+  height: 34px;
 }
 .erp-search-input--table {
-  min-width: 220px;
-  max-width: 280px;
+  min-width: 160px;
+  max-width: none;
+  flex: 1 1 260px;
 }
 .erp-search-input:focus-within {
   background: #fff;
@@ -1787,7 +1790,8 @@ table tbody tr[data-selected="true"] {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 0 12px;
+  height: 34px;
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.4;
@@ -1813,7 +1817,7 @@ table tbody tr[data-selected="true"] {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 8px;
+  padding: 0 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-base);
   background: #f8f9fa;
@@ -1822,6 +1826,7 @@ table tbody tr[data-selected="true"] {
   color: var(--color-text-muted);
   transition: all 150ms;
   flex-shrink: 0;
+  height: 34px;
 }
 .erp-filter-date:focus-within {
   background: #fff;
@@ -1846,7 +1851,7 @@ table tbody tr[data-selected="true"] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
+  padding: 0 10px;
   border-radius: var(--border-radius-base);
   border: 1px solid var(--color-border);
   background: #f8f9fa;
@@ -1858,11 +1863,13 @@ table tbody tr[data-selected="true"] {
   appearance: none;
   -webkit-appearance: none;
   font-family: 'Cairo', sans-serif;
+  min-width: 110px;
+  height: 34px;
 }
 .erp-filter-select:hover { border-color: rgb(var(--color-primary) / 0.4); background: rgb(var(--color-primary) / 0.04); }
 .erp-filter-select:focus { outline: none; border-color: rgb(var(--color-primary)); box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.1); }
 .erp-filter-select.active { border-color: rgb(var(--color-primary) / 0.5); background: rgb(var(--color-primary) / 0.08); color: rgb(var(--color-primary)); }
-.erp-filter-select.w-full { width: 100% !important; padding: 6px 12px !important; }
+.erp-filter-select.w-full { width: auto !important; min-width: 110px !important; padding: 0 12px !important; }
 
 /* ─── Filter label (compact) ─────────────────────────────────────────────── */
 .erp-filter-label {
@@ -1878,7 +1885,7 @@ table tbody tr[data-selected="true"] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
+  padding: 0 10px;
   border-radius: var(--border-radius-base);
   border: 1px solid #fca5a5;
   background: #fef2f2;
@@ -1890,6 +1897,7 @@ table tbody tr[data-selected="true"] {
   transition: all 120ms;
   flex-shrink: 0;
   font-family: 'Cairo', sans-serif;
+  height: 34px;
 }
 .erp-filter-clear:hover { background: #fee2e2; border-color: #f87171; }
 
@@ -1925,7 +1933,7 @@ table tbody tr[data-selected="true"] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 0 12px;
   border-radius: var(--border-radius-base);
   border: 1px solid rgb(var(--color-primary));
   background: rgb(var(--color-primary) / 0.08);
@@ -1937,6 +1945,7 @@ table tbody tr[data-selected="true"] {
   transition: all 120ms;
   flex-shrink: 0;
   font-family: 'Cairo', sans-serif;
+  height: 34px;
 }
 .erp-filter-apply:hover { background: rgb(var(--color-primary) / 0.14); }
 .erp-filter-apply:active { background: rgb(var(--color-primary) / 0.2); }
@@ -1966,17 +1975,17 @@ table tbody tr[data-selected="true"] {
   }
   .erp-search-input,
   .erp-search-input--table {
-    min-width: 0 !important;
+    min-width: 160px !important;
     max-width: none !important;
-    width: 100%;
-    flex: 1 1 100%;
+    width: auto;
+    flex: 1 1 220px;
   }
   .erp-filter-date,
   .erp-filter-select,
   .erp-filter-clear,
   .erp-filter-apply {
-    flex: 1 1 160px;
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 110px;
   }
   .erp-page-title-block h1,
   .erp-page-title-block h2,
@@ -2002,11 +2011,13 @@ table tbody tr[data-selected="true"] {
   .erp-filter-select,
   .erp-filter-clear,
   .erp-filter-apply {
-    width: 100%;
-    flex: 1 1 100%;
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 110px;
   }
   .erp-date-seg {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
   }
   .erp-date-seg-btn {
     flex: 1 0 auto;

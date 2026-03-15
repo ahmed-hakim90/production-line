@@ -38,6 +38,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Button, LoadingSkeleton } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { reportService } from '@/modules/production/services/reportService';
@@ -1027,95 +1028,86 @@ export const ProductDetails: React.FC = () => {
         ]}
       />
 
-      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-4 sm:px-6 py-3">
-        <div className="erp-filter-bar">
-          <div className="erp-date-seg">
-            <button className={`erp-date-seg-btn${reportViewMode === 'all' ? ' active' : ''}`} onClick={handleShowAllReports}>
-              الكل
-            </button>
+      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 sm:px-6">
+        <SmartFilterBar
+          periods={[
+            { label: 'الكل', value: 'all' },
+            { label: 'اليوم', value: 'today' },
+            { label: 'أمس', value: 'yesterday' },
+            { label: 'أسبوعي', value: 'week' },
+            { label: 'شهري', value: 'month' },
+          ]}
+          activePeriod={
+            reportViewMode === 'all'
+              ? 'all'
+              : reportStartDate === reportEndDate && reportStartDate === toDateInputValue(new Date())
+                ? 'today'
+                : reportStartDate === reportEndDate && reportStartDate === toDateInputValue(new Date(new Date().setDate(new Date().getDate() - 1)))
+                  ? 'yesterday'
+                  : reportStartDate.endsWith('-01')
+                    ? 'month'
+                    : 'week'
+          }
+          onPeriodChange={(value) => {
+            if (value === 'all') handleShowAllReports();
+            if (value === 'today') handleShowTodayReports();
+            if (value === 'yesterday') handleShowYesterdayReports();
+            if (value === 'week') handleShowWeeklyReports();
+            if (value === 'month') handleShowMonthlyReports();
+          }}
+          quickFilters={[
+            {
+              key: 'line',
+              placeholder: 'كل الخطوط',
+              options: _rawLines.map((line) => ({ value: line.id || '', label: line.name })),
+            },
+            {
+              key: 'employee',
+              placeholder: 'كل المشرفين',
+              options: employees.filter((employee) => employee.level === 2).map((employee) => ({
+                value: employee.id || '',
+                label: employee.name,
+              })),
+              width: 'w-[170px]',
+            },
+          ]}
+          quickFilterValues={{
+            line: reportFilterLineId || 'all',
+            employee: reportFilterEmployeeId || 'all',
+          }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'line') setReportFilterLineId(value === 'all' ? '' : value);
+            if (key === 'employee') setReportFilterEmployeeId(value === 'all' ? '' : value);
+          }}
+          advancedFilters={[
+            { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+            { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          ]}
+          advancedFilterValues={{
+            dateFrom: reportStartDate,
+            dateTo: reportEndDate,
+          }}
+          onAdvancedFilterChange={(key, value) => {
+            setReportViewMode('range');
+            if (key === 'dateFrom') setReportStartDate(value);
+            if (key === 'dateTo') setReportEndDate(value);
+          }}
+          onApply={() => undefined}
+          applyLabel="عرض"
+          extra={activeReportFilterCount > 0 ? (
             <button
-              className={`erp-date-seg-btn${reportViewMode === 'range' && reportStartDate === reportEndDate && reportStartDate === toDateInputValue(new Date()) ? ' active' : ''}`}
-              onClick={handleShowTodayReports}
-            >
-              اليوم
-            </button>
-            <button
-              className={`erp-date-seg-btn${reportViewMode === 'range' && reportStartDate === reportEndDate && reportStartDate === toDateInputValue(new Date(new Date().setDate(new Date().getDate() - 1))) ? ' active' : ''}`}
-              onClick={handleShowYesterdayReports}
-            >
-              أمس
-            </button>
-            <button className="erp-date-seg-btn" onClick={handleShowWeeklyReports}>
-              أسبوعي
-            </button>
-            <button className="erp-date-seg-btn" onClick={handleShowMonthlyReports}>
-              شهري
-            </button>
-          </div>
-
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">من</span>
-            <input
-              type="date"
-              value={reportStartDate}
-              onChange={(e) => {
-                setReportViewMode('range');
-                setReportStartDate(e.target.value);
-              }}
-            />
-          </div>
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">إلى</span>
-            <input
-              type="date"
-              value={reportEndDate}
-              onChange={(e) => {
-                setReportViewMode('range');
-                setReportEndDate(e.target.value);
-              }}
-            />
-          </div>
-
-          <div className="erp-filter-sep" />
-
-          <Select value={reportFilterLineId || 'all'} onValueChange={(value) => setReportFilterLineId(value === 'all' ? '' : value)}>
-            <SelectTrigger className={`erp-filter-select${reportFilterLineId ? ' active' : ''}`}>
-              <SelectValue placeholder="كل الخطوط" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل الخطوط</SelectItem>
-              {_rawLines.map((l) => (
-                <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={reportFilterEmployeeId || 'all'} onValueChange={(value) => setReportFilterEmployeeId(value === 'all' ? '' : value)}>
-            <SelectTrigger className={`erp-filter-select${reportFilterEmployeeId ? ' active' : ''}`}>
-              <SelectValue placeholder="كل المشرفين" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل المشرفين</SelectItem>
-              {employees.filter((e) => e.level === 2).map((emp) => (
-                <SelectItem key={emp.id} value={emp.id!}>{emp.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {activeReportFilterCount > 0 && (
-            <button
-              className="erp-filter-clear"
+              type="button"
+              className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
               onClick={() => {
                 handleShowAllReports();
                 setReportFilterLineId('');
                 setReportFilterEmployeeId('');
               }}
             >
-              <ProductDetailsIcon name="close" style={{ fontSize: 13 }} />
               مسح ({activeReportFilterCount})
             </button>
-          )}
-        </div>
+          ) : undefined}
+        />
       </div>
 
       {/* ── Hidden Printable Report ── */}

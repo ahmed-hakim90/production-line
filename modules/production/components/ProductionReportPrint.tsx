@@ -462,112 +462,64 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-    const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const now = new Date().toLocaleString('ar-EG');
-    const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
-    const isThermal = ps.paperSize === 'thermal';
-    const spacing = isThermal ? PRINT_SPACING.thermal : PRINT_SPACING.regular;
     const progress = data.quantity > 0 ? Math.min((data.producedQuantity / data.quantity) * 100, 100) : 0;
+    const remaining = Math.max(0, Number(data.quantity || 0) - Number(data.producedQuantity || 0));
+    const showCosts = !!data.showCosts;
 
     return (
-      <div
+      <PrintReportLayout
         ref={ref}
-        className="print-root print-report"
-        dir="rtl"
-        style={{
-          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
-          width: paper.width,
-          minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
-          padding: spacing.pagePadding,
-          background: '#fff',
-          color: palette.text,
-          ['--print-text' as any]: palette.text,
-          ['--print-muted-text' as any]: palette.mutedText,
-          ['--print-border' as any]: palette.border,
-          ['--print-th-bg' as any]: palette.tableHeaderBg,
-          ['--print-th-text' as any]: palette.tableHeaderText,
-          ['--print-row-alt' as any]: palette.tableRowAltBg,
-          fontSize: isThermal ? '8pt' : '11pt',
-          lineHeight: 1.55,
-          boxSizing: 'border-box',
+        companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
+        reportType="أمر شغل"
+        printDate={now}
+        logoUrl={ps.logoUrl}
+        accentColor={ps.primaryColor}
+        footerText={ps.footerText}
+        paperSize={ps.paperSize}
+        orientation={ps.orientation}
+        meta={{
+          reportNumber: data.workOrderNumber || '—',
+          reportDate: data.targetDate || '—',
+          lineName: data.lineName || '—',
+          supervisorName: data.supervisorName || '—',
         }}
-      >
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: spacing.sectionGap, borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '5mm' }}>
-          {ps.logoUrl && (
-            <img src={ps.logoUrl} alt="logo" style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }} />
-          )}
-          <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
-            {ps.headerText}
-          </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
-            أمر شغل رقم: {data.workOrderNumber}
-          </p>
-        </div>
-
-        {/* Progress Bar */}
-        <div style={{ marginBottom: spacing.sectionGap }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8pt', color: palette.mutedText, marginBottom: '1mm' }}>
-            <span>نسبة الإنجاز</span>
-            <span style={{ fontWeight: 800, color: progress >= 100 ? '#059669' : ps.primaryColor }}>{progress.toFixed(0)}%</span>
-          </div>
-          <div style={{ width: '100%', height: isThermal ? '3mm' : '5mm', background: palette.tableHeaderBg, borderRadius: '3mm', overflow: 'hidden' }}>
-            <div style={{ width: `${Math.min(progress, 100)}%`, height: '100%', background: progress >= 100 ? '#059669' : ps.primaryColor, borderRadius: '3mm' }} />
-          </div>
-        </div>
-
-        {/* Details Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7.5pt' : '10.5pt', marginBottom: spacing.sectionGap, border: `1px solid ${palette.border}` }}>
-          <tbody>
-            <DetailRow label="رقم أمر الشغل"             value={data.workOrderNumber} />
-            <DetailRow label="المنتج"                     value={data.productName}     even />
-            <DetailRow label="خط الإنتاج"                value={data.lineName} />
-            <DetailRow label="المشرف"                     value={data.supervisorName}  even />
-            <DetailRow label="الكمية المطلوبة"            value={`${fmtNum(data.quantity, dp)} وحدة`}          highlight={ps.primaryColor} />
-            <DetailRow label="الكمية المنتجة"             value={`${fmtNum(data.producedQuantity, dp)} وحدة`}   highlight="#059669"         even />
-            <DetailRow label="نسبة الإنجاز"              value={`${progress.toFixed(dp)}%`}                    highlight={progress >= 100 ? '#059669' : progress >= 50 ? '#f59e0b' : '#f43f5e'} />
-            <DetailRow label="الحد الأقصى للعمالة"        value={`${data.maxWorkers} عامل`}                    even />
-            <DetailRow label="التاريخ المستهدف للإنجاز"   value={data.targetDate} />
-            <DetailRow label="الحالة"                     value={data.statusLabel}     even />
-            {data.showCosts && data.estimatedCost != null && (
-              <DetailRow label="التكلفة التقديرية"        value={`${fmtNum(data.estimatedCost, 2)} ج.م`}       highlight={ps.primaryColor} />
-            )}
-            {data.showCosts && data.actualCost != null && data.actualCost > 0 && (
-              <DetailRow label="التكلفة الفعلية"          value={`${fmtNum(data.actualCost, 2)} ج.م`}          highlight="#059669"         even />
-            )}
-            {data.notes && <DetailRow label="ملاحظات"     value={data.notes} />}
-          </tbody>
-        </table>
-
-        {/* Signature Section */}
-        {!isThermal && (
-          <div style={{ marginTop: spacing.signatureTopMargin, display: 'flex', justifyContent: 'space-between', gap: '14mm' }}>
-            <SignatureBlock label="مدير المصنع" />
-            <SignatureBlock label="المشرف" />
-            <SignatureBlock label="مراقب الجودة" />
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{ marginTop: isThermal ? '2.8mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '2.8mm', textAlign: 'center' }}>
-          {ps.showQRCode && (
-            <div style={{ marginBottom: '3mm' }}>
-              <QRCodeSVG
-                value={`work-order|${data.workOrderNumber}|${data.productName}|qty:${data.quantity}|produced:${data.producedQuantity}`}
-                size={isThermal ? 40 : 64}
-                level="L"
-              />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>
-                امسح رمز QR للرجوع إلى أمر الشغل
-              </p>
-            </div>
-          )}
-          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
-            {ps.footerText} — {now}
-          </p>
-        </div>
-      </div>
+        kpis={[
+          { label: 'الكمية المطلوبة', value: Number(data.quantity || 0), unit: 'وحدة', color: 'indigo' },
+          { label: 'الكمية المنتجة', value: Number(data.producedQuantity || 0), unit: 'وحدة', color: 'green' },
+          { label: 'المتبقي', value: remaining, unit: 'وحدة', color: remaining > 0 ? 'red' : 'default' },
+          { label: 'نسبة الإنجاز', value: progress.toFixed(dp), unit: '%', color: progress >= 100 ? 'green' : 'default' },
+        ]}
+        sections={[
+          {
+            title: 'المنتج وأمر الشغل',
+            rows: [
+              { label: 'المنتج', value: data.productName || '—', highlight: true },
+              { label: 'الحالة', value: data.statusLabel || data.status || '—' },
+            ],
+            progress: { label: 'تقدم أمر الشغل', value: Math.round(Math.max(0, Math.min(100, progress))) },
+          },
+          {
+            title: 'تفاصيل التنفيذ',
+            rows: [
+              { label: 'الحد الأقصى للعمالة', value: `${data.maxWorkers || 0} عامل` },
+              ...(showCosts && data.estimatedCost != null
+                ? [{ label: 'التكلفة التقديرية', value: `${fmtNum(data.estimatedCost, 2)} ج.م` }]
+                : []),
+              ...(showCosts && data.actualCost != null && data.actualCost > 0
+                ? [{ label: 'التكلفة الفعلية', value: `${fmtNum(data.actualCost, 2)} ج.م` }]
+                : []),
+              ...(data.notes ? [{ label: 'ملاحظات', value: data.notes }] : []),
+            ],
+          },
+        ]}
+        signatures={[
+          { title: 'مدير المصنع' },
+          { title: 'المشرف' },
+          { title: 'مراقب الجودة' },
+        ]}
+      />
     );
   },
 );

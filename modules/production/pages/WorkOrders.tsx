@@ -24,6 +24,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
   Select,
   SelectContent,
@@ -576,52 +577,36 @@ export const WorkOrders: React.FC = () => {
         )}
       </div>
 
-      {/* ── Filters ── */}
-      <div className="erp-filter-bar">
-        <div className="erp-search-input erp-search-input--table">
-          <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="بحث برقم أمر الشغل أو المنتج..."
-          />
-          {searchTerm && (
-            <button onClick={() => setSearchTerm('')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-              <span className="material-icons-round" style={{ fontSize: 14 }}>close</span>
-            </button>
-          )}
-        </div>
-        <div className="erp-filter-sep" />
-        <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as WorkOrderStatus | 'all')}>
-          <SelectTrigger className={`erp-filter-select${filterStatus !== 'all' ? ' active' : ''}`}>
-            <SelectValue placeholder="كل الحالات" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">كل الحالات</SelectItem>
-            {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-              <SelectItem key={k} value={k}>{v.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterLine || 'all'} onValueChange={(value) => setFilterLine(value === 'all' ? '' : value)}>
-          <SelectTrigger className={`erp-filter-select${filterLine ? ' active' : ''}`}>
-            <SelectValue placeholder="كل الخطوط" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">كل الخطوط</SelectItem>
-            {_rawLines.map((l) => (
-              <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {(filterStatus !== 'all' || filterLine) && (
-          <button className="erp-filter-clear" onClick={() => { setFilterStatus('all'); setFilterLine(''); }}>
-            <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
-            مسح
-          </button>
-        )}
-      </div>
+      <SmartFilterBar
+        searchPlaceholder="بحث برقم أمر الشغل أو المنتج..."
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        quickFilters={[
+          {
+            key: 'status',
+            placeholder: 'كل الحالات',
+            options: Object.entries(STATUS_CONFIG).map(([key, value]) => ({ value: key, label: value.label })),
+            width: 'w-[150px]',
+          },
+        ]}
+        quickFilterValues={{ status: filterStatus }}
+        onQuickFilterChange={(_, value) => setFilterStatus(value as WorkOrderStatus | 'all')}
+        advancedFilters={[
+          {
+            key: 'line',
+            label: 'خط الإنتاج',
+            placeholder: 'كل الخطوط',
+            options: _rawLines.map((line) => ({ value: line.id || '', label: line.name })),
+            width: 'w-[170px]',
+          },
+        ]}
+        advancedFilterValues={{ line: filterLine || 'all' }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'line') setFilterLine(value === 'all' ? '' : value);
+        }}
+        onApply={() => undefined}
+        applyLabel="عرض"
+      />
 
       {/* Table */}
       <Card>

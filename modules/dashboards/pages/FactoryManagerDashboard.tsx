@@ -5,7 +5,7 @@ import { usePermission } from '../../../utils/permissions';
 import { Card, Badge } from '../components/UI';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
-import { FilterBar } from '@/src/components/erp/FilterBar';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
@@ -682,31 +682,36 @@ export const FactoryManagerDashboard: React.FC = () => {
       <CustomDashboardWidgets dashboardKey="factoryDashboard" systemSettings={systemSettings} />
 
       {/* ── Period Filter ──────────────────────────────────────────────────────── */}
-      <FilterBar
+      <SmartFilterBar
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
           label: PRESET_LABELS[key],
         }))}
         activePeriod={preset}
         onPeriodChange={(value) => setPreset(value as PeriodPreset)}
+        advancedFilters={[
+          { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+        ]}
+        advancedFilterValues={{
+          dateFrom: customStart || dateRange.start,
+          dateTo: customEnd || dateRange.end,
+        }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'dateFrom') {
+            setCustomStart(value);
+            setPreset('custom');
+          }
+          if (key === 'dateTo') {
+            setCustomEnd(value);
+            setPreset('custom');
+          }
+        }}
+        onApply={() => undefined}
+        applyLabel="عرض"
         extra={(
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ms-auto">
-            {preset === 'custom' && (
-              <>
-                <div className="erp-filter-date">
-                  <span className="erp-filter-label">من</span>
-                  <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-                </div>
-                <div className="erp-filter-date">
-                  <span className="erp-filter-label">إلى</span>
-                  <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-                </div>
-              </>
-            )}
-            <span className="text-xs font-medium text-[var(--color-text-muted)]">{dateRange.start} ← {dateRange.end}</span>
-            <span className="text-xs font-medium text-[var(--color-text-muted)]">
-              {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
-            </span>
+          <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
+            {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
           </div>
         )}
       />

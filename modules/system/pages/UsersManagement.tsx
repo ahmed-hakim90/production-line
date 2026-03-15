@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Button, LoadingSkeleton } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
-import { FilterBar } from '../../../components/FilterBar';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '../../../src/components/erp/StatusBadge';
 import { useAppStore } from '../../../store/useAppStore';
 import { roleService } from '../services/roleService';
@@ -416,31 +416,37 @@ export const UsersManagement: React.FC = () => {
       </div>
 
       <Card title="قائمة المستخدمين">
-        <FilterBar
-          search={{
-            value: query,
-            onChange: setQuery,
-            placeholder: 'بحث بالبريد أو الاسم أو الموظف',
-          }}
-          activeCount={activeFilterCount}
-          onClear={() => {
-            setQuery('');
-            setStatusFilter('all');
-          }}
-          extra={(
-            <div className="erp-date-seg sm:ms-auto">
-              {statusTabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={`erp-date-seg-btn ${statusFilter === tab.key ? '!bg-indigo-600 !text-white !border-indigo-600 hover:!bg-indigo-700' : ''}`}
-                  onClick={() => setStatusFilter(tab.key)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          )}
+        <SmartFilterBar
+          searchPlaceholder="بحث بالبريد أو الاسم أو الموظف"
+          searchValue={query}
+          onSearchChange={setQuery}
+          quickFilters={[
+            {
+              key: 'status',
+              placeholder: 'كل الحالات',
+              options: statusTabs.filter((tab) => tab.key !== 'all').map((tab) => ({
+                value: tab.key,
+                label: tab.label,
+              })),
+              width: 'w-[180px]',
+            },
+          ]}
+          quickFilterValues={{ status: statusFilter }}
+          onQuickFilterChange={(_, value) => setStatusFilter(value as 'all' | 'active' | 'pending' | 'not_created')}
+          onApply={() => undefined}
+          applyLabel="عرض"
+          extra={activeFilterCount > 0 ? (
+            <button
+              type="button"
+              className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+              onClick={() => {
+                setQuery('');
+                setStatusFilter('all');
+              }}
+            >
+              مسح ({activeFilterCount})
+            </button>
+          ) : undefined}
         />
         {loading ? (
           <LoadingSkeleton rows={7} type="table" />

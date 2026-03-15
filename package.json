@@ -1,7 +1,7 @@
 {
   "name": "hakimo-erp-production-management",
   "private": true,
-  "version": "4.0.60",
+  "version": "4.0.61",
   "type": "module",
   "scripts": {
     "dev": "vite",

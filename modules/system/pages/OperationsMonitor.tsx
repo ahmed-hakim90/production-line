@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../../../components/PageHeader';
-import { FilterBar } from '../../../components/FilterBar';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { Card, LoadingSkeleton } from '../components/UI';
 import { auditService } from '../audit/services/audit.service';
 import type { AuditRecord } from '../audit/types/audit.types';
@@ -319,58 +319,84 @@ export const OperationsMonitorPage: React.FC = () => {
         </Card>
       </div>
 
-      <FilterBar
-        dateRange={{
-          start: fromDate,
-          end: toDate,
-          onStartChange: setFromDate,
-          onEndChange: setToDate,
-          onApply: () => void load(),
-          loading,
-        }}
-        selects={[
+      <SmartFilterBar
+        searchPlaceholder="ابحث باسم العملية..."
+        searchValue={operationFilter}
+        onSearchChange={setOperationFilter}
+        quickFilters={[
           {
-            value: moduleFilter,
-            onChange: setModuleFilter,
+            key: 'module',
             placeholder: 'الموديول: الكل',
             options: [
               { label: 'Production', value: 'production' },
               { label: 'Quality', value: 'quality' },
             ],
-            minWidth: 150,
+            width: 'w-[150px]',
           },
           {
-            value: statusFilter,
-            onChange: setStatusFilter,
+            key: 'status',
             placeholder: 'الحالة: الكل',
             options: [
               { label: 'started', value: 'started' },
               { label: 'succeeded', value: 'succeeded' },
               { label: 'failed', value: 'failed' },
             ],
-            minWidth: 150,
+            width: 'w-[150px]',
           },
+        ]}
+        quickFilterValues={{
+          module: moduleFilter || 'all',
+          status: statusFilter || 'all',
+        }}
+        onQuickFilterChange={(key, value) => {
+          if (key === 'module') setModuleFilter(value === 'all' ? '' : value);
+          if (key === 'status') setStatusFilter(value === 'all' ? '' : value);
+        }}
+        advancedFilters={[
           {
-            value: kindFilter,
-            onChange: setKindFilter,
+            key: 'kind',
+            label: 'نوع النشاط',
             placeholder: 'نوع النشاط: الكل',
             options: [
               { label: 'Business', value: 'business' },
               { label: 'Session', value: 'session' },
               { label: 'UI', value: 'ui' },
             ],
-            minWidth: 150,
+            width: 'w-[150px]',
           },
           {
-            value: operationFilter,
-            onChange: setOperationFilter,
+            key: 'operation',
+            label: 'العملية',
             placeholder: 'العملية: الكل',
             options: operations.map((operation) => ({ label: operation, value: operation })),
-            minWidth: 190,
+            width: 'w-[200px]',
           },
+          { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
         ]}
-        activeCount={activeFilterCount}
-        onClear={clearFilters}
+        advancedFilterValues={{
+          kind: kindFilter || 'all',
+          operation: operationFilter || 'all',
+          dateFrom: fromDate,
+          dateTo: toDate,
+        }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'kind') setKindFilter(value === 'all' ? '' : value);
+          if (key === 'operation') setOperationFilter(value === 'all' ? '' : value);
+          if (key === 'dateFrom') setFromDate(value);
+          if (key === 'dateTo') setToDate(value);
+        }}
+        onApply={() => void load()}
+        applyLabel={loading ? 'جار التحميل...' : 'عرض'}
+        extra={activeFilterCount > 0 ? (
+          <button
+            type="button"
+            className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+            onClick={clearFilters}
+          >
+            مسح ({activeFilterCount})
+          </button>
+        ) : undefined}
       />
 
       <Card title={`جلسات متأخرة (${delayed.length})`}>

@@ -3,7 +3,7 @@ import { Calendar, Eye, Pencil, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { Button } from '../../../components/UI';
-import { FilterBar } from '../../../components/FilterBar';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
   Select,
   SelectContent,
@@ -391,32 +391,40 @@ export const AssetsList: React.FC = () => {
       )}
 
       <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-        <FilterBar
-          search={{
-            value: search,
-            onChange: setSearch,
-            placeholder: 'بحث بالاسم أو الكود',
-          }}
-          selects={[
+        <SmartFilterBar
+          searchPlaceholder="بحث بالاسم أو الكود"
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
             {
-              value: category,
-              onChange: setCategory,
-              options: categories.map((item) => ({ label: item, value: item })),
-              placeholder: 'كل الفئات',
-              minWidth: 180,
-            },
-            {
-              value: status,
-              onChange: setStatus,
+              key: 'status',
+              placeholder: 'كل الحالات',
               options: [
                 { label: 'نشط', value: 'active' },
                 { label: 'غير نشط', value: 'inactive' },
                 { label: 'مستبعد', value: 'disposed' },
               ],
-              placeholder: 'كل الحالات',
-              minWidth: 160,
+              width: 'w-[150px]',
             },
           ]}
+          quickFilterValues={{ status: status || 'all' }}
+          onQuickFilterChange={(_, value) => setStatus(value === 'all' ? '' : value)}
+          advancedFilters={[
+            {
+              key: 'category',
+              label: 'الفئة',
+              placeholder: 'كل الفئات',
+              options: categories.map((item) => ({ label: item, value: item })),
+              width: 'w-[190px]',
+            },
+          ]}
+          advancedFilterValues={{ category: category || 'all' }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'category') setCategory(value === 'all' ? '' : value);
+          }}
+          onApply={() => undefined}
+          applyLabel="عرض"
+          className="mb-0 border-0"
         />
         <DataTable
           columns={columns}
