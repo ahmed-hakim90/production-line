@@ -244,11 +244,15 @@ function pickBestAutoLinkedWorkOrder(
     productId: string;
     supervisorId?: string;
     reportType: NonNullable<ProductionReport['reportType']>;
+    includeCompleted?: boolean;
   },
 ): WorkOrder | null {
+  const allowedStatuses = criteria.includeCompleted
+    ? new Set<WorkOrder['status']>(['pending', 'in_progress', 'completed'])
+    : new Set<WorkOrder['status']>(['pending', 'in_progress']);
   const filtered = workOrders.filter((wo) => (
     Boolean(wo?.id)
-    && isActiveWorkOrderStatus(wo.status)
+    && allowedStatuses.has(wo.status)
     && wo.productId === criteria.productId
     && resolveWorkOrderReportType(wo.workOrderType) === criteria.reportType
   ));
@@ -262,6 +266,7 @@ function pickBestAutoLinkedWorkOrder(
       if (supervisorId && wo.supervisorId === supervisorId) value += 4;
       if (wo.status === 'in_progress') value += 2;
       if (wo.status === 'pending') value += 1;
+      if (wo.status === 'completed') value += 0.5;
       return value;
     };
     const scoreDiff = score(b) - score(a);
@@ -2951,6 +2956,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             productId: report.productId,
             supervisorId: report.employeeId,
             reportType: resolveReportType(report.reportType),
+            includeCompleted: true,
           });
           if (!target?.id) {
             skipped += 1;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Download } from 'lucide-react';
 
@@ -7,12 +7,15 @@ import { toast } from '../../../../components/Toast';
 import { useGlobalModalManager } from '../../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../../components/modal-manager/modalKeys';
 import { db, isConfigured } from '../../../auth/services/firebase';
-import { useShallowStore } from '../../../../store/useAppStore';
+import { useAppStore, useShallowStore } from '../../../../store/useAppStore';
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { addDaysToDate, formatNumber } from '../../../../utils/calculations';
 import { estimateReportCost } from '../../../../utils/costCalculations';
 import { exportWorkOrders, type WorkOrderExportRow } from '../../../../utils/exportExcel';
+import { useManagedPrint } from '../../../../utils/printManager';
 import { reportService } from '../../services/reportService';
+import { WorkOrderPrint } from '../../components/ProductionReportPrint';
+import type { WorkOrderPrintData } from '../../components/ProductionReportPrint';
 import { WorkOrderDrawer } from './WorkOrderDrawer';
 import { WorkOrderFilters } from './WorkOrderFilters';
 import { WorkOrdersTable } from './WorkOrdersTable';
@@ -39,7 +42,15 @@ const normalizeDateRange = (dateRange: { from: string; to: string } | null) => {
 interface WorkOrderReportMeta {
   count: number;
   firstReportDate: string | null;
+  producedQuantity: number;
 }
+
+const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
+  pending: 'قيد الانتظار',
+  in_progress: 'قيد التنفيذ',
+  completed: 'مكتمل',
+  cancelled: 'ملغي',
+};
 
 const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
   const explicit = Number((order as any).estimatedDays ?? (order as any).estimatedDurationDays ?? 0);
@@ -59,6 +70,7 @@ export const WorkOrders: React.FC = () => {
     costCenterValues: s.costCenterValues,
     costAllocations: s.costAllocations,
   }));
+  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
 
   const { filters, setFilter, clearFilters } = useWorkOrderFilters();
   const { orders: liveOrders, loading, loadingMore, hasMore, error, loadMore } = useWorkOrdersRealtime({
@@ -75,6 +87,9 @@ export const WorkOrders: React.FC = () => {
 
   const [syncingStatus, setSyncingStatus] = useState<string | null>(null);
   const [reportMetaByOrderId, setReportMetaByOrderId] = useState<Record<string, WorkOrderReportMeta>>({});
+  const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
+  const woPrintRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
 
   useEffect(() => {
     setOrders(liveOrders);
@@ -133,10 +148,11 @@ export const WorkOrders: React.FC = () => {
               if (!minDate || date < minDate) return date;
               return minDate;
             }, null);
-            return [id, { count: reports.length, firstReportDate }] as const;
+            const producedQuantity = reports.reduce((sum, report) => sum + Number(report.quantityProduced || 0), 0);
+            return [id, { count: reports.length, firstReportDate, producedQuantity }] as const;
           } catch (error) {
             console.error('work order report meta error', error);
-            return [id, { count: -1, firstReportDate: null }] as const;
+            return [id, { count: -1, firstReportDate: null, producedQuantity: 0 }] as const;
           }
         }),
       );
@@ -183,7 +199,10 @@ export const WorkOrders: React.FC = () => {
           ? 'pending'
           : order.status;
       const quantity = Number(order.quantity || 0);
-      const produced = Number(order.producedQuantity || 0);
+      const producedFromOrder = Number(order.producedQuantity || 0);
+      const producedFromScans = Number(order.actualProducedFromScans || order.scanSummary?.completedUnits || 0);
+      const producedFromReports = Number(reportMeta?.producedQuantity || 0);
+      const produced = Math.max(producedFromOrder, producedFromScans, producedFromReports);
       const hasExecutionSignal = reportCount > 0 || produced > 0 || Boolean((order as any).startedAt);
       const diff = expectedEnd ? dayDiff(expectedEnd) : 0;
       const isCompleted = effectiveStatus === 'completed';
@@ -249,6 +268,7 @@ export const WorkOrders: React.FC = () => {
           ...order,
           supervisorName,
           status: effectiveStatus,
+          producedQuantity: produced,
           estimatedCost: resolvedEstimatedCost,
           startedAt: firstReportDate || undefined,
           expectedEnd,
@@ -366,45 +386,26 @@ export const WorkOrders: React.FC = () => {
   };
 
   const handlePrintOrder = (order: WorkOrder) => {
-    const product = productNameMap.get(order.productId || '') || '—';
-    const line = lineNameMap.get(order.lineId || '') || '—';
-    const supervisor = supervisorNameMap.get(order.supervisorId || '') || '—';
-    const popup = window.open('', '_blank', 'width=900,height=700');
-    if (!popup) {
-      toast.error('يرجى السماح بالنوافذ المنبثقة للطباعة.');
-      return;
-    }
-    popup.document.write(`
-      <html dir="rtl" lang="ar">
-        <head>
-          <title>طباعة أمر الشغل ${order.workOrderNumber}</title>
-          <style>
-            body { font-family: Tahoma, Arial, sans-serif; padding: 24px; color: #111827; }
-            h1 { font-size: 22px; margin: 0 0 12px; }
-            .muted { color: #6b7280; margin-bottom: 16px; }
-            .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-bottom: 10px; }
-            .label { color: #6b7280; font-size: 12px; margin-bottom: 4px; }
-            .value { font-weight: 700; font-size: 14px; }
-            .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-          </style>
-        </head>
-        <body>
-          <h1>${order.workOrderNumber}</h1>
-          <div class="muted">تقرير أمر الشغل</div>
-          <div class="grid">
-            <div class="card"><div class="label">المنتج</div><div class="value">${product}</div></div>
-            <div class="card"><div class="label">الخط</div><div class="value">${line}</div></div>
-            <div class="card"><div class="label">المشرف</div><div class="value">${supervisor}</div></div>
-            <div class="card"><div class="label">الحالة</div><div class="value">${order.status}</div></div>
-            <div class="card"><div class="label">المستهدف</div><div class="value">${formatNumber(order.quantity || 0)}</div></div>
-            <div class="card"><div class="label">المنجز</div><div class="value">${formatNumber(order.producedQuantity || 0)}</div></div>
-          </div>
-        </body>
-      </html>
-    `);
-    popup.document.close();
-    popup.focus();
-    popup.print();
+    setPrintData({
+      workOrderNumber: order.workOrderNumber,
+      productName: productNameMap.get(order.productId || '') || '—',
+      lineName: lineNameMap.get(order.lineId || '') || '—',
+      supervisorName: supervisorNameMap.get(order.supervisorId || '') || '—',
+      quantity: Number(order.quantity || 0),
+      producedQuantity: Number(order.producedQuantity || 0),
+      maxWorkers: Number(order.maxWorkers || 0),
+      targetDate: String(order.targetDate || '—'),
+      status: order.status,
+      statusLabel: WORK_ORDER_STATUS_LABELS[order.status] || order.status,
+      estimatedCost: Number(order.estimatedCost || 0),
+      actualCost: Number(order.actualCost || 0),
+      notes: String(order.notes || ''),
+      showCosts: true,
+    });
+    setTimeout(() => {
+      handlePrint();
+      setTimeout(() => setPrintData(null), 600);
+    }, 220);
   };
 
   const handleExport = () => {
@@ -508,6 +509,9 @@ export const WorkOrders: React.FC = () => {
         onCloseOrder={handleCloseOrder}
         onPrint={handlePrintOrder}
       />
+      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+        <WorkOrderPrint ref={woPrintRef} data={printData} printSettings={printTemplate} />
+      </div>
     </div>
   );
 };

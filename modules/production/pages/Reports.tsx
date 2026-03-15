@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import html2canvas from 'html2canvas';
 import {
   AlertCircle,
   AlertTriangle,
@@ -77,6 +78,7 @@ import type { StockItemBalance, Warehouse } from '../../inventory/types';
 import { categoryService } from '../../catalog/services/categoryService';
 import { catalogRawMaterialService } from '../../catalog/services/catalogRawMaterialService';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { ReportShareCard, type ReportShareCardProps } from '@/src/components/erp/ReportShareCard';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import {
   Select,
@@ -110,6 +112,12 @@ const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>
   (report.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const NOTE_PREVIEW_LENGTH = 10;
 type ReportGroupBy = 'none' | 'supervisor' | 'line' | 'product';
+const workOrderStatusLabel = (status?: WorkOrder['status']): string => {
+  if (status === 'completed') return 'مكتمل';
+  if (status === 'cancelled') return 'موقف';
+  if (status === 'in_progress' || status === 'pending') return 'قيد التنفيذ';
+  return 'قيد التنفيذ';
+};
 
 type FactoryGeneralRow = {
   key: string;
@@ -303,6 +311,8 @@ export const Reports: React.FC = () => {
   // Single-report print state
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
   const singlePrintRef = useRef<HTMLDivElement>(null);
+  const shareCardRef = useRef<HTMLDivElement>(null);
+  const [shareCardReport, setShareCardReport] = useState<ReportShareCardProps['report'] | null>(null);
   const [bulkSinglePrintRows, setBulkSinglePrintRows] = useState<ReportPrintRow[] | null>(null);
   const bulkSinglePrintRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -1024,6 +1034,48 @@ export const Reports: React.FC = () => {
     [getLineName, getProductName, getEmployeeName, woMap, canViewCosts, reportCosts]
   );
 
+  const buildShareCardReport = useCallback(
+    (report: ProductionReport): ReportShareCardProps['report'] => {
+      const wasteQty = deriveReportWaste(report);
+      const producedQty = Number(report.quantityProduced || 0);
+      const totalQty = producedQty + wasteQty;
+      const wastePercent = totalQty > 0 ? Number(((wasteQty / totalQty) * 100).toFixed(1)) : 0;
+      const linkedWo = report.workOrderId ? woMap.get(report.workOrderId) : undefined;
+      const targetQty = Number(linkedWo?.quantity || 0);
+      const deviation = targetQty > 0
+        ? Number((((producedQty - targetQty) / targetQty) * 100).toFixed(1))
+        : 0;
+      const workOrderProgress = linkedWo && targetQty > 0
+        ? Math.max(0, Math.min(100, Math.round((Number(linkedWo.producedQuantity || 0) / targetQty) * 100)))
+        : undefined;
+      const unitCost = report.id && canViewCosts ? Number(reportCosts.get(report.id) || 0) : 0;
+      return {
+        productName: getProductName(report.productId, report.reportType),
+        lineName: getLineName(report.lineId),
+        supervisorName: getEmployeeName(report.employeeId),
+        reportDate: report.date,
+        status: workOrderStatusLabel(linkedWo?.status),
+        producedQty,
+        wasteQty,
+        workers: Number(report.workersCount || 0),
+        unitCost,
+        workOrderNumber: linkedWo?.workOrderNumber,
+        workOrderProgress,
+        hours: Number(report.workHours || 0),
+        wastePercent,
+        deviation,
+        workerBreakdown: {
+          production: Number(report.workersProductionCount || 0),
+          packaging: Number(report.workersPackagingCount || 0),
+          quality: Number(report.workersQualityCount || 0),
+          maintenance: Number(report.workersMaintenanceCount || 0),
+          external: Number(report.workersExternalCount || 0),
+        },
+      };
+    },
+    [canViewCosts, getEmployeeName, getLineName, getProductName, reportCosts, woMap]
+  );
+
   const triggerSinglePrint = useCallback(
     async (report: ProductionReport) => {
       const row = buildReportRow(report);
@@ -1078,23 +1130,53 @@ export const Reports: React.FC = () => {
 
   const triggerSingleShare = useCallback(
     async (report: ProductionReport) => {
-      const row = buildReportRow(report);
-      setPrintReport(row);
-      await new Promise((r) => setTimeout(r, 300));
-      if (!singlePrintRef.current) return;
+      const shareReport = buildShareCardReport(report);
+      setShareCardReport(shareReport);
+      await new Promise((r) => setTimeout(r, 120));
+      if (!shareCardRef.current) return;
       setExporting(true);
       try {
-        const result = await shareToWhatsApp(
-          singlePrintRef.current,
-          `تقرير إنتاج - ${row.lineName} - ${row.date}`,
-        );
-        showShareFeedback(result);
+        const canvas = await html2canvas(shareCardRef.current, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#fff',
+          width: 420,
+          windowWidth: 420,
+        });
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob(resolve, 'image/png');
+        });
+        if (!blob) {
+          throw new Error('تعذر إنشاء صورة التقرير.');
+        }
+        const file = new File([blob], `تقرير-إنتاج-${shareReport.reportDate}.png`, { type: 'image/png' });
+        const canUseNativeShare = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+        if (canUseNativeShare) {
+          await navigator.share({
+            files: [file],
+            title: `تقرير إنتاج - ${shareReport.productName}`,
+            text: `تقرير إنتاج ${shareReport.reportDate}`,
+          });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `تقرير-${shareReport.reportDate}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setShareToast('تم تحميل صورة التقرير — أرفقها مباشرة في واتساب.');
+          setTimeout(() => setShareToast(null), 6000);
+        }
+      } catch (error: any) {
+        if (error?.name !== 'AbortError') {
+          toast.error(error?.message || 'تعذر مشاركة التقرير الآن. حاول مرة أخرى.');
+        }
       } finally {
         setExporting(false);
-        setTimeout(() => setPrintReport(null), 500);
+        setShareCardReport(null);
       }
     },
-    [buildReportRow, showShareFeedback]
+    [buildShareCardReport]
   );
 
   // ── CRUD handlers ──────────────────────────────────────────────────────────
@@ -2701,6 +2783,11 @@ export const Reports: React.FC = () => {
 
       {/* ══ Hidden print components (off-screen, only rendered for print) ══ */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+        {shareCardReport && (
+          <div style={{ width: '420px', background: '#fff' }}>
+            <ReportShareCard ref={shareCardRef} report={shareCardReport} companyName="مؤسسة المغربي" />
+          </div>
+        )}
         <ProductionReportPrint
           ref={bulkPrintRef}
           title={viewMode === 'today' ? `تقارير إنتاج اليوم — ${getOperationalDateString(8)}` : `تقارير الإنتاج — ${startDate} إلى ${endDate}`}

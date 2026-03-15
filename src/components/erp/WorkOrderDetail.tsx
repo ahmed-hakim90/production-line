@@ -74,6 +74,7 @@ export function WorkOrderDetail({
     if (order.targetQty <= 0) return 0
     return Math.max(0, Math.min(100, Math.round((order.producedQty / order.targetQty) * 100)))
   }, [order.producedQty, order.targetQty])
+  const progressValue = Number.isFinite(progress) ? progress : 0
 
   const remaining = Math.max(0, order.targetQty - order.producedQty)
   const progressTone =
@@ -152,12 +153,12 @@ export function WorkOrderDetail({
               </p>
             </div>
 
-            <div className="h-3 overflow-hidden rounded-full bg-[hsl(var(--muted-foreground)/0.24)]">
+            <div className="relative h-3 overflow-hidden rounded-full bg-[hsl(var(--muted-foreground)/0.24)]">
               <div
-                className="h-full rounded-full transition-all"
+                className="absolute inset-y-0 end-0 rounded-full transition-all"
                 style={{
-                  width: `${progress}%`,
-                  minWidth: progress > 0 ? 4 : 0,
+                  width: `${progressValue}%`,
+                  minWidth: progressValue > 0 ? 4 : 0,
                   background: progressTone,
                 }}
               />
