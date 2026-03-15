@@ -34,9 +34,9 @@
   --border-radius-xl:  12px;
 
   /* Elevation */
-  --shadow-card:     0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-dropdown: 0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06);
-  --shadow-modal:    0 16px 48px rgba(0,0,0,0.14);
+  --shadow-card: none;
+  --shadow-dropdown: none;
+  --shadow-modal: none;
 
   /* Chart palette */
   --chart-1: #1392ec;
@@ -1594,6 +1594,32 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
    ERPNext DROPDOWN / SELECT MENU
    ══════════════════════════════════════════════════════════ */
 
+/* Force non-transparent dropdown surfaces across all Radix menus */
+[data-radix-dropdown-menu-content],
+[data-radix-dropdown-menu-subcontent],
+[data-radix-select-content],
+[data-radix-popover-content],
+[role="menu"],
+[role="listbox"] {
+  opacity: 1 !important;
+  background-color: var(--color-card) !important;
+}
+
+/* Unified hover/highlight behavior for dropdown options */
+[data-radix-select-content] [role="option"]:hover,
+[data-radix-select-content] [data-highlighted],
+[data-radix-dropdown-menu-content] [role="menuitem"]:hover,
+[data-radix-dropdown-menu-content] [data-highlighted],
+[data-radix-dropdown-menu-subcontent] [role="menuitem"]:hover,
+[data-radix-dropdown-menu-subcontent] [data-highlighted],
+[data-radix-popover-content] [role="option"]:hover,
+[data-radix-popover-content] [role="menuitem"]:hover,
+[cmdk-list] [cmdk-item]:hover,
+[cmdk-list] [cmdk-item][data-selected="true"] {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
 /* Native select */
 select {
   cursor: pointer;
@@ -2434,4 +2460,26 @@ input[type="radio"] {
   body { background: white !important; }
   table { font-size: 11px; }
   table th, table td { padding: 5px 8px !important; }
+}
+
+/* Production/Inventory DS normalization wrapper */
+.erp-ds-clean .font-bold,
+.erp-ds-clean .font-semibold {
+  font-weight: 500 !important;
+}
+
+.erp-ds-clean [class*="shadow"] {
+  box-shadow: none !important;
+}
+
+.erp-ds-clean [class*="bg-gradient"] {
+  background-image: none !important;
+  background-color: #eef2ff !important;
+}
+
+.erp-ds-clean .erp-date-seg-btn.active,
+.erp-ds-clean .erp-date-seg-btn[aria-pressed="true"],
+.erp-ds-clean .erp-date-seg-btn[data-active="true"] {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
 }

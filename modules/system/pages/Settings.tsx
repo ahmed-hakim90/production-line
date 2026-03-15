@@ -46,6 +46,7 @@ import { QuickActionsSection } from '../components/settings/QuickActionsSection'
 import { DashboardWidgetsSection } from '../components/settings/DashboardWidgetsSection';
 import { useSettingsDraft } from '../hooks/useSettingsDraft';
 import { useBackupRestore } from '../hooks/useBackupRestore';
+import { PageHeader } from '../../../components/PageHeader';
 
 type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'backup';
 
@@ -122,15 +123,51 @@ interface ThemePreset {
   name: string;
   description: string;
   colors: { primary: string; bg: string; card: string };
+  swatches?: [string, string, string];
   partialTheme: Partial<ThemeSettings>;
 }
 
 const THEME_PRESETS: ThemePreset[] = [
-  /* ── ERPNext Espresso (مقترح كثيم افتراضي) ── */
+  /* ── Indigo Pro (default) ─────────────────────────────────────────────── */
+  {
+    id: 'indigo-pro',
+    name: 'Indigo Pro ⭐',
+    description: 'الثيم الافتراضي الرسمي',
+    colors: { primary: '#4F46E5', bg: '#F8FAFC', card: '#C7D2FE' },
+    swatches: ['#F1F5F9', '#C7D2FE', '#4F46E5'],
+    partialTheme: {
+      primaryColor: '#4F46E5',
+      secondaryColor: '#6366F1',
+      successColor: '#059669',
+      warningColor: '#D97706',
+      dangerColor: '#DC2626',
+      backgroundColor: '#F8FAFC',
+      cssVars: {
+        '--primary': '239 84% 60%',
+        '--primary-foreground': '0 0% 100%',
+        '--secondary': '240 5% 96%',
+        '--secondary-foreground': '240 6% 10%',
+        '--background': '210 40% 98%',
+        '--foreground': '222 84% 5%',
+        '--muted': '210 40% 96%',
+        '--muted-foreground': '215 16% 47%',
+        '--accent': '239 84% 97%',
+        '--accent-foreground': '239 84% 30%',
+        '--border': '214 32% 91%',
+        '--input': '214 32% 91%',
+        '--ring': '239 84% 60%',
+        '--card': '0 0% 100%',
+        '--card-foreground': '222 84% 5%',
+        '--radius': '0.5rem',
+      },
+      darkMode: 'light',
+      sidebarIconStyle: 'primary',
+    },
+  },
   {
     id: 'erpnext_espresso',
-    name: 'ERPNext Espresso ⭐',
-    description: 'أزرق نقي — النمط الرسمي',
+    name: 'ERPNext Espresso',
+    description: 'أزرق نقي — نمط بديل',
     colors: { primary: '#2490EF', bg: '#f0f2f5', card: '#ffffff' },
     partialTheme: { primaryColor: '#2490EF', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
   },
@@ -417,6 +454,51 @@ export const Settings: React.FC = () => {
     }
     setSaving(false);
   }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, updateSystemSettings]);
+  const handleSaveAll = useCallback(async () => {
+    setSaving(true);
+    setSaveMessage('');
+    try {
+      const updated: SystemSettings = {
+        ...systemSettings,
+        dashboardWidgets: localWidgets,
+        customDashboardWidgets: normalizeCustomWidgets(localCustomWidgets),
+        alertSettings: localAlerts,
+        kpiThresholds: localKPIs,
+        printTemplate: localPrint,
+        planSettings: localPlanSettings,
+        branding: localBranding,
+        theme: localTheme,
+        dashboardDisplay: localDashboardDisplay,
+        alertToggles: localAlertToggles,
+        quickActions: normalizeQuickActions(localQuickActions),
+        exportImport: localExportImport,
+      };
+      await updateSystemSettings(updated);
+      setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch {
+      setSaveMessage('فشل حفظ جميع الإعدادات');
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    systemSettings,
+    localWidgets,
+    localCustomWidgets,
+    localAlerts,
+    localKPIs,
+    localPrint,
+    localPlanSettings,
+    localBranding,
+    localTheme,
+    localDashboardDisplay,
+    localAlertToggles,
+    localQuickActions,
+    localExportImport,
+    normalizeCustomWidgets,
+    normalizeQuickActions,
+    updateSystemSettings,
+  ]);
 
   // ── Widget drag & drop ─────────────────────────────────────────────────────
 
@@ -702,36 +784,44 @@ export const Settings: React.FC = () => {
   }, [hasUnsavedChanges]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">الإعدادات</h2>
-        <p className="page-subtitle">إعدادات النظام وحالة الاتصال والصلاحيات.</p>
-      </div>
+    <div className="space-y-6 erp-ds-clean">
+      <PageHeader
+        title="الإعدادات"
+        subtitle="إعدادات النظام وحالة الاتصال والصلاحيات."
+        backAction={false}
+        primaryAction={{
+          label: 'حفظ جميع الإعدادات',
+          icon: 'save',
+          onClick: handleSaveAll,
+          disabled: saving || !hasUnsavedChanges,
+        }}
+        loading={saving}
+      />
 
       {hasUnsavedChanges && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700/40">
-          <span className="material-icons-round text-lg">pending_actions</span>
-          لديك تعديلات غير محفوظة. تأكد من الضغط على زر الحفظ في التبويب المناسب.
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/40">
+          <span className="material-icons-round text-base">info</span>
+          لديك تعديلات غير محفوظة. احفظ التغييرات قبل مغادرة الصفحة.
         </div>
       )}
 
       {/* ── Tab Bar ──────────────────────────────────────────────────────────── */}
-      <div className="flex gap-2 border-b border-[var(--color-border)] pb-2 overflow-x-auto">
+      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto">
         {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => handleTabChange(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] text-sm font-bold transition-all shrink-0 ${
+            className={`relative flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors shrink-0 border-b-2 ${
               activeTab === tab.key
-                ? 'bg-primary text-white shadow-primary/20'
-                : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary/30 hover:bg-[var(--color-bg)]'
+                ? 'text-indigo-700 border-indigo-600'
+                : 'text-[var(--color-text-muted)] border-transparent hover:text-indigo-600'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
             {tab.label}
             {getTabDirty(tab.key) && (
               <span className={`inline-block w-2 h-2 rounded-full ${
-                activeTab === tab.key ? 'bg-white' : 'bg-amber-500'
+                activeTab === tab.key ? 'bg-indigo-600' : 'bg-amber-500'
               }`} />
             )}
           </button>
@@ -740,7 +830,7 @@ export const Settings: React.FC = () => {
 
       {/* ── Save feedback ─────────────────────────────────────────────────── */}
       {saveMessage && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-medium ${
           saveMessage.includes('نجاح')
             ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
             : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
@@ -802,46 +892,46 @@ export const Settings: React.FC = () => {
           />
 
           {/* ── System Status (for all users) ─────────────────────────────── */}
-          <Card title="حالة النظام">
+          <Card title="حالة النظام" className="bg-white border-slate-200 rounded-xl shadow-none">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
+              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">cloud_done</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">اتصال Firebase</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">اتصال Firebase</p>
                 <Badge variant={isAuthenticated ? 'success' : 'danger'}>
                   {isAuthenticated ? 'متصل' : 'غير متصل'}
                 </Badge>
               </div>
-              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
+              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">inventory_2</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المنتجات</p>
-                <p className="text-2xl font-bold text-[var(--color-text)]">{products.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المنتجات</p>
+                <p className="text-2xl font-medium text-[var(--color-text)]">{products.length}</p>
               </div>
-              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
+              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">precision_manufacturing</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">خطوط الإنتاج</p>
-                <p className="text-2xl font-bold text-[var(--color-text)]">{productionLines.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">خطوط الإنتاج</p>
+                <p className="text-2xl font-medium text-[var(--color-text)]">{productionLines.length}</p>
               </div>
-              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-5 text-center border border-[var(--color-border)]">
+              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">groups</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المشرفين</p>
-                <p className="text-2xl font-bold text-[var(--color-text)]">{employees.length}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المشرفين</p>
+                <p className="text-2xl font-medium text-[var(--color-text)]">{employees.length}</p>
               </div>
             </div>
           </Card>
 
           {/* Current Role Info (for all users) */}
-          <Card title="الدور الحالي والصلاحيات">
+          <Card title="الدور الحالي والصلاحيات" className="bg-white border-slate-200 rounded-xl shadow-none">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                 <span className="material-icons-round text-primary text-2xl">shield</span>
               </div>
               <div>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الدور الحالي</p>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold ${roleColor}`}>
+                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">الدور الحالي</p>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${roleColor}`}>
                   {roleName}
                 </span>
               </div>
-              <div className="mr-auto text-xs text-[var(--color-text-muted)] font-bold">
+              <div className="mr-auto text-xs text-[var(--color-text-muted)] font-medium">
                 {enabledCount} / {ALL_PERMISSIONS.length} صلاحية مفعلة
               </div>
             </div>

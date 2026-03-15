@@ -1,0 +1,586 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kpiCard {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kpiCard span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kpiCard strong {
+  font-size: 18px;
+}
+
+.filterBar {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-card);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filterPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterPill {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filterPillActive {
+  background: rgba(58, 124, 255, 0.09);
+  border-color: rgba(58, 124, 255, 0.35);
+  color: #1e4ed9;
+}
+
+.filterCount {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.filterControls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(160px, 180px)) minmax(230px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.dateRangeWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dateLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.dateInput {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-base);
+  background: var(--color-card);
+  height: 34px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.clearBtn {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-base);
+  background: transparent;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.exportBtn {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-base);
+  background: var(--color-card);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.syncHint {
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.errorHint {
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tableWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.groupBlock {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+}
+
+.groupHeader {
+  background: rgba(15, 23, 42, 0.05);
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-card);
+}
+
+.table thead th {
+  text-align: right;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.tableRow td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.tableRow:hover {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+.cellStrong {
+  font-weight: 800;
+}
+
+.linkLike {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cellStack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cellPrimary {
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.cellSecondary {
+  color: var(--color-text-muted);
+}
+
+.monoCell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.progressCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progressBar {
+  flex: 1;
+  min-width: 70px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 180ms ease;
+}
+
+.progressPrimary {
+  background: var(--color-primary);
+}
+
+.progressWarning {
+  background: #d97706;
+}
+
+.progressSuccess {
+  background: #16a34a;
+}
+
+.progressLabel {
+  min-width: 34px;
+  text-align: left;
+  font-weight: 800;
+}
+
+.deadline {
+  font-weight: 700;
+}
+
+.deadline_normal {
+  color: var(--color-text);
+}
+
+.deadline_near {
+  color: #b45309;
+}
+
+.deadline_overdue {
+  color: #be123c;
+}
+
+.deviationBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.deviationUp {
+  color: #be123c;
+  background: rgba(190, 18, 60, 0.1);
+}
+
+.deviationDown {
+  color: #047857;
+  background: rgba(4, 120, 87, 0.1);
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.status_pending {
+  color: #1d4ed8;
+  background: rgba(29, 78, 216, 0.12);
+}
+
+.status_in_progress {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.12);
+}
+
+.status_completed {
+  color: #047857;
+  background: rgba(4, 120, 87, 0.12);
+}
+
+.status_cancelled {
+  color: #be123c;
+  background: rgba(190, 18, 60, 0.12);
+}
+
+.actionCell {
+  display: flex;
+  gap: 6px;
+}
+
+.actionBtn {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-base);
+  background: var(--color-card);
+  height: 28px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.actionBtn span:first-child {
+  font-size: 16px;
+}
+
+.tableFooter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px;
+}
+
+.loadSentinel {
+  width: 100%;
+  height: 1px;
+}
+
+.loadMoreBtn {
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  border-radius: var(--border-radius-base);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.endText {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.emptyState {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-muted);
+  background: var(--color-card);
+}
+
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 199;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-base);
+}
+
+.drawerBackdropOpen {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(420px, 94vw);
+  background: var(--color-card);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  transform: translateX(100%);
+  transition: transform var(--transition-base);
+  z-index: 200;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawerOpen {
+  transform: translateX(0);
+}
+
+.drawerHeader {
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.drawerTitleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawerTitleRow h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.backBtn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.drawerStatusWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusSelect {
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-base);
+  background: var(--color-card);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.drawerMeta {
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.drawerMeta p {
+  margin: 0;
+}
+
+.drawerProgress {
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px;
+}
+
+.drawerProgress p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.drawerProgressBar {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+}
+
+.drawerProgressFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%);
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.28);
+  border-radius: 999px;
+  transition: width 220ms ease;
+}
+
+.drawerTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawerTabs button {
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+  padding: 10px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.drawerTabActive {
+  background: rgba(58, 124, 255, 0.1) !important;
+  color: #1e4ed9;
+}
+
+.drawerBody {
+  padding: 12px;
+  flex: 1;
+}
+
+.drawerPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.drawerPanel p {
+  margin: 0;
+}
+
+.costDanger {
+  color: #be123c;
+  font-weight: 800;
+}
+
+.costGood {
+  color: #047857;
+  font-weight: 800;
+}
+
+.drawerFooter {
+  border-top: 1px solid var(--color-border);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.drawerActionBtn {
+  height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-base);
+  background: var(--color-card);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 1080px) {
+  .filterControls {
+    grid-template-columns: 1fr;
+  }
+
+  .dateRangeWrap {
+    flex-wrap: wrap;
+  }
+}

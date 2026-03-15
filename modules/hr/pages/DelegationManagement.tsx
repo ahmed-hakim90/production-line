@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -8,7 +8,7 @@ import {
   type FirestoreApprovalDelegation,
   type ApprovalRequestType,
 } from '../approval';
-import type { FirestoreEmployee } from '../types';
+import type { FirestoreEmployee } from '@/types';
 
 const REQUEST_TYPE_LABELS: Record<ApprovalRequestType, string> = {
   leave: 'إجازات',
@@ -29,7 +29,7 @@ function isDelegationActive(d: FirestoreApprovalDelegation): boolean {
 export const DelegationManagement: React.FC = () => {
   const { can } = usePermission();
   const currentEmployee = useAppStore((s) => s.currentEmployee);
-  const currentUser = useAppStore((s) => s.currentUser);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
 
   const [delegations, setDelegations] = useState<FirestoreApprovalDelegation[]>([]);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
@@ -96,7 +96,7 @@ export const DelegationManagement: React.FC = () => {
       const delegatee = employees.find((e: FirestoreEmployee) => e.id === toEmployeeId);
       await approvalDelegationService.create({
         fromEmployeeId: myId,
-        fromEmployeeName: currentEmployee?.name || currentUser?.displayName || '',
+        fromEmployeeName: currentEmployee?.name || userDisplayName || '',
         toEmployeeId,
         toEmployeeName: delegatee?.name || '',
         startDate,
@@ -119,7 +119,7 @@ export const DelegationManagement: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [toEmployeeId, startDate, endDate, requestTypes, myId, currentEmployee, currentUser, employees, loadData]);
+  }, [toEmployeeId, startDate, endDate, requestTypes, myId, currentEmployee, userDisplayName, employees, loadData]);
 
   const handleDeactivate = useCallback(async (id: string) => {
     if (!confirm('هل أنت متأكد من إلغاء هذا التفويض؟')) return;

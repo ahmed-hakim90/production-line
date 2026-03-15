@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowLeftRight, Clock3, Factory, type LucideIcon } from 'lucide-react';
 import { Card } from '../UI';
 import type { AlertToggleSettings } from '../../../../types';
 
@@ -6,6 +7,17 @@ type GeneralAlertsSectionProps = {
   isAdmin: boolean;
   localAlertToggles: AlertToggleSettings;
   setLocalAlertToggles: React.Dispatch<React.SetStateAction<AlertToggleSettings>>;
+};
+
+const ALERT_ICON_MAP: Record<string, LucideIcon> = {
+  schedule: Clock3,
+  production_quantity_limits: Factory,
+  compare_arrows: ArrowLeftRight,
+};
+
+const AlertIcon = ({ name }: { name: string }) => {
+  const Icon = ALERT_ICON_MAP[name] ?? Clock3;
+  return <Icon size={18} className="text-primary" />;
 };
 
 export const GeneralAlertsSection: React.FC<GeneralAlertsSectionProps> = ({
@@ -25,7 +37,7 @@ export const GeneralAlertsSection: React.FC<GeneralAlertsSectionProps> = ({
         ]).map((alert) => (
           <div key={alert.key} className="flex items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-primary">{alert.icon}</span>
+              <AlertIcon name={alert.icon} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">{alert.label}</p>

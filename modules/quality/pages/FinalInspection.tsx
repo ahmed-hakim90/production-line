@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ImagePlus } from 'lucide-react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -115,8 +116,10 @@ export const FinalInspection: React.FC = () => {
       const reason = reasonCatalog.find((r) => r.code === reasonCode);
       const attachments: FileAttachmentMeta[] = [];
       for (let i = 0; i < photoFiles.length; i += 1) {
+        const file = photoFiles[i];
+        if (!(file instanceof File)) continue;
         const uploaded = await storageService.uploadImage(
-          photoFiles[i],
+          file,
           'qc_reports',
           selectedWorkOrder.id!,
           {
@@ -363,7 +366,7 @@ export const FinalInspection: React.FC = () => {
                 multiple
                 disabled={!canInspect || busy}
                 onChange={(e) => {
-                  const files = Array.from(e.target.files ?? []).slice(0, 3);
+                  const files = Array.from<File>(e.target.files ?? []).slice(0, 3);
                   const urls = files.map((f) => URL.createObjectURL(f));
                   setPhotoFiles(files);
                   setPhotoPreviews(urls);
@@ -374,7 +377,7 @@ export const FinalInspection: React.FC = () => {
               <div className="w-full border-2 border-dashed border-[var(--color-border)] rounded-[var(--border-radius-xl)] p-4 sm:p-5 bg-[#f8f9fa]/70/40 hover:border-primary/60 hover:bg-primary/5 transition-all">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-[var(--border-radius-lg)] bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    <span className="material-icons-round text-xl">add_photo_alternate</span>
+                    <ImagePlus size={20} />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-[var(--color-text)] truncate">

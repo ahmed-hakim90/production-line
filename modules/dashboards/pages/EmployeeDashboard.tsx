@@ -1,10 +1,16 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Badge, LoadingSkeleton } from '../components/UI';
+import { Card } from '../components/UI';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../production/components/ProductionReportPrint';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
+import { PageHeader } from '@/src/components/erp/PageHeader';
+import { KPICard } from '@/src/components/erp/KPICard';
+import { FilterBar } from '@/src/components/erp/FilterBar';
+import { DataTable, type Column } from '@/src/components/erp/DataTable';
+import { StatusBadge } from '@/src/components/erp/StatusBadge';
+import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
 import {
   formatNumber,
   formatCurrency,
@@ -69,25 +75,6 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
-const DashboardPeriodFilter: React.FC<{
-  period: Period;
-  onChange: (p: Period) => void;
-}> = ({ period, onChange }) => (
-  <div className="erp-date-seg w-full sm:w-auto">
-    {PERIOD_OPTIONS.map((opt) => (
-      <button
-        key={opt.value}
-        onClick={() => onChange(opt.value)}
-        className={`erp-date-seg-btn${
-          period === opt.value
-            ? ' active' : ''}`}
-      >
-        {opt.label}
-      </button>
-    ))}
-  </div>
-);
-
 // ─── Employee Dashboard ────────────────────────────────────────────────────
 
 export const EmployeeDashboard: React.FC = () => {
@@ -135,6 +122,7 @@ export const EmployeeDashboard: React.FC = () => {
   const [period, setPeriod] = useState<Period>('daily');
   const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
   const [periodLoading, setPeriodLoading] = useState(false);
+  const [pendingEntriesLoading, setPendingEntriesLoading] = useState(false);
   const [pendingProductionEntries, setPendingProductionEntries] = useState<InventoryTransferRequest[]>([]);
   const [workOrderCardMetricsData, setWorkOrderCardMetricsData] = useState<WorkOrderCardMetricsData>(
     () => emptyWorkOrderCardMetricsData(),
@@ -212,11 +200,6 @@ export const EmployeeDashboard: React.FC = () => {
       return;
     }
 
-    if (period === 'monthly') {
-      setPeriodReports(monthlyReports.filter((r) => r.employeeId === employee.id));
-      return;
-    }
-
     let cancelled = false;
     setPeriodLoading(true);
     const { start, end } = getDateRange(period);
@@ -226,7 +209,13 @@ export const EmployeeDashboard: React.FC = () => {
         setPeriodLoading(false);
       }
     }).catch(() => {
-      if (!cancelled) setPeriodLoading(false);
+      if (!cancelled) {
+        // Fallback to cached monthly snapshot to avoid empty UI on transient fetch errors.
+        if (period === 'monthly') {
+          setPeriodReports(monthlyReports.filter((r) => r.employeeId === employee.id));
+        }
+        setPeriodLoading(false);
+      }
     });
     return () => { cancelled = true; };
   }, [period, employee?.id, todayReports, monthlyReports]);
@@ -237,12 +226,17 @@ export const EmployeeDashboard: React.FC = () => {
       setPendingProductionEntries([]);
       return;
     }
+    setPendingEntriesLoading(true);
     transferApprovalService.getByStatus('pending').then((rows) => {
       if (cancelled) return;
       const pending = rows.filter((row) => (row.requestType || 'transfer') === 'production_entry');
       setPendingProductionEntries(pending);
+      setPendingEntriesLoading(false);
     }).catch(() => {
-      if (!cancelled) setPendingProductionEntries([]);
+      if (!cancelled) {
+        setPendingProductionEntries([]);
+        setPendingEntriesLoading(false);
+      }
     });
     return () => { cancelled = true; };
   }, [can, transferApprovalPermission, todayReports, monthlyReports]);
@@ -407,13 +401,48 @@ export const EmployeeDashboard: React.FC = () => {
     return result;
   }, [activePlan, kpis]);
 
+  const pendingEntriesColumns: Column<InventoryTransferRequest>[] = useMemo(
+    () => [
+      {
+        key: 'referenceNo',
+        header: 'المرجع',
+        cell: (row) => <span className="font-medium text-[#0F172A]">{row.referenceNo || '—'}</span>,
+        sortable: true,
+      },
+      {
+        key: 'topItem',
+        header: 'الصنف',
+        cell: (row) => row.lines[0]?.itemName || '—',
+      },
+      {
+        key: 'qty',
+        header: 'الكمية',
+        align: 'center',
+        cell: (row) => formatNumber(row.lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)),
+        sortable: true,
+      },
+      {
+        key: 'lines',
+        header: 'عدد الأصناف',
+        align: 'center',
+        cell: (row) => row.lines.length,
+        sortable: true,
+      },
+    ],
+    []
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="erp-dashboard-theme space-y-8">
-        {/* <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">لوحة الموظف</h2> */}
-        <LoadingSkeleton type="card" rows={6} />
+        <PageHeader title="لوحة الموظف" subtitle="جاري تحميل البيانات..." />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <KPICard key={`kpi-loading-${idx}`} label="" value="" loading />
+          ))}
+        </div>
       </div>
     );
   }
@@ -429,59 +458,58 @@ export const EmployeeDashboard: React.FC = () => {
 
   return (
     <div className="erp-dashboard-theme space-y-5">
+      <PageHeader
+        title={employee?.name ? `مرحباً، ${employee.name}` : 'لوحة الموظف'}
+        subtitle={`متابعة الأداء التشغيلي — ${periodLabel}`}
+      />
 
-      {/* ── ROW 1: Header — greeting + period filter ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-[var(--color-text)]">
-            {employee?.name ? `مرحباً، ${employee.name} 👋` : 'لوحة الموظف'}
-          </h2>
-          <p className="text-xs text-[var(--color-text-muted)] font-medium mt-0.5">متابعة الأداء التشغيلي — {periodLabel}</p>
-        </div>
-        <DashboardPeriodFilter period={period} onChange={setPeriod} />
-      </div>
+      <FilterBar
+        periods={PERIOD_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+        activePeriod={period}
+        onPeriodChange={(value) => setPeriod(value as Period)}
+      />
 
       {/* ── ROW 2: Quick Actions ── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0 sm:flex-wrap">
         {can('quickAction.view') && (
-          <button
+          <PrimaryButton
             type="button"
             onClick={() => navigate('/quick-action')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-primary text-white hover:bg-primary/90 shadow-primary/20 transition-all shrink-0"
+            className="shrink-0"
           >
             <span className="material-icons-round text-base">bolt</span>
             الإدخال السريع
-          </button>
+          </PrimaryButton>
         )}
         {can('inventory.transactions.create') && (
-          <button
+          <GhostButton
             type="button"
             onClick={() => navigate('/inventory/movements')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20 transition-all shrink-0"
+            className="shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
           >
             <span className="material-icons-round text-base">warehouse</span>
             حركة المخزون
-          </button>
+          </GhostButton>
         )}
         {can('lineWorkers.view') && (
-          <button
+          <GhostButton
             type="button"
             onClick={() => navigate('/line-workers')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20 transition-all shrink-0"
+            className="shrink-0 border-[#C7D2FE] text-[#4F46E5] hover:bg-[#EEF2FF]"
           >
             <span className="material-icons-round text-base">group_work</span>
             ربط العمالة بالخط
-          </button>
+          </GhostButton>
         )}
         {can(transferApprovalPermission as any) && (
-          <button
+          <GhostButton
             type="button"
             onClick={() => navigate('/inventory/transfer-approvals')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-amber-600/20 transition-all shrink-0"
+            className="shrink-0 border-amber-200 text-amber-700 hover:bg-amber-50"
           >
             <span className="material-icons-round text-base">verified_user</span>
             اعتماد التحويلات
-          </button>
+          </GhostButton>
         )}
       </div>
 
@@ -509,117 +537,50 @@ export const EmployeeDashboard: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-amber-500">approval</span>
-              <h3 className="text-sm font-bold text-[var(--color-text)]">طلبات اعتماد دخول تم الصنع</h3>
-              <Badge variant="warning">{pendingProductionEntries.length}</Badge>
+              <h3 className="text-sm font-medium text-[var(--color-text)]">طلبات اعتماد دخول تم الصنع</h3>
+              <StatusBadge label={`${pendingProductionEntries.length}`} type="warning" />
             </div>
-            <button
+            <GhostButton
               type="button"
               onClick={() => navigate('/inventory/transfer-approvals')}
-              className="sm:mr-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+              className="sm:mr-auto text-xs border-amber-200 text-amber-700 hover:bg-amber-50"
             >
               <span className="material-icons-round text-sm">inventory</span>
               فتح شاشة الاعتماد
-            </button>
+            </GhostButton>
           </div>
-          <div className="mt-3 space-y-2">
-            {pendingProductionEntries.slice(0, 4).map((req) => {
-              const totalQty = req.lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
-              const topItem = req.lines[0]?.itemName || '—';
-              return (
-                <div key={req.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]/50">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-bold text-[var(--color-text)]">{req.referenceNo}</p>
-                    <span className="text-xs font-black text-emerald-600">{formatNumber(totalQty)} وحدة</span>
-                  </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
-                    {topItem}
-                    {req.lines.length > 1 ? ` + ${req.lines.length - 1} أصناف` : ''}
-                  </p>
-                </div>
-              );
-            })}
+          <div className="mt-3">
+            <DataTable
+              columns={pendingEntriesColumns}
+              data={pendingProductionEntries.slice(0, 6)}
+              isLoading={pendingEntriesLoading}
+              emptyMessage="لا توجد طلبات اعتماد معلقة"
+            />
           </div>
         </Card>
       )}
 
       {periodLoading ? (
-        <LoadingSkeleton type="card" rows={4} />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <KPICard key={`kpi-period-loading-${idx}`} label="" value="" loading />
+          ))}
+        </div>
       ) : (
         <>
           {/* ── ROW 3: KPI Strip — all KPIs in one unified row ── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-
-            {/* ساعات الإنتاج */}
-            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-emerald-50 flex items-center justify-center">
-                  <span className="material-icons-round text-emerald-600 text-[15px]">schedule</span>
-                </span>
-                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">ساعات الإنتاج</p>
-              </div>
-              <h3 className="text-2xl font-bold text-emerald-600 leading-none">{todayProductionHours}</h3>
-              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">ساعة</span>
-            </div>
-
-            {/* متوسط/ساعة */}
-            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
-                  <span className="material-icons-round text-blue-600 text-[15px]">speed</span>
-                </span>
-                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">متوسط/ساعة</p>
-              </div>
-              <h3 className="text-2xl font-bold text-blue-600 leading-none">{formatNumber(performance.avgPerHour)}</h3>
-              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">وحدة/ساعة</span>
-            </div>
-
-            {/* عدد التقارير */}
-            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center">
-                  <span className="material-icons-round text-primary text-[15px]">assignment</span>
-                </span>
-                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">عدد التقارير</p>
-              </div>
-              <h3 className="text-2xl font-bold text-primary leading-none">{performance.reportsCount}</h3>
-              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">تقرير</span>
-            </div>
-
-            {/* إجمالي الإنتاج */}
-            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-7 h-7 rounded-[var(--border-radius-base)] bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
-                  <span className="material-icons-round text-indigo-600 dark:text-indigo-400 text-[15px]">inventory</span>
-                </span>
-                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">إجمالي الإنتاج</p>
-              </div>
-              <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 leading-none">{formatNumber(kpis.totalProduction)}</h3>
-              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">وحدة</span>
-            </div>
-
-            {/* تحقيق الخطة */}
-            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex flex-col gap-1 col-span-2 sm:col-span-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`w-7 h-7 rounded-[var(--border-radius-base)] flex items-center justify-center ${
-                  kpis.planAchievement >= 80 ? 'bg-emerald-50'
-                    : kpis.planAchievement >= 50 ? 'bg-amber-50'
-                    : 'bg-rose-50'
-                }`}>
-                  <span className={`material-icons-round text-[15px] ${
-                    kpis.planAchievement >= 80 ? 'text-emerald-600'
-                      : kpis.planAchievement >= 50 ? 'text-amber-600'
-                      : 'text-rose-600'
-                  }`}>flag</span>
-                </span>
-                <p className="text-[11px] font-bold text-[var(--color-text-muted)] leading-tight">تحقيق الخطة</p>
-              </div>
-              <h3 className={`text-2xl font-bold leading-none ${
-                kpis.planAchievement >= 80 ? 'text-emerald-600' : kpis.planAchievement >= 50 ? 'text-amber-600' : 'text-rose-600'
-              }`}>
-                {kpis.planAchievement > 0 ? `${kpis.planAchievement}%` : '—'}
-              </h3>
-              <span className="text-[10px] text-[var(--color-text-muted)] font-medium">متبقي: {formatNumber(kpis.remaining)} وحدة</span>
-            </div>
+            <KPICard label="ساعات الإنتاج" value={todayProductionHours} unit="ساعة" iconType="metric" color="green" />
+            <KPICard label="متوسط/ساعة" value={formatNumber(performance.avgPerHour)} unit="وحدة/ساعة" iconType="trend" color="indigo" />
+            <KPICard label="عدد التقارير" value={performance.reportsCount} unit="تقرير" iconType="metric" color="indigo" />
+            <KPICard label="إجمالي الإنتاج" value={formatNumber(kpis.totalProduction)} unit="وحدة" iconType="metric" color="indigo" />
+            <KPICard
+              label="تحقيق الخطة"
+              value={kpis.planAchievement > 0 ? `${kpis.planAchievement}%` : '—'}
+              subValue={`متبقي: ${formatNumber(kpis.remaining)} وحدة`}
+              iconType="trend"
+              color="indigo"
+            />
           </div>
 
           {/* متوسط يومي - أسبوع/شهر فقط */}
@@ -646,12 +607,10 @@ export const EmployeeDashboard: React.FC = () => {
                     <span className="material-icons-round text-primary">event_note</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-bold text-[var(--color-text)]">الخطة النشطة الحالية</h3>
+                  <h3 className="text-base font-medium text-[var(--color-text)]">الخطة النشطة الحالية</h3>
                     <p className="text-[11px] text-slate-400">{activePlan.productName} — {activePlan.lineName ?? ''}</p>
                   </div>
-                  <Badge variant={activePlan.status === 'in_progress' ? 'warning' : 'info'}>
-                    {activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'}
-                  </Badge>
+                <StatusBadge label={activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'} />
                 </div>
 
                 {/* Progress bar — prominent */}
@@ -662,7 +621,7 @@ export const EmployeeDashboard: React.FC = () => {
                       {activePlan.progress}%
                     </span>
                   </div>
-                  <div className="w-full h-4 bg-[#f0f2f5] rounded-full overflow-hidden shadow-inner">
+                  <div className="w-full h-4 bg-[#f0f2f5] rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-1000 ${
                         activePlan.progress >= 80 ? 'bg-emerald-500' : activePlan.progress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
@@ -707,8 +666,8 @@ export const EmployeeDashboard: React.FC = () => {
                 <Card className="!p-0 overflow-hidden">
                   <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
                     <span className="material-icons-round text-amber-500">assignment</span>
-                    <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل الخاصة بك</h3>
-                    <Badge variant="warning">{myWOs.length}</Badge>
+                    <h3 className="text-base font-medium text-[var(--color-text)]">أوامر الشغل الخاصة بك</h3>
+                    <StatusBadge label={`${myWOs.length}`} type="warning" />
                   </div>
                     <div className="divide-y divide-[var(--color-border)]">
                       {myWOs.map((wo) => {
@@ -735,9 +694,7 @@ export const EmployeeDashboard: React.FC = () => {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="font-mono text-xs font-bold text-amber-600">#{wo.workOrderNumber}</span>
-                                <Badge variant={wo.status === 'in_progress' ? 'warning' : 'info'}>
-                                  {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'}
-                                </Badge>
+                                <StatusBadge label={wo.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'} />
                                 {isSupervisor && (
                                   <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-full">مشرف</span>
                                 )}
@@ -753,22 +710,22 @@ export const EmployeeDashboard: React.FC = () => {
                                   </button>
                                 )}
                                 {isSupervisor && can('workOrders.edit') && wo.status === 'pending' && (
-                                  <button
+                                  <GhostButton
                                     onClick={() => updateWorkOrder(wo.id!, { status: 'in_progress' })}
-                                    className="flex items-center gap-1 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs font-bold transition-colors"
+                                    className="h-8 px-3 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                                   >
                                     <span className="material-icons-round text-sm">play_arrow</span>
                                     بدء
-                                  </button>
+                                  </GhostButton>
                                 )}
                                 {isSupervisor && can('workOrders.edit') && wo.status === 'in_progress' && (
-                                  <button
+                                  <GhostButton
                                     onClick={() => updateWorkOrder(wo.id!, { status: 'completed', completedAt: new Date().toISOString() })}
-                                    className="flex items-center gap-1 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 text-xs font-bold transition-colors"
+                                    className="h-8 px-3 text-xs border-[#C7D2FE] text-[#4F46E5] hover:bg-[#EEF2FF]"
                                   >
                                     <span className="material-icons-round text-sm">check_circle</span>
                                     اكتمل
-                                  </button>
+                                  </GhostButton>
                                 )}
                               </div>
                             </div>

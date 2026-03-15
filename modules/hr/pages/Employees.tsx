@@ -1,4 +1,28 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  Clock3,
+  EyeOff,
+  Flag,
+  Hammer,
+  Info,
+  Loader2,
+  Lock,
+  Pencil,
+  Plus,
+  Share2,
+  Trash2,
+  TrendingUp,
+  User,
+  UserCog,
+  UserMinus,
+  UserPlus,
+  X,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
@@ -45,6 +69,38 @@ const getEmployeeDisplayName = (employee: Partial<Pick<FirestoreEmployee, 'name'
   const code = String(employee.code || '').trim();
   if (code) return `(${code})`;
   return String(employee.id || '—');
+};
+
+const EMPLOYEE_ICON_MAP: Record<string, LucideIcon> = {
+  person: User,
+  check: Check,
+  close: X,
+  edit: Pencil,
+  person_off: UserMinus,
+  person_add: UserPlus,
+  delete_forever: Trash2,
+  manage_accounts: UserCog,
+  warning: AlertTriangle,
+  add: Plus,
+  lock: Lock,
+  trending_up: TrendingUp,
+  history: Clock3,
+  account_balance_wallet: Wallet,
+  info: Info,
+  check_circle: CheckCircle2,
+  error: AlertTriangle,
+  share: Share2,
+  refresh: Loader2,
+};
+
+const EmployeeIcon = ({
+  name,
+  ...iconProps
+}: {
+  name: string;
+} & React.ComponentProps<'svg'>) => {
+  const Icon = EMPLOYEE_ICON_MAP[name] ?? Hammer;
+  return <Icon {...iconProps} />;
 };
 
 export const Employees: React.FC = () => {
@@ -186,6 +242,11 @@ export const Employees: React.FC = () => {
     if (filterSystemAccess === 'no') list = list.filter((e) => !e.hasSystemAccess);
     return list;
   }, [_rawEmployees, search, filterDepartment, filterJobPosition, filterStatus, filterEmploymentType, filterSystemAccess]);
+
+  const filteredSalaryTotal = useMemo(
+    () => filtered.reduce((sum, emp) => sum + Number(emp.baseSalary ?? 0), 0),
+    [filtered]
+  );
 
   const openCreate = () => {
     setEditId(null);
@@ -521,7 +582,7 @@ export const Employees: React.FC = () => {
       render: (emp) => (
         <div className="flex items-center gap-2">
           <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${emp.isActive !== false ? 'bg-primary/10' : 'bg-[#f0f2f5]'}`}>
-            <span className={`material-icons-round text-base ${emp.isActive !== false ? 'text-primary' : 'text-slate-400'}`}>person</span>
+            <EmployeeIcon name="person" className={`text-base ${emp.isActive !== false ? 'text-primary' : 'text-slate-400'}`} />
           </div>
           <div className="min-w-0">
             <span className="font-bold text-[var(--color-text)] block truncate">{getEmployeeDisplayName(emp)}</span>
@@ -552,6 +613,17 @@ export const Employees: React.FC = () => {
       render: (emp) => <span className="text-sm">{EMPLOYMENT_TYPE_LABELS[(emp.employmentType as EmploymentType)] ?? emp.employmentType}</span>,
     },
     {
+      header: 'المرتب',
+      sortKey: (emp) => Number(emp.baseSalary ?? 0),
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (emp) => (
+        <span className="text-sm font-bold text-[var(--color-text)]">
+          {Number(emp.baseSalary ?? 0).toLocaleString('ar-EG')} ج.م
+        </span>
+      ),
+    },
+    {
       header: 'المركبة',
       sortKey: (emp) => getVehicleName(emp.vehicleId ?? ''),
       render: (emp) => <span className="text-sm text-[var(--color-text-muted)]">{getVehicleName(emp.vehicleId ?? '')}</span>,
@@ -565,7 +637,7 @@ export const Employees: React.FC = () => {
           onClick={(e) => { e.stopPropagation(); handleSystemAccessToggle(emp.id!); }}
           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${emp.hasSystemAccess ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'}`}
         >
-          <span className="material-icons-round text-xs">{emp.hasSystemAccess ? 'check' : 'close'}</span>
+          <EmployeeIcon name={emp.hasSystemAccess ? 'check' : 'close'} className="text-xs" />
           {emp.hasSystemAccess ? 'نعم' : 'لا'}
         </button>
       ) : (
@@ -593,7 +665,7 @@ export const Employees: React.FC = () => {
           className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/10 rounded-[var(--border-radius-base)] transition-all"
           title="عرض الملف"
         >
-          <span className="material-icons-round text-lg">person</span>
+          <EmployeeIcon name="person" className="text-lg" />
         </button>
       )}
       {can('employees.edit') && (
@@ -602,7 +674,7 @@ export const Employees: React.FC = () => {
           className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/10 rounded-[var(--border-radius-base)] transition-all"
           title="تعديل"
         >
-          <span className="material-icons-round text-lg">edit</span>
+          <EmployeeIcon name="edit" className="text-lg" />
         </button>
       )}
       {can('employees.edit') && emp.isActive !== false && (
@@ -611,7 +683,7 @@ export const Employees: React.FC = () => {
           className="p-2 text-[var(--color-text-muted)] hover:text-amber-500 hover:bg-amber-500/10 rounded-[var(--border-radius-base)] transition-all"
           title="تعطيل"
         >
-          <span className="material-icons-round text-lg">person_off</span>
+          <EmployeeIcon name="person_off" className="text-lg" />
         </button>
       )}
       {can('employees.edit') && emp.isActive === false && (
@@ -620,7 +692,7 @@ export const Employees: React.FC = () => {
           className="p-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-500/10 rounded-[var(--border-radius-base)] transition-all"
           title="إعادة تفعيل"
         >
-          <span className="material-icons-round text-lg">person_add</span>
+          <EmployeeIcon name="person_add" className="text-lg" />
         </button>
       )}
       {can('employees.delete') && emp.isActive === false && (
@@ -629,7 +701,7 @@ export const Employees: React.FC = () => {
           className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 rounded-[var(--border-radius-base)] transition-all"
           title="حذف نهائي"
         >
-          <span className="material-icons-round text-lg">delete_forever</span>
+          <EmployeeIcon name="delete_forever" className="text-lg" />
         </button>
       )}
     </div>
@@ -790,7 +862,7 @@ export const Employees: React.FC = () => {
               </p>
             </div>
             <Button variant="secondary" onClick={() => navigate('/system/users')}>
-              <span className="material-icons-round text-sm">manage_accounts</span>
+              <EmployeeIcon name="manage_accounts" className="text-sm" />
               فتح إدارة المستخدمين
             </Button>
           </div>
@@ -895,6 +967,13 @@ export const Employees: React.FC = () => {
         pageSize={15}
       />
 
+      <Card className="py-3 px-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-bold text-[var(--color-text-muted)]">إجمالي المرتبات (حسب النتائج المعروضة)</span>
+          <span className="text-base font-extrabold text-primary">{filteredSalaryTotal.toLocaleString('ar-EG')} ج.م</span>
+        </div>
+      </Card>
+
       {/* 6. Create/Edit Modal — Professional HR Panel */}
       {showModal && (can('employees.create') || can('employees.edit')) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
@@ -903,7 +982,7 @@ export const Employees: React.FC = () => {
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0 bg-gradient-to-l from-primary/5 to-transparent">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 flex items-center justify-center">
-                  <span className="material-icons-round text-primary">{editId ? 'edit' : 'person_add'}</span>
+                  <EmployeeIcon name={editId ? 'edit' : 'person_add'} className="text-primary" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-[var(--color-text)]">{editId ? 'تعديل موظف' : 'إضافة موظف جديد'}</h3>
@@ -911,7 +990,7 @@ export const Employees: React.FC = () => {
                 </div>
               </div>
               <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="p-2 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-lg)] transition-all">
-                <span className="material-icons-round">close</span>
+                <EmployeeIcon name="close" />
               </button>
             </div>
 
@@ -931,7 +1010,7 @@ export const Employees: React.FC = () => {
                       : 'border-transparent text-[var(--color-text-muted)] hover:text-slate-600 dark:hover:text-[var(--color-text-muted)]'
                   }`}
                 >
-                  <span className="material-icons-round text-base">{tab.icon}</span>
+                  <EmployeeIcon name={tab.icon} className="text-base" />
                   <span className="hidden sm:inline">{tab.label}</span>
                 </button>
               ))}
@@ -941,7 +1020,7 @@ export const Employees: React.FC = () => {
               {/* Validation errors */}
               {validationErrors.length > 0 && (
                 <div className="flex items-start gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] bg-amber-50 border border-amber-200">
-                  <span className="material-icons-round text-amber-500 text-lg mt-0.5 shrink-0">warning</span>
+                  <EmployeeIcon name="warning" className="text-amber-500 text-lg mt-0.5 shrink-0" />
                   <div className="space-y-1">
                     {validationErrors.map((err, i) => (
                       <p key={i} className="text-sm font-bold text-amber-700">{err}</p>
@@ -1001,7 +1080,7 @@ export const Employees: React.FC = () => {
                           className="px-3 py-2 bg-primary/10 text-primary rounded-[var(--border-radius-lg)] hover:bg-primary/20 transition-colors shrink-0"
                           title="إضافة قسم جديد"
                         >
-                          <span className="material-icons-round text-lg">add</span>
+                          <EmployeeIcon name="add" className="text-lg" />
                         </button>
                       </div>
                     </div>
@@ -1024,7 +1103,7 @@ export const Employees: React.FC = () => {
                           className="px-3 py-2 bg-primary/10 text-primary rounded-[var(--border-radius-lg)] hover:bg-primary/20 transition-colors shrink-0"
                           title="إضافة منصب جديد"
                         >
-                          <span className="material-icons-round text-lg">add</span>
+                          <EmployeeIcon name="add" className="text-lg" />
                         </button>
                       </div>
                     </div>
@@ -1036,7 +1115,7 @@ export const Employees: React.FC = () => {
                       <div className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 font-bold ${selectedPosition ? 'bg-[#f8f9fa]/80 border-[var(--color-border)] text-primary' : 'border-[var(--color-border)]'}`}>
                         {selectedPosition ? (
                           <div className="flex items-center gap-2">
-                            <span className="material-icons-round text-sm text-primary/50">lock</span>
+                            <EmployeeIcon name="lock" className="text-sm text-primary/50" />
                             {JOB_LEVEL_LABELS[form.level as 1 | 2 | 3 | 4] ?? form.level}
                           </div>
                         ) : (
@@ -1137,7 +1216,7 @@ export const Employees: React.FC = () => {
                           className="px-3 py-2 bg-primary/10 text-primary rounded-[var(--border-radius-lg)] hover:bg-primary/20 transition-colors shrink-0"
                           title="إضافة وردية جديدة"
                         >
-                          <span className="material-icons-round text-lg">add</span>
+                          <EmployeeIcon name="add" className="text-lg" />
                         </button>
                       </div>
                     </div>
@@ -1183,7 +1262,7 @@ export const Employees: React.FC = () => {
                   {/* Salary change indicator */}
                   {salaryChanged && (
                     <div className="flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] bg-amber-50 border border-amber-200">
-                      <span className="material-icons-round text-amber-500">trending_up</span>
+                      <EmployeeIcon name="trending_up" className="text-amber-500" />
                       <div className="flex-1">
                         <p className="text-xs font-bold text-amber-700">تغيير في الراتب</p>
                         <p className="text-sm text-amber-600">
@@ -1193,7 +1272,7 @@ export const Employees: React.FC = () => {
                           <span className="text-xs mr-1">ج.م</span>
                         </p>
                       </div>
-                      <span className="material-icons-round text-xs text-amber-500">history</span>
+                      <EmployeeIcon name="history" className="text-xs text-amber-500" />
                       <span className="text-[10px] text-amber-600 font-bold">سيتم تسجيل التغيير</span>
                     </div>
                   )}
@@ -1203,7 +1282,7 @@ export const Employees: React.FC = () => {
                     <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-gradient-to-l from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-900 p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="material-icons-round text-emerald-600 text-lg">account_balance_wallet</span>
+                          <EmployeeIcon name="account_balance_wallet" className="text-emerald-600 text-lg" />
                           <span className="text-xs font-bold text-emerald-700">صافي الراتب التقديري</span>
                         </div>
                         <div className="text-left">
@@ -1224,7 +1303,7 @@ export const Employees: React.FC = () => {
                 <div className="space-y-5 min-h-[360px]">
                   <div className="border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-blue-50/50 dark:bg-blue-900/10">
                     <div className="flex items-start gap-2">
-                      <span className="material-icons-round text-blue-600">info</span>
+                      <EmployeeIcon name="info" className="text-blue-600" />
                       <div>
                         <p className="text-sm font-bold text-blue-700">إدارة حسابات الدخول أصبحت من صفحة المستخدمين</p>
                         <p className="text-xs text-blue-700/80 mt-1">
@@ -1236,7 +1315,7 @@ export const Employees: React.FC = () => {
                       الحالة الحالية لهذا الموظف: {form.hasSystemAccess ? 'لديه حساب مرتبط' : 'غير مرتبط بحساب'}.
                     </div>
                     <Button variant="secondary" onClick={() => navigate('/system/users')}>
-                      <span className="material-icons-round text-sm">manage_accounts</span>
+                      <EmployeeIcon name="manage_accounts" className="text-sm" />
                       فتح صفحة المستخدمين
                     </Button>
                   </div>
@@ -1247,14 +1326,14 @@ export const Employees: React.FC = () => {
             {/* Footer messages & actions */}
             {saveMsg && (
               <div className={`mx-6 mb-2 flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                <span className="material-icons-round text-lg">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
+                <EmployeeIcon name={saveMsg.type === 'success' ? 'check_circle' : 'error'} className="text-lg" />
                 {saveMsg.text}
               </div>
             )}
             {shareCredentials && (
               <div className="mx-6 mb-2">
                 <Button variant="outline" onClick={shareCredentialsToWhatsApp}>
-                  <span className="material-icons-round text-sm">share</span>
+                  <EmployeeIcon name="share" className="text-sm" />
                   مشاركة بيانات الدخول واتساب
                 </Button>
               </div>
@@ -1268,7 +1347,7 @@ export const Employees: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>
                 <Button variant="primary" onClick={handleSave} disabled={saving || !isFormValid}>
-                  {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                  {saving && <EmployeeIcon name="refresh" className="animate-spin text-sm" />}
                   {editId ? 'حفظ التعديلات' : 'إضافة الموظف'}
                 </Button>
               </div>
@@ -1282,7 +1361,7 @@ export const Employees: React.FC = () => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-amber-500 text-3xl">person_off</span>
+              <EmployeeIcon name="person_off" className="text-amber-500 text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">تعطيل الموظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
@@ -1295,7 +1374,7 @@ export const Employees: React.FC = () => {
                 onClick={() => handleDeactivate(deleteConfirmId)}
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-2"
               >
-                <span className="material-icons-round text-sm">person_off</span>
+                <EmployeeIcon name="person_off" className="text-sm" />
                 تعطيل
               </button>
             </div>
@@ -1308,7 +1387,7 @@ export const Employees: React.FC = () => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPermanentDeleteId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
+              <EmployeeIcon name="delete_forever" className="text-rose-500 text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">حذف نهائي</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
@@ -1316,7 +1395,7 @@ export const Employees: React.FC = () => {
             </p>
             <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 mb-4 text-right">
               <p className="text-xs font-bold text-rose-600 flex items-center gap-1">
-                <span className="material-icons-round text-sm">warning</span>
+                <EmployeeIcon name="warning" className="text-sm" />
                 لا يمكن التراجع عن هذا الإجراء
               </p>
               {_rawEmployees.find((e) => e.id === permanentDeleteId)?.userId && (
@@ -1329,7 +1408,7 @@ export const Employees: React.FC = () => {
                 onClick={() => handlePermanentDelete(permanentDeleteId)}
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 flex items-center gap-2"
               >
-                <span className="material-icons-round text-sm">delete_forever</span>
+                <EmployeeIcon name="delete_forever" className="text-sm" />
                 حذف نهائي
               </button>
             </div>
@@ -1342,7 +1421,7 @@ export const Employees: React.FC = () => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setToggleConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-emerald-500 text-3xl">person_add</span>
+              <EmployeeIcon name="person_add" className="text-emerald-500 text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">إعادة تفعيل الموظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">
@@ -1351,7 +1430,7 @@ export const Employees: React.FC = () => {
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setToggleConfirmId(null)}>إلغاء</Button>
               <Button variant="primary" onClick={() => handleToggleActive(toggleConfirmId)}>
-                <span className="material-icons-round text-sm">check_circle</span>
+                <EmployeeIcon name="check_circle" className="text-sm" />
                 تفعيل
               </Button>
             </div>
@@ -1371,7 +1450,7 @@ export const Employees: React.FC = () => {
                 {quickAddType === 'shift' && 'إضافة وردية جديدة'}
               </h3>
               <button onClick={() => setQuickAddType(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
-                <span className="material-icons-round">close</span>
+                <EmployeeIcon name="close" />
               </button>
             </div>
             <div className="p-6 space-y-4">
@@ -1406,7 +1485,7 @@ export const Employees: React.FC = () => {
               )}
               {quickAddType === 'position' && !form.departmentId && (
                 <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-[var(--border-radius-base)]">
-                  <span className="material-icons-round text-xs align-middle ml-1">info</span>
+                  <EmployeeIcon name="info" className="text-xs align-middle ml-1 inline" />
                   لم تختر قسم بعد — سيتم ربط المنصب بالقسم المختار لاحقاً
                 </p>
               )}
@@ -1414,7 +1493,7 @@ export const Employees: React.FC = () => {
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setQuickAddType(null)}>إلغاء</Button>
               <Button variant="primary" onClick={handleQuickAdd} disabled={quickAddSaving || !quickAddName.trim()}>
-                {quickAddSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                {quickAddSaving && <EmployeeIcon name="refresh" className="animate-spin text-sm" />}
                 إضافة
               </Button>
             </div>

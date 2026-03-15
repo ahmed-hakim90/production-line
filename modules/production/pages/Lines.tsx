@@ -12,6 +12,14 @@ import { supervisorLineAssignmentService } from '../services/supervisorLineAssig
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 
 const statusOptions: { value: ProductionLineStatus; label: string }[] = [
@@ -251,7 +259,7 @@ export const Lines: React.FC = () => {
   }, [sortedLines, searchTerm, statusFilter]);
 
   return (
-    <div className="space-y-6">
+    <div className="erp-ds-clean space-y-6">
       <PageHeader
         title="خطوط الإنتاج"
         subtitle="عرض وإدارة خطوط الإنتاج فقط بأسلوب ERPNext"
@@ -278,32 +286,27 @@ export const Lines: React.FC = () => {
         </Card>
       ) : (
         <div className="list-view-wrapper">
-          <div className="list-toolbar">
-            <div className="erp-search-input erp-search-input--table">
-              <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
-              <input
-                type="search"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="بحث باسم الخط أو الكود..."
-              />
-            </div>
-
-            <select
-              className="erp-filter-select"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'all' | ProductionLineStatus)}
-            >
-              <option value="all">كل الحالات</option>
-              {statusOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-
-            <div className="mr-auto text-xs text-[var(--color-text-muted)] font-bold">
-              إجمالي الخطوط: <span className="text-[var(--color-text)]">{formatNumber(filteredLines.length)}</span>
-            </div>
-          </div>
+          <SmartFilterBar
+            searchPlaceholder="ابحث باسم الخط أو الكود..."
+            searchValue={searchTerm}
+            onSearchChange={setSearchTerm}
+            quickFilters={[
+              {
+                key: 'status',
+                placeholder: 'كل الحالات',
+                options: statusOptions.map((option) => ({ value: option.value, label: option.label })),
+              },
+            ]}
+            quickFilterValues={{ status: statusFilter }}
+            onQuickFilterChange={(_, value) => setStatusFilter(value as 'all' | ProductionLineStatus)}
+            onApply={() => undefined}
+            extra={(
+              <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
+                إجمالي الخطوط: <span className="mx-1 font-semibold text-slate-700">{formatNumber(filteredLines.length)}</span>
+              </div>
+            )}
+            className="mb-3"
+          />
 
           <div className="overflow-x-auto">
             <table>
@@ -466,15 +469,16 @@ export const Lines: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الحالة</label>
-                <select
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value as ProductionLineStatus })}
-                >
-                  {statusOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <Select value={form.status} onValueChange={(value) => setForm({ ...form, status: value as ProductionLineStatus })}>
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                    <SelectValue placeholder="اختر الحالة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
@@ -528,16 +532,17 @@ export const Lines: React.FC = () => {
             <div className="p-6 space-y-5">
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج الحالي *</label>
-                <select
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={targetForm.currentProductId}
-                  onChange={(e) => setTargetForm({ ...targetForm, currentProductId: e.target.value })}
-                >
-                  <option value="">اختر المنتج...</option>
-                  {_rawProducts.map((p) => (
-                    <option key={p.id} value={p.id!}>{p.name}</option>
-                  ))}
-                </select>
+                <Select value={targetForm.currentProductId || 'none'} onValueChange={(value) => setTargetForm({ ...targetForm, currentProductId: value === 'none' ? '' : value })}>
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                    <SelectValue placeholder="اختر المنتج..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">اختر المنتج...</SelectItem>
+                    {_rawProducts.map((p) => (
+                      <SelectItem key={p.id} value={p.id!}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهدف اليومي (كمية) *</label>

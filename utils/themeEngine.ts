@@ -32,6 +32,17 @@ export function applyTheme(theme?: ThemeSettings): void {
   root.style.setProperty('--color-warning',   hexToRgbString(t.warningColor));
   root.style.setProperty('--color-danger',    hexToRgbString(t.dangerColor));
   root.style.setProperty('--color-background', t.backgroundColor);
+  // Hex aliases for components that consume direct CSS colors.
+  root.style.setProperty('--color-primary-hex', t.primaryColor);
+  root.style.setProperty('--color-secondary-hex', t.secondaryColor);
+  root.style.setProperty('--color-success-hex', t.successColor);
+  root.style.setProperty('--color-warning-hex', t.warningColor);
+  root.style.setProperty('--color-danger-hex', t.dangerColor);
+  if (t.cssVars) {
+    Object.entries(t.cssVars).forEach(([key, value]) => {
+      root.style.setProperty(key, value);
+    });
+  }
 
   // ── Layout surface variables (used by sidebar, topbar, cards, borders) ────
   if (isDark) {

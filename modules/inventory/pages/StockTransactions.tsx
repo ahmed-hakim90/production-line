@@ -13,6 +13,17 @@ import { useAppStore } from '../../../store/useAppStore';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { toast } from '../../../components/Toast';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Filter } from 'lucide-react';
 
 const movementLabel: Record<string, string> = {
   IN: 'وارد',
@@ -36,6 +47,7 @@ export const StockTransactions: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<'export' | 'delete' | ''>('');
   const [processing, setProcessing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const [selectedPending, setSelectedPending] = useState<InventoryTransferRequest | null>(null);
   const [selectedApprovedTransfer, setSelectedApprovedTransfer] = useState<{
@@ -58,15 +70,20 @@ export const StockTransactions: React.FC = () => {
   });
 
   const loadData = async () => {
-    const [txs, whs] = await Promise.all([
-      stockService.getTransactions(),
-      warehouseService.getAll(),
-    ]);
-    const pending = (await transferApprovalService.getAll()).filter((row) => row.status === 'pending');
-    setTransactions(txs);
-    setPendingTransfers(pending);
-    setWarehouses(whs);
-    setSelectedIds([]);
+    setLoading(true);
+    try {
+      const [txs, whs] = await Promise.all([
+        stockService.getTransactions(),
+        warehouseService.getAll(),
+      ]);
+      const pending = (await transferApprovalService.getAll()).filter((row) => row.status === 'pending');
+      setTransactions(txs);
+      setPendingTransfers(pending);
+      setWarehouses(whs);
+      setSelectedIds([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -206,7 +223,7 @@ export const StockTransactions: React.FC = () => {
       await stockService.deleteMovements(rows);
       await loadData();
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر حذف الحركات المحددة.');
+      toast.error(error?.message || 'تعذر حذف الحركات المحددة.');
     } finally {
       setProcessing(false);
     }
@@ -216,7 +233,7 @@ export const StockTransactions: React.FC = () => {
     if (tx.movementType !== 'TRANSFER') return;
     const transferNo = tx.referenceNo?.trim();
     if (!transferNo) {
-      window.alert('لا يمكن طباعة التحويلة بدون رقم مرجع.');
+      toast.warning('لا يمكن طباعة التحويلة بدون رقم مرجع.');
       return;
     }
 
@@ -227,7 +244,7 @@ export const StockTransactions: React.FC = () => {
       const outRows = transferRows.filter((row) => row.transferDirection === 'OUT');
       const rowsForPrint = outRows.length > 0 ? outRows : transferRows;
       if (rowsForPrint.length === 0) {
-        window.alert('لا توجد بيانات كافية لطباعة هذه التحويلة.');
+        toast.warning('لا توجد بيانات كافية لطباعة هذه التحويلة.');
         return;
       }
 
@@ -254,7 +271,7 @@ export const StockTransactions: React.FC = () => {
       handleTransferPrint();
       setTimeout(() => setPrintData(null), 1000);
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر طباعة التحويلة.');
+      toast.error(error?.message || 'تعذر طباعة التحويلة.');
     } finally {
       setProcessing(false);
     }
@@ -273,7 +290,7 @@ export const StockTransactions: React.FC = () => {
     if (tx.movementType !== 'TRANSFER') return;
     const transferNo = tx.referenceNo?.trim();
     if (!transferNo) {
-      window.alert('لا يمكن مشاركة التحويلة بدون رقم مرجع.');
+      toast.warning('لا يمكن مشاركة التحويلة بدون رقم مرجع.');
       return;
     }
 
@@ -284,7 +301,7 @@ export const StockTransactions: React.FC = () => {
       const outRows = transferRows.filter((row) => row.transferDirection === 'OUT');
       const rowsForPrint = outRows.length > 0 ? outRows : transferRows;
       if (rowsForPrint.length === 0) {
-        window.alert('لا توجد بيانات كافية لمشاركة هذه التحويلة.');
+        toast.warning('لا توجد بيانات كافية لمشاركة هذه التحويلة.');
         return;
       }
 
@@ -315,7 +332,7 @@ export const StockTransactions: React.FC = () => {
       }
       setTimeout(() => setPrintData(null), 1000);
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر مشاركة التحويلة.');
+      toast.error(error?.message || 'تعذر مشاركة التحويلة.');
     } finally {
       setProcessing(false);
     }
@@ -357,7 +374,7 @@ export const StockTransactions: React.FC = () => {
       }
       setTimeout(() => setPrintData(null), 1000);
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر مشاركة التحويلة.');
+      toast.error(error?.message || 'تعذر مشاركة التحويلة.');
     } finally {
       setProcessing(false);
     }
@@ -400,7 +417,7 @@ export const StockTransactions: React.FC = () => {
       setEditNote('');
       await loadData();
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر حفظ تعديل التحويلة المعلقة.');
+      toast.error(error?.message || 'تعذر حفظ تعديل التحويلة المعلقة.');
     } finally {
       setProcessing(false);
     }
@@ -409,7 +426,7 @@ export const StockTransactions: React.FC = () => {
   const editRow = async (tx: StockTransaction) => {
     if (!tx.id) return;
     if (tx.movementType === 'TRANSFER') {
-      window.alert('تعديل التحويلة غير مدعوم مباشرة. احذف التحويلة ثم أنشئها من جديد.');
+      toast.warning('تعديل التحويلة غير مدعوم مباشرة. احذف التحويلة ثم أنشئها من جديد.');
       return;
     }
 
@@ -423,7 +440,7 @@ export const StockTransactions: React.FC = () => {
     if (quantityRaw == null) return;
     const nextQty = Number(quantityRaw);
     if (Number.isNaN(nextQty)) {
-      window.alert('أدخل رقمًا صحيحًا للكمية.');
+      toast.warning('أدخل رقمًا صحيحًا للكمية.');
       return;
     }
 
@@ -438,7 +455,7 @@ export const StockTransactions: React.FC = () => {
       });
       await loadData();
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر تعديل الحركة.');
+      toast.error(error?.message || 'تعذر تعديل الحركة.');
     } finally {
       setProcessing(false);
     }
@@ -456,7 +473,7 @@ export const StockTransactions: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="erp-ds-clean space-y-5">
       <PageHeader
         title="سجل حركات المخزون"
         subtitle="تتبع كامل لكل حركة على المنتجات والخامات"
@@ -473,44 +490,69 @@ export const StockTransactions: React.FC = () => {
       />
 
       <Card className="!p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input
-            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
-            placeholder="بحث بالاسم أو الكود"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
-            <option value="">كل المخازن</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-          <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={movementFilter} onChange={(e) => setMovementFilter(e.target.value)}>
-            <option value="">كل أنواع الحركة</option>
-            <option value="IN">وارد</option>
-            <option value="OUT">منصرف</option>
-            <option value="TRANSFER">تحويل</option>
-            <option value="ADJUSTMENT">تسوية</option>
-          </select>
-          <div className="flex gap-2">
-            <select
-              className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
-              value={bulkAction}
-              onChange={(e) => setBulkAction(e.target.value as 'export' | 'delete' | '')}
-              disabled={selectedRows.length === 0}
-            >
-              <option value="">إجراء على المحدد</option>
-              {can('inventory.transactions.export') && <option value="export">تصدير المحدد Excel</option>}
-              {can('inventory.transactions.delete') && <option value="delete">حذف المحدد</option>}
-            </select>
-            <Button
-              variant="outline"
-              onClick={() => void handleBulkAction()}
-              disabled={!bulkAction || selectedRows.length === 0 || processing}
-            >
-              تنفيذ
-            </Button>
-          </div>
-        </div>
+        <SmartFilterBar
+          searchPlaceholder="ابحث بالاسم أو الكود..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'movement',
+              placeholder: 'كل أنواع الحركة',
+              options: [
+                { value: 'IN', label: 'وارد' },
+                { value: 'OUT', label: 'منصرف' },
+                { value: 'TRANSFER', label: 'تحويل' },
+                { value: 'ADJUSTMENT', label: 'تسوية' },
+              ],
+              width: 'w-[150px]',
+            },
+          ]}
+          quickFilterValues={{ movement: movementFilter || 'all' }}
+          onQuickFilterChange={(_, value) => setMovementFilter(value === 'all' ? '' : value)}
+          advancedFilters={[
+            {
+              key: 'warehouse',
+              label: 'المخزن',
+              placeholder: 'كل المخازن',
+              options: warehouses.map((warehouse) => ({ value: warehouse.id || '', label: warehouse.name })),
+              width: 'w-[170px]',
+            },
+          ]}
+          advancedFilterValues={{ warehouse: warehouseFilter || 'all' }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'warehouse') setWarehouseFilter(value === 'all' ? '' : value);
+          }}
+          onApply={() => undefined}
+          applyLabel="عرض"
+          extra={(
+            <div className="inline-flex h-[34px] items-center gap-2">
+              <Select
+                value={bulkAction || 'none'}
+                onValueChange={(value) => setBulkAction(value === 'none' ? '' : (value as 'export' | 'delete'))}
+                disabled={selectedRows.length === 0}
+              >
+                <SelectTrigger className="h-[34px] min-w-[150px] rounded-lg border-slate-200 bg-white">
+                  <SelectValue placeholder="إجراء على المحدد" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">إجراء على المحدد</SelectItem>
+                  {can('inventory.transactions.export') && <SelectItem value="export">تصدير المحدد Excel</SelectItem>}
+                  {can('inventory.transactions.delete') && <SelectItem value="delete">حذف المحدد</SelectItem>}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                className="h-[34px]"
+                onClick={() => void handleBulkAction()}
+                disabled={!bulkAction || selectedRows.length === 0 || processing}
+              >
+                <Filter className="h-3.5 w-3.5" />
+                تنفيذ
+              </Button>
+            </div>
+          )}
+          className="mb-0 border-0"
+        />
       </Card>
 
       <Card className="!p-0 overflow-hidden">
@@ -536,8 +578,15 @@ export const StockTransactions: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
-              {combinedRows.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">لا توجد حركات مطابقة.</td></tr>}
-              {combinedRows.map((entry) => {
+              {loading && Array.from({ length: 6 }).map((_, i) => (
+                <tr key={`tx-skeleton-${i}`}>
+                  <td colSpan={8} className="px-4 py-3">
+                    <Skeleton className="h-6 w-full rounded-md" />
+                  </td>
+                </tr>
+              ))}
+              {!loading && combinedRows.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">لا توجد حركات مطابقة.</td></tr>}
+              {!loading && combinedRows.map((entry) => {
                 if (entry.kind === 'transaction') {
                   const tx = entry.tx;
                   return (

@@ -13,6 +13,8 @@ import {
 import { exportHRData } from '../../../utils/exportExcel';
 import { useAppStore } from '../../../store/useAppStore';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const StockBalances: React.FC = () => {
   const navigate = useNavigate();
@@ -24,15 +26,18 @@ export const StockBalances: React.FC = () => {
   const [itemTypeFilter, setItemTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
+      setLoading(true);
       const [bals, whs] = await Promise.all([
         stockService.getBalances(),
         warehouseService.getAll(),
       ]);
       setBalances(bals);
       setWarehouses(whs);
+      setLoading(false);
     })();
   }, []);
 
@@ -89,7 +94,7 @@ export const StockBalances: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="erp-ds-clean space-y-5">
       <PageHeader
         title="أرصدة المخزون"
         subtitle="عرض الرصيد الحالي لكل صنف داخل كل مخزن"
@@ -127,29 +132,53 @@ export const StockBalances: React.FC = () => {
       />
 
       <Card className="!p-0 overflow-hidden">
-        <div className="erp-filter-bar">
-          <input
-            className="erp-filter-input-inner"
-            placeholder="بحث بالاسم أو الكود"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select className="erp-filter-select" value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)}>
-            <option value="">كل المخازن</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-          <select className="erp-filter-select" value={itemTypeFilter} onChange={(e) => setItemTypeFilter(e.target.value)}>
-            <option value="">كل الأنواع</option>
-            <option value="finished_good">منتج نهائي</option>
-            <option value="raw_material">مادة خام</option>
-          </select>
-          <select className="erp-filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">كل الحالات</option>
-            <option value="ok">طبيعي</option>
-            <option value="low">منخفض</option>
-            <option value="out">نفد</option>
-          </select>
-        </div>
+        <SmartFilterBar
+          searchPlaceholder="ابحث بالاسم أو الكود..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'warehouse',
+              placeholder: 'كل المخازن',
+              options: warehouses.map((warehouse) => ({ value: warehouse.id || '', label: warehouse.name })),
+            },
+            {
+              key: 'status',
+              placeholder: 'كل الحالات',
+              options: [
+                { value: 'ok', label: 'طبيعي' },
+                { value: 'low', label: 'منخفض' },
+                { value: 'out', label: 'نفد' },
+              ],
+            },
+          ]}
+          quickFilterValues={{
+            warehouse: warehouseFilter || 'all',
+            status: statusFilter || 'all',
+          }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'warehouse') setWarehouseFilter(value === 'all' ? '' : value);
+            if (key === 'status') setStatusFilter(value === 'all' ? '' : value);
+          }}
+          advancedFilters={[
+            {
+              key: 'itemType',
+              label: 'النوع',
+              placeholder: 'كل الأنواع',
+              options: [
+                { value: 'finished_good', label: 'منتج نهائي' },
+                { value: 'raw_material', label: 'مادة خام' },
+              ],
+            },
+          ]}
+          advancedFilterValues={{ itemType: itemTypeFilter || 'all' }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'itemType') setItemTypeFilter(value === 'all' ? '' : value);
+          }}
+          onApply={() => undefined}
+          applyLabel="تطبيق"
+          className="mb-0 border-0 rounded-none"
+        />
       </Card>
 
       <Card className="!p-0 overflow-hidden">
@@ -167,10 +196,17 @@ export const StockBalances: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
-              {rows.length === 0 && (
+              {loading && Array.from({ length: 6 }).map((_, i) => (
+                <tr key={`balance-skeleton-${i}`}>
+                  <td className="px-4 py-3" colSpan={7}>
+                    <Skeleton className="h-5 w-full rounded-md" />
+                  </td>
+                </tr>
+              ))}
+              {!loading && rows.length === 0 && (
                 <tr><td className="px-4 py-10 text-center text-slate-400" colSpan={7}>لا توجد بيانات مطابقة.</td></tr>
               )}
-              {rows.map((row) => {
+              {!loading && rows.map((row) => {
                 const isLow = row.minStock > 0 && row.quantity <= row.minStock;
                 const isOut = row.quantity <= 0;
                 const unitsPerCarton = row.itemType === 'finished_good'

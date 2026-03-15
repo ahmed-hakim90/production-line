@@ -62,6 +62,7 @@ import { costCenterService } from '../modules/costs/services/costCenterService';
 import { costCenterValueService } from '../modules/costs/services/costCenterValueService';
 import { costAllocationService } from '../modules/costs/services/costAllocationService';
 import { laborSettingsService } from '../modules/costs/services/laborSettingsService';
+import { monthlyProductionCostService } from '../modules/costs/services/monthlyProductionCostService';
 import { roleService } from '../modules/system/services/roleService';
 import { userService } from '../services/userService';
 import { activityLogService } from '../modules/system/services/activityLogService';
@@ -74,9 +75,9 @@ import { catalogRawMaterialService as rawMaterialService } from '../modules/cata
 import type { StockItemBalance } from '../modules/inventory/types';
 import { productMaterialService } from '../modules/production/services/productMaterialService';
 import { categoryService } from '../modules/catalog/services/categoryService';
-import { assetService } from '../modules/production/services/assetService';
-import { assetDepreciationService } from '../modules/production/services/assetDepreciationService';
-import { assetDepreciationJobService } from '../modules/production/services/assetDepreciationJobService';
+import { assetService } from '../modules/costs/services/assetService';
+import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
+import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
 import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
@@ -92,6 +93,16 @@ import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
 import { REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
 import { estimateReportCost } from '../utils/costCalculations';
+import { zktecoSyncService } from '../modules/attendance/services/zktecoSyncService';
+import { attendanceProcessingService } from '../modules/attendance/services/attendanceProcessingService';
+import type {
+  AttendanceImportResult,
+  AttendanceLog,
+  AttendanceProcessResult,
+  AttendanceRecord,
+  AttendanceSource,
+  NormalizedAttendanceLogInput,
+} from '../modules/attendance/types';
 
 // ─── Helper: build full admin permissions map (fallback) ─────────────────────
 
@@ -436,6 +447,8 @@ interface AppState {
   productionPlans: ProductionPlan[];
   productionPlanFollowUps: ProductionPlanFollowUp[];
   planReports: Record<string, ProductionReport[]>;
+  attendanceLogs: AttendanceLog[];
+  attendanceRecords: AttendanceRecord[];
 
   // Work Orders & Notifications
   workOrders: WorkOrder[];
@@ -504,6 +517,16 @@ interface AppState {
   fetchProducts: () => Promise<void>;
   fetchLines: () => Promise<void>;
   fetchEmployees: () => Promise<void>;
+  fetchAttendanceLogs: (startDate: string, endDate: string) => Promise<void>;
+  fetchAttendanceRecords: (startDate: string, endDate: string) => Promise<void>;
+  syncAttendanceFromDevices: (input?: {
+    mode?: 'manual_upload' | 'watch_folder' | 'scheduled' | 'gateway_push';
+    file?: File;
+    source?: AttendanceSource;
+    logs?: NormalizedAttendanceLogInput[];
+  }) => Promise<AttendanceImportResult>;
+  processDailyAttendance: (date: string) => Promise<AttendanceProcessResult>;
+  recalculateAttendanceForDate: (date: string) => Promise<AttendanceProcessResult>;
   fetchReports: (startDate?: string, endDate?: string) => Promise<void>;
   fetchLineStatuses: () => Promise<void>;
   fetchLineProductConfigs: () => Promise<void>;
@@ -665,6 +688,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   productionPlans: [],
   productionPlanFollowUps: [],
   planReports: {},
+  attendanceLogs: [],
+  attendanceRecords: [],
 
   workOrders: [],
   notifications: [],
@@ -819,6 +844,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       productionPlans: [],
       productionPlanFollowUps: [],
       planReports: {},
+      attendanceLogs: [],
+      attendanceRecords: [],
       workOrders: [],
       notifications: [],
       scanEventsToday: [],
@@ -1018,7 +1045,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const mergedSettings = systemSettingsRaw
-      ? { ...DEFAULT_SYSTEM_SETTINGS, ...systemSettingsRaw }
+      ? {
+          ...DEFAULT_SYSTEM_SETTINGS,
+          ...systemSettingsRaw,
+          attendanceIntegration: {
+            ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
+            ...(systemSettingsRaw.attendanceIntegration || {}),
+          },
+        }
       : DEFAULT_SYSTEM_SETTINGS;
     const filteredRawProducts = await filterProductsByRawMaterialWarehouse(
       rawProducts,
@@ -1198,6 +1232,174 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ employees });
     } catch (error) {
       set({ error: (error as Error).message });
+    }
+  },
+
+  fetchAttendanceLogs: async (startDate, endDate) => {
+    try {
+      const rows = await zktecoSyncService.getLogsByDateRange(startDate, endDate);
+      set({ attendanceLogs: rows as AttendanceLog[] });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  fetchAttendanceRecords: async (startDate, endDate) => {
+    try {
+      const rows = await attendanceProcessingService.getRecordsByDateRange(startDate, endDate);
+      set({ attendanceRecords: rows });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  syncAttendanceFromDevices: async (input) => {
+    const mode = input?.mode || 'manual_upload';
+    const watchEnabled = get().systemSettings.attendanceIntegration?.watchFolderEnabled === true;
+    if ((mode === 'scheduled' || mode === 'watch_folder') && !watchEnabled && !input?.file && !input?.logs?.length) {
+      return {
+        batchId: '',
+        totalRows: 0,
+        importedRows: 0,
+        dedupedRows: 0,
+        failedRows: 0,
+        errors: [],
+      };
+    }
+    const startedBy = get().userDisplayName || get().userEmail || 'System';
+    const jobStore = useJobsStore.getState();
+    const estimatedRows = input?.logs?.length || 1;
+    const fileName =
+      input?.file?.name ||
+      (mode === 'watch_folder'
+        ? 'Attendance Watch Folder'
+        : mode === 'scheduled'
+          ? 'Attendance Scheduled Sync'
+          : 'Attendance Manual Sync');
+    const jobId = jobStore.addJob({
+      fileName,
+      jobType: 'Attendance Device Sync',
+      totalRows: estimatedRows,
+      startedBy,
+    });
+    jobStore.startJob(jobId, 'Preparing attendance import');
+    set({ error: null });
+    try {
+      let result: AttendanceImportResult;
+      if (input?.file) {
+        jobStore.setJobProgress(jobId, {
+          processedRows: 0,
+          status: 'uploading',
+          statusText: 'Parsing Excel/CSV file',
+          totalRows: 1,
+        });
+        result = await zktecoSyncService.importFile(input.file, input.source || 'zkteco_excel');
+      } else if (input?.logs && input.logs.length > 0) {
+        jobStore.setJobProgress(jobId, {
+          processedRows: 0,
+          status: 'processing',
+          statusText: 'Importing gateway logs',
+          totalRows: input.logs.length,
+        });
+        const imported = await zktecoSyncService.importNormalizedLogs(input.logs);
+        result = {
+          batchId: imported.batchId,
+          totalRows: input.logs.length,
+          importedRows: imported.importedRows,
+          dedupedRows: imported.dedupedRows,
+          failedRows: 0,
+          errors: [],
+        };
+      } else {
+        result = {
+          batchId: '',
+          totalRows: 0,
+          importedRows: 0,
+          dedupedRows: 0,
+          failedRows: 0,
+          errors: [],
+        };
+      }
+
+      const processedDates = result.processedDates && result.processedDates.length > 0
+        ? result.processedDates
+        : [getTodayDateString()];
+      for (let i = 0; i < processedDates.length; i += 1) {
+        const date = processedDates[i];
+        jobStore.setJobProgress(jobId, {
+          processedRows: i + 1,
+          totalRows: processedDates.length,
+          status: 'processing',
+          statusText: `Processing attendance date ${date}`,
+        });
+        await attendanceProcessingService.processDate(date);
+      }
+
+      jobStore.completeJob(jobId, {
+        addedRows: result.importedRows,
+        failedRows: result.failedRows + result.dedupedRows,
+        statusText: `Imported ${result.importedRows}, deduped ${result.dedupedRows}`,
+      });
+      return result;
+    } catch (error) {
+      const message = (error as Error).message || 'Attendance sync failed';
+      set({ error: message });
+      jobStore.failJob(jobId, message, 'Attendance sync failed');
+      throw error;
+    }
+  },
+
+  processDailyAttendance: async (date) => {
+    const startedBy = get().userDisplayName || get().userEmail || 'System';
+    const jobStore = useJobsStore.getState();
+    const jobId = jobStore.addJob({
+      fileName: date,
+      jobType: 'Attendance Daily Process',
+      totalRows: 1,
+      startedBy,
+    });
+    jobStore.startJob(jobId, `Processing attendance for ${date}`);
+    set({ error: null });
+    try {
+      const result = await attendanceProcessingService.processDate(date);
+      jobStore.completeJob(jobId, {
+        addedRows: result.recordsUpserted,
+        failedRows: 0,
+        statusText: `Upserted ${result.recordsUpserted} records`,
+      });
+      return result;
+    } catch (error) {
+      const message = (error as Error).message || 'Attendance process failed';
+      set({ error: message });
+      jobStore.failJob(jobId, message, 'Attendance process failed');
+      throw error;
+    }
+  },
+
+  recalculateAttendanceForDate: async (date) => {
+    const startedBy = get().userDisplayName || get().userEmail || 'System';
+    const jobStore = useJobsStore.getState();
+    const jobId = jobStore.addJob({
+      fileName: date,
+      jobType: 'Attendance Recalculate',
+      totalRows: 1,
+      startedBy,
+    });
+    jobStore.startJob(jobId, `Recalculating ${date}`);
+    set({ error: null });
+    try {
+      const result = await attendanceProcessingService.recalculateDate(date);
+      jobStore.completeJob(jobId, {
+        addedRows: result.recordsUpserted,
+        failedRows: 0,
+        statusText: `Recalculated ${result.recordsUpserted} records`,
+      });
+      return result;
+    } catch (error) {
+      const message = (error as Error).message || 'Attendance recalculation failed';
+      set({ error: message });
+      jobStore.failJob(jobId, message, 'Attendance recalculation failed');
+      throw error;
     }
   },
 
@@ -3032,6 +3234,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveCostCenterValue: async (data, existingId) => {
     try {
+      const targetMonth = String(data.month || '').trim();
+      if (targetMonth && await monthlyProductionCostService.isMonthClosed(targetMonth)) {
+        throw new Error('الفترة مُغلقة، لا يمكن تعديل قيم مراكز التكلفة لهذا الشهر.');
+      }
       if (existingId) {
         await costCenterValueService.update(existingId, data);
       } else {
@@ -3046,6 +3252,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveCostAllocation: async (data, existingId) => {
     try {
+      const targetMonth = String(data.month || '').trim();
+      if (targetMonth && await monthlyProductionCostService.isMonthClosed(targetMonth)) {
+        throw new Error('الفترة مُغلقة، لا يمكن تعديل توزيعات مراكز التكلفة لهذا الشهر.');
+      }
       if (existingId) {
         await costAllocationService.update(existingId, data);
       } else {
@@ -3161,7 +3371,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const data = await systemSettingsService.get();
       if (data) {
-        const merged = { ...DEFAULT_SYSTEM_SETTINGS, ...data };
+        const merged = {
+          ...DEFAULT_SYSTEM_SETTINGS,
+          ...data,
+          attendanceIntegration: {
+            ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
+            ...(data.attendanceIntegration || {}),
+          },
+        };
         set({ systemSettings: merged });
         await get().fetchProducts();
         applyTheme(merged.theme);
@@ -3174,11 +3391,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateSystemSettings: async (data: SystemSettings) => {
     try {
-      await systemSettingsService.set(data);
-      set({ systemSettings: data });
+      const merged: SystemSettings = {
+        ...DEFAULT_SYSTEM_SETTINGS,
+        ...data,
+        attendanceIntegration: {
+          ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
+          ...(data.attendanceIntegration || {}),
+        },
+      };
+      await systemSettingsService.set(merged);
+      set({ systemSettings: merged });
       await get().fetchProducts();
-      applyTheme(data.theme);
-      setupAutoThemeListener(data.theme);
+      applyTheme(merged.theme);
+      setupAutoThemeListener(merged.theme);
     } catch (error) {
       set({ error: (error as Error).message });
     }

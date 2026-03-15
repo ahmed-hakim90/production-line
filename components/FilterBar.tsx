@@ -17,6 +17,16 @@
  *   />
  */
 import React from 'react';
+import { Loader2, Search, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export interface FilterSelectOption { label: string; value: string; }
 
@@ -75,19 +85,23 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       {/* Quick text search */}
       {search && (
         <div className="erp-search-input erp-search-input--table">
-          <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
-          <input
+          <Search className="text-[var(--color-text-muted)]" style={{ width: 15, height: 15, flexShrink: 0 }} />
+          <Input
             value={search.value}
             onChange={(e) => search.onChange(e.target.value)}
             placeholder={search.placeholder ?? 'بحث...'}
+            className="!border-0 !bg-transparent !shadow-none !ring-0 focus-visible:!ring-0"
           />
           {search.value && (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => search.onChange('')}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', flexShrink: 0 }}
+              className="h-5 w-5 p-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             >
-              <span className="material-icons-round" style={{ fontSize: 14 }}>close</span>
-            </button>
+              <X style={{ width: 14, height: 14 }} />
+            </Button>
           )}
         </div>
       )}
@@ -96,13 +110,16 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       {dateSegment && (
         <div className="erp-date-seg">
           {dateSegment.options.map((opt) => (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               key={opt.value}
               className={`erp-date-seg-btn${dateSegment.value === opt.value ? ' active' : ''}`}
               onClick={() => dateSegment.onChange(opt.value)}
             >
               {opt.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -119,13 +136,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <input type="date" value={dateRange.end} onChange={(e) => dateRange.onEndChange(e.target.value)} />
           </div>
           {dateRange.onApply && (
-            <button className="erp-filter-apply" onClick={dateRange.onApply}>
+            <Button type="button" className="erp-filter-apply" onClick={dateRange.onApply}>
               {dateRange.loading
-                ? <span className="material-icons-round" style={{ fontSize: 14, animation: 'spin 1s linear infinite' }}>refresh</span>
-                : <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
+                ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />
+                : <Search style={{ width: 14, height: 14 }} />
               }
               عرض
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -137,18 +154,26 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
       {/* Dropdown selects */}
       {visibleSelects.map((sel, i) => (
-        <select
+        <Select
           key={i}
-          className={`erp-filter-select${sel.value ? ' active' : ''}`}
-          value={sel.value}
-          onChange={(e) => sel.onChange(e.target.value)}
-          style={{ minWidth: sel.minWidth ?? 130 }}
+          value={sel.value || '__all__'}
+          onValueChange={(value) => sel.onChange(value === '__all__' ? '' : value)}
         >
-          {sel.placeholder && <option value="">{sel.placeholder}</option>}
-          {sel.options.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+          <SelectTrigger
+            className={`erp-filter-select${sel.value ? ' active' : ''}`}
+            style={{ minWidth: sel.minWidth ?? 130 }}
+          >
+            <SelectValue placeholder={sel.placeholder ?? 'اختر...'} />
+          </SelectTrigger>
+          <SelectContent>
+            {sel.placeholder && <SelectItem value="__all__">{sel.placeholder}</SelectItem>}
+            {sel.options.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ))}
 
       {/* Extra content */}
@@ -156,8 +181,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
       {/* Clear filters */}
       {activeCount > 0 && onClear && (
-        <button className="erp-filter-clear" onClick={onClear}>
-          <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
+        <button className="erp-filter-clear" onClick={onClear} type="button">
+          <X style={{ width: 13, height: 13 }} />
           مسح ({activeCount})
         </button>
       )}

@@ -1,10 +1,41 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeftRight,
+  BadgeCheck,
+  BadgeDollarSign,
+  Boxes,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
+  CirclePlus,
+  Cog,
+  Download,
+  Eye,
+  GripVertical,
+  Loader2,
+  Package,
+  Pencil,
+  ReceiptText,
+  RefreshCcw,
+  Save,
+  Search,
+  SlidersHorizontal,
+  Split,
+  Trash2,
+  Truck,
+  Wallet,
+  Warehouse,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
-import { buildProductCosts, buildProductAvgCost, formatCost, type ProductCostData } from '../../../utils/costCalculations';
+import { buildProductCosts, buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
 import { FirestoreProduct, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
@@ -22,9 +53,18 @@ import { reportService } from '@/modules/production/services/reportService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { warehouseService } from '../../inventory/services/warehouseService';
-import type { Warehouse } from '../../inventory/types';
+import type { Warehouse as InventoryWarehouse } from '../../inventory/types';
 import { categoryService } from '../../catalog/services/categoryService';
+import { monthlyProductionCostService } from '../../costs/services/monthlyProductionCostService';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -42,6 +82,56 @@ type ProductTableColumnKey =
   | 'unitsPerCarton';
 
 const COLUMN_PREFS_KEY = 'products_table_visible_columns_v1';
+
+const PRODUCT_ICON_MAP: Record<string, LucideIcon> = {
+  unfold_more: ChevronsUpDown,
+  expand_less: ChevronUp,
+  expand_more: ChevronDown,
+  search: Search,
+  close: X,
+  delete: Trash2,
+  done_all: BadgeCheck,
+  remove_done: AlertCircle,
+  inventory_2: Boxes,
+  visibility: Eye,
+  edit: Pencil,
+  check_circle: BadgeCheck,
+  error: AlertCircle,
+  receipt_long: ReceiptText,
+  refresh: Loader2,
+  save: Save,
+  add: CirclePlus,
+  delete_forever: Trash2,
+  drag_indicator: GripVertical,
+  download: Download,
+  warning: AlertTriangle,
+  add_circle: CirclePlus,
+  sync: RefreshCcw,
+  warehouse: Warehouse,
+  tune: SlidersHorizontal,
+  call_split: Split,
+  precision_manufacturing: Cog,
+  delete_sweep: Trash2,
+  sell: BadgeDollarSign,
+  payments: Wallet,
+  compare_arrows: ArrowLeftRight,
+  price_check: BadgeCheck,
+  local_shipping: Truck,
+  currency_yuan: BadgeDollarSign,
+  inventory: Package,
+  package_2: Package,
+  view_in_ar: Boxes,
+};
+
+const ProductIcon = ({
+  name,
+  ...iconProps
+}: {
+  name: string;
+} & React.ComponentProps<'svg'>) => {
+  const Icon = PRODUCT_ICON_MAP[name] ?? AlertCircle;
+  return <Icon {...iconProps} />;
+};
 
 const DEFAULT_VISIBLE_COLUMNS: Record<ProductTableColumnKey, boolean> = {
   openingStock: true,
@@ -82,6 +172,7 @@ export const Products: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
   const products = useAppStore((s) => s.products);
+  const _rawProducts = useAppStore((s) => s._rawProducts);
   const createProduct = useAppStore((s) => s.createProduct);
   const updateProduct = useAppStore((s) => s.updateProduct);
   const deleteProduct = useAppStore((s) => s.deleteProduct);
@@ -153,7 +244,8 @@ export const Products: React.FC = () => {
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [savedMonthlyCostsMap, setSavedMonthlyCostsMap] = useState<Record<string, ProductCostData>>({});
+  const [warehouses, setWarehouses] = useState<InventoryWarehouse[]>([]);
   const [showWarehouseExportModal, setShowWarehouseExportModal] = useState(false);
   const [exportWarehouseId, setExportWarehouseId] = useState('');
 
@@ -279,6 +371,39 @@ export const Products: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadSavedMonthlyCosts = async () => {
+      if (!canViewCosts) {
+        if (!cancelled) setSavedMonthlyCostsMap({});
+        return;
+      }
+      try {
+        const rows = await monthlyProductionCostService.getByMonth(getCurrentMonth());
+        if (cancelled) return;
+        const next = rows.reduce<Record<string, ProductCostData>>((acc, row) => {
+          const qty = Number(row.totalProducedQty || 0);
+          const labor = Number(row.directCost || 0);
+          const indirect = Number(row.indirectCost || 0);
+          const total = Number(row.totalProductionCost || (labor + indirect));
+          acc[row.productId] = {
+            laborCost: labor,
+            indirectCost: indirect,
+            totalCost: total,
+            quantityProduced: qty,
+            costPerUnit: qty > 0 ? (total / qty) : Number(row.averageUnitCost || 0),
+          };
+          return acc;
+        }, {});
+        setSavedMonthlyCostsMap(next);
+      } catch {
+        if (!cancelled) setSavedMonthlyCostsMap({});
+      }
+    };
+    void loadSavedMonthlyCosts();
+    return () => { cancelled = true; };
+  }, [canViewCosts]);
+
   const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
   const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
 
@@ -302,10 +427,11 @@ export const Products: React.FC = () => {
     const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
     const result: Record<string, ProductCostData> = {};
     for (const p of products) {
-      result[p.id] = buildProductAvgCost(p.id, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+      result[p.id] = savedMonthlyCostsMap[p.id]
+        ?? buildProductAvgCost(p.id, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
     }
     return result;
-  }, [canViewCosts, products, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+  }, [canViewCosts, products, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations, savedMonthlyCostsMap]);
 
   const openCreate = () => {
     openModal(MODAL_KEYS.PRODUCTS_CREATE, { source: 'products.page' });
@@ -318,6 +444,13 @@ export const Products: React.FC = () => {
     openCreate();
     navigate('/products', { replace: true });
   }, [location.search, can, navigate]);
+
+  useEffect(() => {
+    const editProductId = (location.state as { editProductId?: string } | null)?.editProductId;
+    if (!editProductId) return;
+    openEdit(editProductId);
+    navigate('/products', { replace: true, state: null });
+  }, [location.state, navigate, products, _rawProducts]);
 
   const openEdit = (id: string) => {
     const product = products.find((p) => p.id === id);
@@ -368,7 +501,6 @@ export const Products: React.FC = () => {
 
   // ── Import from Excel ──────────────────────────────────────────────────
 
-  const _rawProducts = useAppStore((s) => s._rawProducts);
   const fallbackCategoryOptions = useMemo(() => {
     const unique = new Set<string>();
     _rawProducts.forEach((product) => {
@@ -589,9 +721,10 @@ export const Products: React.FC = () => {
   };
 
   const SortIcon = ({ col }: { col: string }) => (
-    <span className="material-icons-round" style={{ fontSize: 13, verticalAlign: 'middle', marginInlineStart: 2, opacity: sortKey === col ? 1 : 0.35 }}>
-      {sortKey !== col ? 'unfold_more' : sortDir === 'asc' ? 'expand_less' : 'expand_more'}
-    </span>
+    <ProductIcon
+      name={sortKey !== col ? 'unfold_more' : sortDir === 'asc' ? 'expand_less' : 'expand_more'}
+      style={{ fontSize: 13, verticalAlign: 'middle', marginInlineStart: 2, opacity: sortKey === col ? 1 : 0.35 }}
+    />
   );
 
   return (
@@ -654,41 +787,38 @@ export const Products: React.FC = () => {
       />
 
       {/* ── Search & Filters ── */}
-      <div className="erp-filter-bar">
-        <div className="erp-search-input w-full sm:max-w-[320px] sm:flex-[1_1_240px]">
-          <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
-          <input
-            type="text"
-            placeholder="ابحث عن منتج..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-              <span className="material-icons-round" style={{ fontSize: 14 }}>close</span>
-            </button>
-          )}
-        </div>
-        <div className="erp-filter-sep" />
-        <select className={`erp-filter-select${categoryFilter ? ' active' : ''}`} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-          <option value="">كل الفئات</option>
-          {mergedCategoryOptions.map((category) => (
-            <option key={category} value={category}>{category}</option>
-          ))}
-        </select>
-        <select className={`erp-filter-select${stockFilter ? ' active' : ''}`} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
-          <option value="">حالة المخزون</option>
-          <option value="available">متوفر</option>
-          <option value="low">منخفض</option>
-          <option value="out">نفذ</option>
-        </select>
-        {(search || categoryFilter || stockFilter) && (
-          <button className="erp-filter-clear" onClick={() => { setSearch(''); setCategoryFilter(''); setStockFilter(''); }}>
-            <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
-            مسح
-          </button>
-        )}
-      </div>
+      <SmartFilterBar
+        searchPlaceholder="ابحث بالاسم أو الكود..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        quickFilters={[
+          {
+            key: 'stock',
+            placeholder: 'حالة المخزون',
+            options: [
+              { value: 'available', label: 'متوفر' },
+              { value: 'low', label: 'منخفض' },
+              { value: 'out', label: 'نفد' },
+            ],
+          },
+        ]}
+        quickFilterValues={{ stock: stockFilter || 'all' }}
+        onQuickFilterChange={(_, value) => setStockFilter(value === 'all' ? '' : value)}
+        advancedFilters={[
+          {
+            key: 'category',
+            label: 'الفئة',
+            placeholder: 'كل الفئات',
+            options: mergedCategoryOptions.map((category) => ({ value: category, label: category })),
+          },
+        ]}
+        advancedFilterValues={{ category: categoryFilter || 'all' }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'category') setCategoryFilter(value === 'all' ? '' : value);
+        }}
+        onApply={() => undefined}
+        applyLabel="عرض"
+      />
 
       {/* Table */}
       <Card className="!p-0 border-none overflow-hidden ">
@@ -704,7 +834,7 @@ export const Products: React.FC = () => {
                   Promise.all([...selectedIds].map((id) => deleteProduct(id))).then(() => setSelectedIds(new Set()));
                 }}
               >
-                <span className="material-icons-round text-[15px]">delete</span>
+                <ProductIcon name="delete" className="text-[15px]" />
                 حذف المحدد
               </button>
             )}
@@ -730,7 +860,7 @@ export const Products: React.FC = () => {
                     }
                   }}
                 >
-                  <span className="material-icons-round text-[15px]">done_all</span>
+                  <ProductIcon name="done_all" className="text-[15px]" />
                   تفعيل خصم الهالك
                 </button>
                 <button
@@ -753,13 +883,13 @@ export const Products: React.FC = () => {
                     }
                   }}
                 >
-                  <span className="material-icons-round text-[15px]">remove_done</span>
+                  <ProductIcon name="remove_done" className="text-[15px]" />
                   تعطيل خصم الهالك
                 </button>
               </>
             )}
             <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(new Set())}>
-              <span className="material-icons-round text-[15px]">close</span>
+              <ProductIcon name="close" className="text-[15px]" />
               إلغاء التحديد
             </button>
           </div>
@@ -797,7 +927,7 @@ export const Products: React.FC = () => {
               {sorted.length === 0 && (
                 <tr>
                   <td colSpan={99} className="px-6 py-16 text-center text-slate-400">
-                    <span className="material-icons-round text-5xl mb-3 block opacity-30">inventory_2</span>
+                    <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30" />
                     <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter ? ' مطابقة للبحث' : ' بعد'}</p>
                     <p className="text-sm mt-1">
                       {can("products.create")
@@ -820,7 +950,7 @@ export const Products: React.FC = () => {
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-gradient-to-br from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 flex items-center justify-center shrink-0 border border-primary/10">
-                        <span className="material-icons-round text-primary text-lg">inventory_2</span>
+                        <ProductIcon name="inventory_2" className="text-primary text-lg" />
                       </div>
                       <div className="min-w-0">
                         <span
@@ -927,16 +1057,16 @@ export const Products: React.FC = () => {
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-0.5 justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={() => navigate(`/products/${product.id}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="عرض التفاصيل">
-                        <span className="material-icons-round text-[18px]">visibility</span>
+                        <ProductIcon name="visibility" className="text-[18px]" />
                       </button>
                       {can("products.edit") && (
                         <button onClick={() => openEdit(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
-                          <span className="material-icons-round text-[18px]">edit</span>
+                          <ProductIcon name="edit" className="text-[18px]" />
                         </button>
                       )}
                       {can("products.delete") && (
                         <button onClick={() => setDeleteConfirmId(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
-                          <span className="material-icons-round text-[18px]">delete</span>
+                          <ProductIcon name="delete" className="text-[18px]" />
                         </button>
                       )}
                     </div>
@@ -978,16 +1108,16 @@ export const Products: React.FC = () => {
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <h3 className="text-lg font-bold">{editId ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h3>
               <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <span className="material-icons-round">close</span>
+                <ProductIcon name="close" />
               </button>
             </div>
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
               {saveMsg && (
                 <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                  <span className="material-icons-round text-base">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
+                  <ProductIcon name={saveMsg.type === 'success' ? 'check_circle' : 'error'} className="text-base" />
                   <p className="flex-1">{saveMsg.text}</p>
                   <button onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
-                    <span className="material-icons-round text-base">close</span>
+                    <ProductIcon name="close" className="text-base" />
                   </button>
                 </div>
               )}
@@ -1055,7 +1185,7 @@ export const Products: React.FC = () => {
                 <>
                   <div className="border-t border-[var(--color-border)] pt-4">
                     <h4 className="text-sm font-bold text-[var(--color-text-muted)] mb-3 flex items-center gap-2">
-                      <span className="material-icons-round text-teal-500 text-base">receipt_long</span>
+                      <ProductIcon name="receipt_long" className="text-teal-500 text-base" />
                       تفصيل التكلفة
                     </h4>
                   </div>
@@ -1108,9 +1238,9 @@ export const Products: React.FC = () => {
               <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>
               <Button variant="primary" onClick={handleSave} disabled={saving || !form.name || !form.code}>
                 {saving ? (
-                  <span className="material-icons-round animate-spin text-sm">refresh</span>
+                  <ProductIcon name="refresh" className="animate-spin text-sm" />
                 ) : (
-                  <span className="material-icons-round text-sm">{editId ? 'save' : 'add'}</span>
+                  <ProductIcon name={editId ? 'save' : 'add'} className="text-sm" />
                 )}
                 {editId ? 'حفظ التعديلات' : 'إضافة المنتج'}
               </Button>
@@ -1124,7 +1254,7 @@ export const Products: React.FC = () => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
+              <ProductIcon name="delete_forever" className="text-rose-500 text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد الحذف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.</p>
@@ -1134,7 +1264,7 @@ export const Products: React.FC = () => {
                 onClick={() => handleDelete(deleteConfirmId)}
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
-                <span className="material-icons-round text-sm">delete</span>
+                <ProductIcon name="delete" className="text-sm" />
                 نعم، احذف
               </button>
             </div>
@@ -1149,34 +1279,34 @@ export const Products: React.FC = () => {
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-4">
-                  <span className="material-icons-round text-[var(--color-text-muted)] cursor-move select-none" aria-hidden="true">drag_indicator</span>
+                  <ProductIcon name="drag_indicator" className="text-[var(--color-text-muted)] cursor-move select-none" aria-hidden="true" />
                   <h3 className="text-lg font-bold">رفع منتجات من Excel</h3>
                 </div>
                 <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
-                  <span className="material-icons-round text-sm">download</span>
+                  <ProductIcon name="download" className="text-sm" />
                   تحميل نموذج
                 </button>
               </div>
                 <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <span className="material-icons-round">close</span>
+                <ProductIcon name="close" />
               </button>
             </div>
 
             <div className="p-6 overflow-y-auto flex-1">
               {importParsing && (
                 <div className="text-center py-12">
-                  <span className="material-icons-round animate-spin text-4xl text-primary mb-3 block">refresh</span>
+                  <ProductIcon name="refresh" className="animate-spin text-4xl text-primary mb-3 block" />
                   <p className="font-bold text-slate-600">جاري تحليل الملف...</p>
                 </div>
               )}
 
               {!importParsing && importResult && importResult.totalRows === 0 && (
                 <div className="text-center py-12">
-                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">warning</span>
+                  <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد من وجود شيت المنتجات (اسم المنتج، الكود...) ويمكن إضافة شيت المواد الخام اختياريًا</p>
                   <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
-                    <span className="material-icons-round text-sm">download</span>
+                    <ProductIcon name="download" className="text-sm" />
                     تحميل نموذج المنتجات
                   </button>
                 </div>
@@ -1190,13 +1320,13 @@ export const Products: React.FC = () => {
                     </div>
                     {importResult.newCount > 0 && (
                       <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-emerald-600">
-                        <span className="material-icons-round text-xs align-middle ml-1">add_circle</span>
+                        <ProductIcon name="add_circle" className="text-xs align-middle ml-1 inline" />
                         جديد: {importResult.newCount}
                       </div>
                     )}
                     {importResult.updateCount > 0 && (
                       <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-600">
-                        <span className="material-icons-round text-xs align-middle ml-1">sync</span>
+                        <ProductIcon name="sync" className="text-xs align-middle ml-1 inline" />
                         تحديث: {importResult.updateCount}
                       </div>
                     )}
@@ -1232,15 +1362,15 @@ export const Products: React.FC = () => {
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
                                 <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
-                                  <span className="material-icons-round text-sm">error</span> خطأ
+                                  <ProductIcon name="error" className="text-sm" /> خطأ
                                 </span>
                               ) : row.action === 'update' ? (
                                 <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-bold">
-                                  <span className="material-icons-round text-sm">sync</span> تحديث
+                                  <ProductIcon name="sync" className="text-sm" /> تحديث
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold">
-                                  <span className="material-icons-round text-sm">add_circle</span> جديد
+                                  <ProductIcon name="add_circle" className="text-sm" /> جديد
                                 </span>
                               )}
                             </td>
@@ -1279,12 +1409,12 @@ export const Products: React.FC = () => {
                 <Button variant="primary" onClick={handleImportSave} disabled={importSaving}>
                   {importSaving ? (
                     <>
-                      <span className="material-icons-round animate-spin text-sm">refresh</span>
+                      <ProductIcon name="refresh" className="animate-spin text-sm" />
                       {importProgress.done} / {importProgress.total}
                     </>
                   ) : (
                     <>
-                      <span className="material-icons-round text-sm">save</span>
+                      <ProductIcon name="save" className="text-sm" />
                       حفظ {importResult.newCount > 0 && importResult.updateCount > 0
                         ? `${importResult.newCount} جديد + ${importResult.updateCount} تحديث`
                         : importResult.updateCount > 0
@@ -1306,25 +1436,26 @@ export const Products: React.FC = () => {
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="material-icons-round text-primary">warehouse</span>
+                <ProductIcon name="warehouse" className="text-primary" />
                 <h3 className="text-lg font-bold">تصدير المنتجات بالمخزن</h3>
               </div>
               <button onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <span className="material-icons-round">close</span>
+                <ProductIcon name="close" />
               </button>
             </div>
             <div className="p-6 space-y-3">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المخزن للتصدير</label>
-              <select
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
-                value={exportWarehouseId}
-                onChange={(e) => setExportWarehouseId(e.target.value)}
-              >
-                <option value="">كل المخازن (بدون تحديد)</option>
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
+              <Select value={exportWarehouseId || 'all'} onValueChange={(value) => setExportWarehouseId(value === 'all' ? '' : value)}>
+                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 font-medium">
+                  <SelectValue placeholder="كل المخازن (بدون تحديد)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل المخازن (بدون تحديد)</SelectItem>
+                  {warehouses.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-[var(--color-text-muted)]">
                 عند اختيار مخزن سيتم تضمين عمود اسم المخزن ورصيد المنتج داخل هذا المخزن في ملف الإكسل.
               </p>
@@ -1338,7 +1469,7 @@ export const Products: React.FC = () => {
                   setShowWarehouseExportModal(false);
                 }}
               >
-                <span className="material-icons-round text-sm">download</span>
+                <ProductIcon name="download" className="text-sm" />
                 تصدير Excel
               </Button>
             </div>
@@ -1352,11 +1483,11 @@ export const Products: React.FC = () => {
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="material-icons-round text-primary">tune</span>
+                <ProductIcon name="tune" className="text-primary" />
                 <h3 className="text-lg font-bold">إدارة الأعمدة</h3>
               </div>
               <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
-                <span className="material-icons-round">close</span>
+                <ProductIcon name="close" />
               </button>
             </div>
             <div className="p-6 space-y-3 overflow-y-auto flex-1 min-h-0">
@@ -1389,7 +1520,7 @@ export const Products: React.FC = () => {
                     onChange={(e) => toggleColumn(opt.key, e.target.checked)}
                     className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                   />
-                  <span className={`material-icons-round text-lg ${visibleColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`}>{opt.icon}</span>
+                  <ProductIcon name={opt.icon} className={`text-lg ${visibleColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[var(--color-text)]">{opt.label}</p>
                   </div>

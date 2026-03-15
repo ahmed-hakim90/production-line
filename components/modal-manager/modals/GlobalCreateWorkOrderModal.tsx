@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -184,19 +185,19 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h3 className="text-base sm:text-lg font-bold">أمر شغل جديد</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
         <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {message && (
             <div className="erp-alert erp-alert-success">
-              <span className="material-icons-round text-emerald-500 text-base">check_circle</span>
+              <CheckCircle2 size={16} className="text-emerald-500" />
               <p className="text-sm font-bold text-emerald-700 flex-1">{message}</p>
             </div>
           )}
           {error && (
             <div className="erp-alert erp-alert-error">
-              <span className="material-icons-round text-rose-500 text-base">error</span>
+              <AlertCircle size={16} className="text-rose-500" />
               <p className="text-sm font-bold text-rose-700 flex-1">{error}</p>
             </div>
           )}
@@ -355,7 +356,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
           <Button variant="outline" onClick={handleClose} disabled={saving}>إلغاء</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0}>
-            {saving ? <span className="material-icons-round animate-spin text-sm">refresh</span> : null}
+            {saving ? <Loader2 size={14} className="animate-spin" /> : null}
             إنشاء أمر الشغل
           </Button>
         </div>

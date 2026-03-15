@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Badge } from '../components/UI';
+import { Card, Button, LoadingSkeleton } from '../components/UI';
+import { PageHeader } from '../../../components/PageHeader';
+import { FilterBar } from '../../../components/FilterBar';
+import { StatusBadge } from '../../../src/components/erp/StatusBadge';
 import { useAppStore } from '../../../store/useAppStore';
 import { roleService } from '../services/roleService';
 import { employeeService } from '../../hr/employeeService';
@@ -47,6 +50,12 @@ export const UsersManagement: React.FC = () => {
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'not_created'>('all');
+  const statusTabs: Array<{ key: 'all' | 'active' | 'pending' | 'not_created'; label: string }> = [
+    { key: 'all', label: 'الكل' },
+    { key: 'pending', label: 'بانتظار الموافقة' },
+    { key: 'not_created', label: 'حسابات لم تُنشأ' },
+    { key: 'active', label: 'مفعل' },
+  ];
 
   const loadEmployees = async () => {
     const all = await employeeService.getAll();
@@ -235,8 +244,9 @@ export const UsersManagement: React.FC = () => {
     'البريد الإلكتروني': row.user.email || '—',
     'الدور': row.role?.name || roleById.get(row.user.roleId)?.name || '—',
     'الموظف المرتبط': row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط',
-    'الحالة': row.user.isActive ? 'مفعّل' : 'بانتظار الموافقة',
+    'الحالة': row.user.isActive ? 'مفعل' : 'بانتظار الموافقة',
   }));
+  const activeFilterCount = [query.trim(), statusFilter !== 'all' ? statusFilter : ''].filter(Boolean).length;
 
   const handleApproveUserAccess = async (
     row: UserManagementRow,
@@ -334,27 +344,40 @@ export const UsersManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="erp-page-head">
-        <div className="erp-page-title-block">
-          <h1 className="page-title">إدارة المستخدمين</h1>
-          <p className="page-subtitle">إنشاء المستخدمين وربطهم بالموظفين والتحكم في التفعيل والحذف النهائي</p>
-        </div>
-        <div className="erp-page-actions">
-          <button className="btn btn-secondary" onClick={() => exportHRData(exportRows, 'المستخدمون', `المستخدمون-${new Date().toISOString().slice(0, 10)}`)} disabled={rows.length === 0}>
-            <span className="material-icons-round text-[15px]">download</span>
-            تصدير
-          </button>
-          <button className="btn btn-secondary" onClick={openImportUsersModal} data-modal-key={MODAL_KEYS.SYSTEM_USERS_IMPORT}>
-            <span className="material-icons-round text-[15px]">upload_file</span>
-            استيراد
-          </button>
-          <button className="btn btn-primary" onClick={openCreateUserModal} data-modal-key={MODAL_KEYS.SYSTEM_USERS_CREATE}>
-            <span className="material-icons-round text-[15px]">person_add</span>
-            إنشاء مستخدم
-          </button>
-        </div>
-      </div>
+    <div className="space-y-4 erp-ds-clean">
+      <PageHeader
+        title="إدارة المستخدمين"
+        subtitle="إنشاء المستخدمين وربطهم بالموظفين والتحكم في التفعيل والحذف النهائي"
+        backAction={false}
+        extra={(
+          <>
+            <Button
+              variant="ghost"
+              className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+              onClick={() => exportHRData(exportRows, 'المستخدمون', `المستخدمون-${new Date().toISOString().slice(0, 10)}`)}
+              disabled={rows.length === 0}
+            >
+              <span className="material-icons-round text-[15px]">download</span>
+              تصدير
+            </Button>
+            <Button
+              variant="ghost"
+              className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+              onClick={openImportUsersModal}
+              data-modal-key={MODAL_KEYS.SYSTEM_USERS_IMPORT}
+            >
+              <span className="material-icons-round text-[15px]">upload_file</span>
+              استيراد
+            </Button>
+          </>
+        )}
+        primaryAction={{
+          label: '+ إنشاء مستخدم',
+          icon: 'add',
+          onClick: openCreateUserModal,
+          dataModalKey: MODAL_KEYS.SYSTEM_USERS_CREATE,
+        }}
+      />
 
       {msg && (
         <div className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm border ${msg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
@@ -362,75 +385,65 @@ export const UsersManagement: React.FC = () => {
         </div>
       )}
 
-      <div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          <Card className="p-4">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المستخدمين</p>
-            <p className="text-2xl font-bold text-[var(--color-text)]">{rows.length}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مستخدمون مرتبطون بموظف</p>
-            <p className="text-2xl font-bold text-primary">{linkedCount}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مستخدمون مفعّلون</p>
-            <p className="text-2xl font-bold text-emerald-600">{activeCount}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بانتظار الموافقة</p>
-            <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
-          </Card>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        {loading ? (
+          <>
+            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
+            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
+            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
+            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
+          </>
+        ) : (
+          <>
+            <Card className="p-4">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي</p>
+              <p className="text-2xl font-bold text-[var(--color-text)]">{rows.length}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مرتبطون بموظف</p>
+              <p className="text-2xl font-bold text-primary">{linkedCount}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مفعلون</p>
+              <p className="text-2xl font-bold text-emerald-600">{activeCount}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بانتظار الموافقة</p>
+              <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
+            </Card>
+          </>
+        )}
       </div>
 
       <Card title="قائمة المستخدمين">
-        <div className="erp-filter-bar">
-          <div className="erp-search-input erp-search-input--table w-full sm:max-w-[360px]">
-            <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="بحث بالبريد أو الاسم أو الموظف"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', flexShrink: 0 }}
-                title="مسح البحث"
-              >
-                <span className="material-icons-round" style={{ fontSize: 14 }}>close</span>
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-1 flex-wrap sm:ms-auto">
-            <button
-              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${statusFilter === 'all' ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'}`}
-              onClick={() => setStatusFilter('all')}
-            >
-              الكل
-            </button>
-            <button
-              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${statusFilter === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'}`}
-              onClick={() => setStatusFilter('pending')}
-            >
-              منتظر الموافقة
-            </button>
-            <button
-              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${statusFilter === 'not_created' ? 'bg-amber-700 text-white border-amber-700' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'}`}
-              onClick={() => setStatusFilter('not_created')}
-            >
-              حسابات لم تُنشأ
-            </button>
-            <button
-              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${statusFilter === 'active' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'}`}
-              onClick={() => setStatusFilter('active')}
-            >
-              مفعّل
-            </button>
-          </div>
-        </div>
+        <FilterBar
+          search={{
+            value: query,
+            onChange: setQuery,
+            placeholder: 'بحث بالبريد أو الاسم أو الموظف',
+          }}
+          activeCount={activeFilterCount}
+          onClear={() => {
+            setQuery('');
+            setStatusFilter('all');
+          }}
+          extra={(
+            <div className="erp-date-seg sm:ms-auto">
+              {statusTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={`erp-date-seg-btn ${statusFilter === tab.key ? '!bg-indigo-600 !text-white !border-indigo-600 hover:!bg-indigo-700' : ''}`}
+                  onClick={() => setStatusFilter(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+        />
         {loading ? (
-          <div className="text-sm text-[var(--color-text-muted)]">جاري التحميل...</div>
+          <LoadingSkeleton rows={7} type="table" />
         ) : (
           <div className="erp-table-scroll">
             <table className="w-full text-sm">
@@ -457,18 +470,15 @@ export const UsersManagement: React.FC = () => {
                       <td className="py-2.5 px-3">{row.role?.name || roleById.get(row.user.roleId)?.name || '—'}</td>
                       <td className="py-2.5 px-3">{row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط'}</td>
                       <td className="py-2.5 px-3">
-                        <Badge variant={row.user.isActive ? 'success' : 'warning'}>
-                          {row.user.isActive ? 'مفعّل' : 'بانتظار الموافقة'}
-                        </Badge>
+                        <StatusBadge label={row.user.isActive ? 'مفعل' : 'بانتظار الموافقة'} type={row.user.isActive ? 'success' : 'warning'} dot />
                       </td>
                       <td className="py-2.5 px-3">
                         <button
                           type="button"
-                          className="btn btn-secondary text-xs"
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
                           onClick={() => openManageUserModal(row)}
                           data-modal-key={MODAL_KEYS.SYSTEM_USERS_MANAGE}
                         >
-                          <span className="material-icons-round text-[14px]">manage_accounts</span>
                           إدارة المستخدم
                         </button>
                       </td>

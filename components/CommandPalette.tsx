@@ -5,6 +5,21 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  Boxes,
+  Factory,
+  FileBarChart2,
+  FolderOpen,
+  Home,
+  Search,
+  SearchX,
+  Settings,
+  ShieldCheck,
+  Users,
+  Circle,
+  type LucideIcon,
+} from 'lucide-react';
 import { MENU_CONFIG } from '@/config/menu.config';
 import { usePermission } from '@/utils/permissions';
 
@@ -20,6 +35,27 @@ interface PaletteItem {
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
+}
+
+const PALETTE_ICON_MAP: Record<string, LucideIcon> = {
+  analytics: BarChart3,
+  bar_chart: BarChart3,
+  category: FolderOpen,
+  dashboard: Home,
+  factory: Factory,
+  folder: FolderOpen,
+  groups: Users,
+  inventory: Boxes,
+  report: FileBarChart2,
+  security: ShieldCheck,
+  settings: Settings,
+};
+
+function renderPaletteIcon(name?: string, className?: string, size = 16) {
+  if (!name) return null;
+  const Lucide = PALETTE_ICON_MAP[name];
+  if (Lucide) return <Lucide size={size} className={className} />;
+  return <Circle size={size} className={className} />;
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose }) => {
@@ -104,7 +140,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
       >
         {/* Search input */}
         <div className="flex items-center gap-2.5 px-3.5 py-3 border-b border-[var(--color-border)]">
-          <span className="material-icons-round text-[18px] text-[var(--color-text-muted)] shrink-0">search</span>
+          <Search size={18} className="text-[var(--color-text-muted)] shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -123,7 +159,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
         <div ref={listRef} className="max-h-[380px] overflow-y-auto py-1.5">
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-[13px] text-[var(--color-text-muted)]">
-              <span className="material-icons-round text-3xl mb-2 block opacity-30">search_off</span>
+              <SearchX size={30} className="mb-2 block opacity-30 mx-auto" />
               لا توجد نتائج لـ "{query}"
             </div>
           ) : (
@@ -140,17 +176,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
               >
                 {/* Item icon */}
                 <span className={[
-                  'w-8 h-8 rounded-[var(--border-radius-sm)] flex items-center justify-center shrink-0 text-[16px] material-icons-round',
+                  'w-8 h-8 rounded-[var(--border-radius-sm)] flex items-center justify-center shrink-0',
                   idx === activeIdx ? 'bg-primary/10 text-primary' : 'bg-[#f0f2f5] text-[var(--color-text-muted)]',
                 ].join(' ')}>
-                  {item.icon}
+                  {renderPaletteIcon(item.icon, undefined, 16)}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className={`text-[13px] truncate ${idx === activeIdx ? 'text-primary font-semibold' : 'text-[var(--color-text)] font-medium'}`}>
                     {item.label}
                   </p>
                   <p className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1 truncate">
-                    <span className="material-icons-round text-[11px]">{item.groupIcon}</span>
+                    {renderPaletteIcon(item.groupIcon, undefined, 11)}
                     {item.group}
                   </p>
                 </div>

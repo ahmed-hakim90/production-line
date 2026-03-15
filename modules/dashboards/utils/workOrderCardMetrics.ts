@@ -44,7 +44,7 @@ export async function loadWorkOrderCardMetricsData(
         const reports = await reportService.getByWorkOrderId(workOrderId);
         return [workOrderId, reports] as const;
       } catch {
-        return [workOrderId, []] as const;
+        return [workOrderId, [] as ProductionReport[]] as const;
       }
     }),
   );

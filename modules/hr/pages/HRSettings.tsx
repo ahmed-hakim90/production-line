@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -15,7 +15,9 @@ import {
   type TransportZone,
 } from '../config';
 import type { DayOfWeek } from '../types';
+import type { AttendanceIntegrationSettings } from '@/types';
 import { updateApprovalSettings } from '../approval';
+import { DEFAULT_ATTENDANCE_INTEGRATION } from '@/utils/dashboardConfig';
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 
@@ -75,6 +77,25 @@ function validateLeave(data: HRConfigMap['leave']): ValidationError[] {
     errors.push({ field: 'maxConsecutiveDays', message: 'يجب أن يكون 1 على الأقل' });
   if (data.sickDocumentThresholdDays < 1)
     errors.push({ field: 'sickDocumentThresholdDays', message: 'يجب أن يكون 1 على الأقل' });
+  if (!Array.isArray(data.leaveTypes) || data.leaveTypes.length === 0) {
+    errors.push({ field: 'leaveTypes', message: 'يجب إضافة نوع إجازة واحد على الأقل' });
+  } else {
+    const keys = new Set<string>();
+    for (let i = 0; i < data.leaveTypes.length; i++) {
+      const row = data.leaveTypes[i];
+      const key = String(row.key || '').trim();
+      const label = String(row.label || '').trim();
+      if (!key) errors.push({ field: `leaveTypes.${i}.key`, message: `كود النوع في الصف ${i + 1} مطلوب` });
+      if (!label) errors.push({ field: `leaveTypes.${i}.label`, message: `اسم النوع في الصف ${i + 1} مطلوب` });
+      if (key) {
+        if (keys.has(key)) {
+          errors.push({ field: `leaveTypes.${i}.key`, message: `كود النوع "${key}" مكرر` });
+        } else {
+          keys.add(key);
+        }
+      }
+    }
+  }
   return errors;
 }
 
@@ -397,36 +418,130 @@ const OvertimeForm: React.FC<TabFormProps<'overtime'>> = ({ config, onChange, er
   </div>
 );
 
-const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, readOnly }) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <FormField label="الرصيد السنوي الافتراضي (أيام)" error={getError(errors, 'defaultAnnualBalance')}>
-      <NumberInput value={config.defaultAnnualBalance} onChange={(v) => onChange({ ...config, defaultAnnualBalance: v })} min={0} disabled={readOnly} />
-    </FormField>
-    <FormField label="رصيد الإجازات المرضية (أيام)" error={getError(errors, 'defaultSickBalance')}>
-      <NumberInput value={config.defaultSickBalance} onChange={(v) => onChange({ ...config, defaultSickBalance: v })} min={0} disabled={readOnly} />
-    </FormField>
-    <FormField label="رصيد الإجازات الطارئة (أيام)" error={getError(errors, 'defaultEmergencyBalance')}>
-      <NumberInput value={config.defaultEmergencyBalance} onChange={(v) => onChange({ ...config, defaultEmergencyBalance: v })} min={0} disabled={readOnly} />
-    </FormField>
-    <FormField label="حد الترحيل (أيام)" error={getError(errors, 'carryOverLimit')} hint="أقصى عدد أيام يُرحّل للسنة التالية">
-      <NumberInput value={config.carryOverLimit} onChange={(v) => onChange({ ...config, carryOverLimit: v })} min={0} disabled={readOnly} />
-    </FormField>
-    <FormField label="الحد الأقصى للإجازات المتتالية (أيام)" error={getError(errors, 'maxConsecutiveDays')}>
-      <NumberInput value={config.maxConsecutiveDays} onChange={(v) => onChange({ ...config, maxConsecutiveDays: v })} min={1} disabled={readOnly} />
-    </FormField>
-    <FormField label="التقرير الطبي مطلوب بعد (أيام)" error={getError(errors, 'sickDocumentThresholdDays')}>
-      <NumberInput value={config.sickDocumentThresholdDays} onChange={(v) => onChange({ ...config, sickDocumentThresholdDays: v })} min={1} disabled={readOnly} />
-    </FormField>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
-      <span className="text-sm font-bold text-[var(--color-text)]">السماح بالرصيد السالب</span>
-      <Toggle checked={config.allowNegativeBalance} onChange={(v) => onChange({ ...config, allowNegativeBalance: v })} disabled={readOnly} />
+const CORE_LEAVE_KEYS = new Set(['annual', 'sick', 'emergency', 'unpaid']);
+
+const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, readOnly }) => {
+  const updateLeaveType = (index: number, field: 'key' | 'label' | 'isPaid', value: string | boolean) => {
+    const leaveTypes = [...config.leaveTypes];
+    leaveTypes[index] = { ...leaveTypes[index], [field]: value } as any;
+    onChange({ ...config, leaveTypes });
+  };
+
+  const addLeaveType = () => {
+    const leaveTypes = [...config.leaveTypes, { key: '', label: '', isPaid: true }];
+    onChange({ ...config, leaveTypes });
+  };
+
+  const removeLeaveType = (index: number) => {
+    const row = config.leaveTypes[index];
+    if (CORE_LEAVE_KEYS.has(row.key)) return;
+    onChange({ ...config, leaveTypes: config.leaveTypes.filter((_, i) => i !== index) });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <FormField label="الرصيد السنوي الافتراضي (أيام)" error={getError(errors, 'defaultAnnualBalance')}>
+          <NumberInput value={config.defaultAnnualBalance} onChange={(v) => onChange({ ...config, defaultAnnualBalance: v })} min={0} disabled={readOnly} />
+        </FormField>
+        <FormField label="رصيد الإجازات المرضية (أيام)" error={getError(errors, 'defaultSickBalance')}>
+          <NumberInput value={config.defaultSickBalance} onChange={(v) => onChange({ ...config, defaultSickBalance: v })} min={0} disabled={readOnly} />
+        </FormField>
+        <FormField label="رصيد الإجازات الطارئة (أيام)" error={getError(errors, 'defaultEmergencyBalance')}>
+          <NumberInput value={config.defaultEmergencyBalance} onChange={(v) => onChange({ ...config, defaultEmergencyBalance: v })} min={0} disabled={readOnly} />
+        </FormField>
+        <FormField label="حد الترحيل (أيام)" error={getError(errors, 'carryOverLimit')} hint="أقصى عدد أيام يُرحّل للسنة التالية">
+          <NumberInput value={config.carryOverLimit} onChange={(v) => onChange({ ...config, carryOverLimit: v })} min={0} disabled={readOnly} />
+        </FormField>
+        <FormField label="الحد الأقصى للإجازات المتتالية (أيام)" error={getError(errors, 'maxConsecutiveDays')}>
+          <NumberInput value={config.maxConsecutiveDays} onChange={(v) => onChange({ ...config, maxConsecutiveDays: v })} min={1} disabled={readOnly} />
+        </FormField>
+        <FormField label="التقرير الطبي مطلوب بعد (أيام)" error={getError(errors, 'sickDocumentThresholdDays')}>
+          <NumberInput value={config.sickDocumentThresholdDays} onChange={(v) => onChange({ ...config, sickDocumentThresholdDays: v })} min={1} disabled={readOnly} />
+        </FormField>
+        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+          <span className="text-sm font-bold text-[var(--color-text)]">السماح بالرصيد السالب</span>
+          <Toggle checked={config.allowNegativeBalance} onChange={(v) => onChange({ ...config, allowNegativeBalance: v })} disabled={readOnly} />
+        </div>
+        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+          <span className="text-sm font-bold text-[var(--color-text)]">التقرير الطبي مطلوب</span>
+          <Toggle checked={config.requireDocumentForSick} onChange={(v) => onChange({ ...config, requireDocumentForSick: v })} disabled={readOnly} />
+        </div>
+      </div>
+
+      <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-bold text-[var(--color-text)]">ماستر أنواع الإجازات</h4>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">هذه الأنواع ستظهر في طلبات الإجازة وتحدد أثرها على المرتب.</p>
+          </div>
+          {!readOnly && (
+            <Button variant="outline" onClick={addLeaveType}>
+              <span className="material-icons-round text-sm">add</span>
+              إضافة نوع
+            </Button>
+          )}
+        </div>
+
+        {(config.leaveTypes || []).map((row, i) => {
+          const isCore = CORE_LEAVE_KEYS.has(row.key);
+          return (
+            <div key={`${row.key}-${i}`} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-3">
+              <div className="md:col-span-3">
+                <FormField label="الكود" error={getError(errors, `leaveTypes.${i}.key`)}>
+                  <input
+                    type="text"
+                    value={row.key}
+                    onChange={(e) => updateLeaveType(i, 'key', e.target.value.trim())}
+                    disabled={readOnly || isCore}
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    placeholder="marriage"
+                  />
+                </FormField>
+              </div>
+              <div className="md:col-span-4">
+                <FormField label="الاسم" error={getError(errors, `leaveTypes.${i}.label`)}>
+                  <input
+                    type="text"
+                    value={row.label}
+                    onChange={(e) => updateLeaveType(i, 'label', e.target.value)}
+                    disabled={readOnly}
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    placeholder="مثال: زواج"
+                  />
+                </FormField>
+              </div>
+              <div className="md:col-span-3">
+                <FormField label="مدفوعة؟">
+                  <div className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] px-3 py-2.5">
+                    <span className="text-sm text-[var(--color-text-muted)]">{row.isPaid ? 'مدفوعة' : 'غير مدفوعة'}</span>
+                    <Toggle checked={row.isPaid} onChange={(v) => updateLeaveType(i, 'isPaid', v)} disabled={readOnly} />
+                  </div>
+                </FormField>
+              </div>
+              <div className="md:col-span-2 flex justify-end">
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => removeLeaveType(i)}
+                    disabled={isCore}
+                    className="text-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed p-1"
+                    title={isCore ? 'الأنواع الأساسية لا يمكن حذفها' : 'حذف النوع'}
+                  >
+                    <span className="material-icons-round text-lg">delete</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {getError(errors, 'leaveTypes') && (
+          <p className="text-xs text-rose-500 font-medium">{getError(errors, 'leaveTypes')}</p>
+        )}
+      </div>
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
-      <span className="text-sm font-bold text-[var(--color-text)]">التقرير الطبي مطلوب</span>
-      <Toggle checked={config.requireDocumentForSick} onChange={(v) => onChange({ ...config, requireDocumentForSick: v })} disabled={readOnly} />
-    </div>
-  </div>
-);
+  );
+};
 
 const LoanForm: React.FC<TabFormProps<'loan'>> = ({ config, onChange, errors, readOnly }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -486,6 +601,118 @@ const PayrollForm: React.FC<TabFormProps<'payroll'>> = ({ config, onChange, erro
     </div>
   </div>
 );
+
+const PayrollPreviewPanel: React.FC = () => {
+  const sampleRows = [
+    { name: 'أحمد محمد', base: 4200, gross: 4620, deductions: 180, net: 4440, status: 'مُعتمد' },
+    { name: 'سعاد علي', base: 5100, gross: 5480, deductions: 260, net: 5220, status: 'مُعتمد' },
+    { name: 'محمود حسين', base: 3900, gross: 4100, deductions: 90, net: 4010, status: 'مُعتمد' },
+  ];
+
+  const formatAmount = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <div className="mt-6 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-5 space-y-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+            <span className="material-icons-round text-primary">preview</span>
+            معاينة شكل كشف المرتبات والسركي
+          </h3>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            هذه معاينة تصميم فقط من داخل إعدادات HR لتوضيح الشكل النهائي قبل الدخول لشاشة الرواتب.
+          </p>
+        </div>
+      </div>
+
+      <Card title="معاينة كشف المرتبات">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th">الموظف</th>
+                <th className="erp-th">الأساسي</th>
+                <th className="erp-th">المستحقات</th>
+                <th className="erp-th">الاستقطاعات</th>
+                <th className="erp-th">الصافي</th>
+                <th className="erp-th text-center">الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sampleRows.map((row) => (
+                <tr key={row.name} className="border-b border-[var(--color-border)]">
+                  <td className="py-3 px-3 font-bold">{row.name}</td>
+                  <td className="py-3 px-3 font-mono text-xs">{formatAmount(row.base)}</td>
+                  <td className="py-3 px-3 font-mono text-xs text-emerald-600 font-bold">{formatAmount(row.gross)}</td>
+                  <td className="py-3 px-3 font-mono text-xs text-rose-500 font-bold">{formatAmount(row.deductions)}</td>
+                  <td className="py-3 px-3 font-mono text-xs text-primary font-bold">{formatAmount(row.net)}</td>
+                  <td className="py-3 px-3 text-center">
+                    <Badge variant="success">{row.status}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="معاينة السركي (كشف راتب موظف)">
+        <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/40 p-4 space-y-4">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+            <div>
+              <p className="text-base font-black text-[var(--color-text)]">أحمد محمد</p>
+              <p className="text-xs text-[var(--color-text-muted)]">كشف راتب — مارس 2026</p>
+            </div>
+            <Badge variant="success">مقفل</Badge>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] p-3 text-center">
+              <p className="text-xs text-[var(--color-text-muted)]">أيام العمل</p>
+              <p className="text-lg font-black">26</p>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] p-3 text-center">
+              <p className="text-xs text-[var(--color-text-muted)]">حضور</p>
+              <p className="text-lg font-black text-emerald-600">25</p>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] p-3 text-center">
+              <p className="text-xs text-[var(--color-text-muted)]">غياب</p>
+              <p className="text-lg font-black text-rose-500">1</p>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] p-3 text-center">
+              <p className="text-xs text-[var(--color-text-muted)]">تأخير</p>
+              <p className="text-lg font-black text-amber-500">2</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-[var(--border-radius-base)] border border-emerald-200 bg-emerald-50/70 p-3">
+              <p className="text-sm font-bold text-emerald-700 mb-2">المستحقات</p>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-center justify-between"><span>الراتب الأساسي</span><span className="font-mono font-bold">4,200.00</span></div>
+                <div className="flex items-center justify-between"><span>بدل إضافي</span><span className="font-mono font-bold">300.00</span></div>
+                <div className="flex items-center justify-between"><span>بدلات</span><span className="font-mono font-bold">120.00</span></div>
+              </div>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/70 p-3">
+              <p className="text-sm font-bold text-rose-700 mb-2">الاستقطاعات</p>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-center justify-between"><span>خصم غياب</span><span className="font-mono font-bold text-rose-600">120.00</span></div>
+                <div className="flex items-center justify-between"><span>خصم تأخير</span><span className="font-mono font-bold text-rose-600">40.00</span></div>
+                <div className="flex items-center justify-between"><span>قسط سلفة</span><span className="font-mono font-bold text-rose-600">20.00</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[var(--border-radius-base)] bg-primary/10 border border-primary/20 px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-bold text-primary">صافي الراتب</span>
+            <span className="text-xl font-black text-primary font-mono">4,440.00</span>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
 
 const ApprovalForm: React.FC<TabFormProps<'approval'>> = ({ config, onChange, errors, readOnly }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -656,7 +883,10 @@ const AuditLogPanel: React.FC<{ module: HRConfigModuleName }> = ({ module }) => 
 
 export const HRSettings: React.FC = () => {
   const { can } = usePermission();
-  const currentUser = useAppStore((s) => s.currentUser);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const userEmail = useAppStore((s) => s.userEmail);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const updateSystemSettings = useAppStore((s) => s.updateSystemSettings);
   const canEdit = can('hrSettings.edit');
   const readOnly = !canEdit;
 
@@ -669,9 +899,15 @@ export const HRSettings: React.FC = () => {
   const [showConfirmSave, setShowConfirmSave] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [showAuditLog, setShowAuditLog] = useState(false);
+  const [savingAttendanceIntegration, setSavingAttendanceIntegration] = useState(false);
+  const [attendanceIntegrationDraft, setAttendanceIntegrationDraft] =
+    useState<AttendanceIntegrationSettings>(() => ({
+      ...DEFAULT_ATTENDANCE_INTEGRATION,
+      ...systemSettings.attendanceIntegration,
+    }));
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const performedBy = currentUser?.displayName || currentUser?.email || 'unknown';
+  const performedBy = userDisplayName || userEmail || 'unknown';
 
   const loadConfigs = useCallback(async () => {
     setLoading(true);
@@ -696,6 +932,13 @@ export const HRSettings: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  useEffect(() => {
+    setAttendanceIntegrationDraft({
+      ...DEFAULT_ATTENDANCE_INTEGRATION,
+      ...systemSettings.attendanceIntegration,
+    });
+  }, [systemSettings.attendanceIntegration]);
 
   const hasChanges = useMemo(() => {
     if (!configs || !draft) return false;
@@ -773,6 +1016,31 @@ export const HRSettings: React.FC = () => {
       setErrors([]);
     }
   }, [configs]);
+
+  const attendanceIntegrationHasChanges = useMemo(
+    () =>
+      JSON.stringify({
+        ...DEFAULT_ATTENDANCE_INTEGRATION,
+        ...systemSettings.attendanceIntegration,
+      }) !== JSON.stringify(attendanceIntegrationDraft),
+    [systemSettings.attendanceIntegration, attendanceIntegrationDraft],
+  );
+
+  const handleSaveAttendanceIntegration = useCallback(async () => {
+    setSavingAttendanceIntegration(true);
+    try {
+      await updateSystemSettings({
+        ...systemSettings,
+        attendanceIntegration: attendanceIntegrationDraft,
+      });
+      setToast({ message: 'تم حفظ إعدادات تكامل الحضور', type: 'success' });
+    } catch (error) {
+      console.error('Failed to save attendance integration settings:', error);
+      setToast({ message: 'فشل في حفظ إعدادات تكامل الحضور', type: 'error' });
+    } finally {
+      setSavingAttendanceIntegration(false);
+    }
+  }, [updateSystemSettings, systemSettings, attendanceIntegrationDraft]);
 
   if (loading) {
     return (
@@ -888,6 +1156,138 @@ export const HRSettings: React.FC = () => {
             errors={errors}
             readOnly={readOnly}
           />
+
+          {activeTab === 'attendance' && (
+            <div className="mt-6 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-5 space-y-4">
+              <div>
+                <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+                  <span className="material-icons-round text-primary">folder_open</span>
+                  تكامل الحضور (ZKTeco Excel)
+                </h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  إعدادات مسار المجلد المراقب الخاصة بخدمة Gateway المحلية للاستيراد التلقائي.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="مسار المجلد المراقب">
+                  <input
+                    type="text"
+                    value={attendanceIntegrationDraft.watchFolderPath}
+                    onChange={(e) =>
+                      setAttendanceIntegrationDraft((prev) => ({ ...prev, watchFolderPath: e.target.value }))
+                    }
+                    disabled={readOnly}
+                    placeholder="D:\\ZKTeco\\Exports"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </FormField>
+
+                <FormField label="نمط الملفات">
+                  <input
+                    type="text"
+                    value={attendanceIntegrationDraft.importFilePattern}
+                    onChange={(e) =>
+                      setAttendanceIntegrationDraft((prev) => ({ ...prev, importFilePattern: e.target.value }))
+                    }
+                    disabled={readOnly}
+                    placeholder="*.xlsx,*.xls,*.csv"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </FormField>
+
+                <FormField label="توقيت بداية الدوام">
+                  <input
+                    type="time"
+                    value={attendanceIntegrationDraft.shiftStartTime}
+                    onChange={(e) =>
+                      setAttendanceIntegrationDraft((prev) => ({ ...prev, shiftStartTime: e.target.value }))
+                    }
+                    disabled={readOnly}
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </FormField>
+
+                <FormField label="دقائق الدوام اليومية">
+                  <NumberInput
+                    value={attendanceIntegrationDraft.workingMinutesPerDay}
+                    onChange={(value) =>
+                      setAttendanceIntegrationDraft((prev) => ({
+                        ...prev,
+                        workingMinutesPerDay: Math.max(60, value || 0),
+                      }))
+                    }
+                    min={60}
+                    step={30}
+                    disabled={readOnly}
+                  />
+                </FormField>
+
+                <FormField label="سماحية التأخير (دقيقة)">
+                  <NumberInput
+                    value={attendanceIntegrationDraft.lateGraceMinutes}
+                    onChange={(value) =>
+                      setAttendanceIntegrationDraft((prev) => ({
+                        ...prev,
+                        lateGraceMinutes: Math.max(0, value || 0),
+                      }))
+                    }
+                    min={0}
+                    disabled={readOnly}
+                  />
+                </FormField>
+
+                <FormField label="عتبة الإضافي (دقيقة)">
+                  <NumberInput
+                    value={attendanceIntegrationDraft.overtimeThresholdMinutes}
+                    onChange={(value) =>
+                      setAttendanceIntegrationDraft((prev) => ({
+                        ...prev,
+                        overtimeThresholdMinutes: Math.max(60, value || 0),
+                      }))
+                    }
+                    min={60}
+                    step={30}
+                    disabled={readOnly}
+                  />
+                </FormField>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+                <span className="text-sm font-bold text-[var(--color-text)]">تفعيل مجلد المراقبة</span>
+                <Toggle
+                  checked={attendanceIntegrationDraft.watchFolderEnabled}
+                  onChange={(value) =>
+                    setAttendanceIntegrationDraft((prev) => ({ ...prev, watchFolderEnabled: value }))
+                  }
+                  disabled={readOnly}
+                />
+              </div>
+
+              {!readOnly && (
+                <div className="flex items-center justify-end">
+                  <Button
+                    onClick={handleSaveAttendanceIntegration}
+                    disabled={!attendanceIntegrationHasChanges || savingAttendanceIntegration}
+                  >
+                    {savingAttendanceIntegration ? (
+                      <>
+                        <span className="material-icons-round animate-spin text-sm">refresh</span>
+                        جاري حفظ تكامل الحضور...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-icons-round text-sm">save</span>
+                        حفظ إعدادات تكامل الحضور
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'payroll' && <PayrollPreviewPanel />}
 
           {/* Actions */}
           {!readOnly && (

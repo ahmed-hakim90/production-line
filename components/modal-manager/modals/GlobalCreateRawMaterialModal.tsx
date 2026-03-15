@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Loader2, Package, Save, X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
 import type { RawMaterial } from '../../../modules/inventory/types';
@@ -94,13 +95,13 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <h3 className="text-lg font-bold">{isEditMode ? 'تعديل مادة خام' : 'إضافة مادة خام'}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
         <div className="p-6 space-y-4">
           {message && (
             <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-              <span className="material-icons-round text-base">{message.type === 'success' ? 'check_circle' : 'error'}</span>
+              {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <p className="flex-1">{message.text}</p>
             </div>
           )}
@@ -135,8 +136,8 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
           <Button variant="outline" onClick={handleClose}>إلغاء</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving || !name.trim() || !code.trim()}>
-            {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-            <span className="material-icons-round text-sm">{isEditMode ? 'save' : 'inventory_2'}</span>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {isEditMode ? <Save size={14} /> : <Package size={14} />}
             {isEditMode ? 'حفظ التعديلات' : 'إضافة مادة خام'}
           </Button>
         </div>

@@ -5,6 +5,7 @@ import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import { exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
 import type { LineWorkerAssignment, ReportComponentScrapItem } from '../../../types';
@@ -17,6 +18,13 @@ import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export const QuickAction: React.FC = () => {
   const { openModal } = useGlobalModalManager();
@@ -52,12 +60,14 @@ export const QuickAction: React.FC = () => {
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
   const [lineWorkers, setLineWorkers] = useState<LineWorkerAssignment[]>([]);
+  const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
   const [showLineWorkers, setShowLineWorkers] = useState(false);
   const [loadingWorkersCount, setLoadingWorkersCount] = useState(false);
   const [workerPickerId, setWorkerPickerId] = useState('');
   const [workerActionBusy, setWorkerActionBusy] = useState(false);
   const [workerActionError, setWorkerActionError] = useState<string | null>(null);
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -67,11 +77,19 @@ export const QuickAction: React.FC = () => {
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
 
+  const availableReportTypes = useMemo<Array<'finished_product' | 'component_injection'>>(() => {
+    const list: Array<'finished_product' | 'component_injection'> = [];
+    if (canCreateFinishedReports) list.push('finished_product');
+    if (canManageComponentInjectionReports) list.push('component_injection');
+    return list;
+  }, [canCreateFinishedReports, canManageComponentInjectionReports]);
+  const canChooseReportType = availableReportTypes.length > 1;
+
   useEffect(() => {
-    if (forceInjectionOnly) {
-      setReportType('component_injection');
-    }
-  }, [forceInjectionOnly]);
+    if (availableReportTypes.length === 0) return;
+    if (availableReportTypes.includes(reportType)) return;
+    setReportType(availableReportTypes[0]);
+  }, [availableReportTypes, reportType]);
 
   useEffect(() => {
     let mounted = true;
@@ -98,12 +116,6 @@ export const QuickAction: React.FC = () => {
     });
     return ids;
   }, [_rawLines, lineStatuses]);
-
-  const selectableLines = useMemo(() => (
-    reportType === 'component_injection'
-      ? _rawLines.filter((line) => line.id && injectionLineIds.has(line.id))
-      : _rawLines
-  ), [reportType, _rawLines, injectionLineIds]);
 
   const selectableProducts = useMemo(() => (
     reportType === 'component_injection'
@@ -191,9 +203,55 @@ export const QuickAction: React.FC = () => {
   const isSupervisorReporter = currentEmployee?.level === 2;
 
   useEffect(() => {
+    let mounted = true;
+    if (!isSupervisorReporter || !currentEmployee?.id) {
+      setAssignedLineIds(new Set());
+      return () => { mounted = false; };
+    }
+    supervisorLineAssignmentService.getActiveByDate(today)
+      .then((rows) => {
+        if (!mounted) return;
+        const ids = new Set(
+          rows
+            .filter((row) => String(row.supervisorId || '').trim() === currentEmployee.id)
+            .map((row) => String(row.lineId || '').trim())
+            .filter(Boolean),
+        );
+        setAssignedLineIds(ids);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAssignedLineIds(new Set());
+      });
+    return () => { mounted = false; };
+  }, [isSupervisorReporter, currentEmployee?.id, today]);
+
+  const allowedLinesForUser = useMemo(
+    () => (
+      isSupervisorReporter
+        ? _rawLines.filter((line) => Boolean(line.id) && assignedLineIds.has(String(line.id)))
+        : _rawLines
+    ),
+    [_rawLines, isSupervisorReporter, assignedLineIds],
+  );
+
+  const selectableLines = useMemo(() => (
+    reportType === 'component_injection'
+      ? allowedLinesForUser.filter((line) => line.id && injectionLineIds.has(line.id))
+      : allowedLinesForUser
+  ), [reportType, allowedLinesForUser, injectionLineIds]);
+
+  useEffect(() => {
     if (!isSupervisorReporter || !currentEmployee?.id) return;
     setEmployeeId((prev) => (prev === currentEmployee.id ? prev : currentEmployee.id));
   }, [isSupervisorReporter, currentEmployee?.id]);
+
+  useEffect(() => {
+    if (!lineId) return;
+    if (allowedLinesForUser.some((line) => line.id === lineId)) return;
+    setLineId('');
+    setSelectedWorkOrderId('');
+  }, [lineId, allowedLinesForUser]);
 
   const handleQuickAddWorker = useCallback(async () => {
     if (!lineId || !workerPickerId) return;
@@ -311,7 +369,11 @@ export const QuickAction: React.FC = () => {
     setEmployeeId(isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : '');
     setLineId('');
     setProductId('');
-    setReportType(forceInjectionOnly ? 'component_injection' : 'finished_product');
+    setReportType(
+      availableReportTypes.includes('finished_product')
+        ? 'finished_product'
+        : (availableReportTypes[0] ?? 'finished_product')
+    );
     setQuantity('');
     setWorkersProduction('');
     setWorkersPackaging('');
@@ -418,7 +480,7 @@ export const QuickAction: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="erp-ds-clean space-y-6">
       <PageHeader
         title="إدخال سريع"
         subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، طباعة، ومشاركة."
@@ -463,44 +525,62 @@ export const QuickAction: React.FC = () => {
                 <span className="material-icons-round text-sm text-primary">assignment</span>
                 أمر شغل (اختياري)
               </label>
-              <select
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold focus:border-primary focus:ring-2 focus:ring-primary/12"
-                value=""
-                onChange={(e) => handleSelectWO(e.target.value)}
+              <Select
+                value={selectedWorkOrderId || 'none'}
+                onValueChange={(value) => {
+                  if (value === 'none') {
+                    setSelectedWorkOrderId('');
+                    return;
+                  }
+                  setSelectedWorkOrderId(value);
+                  handleSelectWO(value);
+                }}
               >
-                <option value="">اختر أمر شغل لتعبئة البيانات تلقائياً</option>
-                {activeWOs.map((wo) => {
-                  const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
-                  const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
-                  const remaining = wo.quantity - (wo.producedQuantity || 0);
-                  return (
-                    <option key={wo.id} value={wo.id!}>
-                      {wo.workOrderNumber} — {pName} — {lName} — متبقي: {formatNumber(remaining)} وحدة
-                    </option>
-                  );
-                })}
-              </select>
+                <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
+                  <SelectValue placeholder="اختر أمر شغل لتعبئة البيانات تلقائياً" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">اختر أمر شغل لتعبئة البيانات تلقائياً</SelectItem>
+                  {activeWOs.map((wo) => {
+                    const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
+                    const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
+                    const remaining = wo.quantity - (wo.producedQuantity || 0);
+                    return (
+                      <SelectItem key={wo.id} value={wo.id!}>
+                        {wo.workOrderNumber} — {pName} — {lName} — متبقي: {formatNumber(remaining)} وحدة
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div className="sm:col-span-2">
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">نوع التقرير</label>
-              <select
-                value={reportType}
-                onChange={(e) => {
-                  const nextType = e.target.value === 'component_injection' ? 'component_injection' : 'finished_product';
-                  if (nextType === 'component_injection' && !canManageComponentInjectionReports) return;
-                  if (nextType === 'finished_product' && !canCreateFinishedReports) return;
-                  setReportType(nextType);
-                  setLineId('');
-                  setProductId('');
-                }}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold focus:border-primary focus:ring-2 focus:ring-primary/12"
-              >
-                {canCreateFinishedReports && <option value="finished_product">تقرير إنتاج</option>}
-                {canManageComponentInjectionReports && <option value="component_injection">تقرير مكون حقن</option>}
-              </select>
-            </div>
+            {canChooseReportType && (
+              <div className="sm:col-span-2">
+                <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">نوع التقرير</label>
+                <Select
+                  value={reportType}
+                  onValueChange={(value) => {
+                    const nextType = value === 'component_injection' ? 'component_injection' : 'finished_product';
+                    if (nextType === 'component_injection' && !canManageComponentInjectionReports) return;
+                    if (nextType === 'finished_product' && !canCreateFinishedReports) return;
+                    setReportType(nextType);
+                    setLineId('');
+                    setProductId('');
+                    setSelectedWorkOrderId('');
+                  }}
+                >
+                  <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
+                    <SelectValue placeholder="نوع التقرير" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {canCreateFinishedReports && <SelectItem value="finished_product">تقرير إنتاج</SelectItem>}
+                    {canManageComponentInjectionReports && <SelectItem value="component_injection">تقرير مكون حقن</SelectItem>}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">المشرف *</label>
               {isSupervisorReporter && currentEmployee ? (

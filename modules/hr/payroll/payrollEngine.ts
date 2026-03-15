@@ -22,6 +22,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   writeBatch,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -63,6 +64,10 @@ import type {
   FirestoreAttendanceLog,
 } from '../types';
 import { captureConfigVersionSnapshot } from '../config/configService';
+import { getConfigModule } from '../config';
+import { normalizeLeaveTypes } from '../leaveTypes';
+import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
+import type { AttendanceRecord } from '@/modules/attendance/types';
 
 const DEFAULT_BATCH_SIZE = 50;
 
@@ -167,6 +172,51 @@ function buildAttendanceSummaries(
   return map;
 }
 
+function buildAttendanceSummariesFromRecords(
+  records: AttendanceRecord[],
+  hrSettings: FirestoreHRSettings,
+): Map<string, EmployeeAttendanceSummary> {
+  const map = new Map<string, EmployeeAttendanceSummary>();
+  for (const record of records) {
+    let summary = map.get(record.employeeId);
+    if (!summary) {
+      summary = {
+        workingDays: 0,
+        presentDays: 0,
+        absentDays: 0,
+        lateDays: 0,
+        totalLateMinutes: 0,
+        totalOvertimeHours: 0,
+      };
+      map.set(record.employeeId, summary);
+    }
+
+    summary.workingDays += 1;
+    if (record.status === 'absent') {
+      summary.absentDays += 1;
+    } else {
+      summary.presentDays += 1;
+      const overtimeMinutes = Math.max(
+        0,
+        Number(record.overtimeMinutes || 0),
+      );
+      if (overtimeMinutes > 0) {
+        summary.totalOvertimeHours += overtimeMinutes / 60;
+      } else {
+        const expectedMinutes = hrSettings.workingHoursPerDay * 60;
+        if (record.workedMinutes > expectedMinutes) {
+          summary.totalOvertimeHours += (record.workedMinutes - expectedMinutes) / 60;
+        }
+      }
+    }
+    if (record.lateMinutes > 0) {
+      summary.lateDays += 1;
+      summary.totalLateMinutes += record.lateMinutes;
+    }
+  }
+  return map;
+}
+
 // ─── Per-Employee Calculation ───────────────────────────────────────────────
 
 async function calculateEmployeePayroll(
@@ -174,6 +224,7 @@ async function calculateEmployeePayroll(
   attendance: EmployeeAttendanceSummary,
   month: string,
   hrSettings: FirestoreHRSettings,
+  leaveTypeIsPaidMap: Record<string, boolean>,
   penaltyRules: FirestorePenaltyRule[],
   lateRules: FirestoreLateRule[],
   allowanceTypes: FirestoreAllowanceType[],
@@ -205,7 +256,14 @@ async function calculateEmployeePayroll(
   const approvedLeaves = await getApprovedLeaves(employee.employeeId, month);
   let unpaidLeaveDays = 0;
   for (const leave of approvedLeaves) {
-    if (leave.leaveType === 'unpaid' || leave.affectsSalary) {
+    const typeFoundInMap = Object.prototype.hasOwnProperty.call(leaveTypeIsPaidMap, leave.leaveType);
+    const shouldDeduct = typeFoundInMap
+      ? !leaveTypeIsPaidMap[leave.leaveType]
+      : (typeof leave.leaveTypeIsPaid === 'boolean'
+          ? !leave.leaveTypeIsPaid
+          : (leave.leaveType === 'unpaid' || leave.affectsSalary === true));
+
+    if (shouldDeduct) {
       unpaidLeaveDays += leave.totalDays;
     }
   }
@@ -313,6 +371,59 @@ export async function getPayrollRecords(payrollMonthId: string): Promise<Firesto
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestorePayrollRecord));
 }
 
+/**
+ * Get employee payslip only from locked payroll months.
+ * Enforces lock guard at service level, not UI only.
+ */
+export async function getEmployeeLockedPayslip(
+  employeeId: string,
+  month?: string,
+): Promise<{ month: FirestorePayrollMonth; record: FirestorePayrollRecord } | null> {
+  if (!isConfigured || !employeeId) return null;
+
+  const getRecordForMonth = async (payrollMonth: FirestorePayrollMonth) => {
+    if (!payrollMonth.id) return null;
+    const recSnap = await getDocs(
+      query(
+        payrollRecordsRef(),
+        where('payrollMonthId', '==', payrollMonth.id),
+        where('employeeId', '==', employeeId),
+        limit(1),
+      ),
+    );
+    if (recSnap.empty) return null;
+    return {
+      month: payrollMonth,
+      record: { id: recSnap.docs[0].id, ...recSnap.docs[0].data() } as FirestorePayrollRecord,
+    };
+  };
+
+  if (month) {
+    const payrollMonth = await getPayrollMonth(month);
+    if (!payrollMonth?.id || payrollMonth.status !== 'locked') {
+      return null;
+    }
+    return getRecordForMonth(payrollMonth);
+  }
+
+  const lockedMonthsSnap = await getDocs(
+    query(
+      payrollMonthsRef(),
+      where('status', '==', 'locked'),
+      orderBy('month', 'desc'),
+      limit(24),
+    ),
+  );
+
+  for (const monthDoc of lockedMonthsSnap.docs) {
+    const lockedMonth = { id: monthDoc.id, ...monthDoc.data() } as FirestorePayrollMonth;
+    const result = await getRecordForMonth(lockedMonth);
+    if (result) return result;
+  }
+
+  return null;
+}
+
 /** Delete all draft payroll records for a month */
 async function deleteDraftRecords(payrollMonthId: string): Promise<number> {
   if (!isConfigured) return 0;
@@ -364,20 +475,28 @@ export async function generatePayroll(
   }
 
   // Fetch all required data in parallel (including config version snapshot)
-  const [hrSettings, penaltyRules, lateRules, allowanceTypes, attendanceLogs, configVersionSnapshot] =
+  const [hrSettings, leaveConfig, penaltyRules, lateRules, allowanceTypes, attendanceLogs, attendanceRecords, configVersionSnapshot] =
     await Promise.all([
       fetchHRSettings(),
+      getConfigModule('leave'),
       fetchPenaltyRules(),
       fetchLateRules(),
       fetchAllowanceTypes(),
       fetchAttendanceForMonth(month),
+      attendanceProcessingService.getRecordsForMonth(month),
       captureConfigVersionSnapshot(),
     ]);
 
   if (!hrSettings) throw new Error('إعدادات الموارد البشرية غير متوفرة. يرجى ضبط الإعدادات أولاً.');
 
+  const leaveTypeIsPaidMap = Object.fromEntries(
+    normalizeLeaveTypes(leaveConfig.leaveTypes).map((type) => [type.key, type.isPaid]),
+  ) as Record<string, boolean>;
+
   // Build attendance summaries
-  const attendanceMap = buildAttendanceSummaries(attendanceLogs, hrSettings);
+  const attendanceMap = attendanceRecords.length > 0
+    ? buildAttendanceSummariesFromRecords(attendanceRecords, hrSettings)
+    : buildAttendanceSummaries(attendanceLogs, hrSettings);
 
   // Default working days for employees without attendance
   const { startDate, endDate } = getMonthDateRange(month);
@@ -437,6 +556,7 @@ export async function generatePayroll(
           attendance,
           month,
           hrSettings,
+          leaveTypeIsPaidMap,
           penaltyRules,
           lateRules,
           allowanceTypes,

@@ -1,14 +1,17 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
-import { attendanceLogService } from '../attendanceService';
-import { leaveRequestService, leaveBalanceService } from '../leaveService';
+import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
+import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
+import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import { loanService } from '../loanService';
 import { generateApprovalChain } from '../approvalEngine';
+import { getEmployeeLockedPayslip } from '../payroll';
+import { printPayslip } from '../utils/payslipGenerator';
+import type { FirestorePayrollRecord } from '../payroll';
 import type {
-  FirestoreAttendanceLog,
   FirestoreLeaveRequest,
   FirestoreLeaveBalance,
   FirestoreEmployeeLoan,
@@ -16,6 +19,7 @@ import type {
   ApprovalChainItem,
   JobLevel,
 } from '../types';
+import type { AttendanceRecord } from '@/modules/attendance/types';
 import { LEAVE_TYPE_LABELS } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import type { FirestoreEmployee } from '../../../types';
@@ -41,6 +45,15 @@ function calculateDays(start: string, end: string): number {
   const e = new Date(end);
   const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   return Math.max(1, diff);
+}
+
+function formatPayrollMonthLabel(month: string): string {
+  const [year, mon] = month.split('-').map(Number);
+  if (!year || !mon) return month;
+  return new Date(year, mon - 1, 1).toLocaleDateString('ar-EG', {
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 const APPROVAL_STATUS_LABELS: Record<string, string> = {
@@ -77,10 +90,13 @@ export const EmployeeSelfService: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SelfServiceTab>('attendance');
   const [loading, setLoading] = useState(true);
-  const [attendanceLogs, setAttendanceLogs] = useState<FirestoreAttendanceLog[]>([]);
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<FirestoreLeaveRequest[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<FirestoreLeaveBalance | null>(null);
+  const [leaveUsageSummary, setLeaveUsageSummary] = useState<Awaited<ReturnType<typeof getEmployeeLeaveUsageSummary>> | null>(null);
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
+  const [lockedPayslip, setLockedPayslip] = useState<{ month: string; record: FirestorePayrollRecord } | null>(null);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
 
   const [leaveType, setLeaveType] = useState<LeaveType>('annual');
   const [startDate, setStartDate] = useState('');
@@ -99,6 +115,8 @@ export const EmployeeSelfService: React.FC = () => {
   const [loanSubmitSuccess, setLoanSubmitSuccess] = useState(false);
 
   const totalDays = useMemo(() => calculateDays(startDate, endDate), [startDate, endDate]);
+  const leaveTypeByKey = useMemo(() => leaveTypeMapByKey(leaveTypes), [leaveTypes]);
+  const selectedLeaveType = leaveTypeByKey[leaveType];
 
   const employeeId = currentEmployee?.id ?? '';
 
@@ -109,17 +127,35 @@ export const EmployeeSelfService: React.FC = () => {
     (async () => {
       await fetchEmployees?.();
       try {
-        const [logs, leaveReqs, balance, loanList] = await Promise.all([
-          attendanceLogService.getByEmployee(employeeId),
+        const [logs, leaveReqs, balance, loanList, payslipResult, configuredLeaveTypes] = await Promise.all([
+          attendanceProcessingService.getRecordsByEmployee(employeeId),
           leaveRequestService.getByEmployee(employeeId),
           leaveBalanceService.getByEmployee(employeeId).then((b) => b ?? leaveBalanceService.getOrCreate(employeeId)),
           loanService.getByEmployee(employeeId),
+          getEmployeeLockedPayslip(employeeId),
+          getLeaveTypesFromConfig(),
         ]);
         if (!cancelled) {
           setAttendanceLogs(logs);
           setLeaveRequests(leaveReqs);
           setLeaveBalance(balance);
+          const usage = await getEmployeeLeaveUsageSummary(employeeId, {
+            approvedRequests: leaveReqs,
+            leaveBalance: balance,
+          });
+          if (!cancelled) setLeaveUsageSummary(usage);
           setLoans(loanList);
+          setLockedPayslip(
+            payslipResult
+              ? { month: payslipResult.month.month, record: payslipResult.record }
+              : null,
+          );
+          setLeaveTypes(configuredLeaveTypes);
+          setLeaveType((prev) =>
+            configuredLeaveTypes.find((row) => row.key === prev)
+              ? prev
+              : (configuredLeaveTypes[0]?.key || 'annual'),
+          );
         }
       } catch (err) {
         console.error('Employee self-service load error:', err);
@@ -132,8 +168,8 @@ export const EmployeeSelfService: React.FC = () => {
 
   const attendanceStats = useMemo(() => {
     const total = attendanceLogs.length;
-    const present = attendanceLogs.filter((l) => !l.isAbsent).length;
-    const absent = attendanceLogs.filter((l) => l.isAbsent).length;
+    const present = attendanceLogs.filter((l) => l.status !== 'absent').length;
+    const absent = attendanceLogs.filter((l) => l.status === 'absent').length;
     const late = attendanceLogs.filter((l) => l.lateMinutes > 0).length;
     return { total, present, absent, late };
   }, [attendanceLogs]);
@@ -145,7 +181,7 @@ export const EmployeeSelfService: React.FC = () => {
       type: 'leave' as const,
       id: r.id!,
       date: r.createdAt,
-      details: `${LEAVE_TYPE_LABELS[r.leaveType]} — ${r.totalDays} يوم`,
+      details: `${leaveTypeByKey[r.leaveType]?.label || r.leaveTypeLabel || LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType} — ${r.totalDays} يوم`,
       status: r.finalStatus,
       approvalChain: r.approvalChain,
     }));
@@ -164,9 +200,16 @@ export const EmployeeSelfService: React.FC = () => {
       return db.getTime() - da.getTime();
     });
     return combined;
-  }, [leaveRequests, loans]);
+  }, [leaveRequests, loans, leaveTypeByKey]);
 
   const canAccessPayroll = can('payroll.view');
+  const handlePrintLockedPayslip = () => {
+    if (!lockedPayslip) return;
+    printPayslip({
+      record: lockedPayslip.record,
+      month: lockedPayslip.month,
+    });
+  };
 
   if (!currentEmployee || !currentEmployee.hasSystemAccess) {
     return (
@@ -204,10 +247,12 @@ export const EmployeeSelfService: React.FC = () => {
       await leaveRequestService.create({
         employeeId,
         leaveType,
+        leaveTypeLabel: selectedLeaveType?.label || LEAVE_TYPE_LABELS[leaveType] || leaveType,
+        leaveTypeIsPaid: selectedLeaveType ? selectedLeaveType.isPaid : leaveType !== 'unpaid',
         startDate,
         endDate,
         totalDays,
-        affectsSalary: leaveType !== 'unpaid',
+        affectsSalary: selectedLeaveType ? !selectedLeaveType.isPaid : leaveType === 'unpaid',
         status: 'pending',
         approvalChain: chain,
         finalStatus: 'pending',
@@ -222,6 +267,11 @@ export const EmployeeSelfService: React.FC = () => {
       setLeaveRequests(updated);
       const balance = await leaveBalanceService.getByEmployee(employeeId) ?? await leaveBalanceService.getOrCreate(employeeId);
       setLeaveBalance(balance);
+      const usage = await getEmployeeLeaveUsageSummary(employeeId, {
+        approvedRequests: updated,
+        leaveBalance: balance,
+      });
+      setLeaveUsageSummary(usage);
     } catch (err: any) {
       console.error('Leave request create error:', err);
       const msg = err?.message || 'حدث خطأ غير متوقع';
@@ -375,10 +425,10 @@ export const EmployeeSelfService: React.FC = () => {
                       <td className="py-2 px-2">{formatDateAr(log.date)}</td>
                       <td className="py-2 px-2">{formatTime(log.checkIn)}</td>
                       <td className="py-2 px-2">{formatTime(log.checkOut)}</td>
-                      <td className="py-2 px-2">{formatNumber(log.totalHours)}</td>
+                        <td className="py-2 px-2">{formatNumber((log.workedMinutes || 0) / 60)}</td>
                       <td className="py-2 px-2">{formatNumber(log.lateMinutes)}</td>
                       <td className="py-2 px-2">
-                        {log.isAbsent ? (
+                        {log.status === 'absent' ? (
                           <Badge variant="danger">غائب</Badge>
                         ) : log.lateMinutes > 0 ? (
                           <Badge variant="warning">متأخر</Badge>
@@ -398,24 +448,45 @@ export const EmployeeSelfService: React.FC = () => {
       {!loading && activeTab === 'leave' && (
         <div className="space-y-6">
           {leaveBalance && (
-            <Card title="رصيد الإجازات الحالي">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-[var(--color-text-muted)] text-xs font-medium">سنوية</p>
-                  <p className="text-lg font-bold">{formatNumber(leaveBalance.annualBalance)} يوم</p>
-                </div>
-                <div>
-                  <p className="text-[var(--color-text-muted)] text-xs font-medium">مرضية</p>
-                  <p className="text-lg font-bold">{formatNumber(leaveBalance.sickBalance)} يوم</p>
-                </div>
-                <div>
-                  <p className="text-[var(--color-text-muted)] text-xs font-medium">طارئة</p>
-                  <p className="text-lg font-bold">{formatNumber(leaveBalance.emergencyBalance)} يوم</p>
-                </div>
-                <div>
-                  <p className="text-[var(--color-text-muted)] text-xs font-medium">بدون راتب (مستخدم)</p>
-                  <p className="text-lg font-bold">{formatNumber(leaveBalance.unpaidTaken)} يوم</p>
-                </div>
+            <Card title="رصيد الإجازات (المستخدم والمتاح)">
+              <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+                <table className="w-full text-sm text-right">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">النوع</th>
+                      <th className="erp-th">الرصيد الأساسي</th>
+                      <th className="erp-th">المستخدم</th>
+                      <th className="erp-th">المتاح</th>
+                      <th className="erp-th">آخر استخدام</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(leaveUsageSummary?.perType ?? []).map((row) => (
+                      <tr key={row.leaveType} className="border-t border-[var(--color-border)]">
+                        <td className="p-3 font-bold">{row.label}</td>
+                        <td className="p-3">{row.defaultDays == null ? 'غير محدود' : `${formatNumber(row.defaultDays)} يوم`}</td>
+                        <td className="p-3 text-amber-600 font-bold">{formatNumber(row.usedDays)} يوم</td>
+                        <td className="p-3 text-emerald-600 font-bold">
+                          {row.leaveType === 'unpaid' ? 'غير محدود' : `${formatNumber(row.availableDays)} يوم`}
+                        </td>
+                        <td className="p-3">{row.lastUsedDate ? formatDateAr(row.lastUsedDate) : '—'}</td>
+                      </tr>
+                    ))}
+                    {(leaveUsageSummary?.perType ?? []).length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-6 text-center text-[var(--color-text-muted)]">
+                          لا توجد بيانات إجازات
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 text-sm text-[var(--color-text-muted)]">
+                آخر استخدام:{' '}
+                {leaveUsageSummary?.lastUsedLeave
+                  ? `${leaveTypeByKey[leaveUsageSummary.lastUsedLeave.leaveType]?.label || LEAVE_TYPE_LABELS[leaveUsageSummary.lastUsedLeave.leaveType] || leaveUsageSummary.lastUsedLeave.leaveType} - ${formatDateAr(leaveUsageSummary.lastUsedLeave.date)} (${formatNumber(leaveUsageSummary.lastUsedLeave.totalDays)} يوم)`
+                  : 'لا يوجد استخدام معتمد حتى الآن'}
               </div>
             </Card>
           )}
@@ -428,11 +499,17 @@ export const EmployeeSelfService: React.FC = () => {
                   onChange={(e) => setLeaveType(e.target.value as LeaveType)}
                   className="w-full px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)]"
                 >
-                  {(Object.entries(LEAVE_TYPE_LABELS) as [LeaveType, string][]).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                  {(leaveTypes.length
+                    ? leaveTypes
+                    : Object.entries(LEAVE_TYPE_LABELS).map(([key, label]) => ({ key, label, isPaid: key !== 'unpaid' }))
+                  ).map((row) => (
+                    <option key={row.key} value={row.key}>{row.label}</option>
                   ))}
                 </select>
               </div>
+              <p className={`text-xs ${selectedLeaveType?.isPaid === false ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {selectedLeaveType?.isPaid === false ? 'هذه الإجازة غير مدفوعة وسيتم خصمها من الراتب.' : 'هذه الإجازة مدفوعة ولا ينتج عنها خصم راتب.'}
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-[var(--color-text)] mb-1">تاريخ البداية</label>
@@ -608,6 +685,46 @@ export const EmployeeSelfService: React.FC = () => {
                 <p className="text-lg font-bold">{EMPLOYMENT_TYPE_LABELS[currentEmployee.employmentType]}</p>
               </div>
             </div>
+            {lockedPayslip ? (
+              <div className="rounded-[var(--border-radius-base)] border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-800">سركي الراتب المتاح</p>
+                    <p className="text-xs text-emerald-700">
+                      {formatPayrollMonthLabel(lockedPayslip.month)} (شهر مقفول)
+                    </p>
+                  </div>
+                  <Button onClick={handlePrintLockedPayslip}>
+                    <span className="material-icons-round text-sm">print</span>
+                    طباعة السركي
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-[var(--color-text-muted)]">إجمالي المستحقات</p>
+                    <p className="font-bold">{formatNumber(lockedPayslip.record.grossSalary)} ج.م</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--color-text-muted)]">إجمالي الاستقطاعات</p>
+                    <p className="font-bold">{formatNumber(lockedPayslip.record.totalDeductions)} ج.م</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--color-text-muted)]">صافي الراتب</p>
+                    <p className="font-bold text-primary">{formatNumber(lockedPayslip.record.netSalary)} ج.م</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--color-text-muted)]">الحضور / الغياب</p>
+                    <p className="font-bold">
+                      {formatNumber(lockedPayslip.record.presentDays)} / {formatNumber(lockedPayslip.record.absentDays)} يوم
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-base)] p-3">
+                لا يتوفر سركي راتب الآن. سيظهر بعد قفل كشف الرواتب.
+              </p>
+            )}
             {canAccessPayroll && (
               <p className="text-[var(--color-text-muted)]">
                 لعرض كشف الراتب والتفاصيل الكاملة،{' '}

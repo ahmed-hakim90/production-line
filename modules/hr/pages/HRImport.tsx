@@ -161,12 +161,12 @@ export const HRImport: React.FC = () => {
     const autoDepartmentNames = Array.from(
       new Set(
         validEmps
-          .map((emp) => emp.departmentName.trim())
+          .map((emp) => String(emp.departmentName || '').trim())
           .filter((name) => !!name)
           .filter((name) => !existingDeptNames.has(normalize(name)))
           .filter((name) => !deptNamesFromSheet.has(normalize(name))),
       ),
-    );
+    ) as string[];
 
     const departmentsToCreate = [
       ...validDepts,

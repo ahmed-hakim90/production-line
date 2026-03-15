@@ -7,6 +7,13 @@ import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import { getTodayDateString } from '../../../utils/calculations';
 import type { LineWorkerAssignment as LWA } from '../../../types';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const WORKER_POSITION_KEYWORDS = ['عامل انتاج', 'عامل إنتاج', 'عامل الانتاج', 'عامل الإنتاج'];
 
@@ -312,7 +319,7 @@ export const LineWorkerAssignment: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="erp-ds-clean space-y-6">
       {/* Header */}
       <div className="erp-page-head">
         <div>
@@ -335,16 +342,17 @@ export const LineWorkerAssignment: React.FC = () => {
           </div>
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</label>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm font-medium"
-              value={selectedLineId}
-              onChange={(e) => setSelectedLineId(e.target.value)}
-            >
-              <option value="">— كل الخطوط —</option>
-              {_rawLines.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
+            <Select value={selectedLineId || 'all'} onValueChange={(value) => setSelectedLineId(value === 'all' ? '' : value)}>
+              <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm">
+                <SelectValue placeholder="— كل الخطوط —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">— كل الخطوط —</SelectItem>
+                {_rawLines.map((l) => (
+                  <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Button
             variant="outline"

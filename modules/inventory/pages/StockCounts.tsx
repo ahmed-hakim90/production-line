@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
@@ -6,6 +6,13 @@ import type { StockCountSession, StockItemBalance, Warehouse } from '../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { formatNumber } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export const StockCounts: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
@@ -94,10 +101,15 @@ export const StockCounts: React.FC = () => {
 
       <Card title="فتح جلسة جرد جديدة">
         <div className="flex flex-col sm:flex-row gap-3">
-          <select className="flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-            <option value="">اختر المخزن</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          <Select value={warehouseId || 'none'} onValueChange={(value) => setWarehouseId(value === 'none' ? '' : value)}>
+            <SelectTrigger className="flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]">
+              <SelectValue placeholder="اختر المخزن" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">اختر المخزن</SelectItem>
+              {warehouses.map((w) => <SelectItem key={w.id} value={w.id!}>{w.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Button variant="primary" onClick={() => void openSession()} disabled={!warehouseId || creating || !can('inventory.counts.manage')}>
             <span className="material-icons-round text-sm">playlist_add_check</span>
             بدء الجرد

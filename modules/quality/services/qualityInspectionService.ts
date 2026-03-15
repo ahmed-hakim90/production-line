@@ -220,7 +220,7 @@ export const qualityInspectionService = {
     for (const row of capaSnap.docs) await deleteDoc(row.ref);
 
     await activityLogService.logCurrentUser(
-      'QUALITY_DELETE_REPORT',
+      'DELETE_REPORT',
       'حذف تقرير جودة',
       {
         workOrderId,

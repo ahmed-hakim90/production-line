@@ -67,20 +67,6 @@ export {
   calculateNetSalary,
 } from './hrEngine';
 
-// Attendance processor (pure functions)
-export {
-  parseCSV,
-  groupPunchesByDay,
-  processDay,
-  processBatch,
-} from './attendanceProcessor';
-
-// Attendance service (Firestore CRUD)
-export {
-  attendanceRawLogService,
-  attendanceLogService,
-} from './attendanceService';
-
 // Leave service (Firestore CRUD)
 export {
   leaveRequestService,

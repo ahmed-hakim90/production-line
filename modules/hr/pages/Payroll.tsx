@@ -11,7 +11,7 @@ import {
   lockPayroll,
   payrollAuditService,
 } from '../payroll';
-import { printPayslip } from '../utils/payslipGenerator';
+import { printPayslip, printCombinedPayslips } from '../utils/payslipGenerator';
 import { employeeService } from '../employeeService';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef } from '../collections';
@@ -97,12 +97,14 @@ const RecordModal: React.FC<{
   record: FirestorePayrollRecord | null;
   onClose: () => void;
   month: string;
-}> = ({ record, onClose, month }) => {
+  canPrintPayslip: boolean;
+}> = ({ record, onClose, month, canPrintPayslip }) => {
   if (!record) return null;
 
   const r = record;
 
   const handlePrint = () => {
+    if (!canPrintPayslip) return;
     printPayslip({ record: r, month });
   };
 
@@ -119,7 +121,7 @@ const RecordModal: React.FC<{
             <p className="text-xs text-[var(--color-text-muted)] font-medium">{EMPLOYMENT_TYPE_LABELS[r.employmentType]}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handlePrint}>
+            <Button variant="outline" onClick={handlePrint} disabled={!canPrintPayslip}>
               <span className="material-icons-round text-sm">print</span>
               كشف راتب
             </Button>
@@ -131,6 +133,11 @@ const RecordModal: React.FC<{
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
+        {!canPrintPayslip && (
+          <div className="mx-6 mt-4 rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+            الطباعة متاحة فقط بعد قفل الشهر.
+          </div>
+        )}
 
         {/* Attendance Summary */}
         <div className="px-6 py-4 grid grid-cols-4 gap-3">
@@ -477,6 +484,14 @@ export const Payroll: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [filteredRecords, month]);
 
+  const handleExportCombinedPayslips = useCallback(() => {
+    if (!isLocked || records.length === 0) {
+      setError('تصدير السركيات متاح فقط بعد قفل الشهر.');
+      return;
+    }
+    printCombinedPayslips({ records, month });
+  }, [isLocked, records, month]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -618,10 +633,18 @@ export const Payroll: React.FC = () => {
             </Button>
           )}
           {records.length > 0 && canExportFromPage && (
-            <Button variant={pageControl.exportVariant} onClick={handleExport}>
-              <span className="material-icons-round text-sm">download</span>
-              تصدير Excel
-            </Button>
+            <>
+              <Button variant={pageControl.exportVariant} onClick={handleExport}>
+                <span className="material-icons-round text-sm">download</span>
+                تصدير Excel
+              </Button>
+              {isLocked && (
+                <Button variant="secondary" onClick={handleExportCombinedPayslips}>
+                  <span className="material-icons-round text-sm">picture_as_pdf</span>
+                  تصدير سركيات الموظفين PDF
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -686,7 +709,10 @@ export const Payroll: React.FC = () => {
                   <tr
                     key={r.id}
                     className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors cursor-pointer"
-                    onClick={() => setSelectedRecord(r)}
+                    onClick={() => {
+                      if (!isLocked) return;
+                      setSelectedRecord(r);
+                    }}
                   >
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
@@ -728,7 +754,13 @@ export const Payroll: React.FC = () => {
                     </td>
                     <td className="py-3 px-2 text-center">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedRecord(r); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isLocked) return;
+                          setSelectedRecord(r);
+                        }}
+                        disabled={!isLocked}
+                        title={isLocked ? 'عرض السركي' : 'السركي متاح بعد قفل الشهر'}
                         className="p-1.5 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)] transition-colors"
                       >
                         <span className="material-icons-round text-[var(--color-text-muted)] text-sm">visibility</span>
@@ -806,6 +838,7 @@ export const Payroll: React.FC = () => {
         record={selectedRecord}
         onClose={() => setSelectedRecord(null)}
         month={month}
+        canPrintPayslip={isLocked}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Loader2, Save, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -121,7 +122,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold">{editingId ? 'تعديل مركبة' : 'إضافة مركبة جديدة'}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
         <div className="p-6 space-y-5 overflow-y-auto">
@@ -192,7 +193,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
                   <span key={empId} className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium px-3 py-1.5 rounded-[var(--border-radius-base)] border border-indigo-200 dark:border-indigo-800">
                     {employeeNameMap.get(empId) || empId}
                     <button onClick={() => toggleEmployee(empId)} className="text-indigo-400 hover:text-rose-500 transition-colors">
-                      <span className="material-icons-round text-sm">close</span>
+                      <X size={14} />
                     </button>
                   </span>
                 ))}
@@ -208,8 +209,8 @@ export const GlobalCreateVehicleModal: React.FC = () => {
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={handleClose}>إلغاء</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.name.trim() || !form.plateNumber.trim()}>
-            {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-            <span className="material-icons-round text-sm">save</span>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            <Save size={14} />
             {editingId ? 'حفظ التعديلات' : 'إضافة المركبة'}
           </Button>
         </div>

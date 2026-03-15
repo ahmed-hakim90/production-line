@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AlertTriangle, Loader2, Save, X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -146,7 +147,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-amber-600">warning_amber</span>
+              <AlertTriangle size={18} className="text-amber-600" />
             </div>
             <div>
               <h3 className="text-lg font-bold">إضافة متابعة نقص مكونات</h3>
@@ -154,7 +155,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
             </div>
           </div>
           <button onClick={close} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
 
@@ -212,7 +213,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
 
           {error && (
             <div className="erp-alert erp-alert-warning">
-              <span className="material-icons-round text-[18px] shrink-0">warning</span>
+              <AlertTriangle size={18} className="shrink-0" />
               <span>{error}</span>
             </div>
           )}
@@ -221,8 +222,8 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
           <Button variant="outline" onClick={close}>إلغاء</Button>
           <Button variant="primary" onClick={handleSave} disabled={!canSave}>
-            {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-            <span className="material-icons-round text-sm">save</span>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            <Save size={14} />
             حفظ المتابعة
           </Button>
         </div>

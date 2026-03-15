@@ -9,9 +9,11 @@ import type { ProductionReport, PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
 import { getReportWaste } from '../../../utils/calculations';
+import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
 
 export interface ReportPrintRow {
   reportId?: string;
+  reportCode?: string;
   date: string;
   lineName: string;
   productName: string;
@@ -65,6 +67,7 @@ export const mapReportsToPrintRows = (
     return {
       date: r.date,
       reportId: r.id,
+      reportCode: r.reportCode,
       lineName: lookups.getLineName(r.lineId),
       productName: lookups.getProductName(r.productId),
       employeeName: lookups.getEmployeeName(r.employeeId),
@@ -136,6 +139,12 @@ function shortProductName(name: string): string {
   return `${parts[0]} ${parts[1]}`;
 }
 
+function formatReportNumber(reportId?: string): string {
+  if (!reportId) return 'RPT-NA'
+  const shortId = reportId.slice(-6).toUpperCase()
+  return `RPT-${shortId}`
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  ProductionReportPrint — Bulk report printout                              */
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -165,6 +174,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
     return (
       <div
         ref={ref}
+        className="print-root print-report"
         dir="rtl"
         style={{
           fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
@@ -355,145 +365,66 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     if (!report) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-    const palette = getPrintThemePalette(ps);
-    const dp = ps.decimalPlaces;
+    const dp = ps.decimalPlaces ?? 0;
     const now = new Date().toLocaleString('ar-EG');
-    const total = report.quantityProduced + report.wasteQuantity;
-    const wasteRatio = total > 0 ? ((report.wasteQuantity / total) * 100).toFixed(dp) : '0';
-    const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
-    const isThermal = ps.paperSize === 'thermal';
-    const spacing = isThermal ? PRINT_SPACING.thermal : PRINT_SPACING.regular;
-
-    const reportLink =
-      report.reportId && typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}#/reports?reportId=${encodeURIComponent(report.reportId)}`
-        : `report|${report.date}|${report.lineName}|${report.productName}|qty:${report.quantityProduced}`;
+    const total = Number(report.quantityProduced || 0) + Number(report.wasteQuantity || 0);
+    const wasteRatio = total > 0 ? ((Number(report.wasteQuantity || 0) / total) * 100).toFixed(dp) : '0';
 
     return (
-      <div
+      <PrintReportLayout
         ref={ref}
-        dir="rtl"
-        style={{
-          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
-          width: paper.width,
-          minHeight: ps.paperSize === 'a4' ? '148mm' : paper.minHeight,
-          padding: spacing.pagePadding,
-          background: '#fff',
-          color: palette.text,
-          ['--print-text' as any]: palette.text,
-          ['--print-muted-text' as any]: palette.mutedText,
-          ['--print-border' as any]: palette.border,
-          ['--print-th-bg' as any]: palette.tableHeaderBg,
-          ['--print-th-text' as any]: palette.tableHeaderText,
-          ['--print-row-alt' as any]: palette.tableRowAltBg,
-          fontSize: isThermal ? '8pt' : '11pt',
-          lineHeight: 1.55,
-          boxSizing: 'border-box',
+        companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
+        reportType="تقرير إنتاج"
+        printDate={now}
+        logoUrl={ps.logoUrl}
+        accentColor={ps.primaryColor}
+        footerText={ps.footerText}
+        paperSize={ps.paperSize}
+        orientation={ps.orientation}
+        meta={{
+          reportNumber: report.reportCode?.trim() || formatReportNumber(report.reportId),
+          reportDate: report.date || '—',
+          lineName: report.lineName || '—',
+          supervisorName: report.employeeName || '—',
         }}
-      >
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: spacing.sectionGap, borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '5mm' }}>
-          {ps.logoUrl && (
-            <img
-              src={ps.logoUrl}
-              alt="logo"
-              style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
-            />
-          )}
-          <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
-            {ps.headerText}
-          </h1>
-          <h2 style={{ margin: '2mm 0 0', fontSize: isThermal ? '9pt' : '14pt', fontWeight: 700, color: palette.mutedText }}>
-            تقرير إنتاج
-          </h2>
-          <div
-            style={{
-              marginTop: '2mm',
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: '2mm',
-              fontSize: isThermal ? '6pt' : '9pt',
-              color: palette.mutedText,
-              border: `1px solid ${palette.border}`,
-              borderRadius: '2mm',
-              padding: isThermal ? '1mm 1.2mm' : '1.3mm 1.8mm',
-              background: palette.tableRowAltBg,
-            }}
-          >
-            <span>تاريخ الطباعة: {now}</span>
-            <span>الكود: {report.reportId || '—'}</span>
-          </div>
-        </div>
-
-        {/* Report Details */}
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: isThermal ? '7.5pt' : '10.5pt',
-            marginBottom: spacing.sectionGap,
-            border: `1px solid ${palette.border}`,
-          }}
-        >
-          <tbody>
-            <DetailRow label="التاريخ"           value={report.date} />
-            <DetailRow label="خط الإنتاج"         value={report.lineName}      even />
-            <DetailRow label="المنتج"             value={report.productName} />
-            {ps.showEmployee    && <DetailRow label="المشرف"              value={report.employeeName}  even />}
-            {ps.showWorkOrder && report.workOrderNumber && (
-              <DetailRow label="أمر شغل"          value={report.workOrderNumber} />
-            )}
-            <DetailRow label="الكمية المنتجة"     value={`${fmtNum(report.quantityProduced, dp)} وحدة`} highlight="#059669" even />
-            {ps.showWaste && (
-              <>
-                <DetailRow label="هالك المكونات"   value={`${fmtNum(report.wasteQuantity, dp)} وحدة`}   highlight="#f43f5e" />
-                <DetailRow label="نسبة الهالك"     value={`${wasteRatio}%`}                              even />
-              </>
-            )}
-            <DetailRow label="عدد العمال"         value={String(report.workersCount)} />
-            <DetailRow
-              label="تفاصيل العمالة"
-              value={`إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`}
-              even
-            />
-            <DetailRow label="ساعات العمل"        value={fmtNum(report.workHours, dp)} />
-            {ps.showCosts && report.costPerUnit != null && report.costPerUnit > 0 && (
-              <DetailRow label="تكلفة الوحدة"     value={`${fmtNum(report.costPerUnit, 2)} ج.م`}     highlight={ps.primaryColor} />
-            )}
-            {report.notes?.trim() && (
-              <DetailRow label="ملاحظة"           value={report.notes} even />
-            )}
-          </tbody>
-        </table>
-
-        {/* Signature Section */}
-        {!isThermal && (
-          <div style={{ marginTop: spacing.signatureTopMargin, display: 'flex', justifyContent: 'space-between', gap: '14mm' }}>
-            <SignatureBlock label="مدير المصنع" />
-            {ps.showEmployee && <SignatureBlock label="مدير الخط" />}
-            <SignatureBlock label="مراقب الجودة" />
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{ marginTop: isThermal ? '2.8mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '2.8mm', textAlign: 'center' }}>
-          {ps.showQRCode && (
-            <div style={{ marginBottom: '3mm' }}>
-              <QRCodeSVG
-                value={reportLink}
-                size={isThermal ? 40 : 64}
-                level="L"
-              />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>
-                امسح رمز QR للرجوع إلى التقرير
-              </p>
-            </div>
-          )}
-          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
-            {ps.footerText} — {now}
-          </p>
-        </div>
-      </div>
+        kpis={[
+          { label: 'الكمية المنتجة', value: Number(report.quantityProduced || 0), unit: 'وحدة', color: 'indigo' },
+          { label: 'الهالك', value: Number(report.wasteQuantity || 0), unit: 'وحدة', color: report.wasteQuantity > 0 ? 'red' : 'default' },
+          { label: 'العمال', value: report.workersCount || 0, color: 'default' },
+          {
+            label: 'تكلفة الوحدة',
+            value: report.costPerUnit != null && report.costPerUnit > 0 ? report.costPerUnit.toFixed(2) : '—',
+            unit: 'ج.م',
+            color: 'green',
+          },
+        ]}
+        sections={[
+          {
+            title: 'المنتج وأمر الشغل',
+            rows: [
+              { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true },
+              { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
+            ],
+            progress: undefined,
+          },
+          {
+            title: 'تفاصيل الإنتاج',
+            rows: [
+              { label: 'ساعات العمل', value: `${fmtNum(report.workHours, dp)} ساعات` },
+              { label: 'نسبة الهالك', value: `${wasteRatio}%` },
+              {
+                label: 'توزيع العمالة',
+                value: `إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`,
+              },
+            ],
+          },
+        ]}
+        signatures={[
+          { title: 'مدير المصنع' },
+          { title: 'مدير الخط' },
+          { title: 'مراقب الجودة' },
+        ]}
+      />
     );
   },
 );
@@ -542,6 +473,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
     return (
       <div
         ref={ref}
+        className="print-root print-report"
         dir="rtl"
         style={{
           fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",

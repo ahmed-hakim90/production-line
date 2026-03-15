@@ -46,6 +46,12 @@ export const DEFAULT_LEAVE: WithoutMeta<LeaveConfig> = {
   defaultAnnualBalance: 21,
   defaultSickBalance: 14,
   defaultEmergencyBalance: 5,
+  leaveTypes: [
+    { key: 'annual', label: 'سنوية', isPaid: true },
+    { key: 'sick', label: 'مرضية', isPaid: true },
+    { key: 'emergency', label: 'طارئة', isPaid: true },
+    { key: 'unpaid', label: 'بدون راتب', isPaid: false },
+  ],
   allowNegativeBalance: false,
   carryOverLimit: 10,
   maxConsecutiveDays: 30,

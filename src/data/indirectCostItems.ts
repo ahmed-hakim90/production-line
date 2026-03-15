@@ -1,0 +1,68 @@
+import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
+
+export const INDIRECT_COST_ITEMS: IndirectCostItem[] = [
+  {
+    id: "packaging",
+    name: "خط التغليف و الجودة",
+    subLabel: "تكلفة تشغيل غير مباشرة",
+    costPerUnit: 3.98,
+    monthlyTotal: 17263.14,
+    iconType: "packaging",
+  },
+  {
+    id: "storage",
+    name: "ايجار التخزين للخطوط",
+    subLabel: "تشغيل المخازن",
+    costPerUnit: 2.79,
+    monthlyTotal: 12079.82,
+    iconType: "storage",
+  },
+  {
+    id: "salaries",
+    name: "مرتيبات (مدير+مساعد)",
+    subLabel: "أجور إدارية",
+    costPerUnit: 2.17,
+    monthlyTotal: 9397.64,
+    iconType: "salaries",
+  },
+  {
+    id: "tools",
+    name: "عدد و مهمات",
+    subLabel: "استهلاك أدوات",
+    costPerUnit: 0.87,
+    monthlyTotal: 3755.59,
+    iconType: "tools",
+  },
+  {
+    id: "rent",
+    name: "ايجار المصنع",
+    subLabel: "مصروف ثابت",
+    costPerUnit: 0.34,
+    monthlyTotal: 1456.85,
+    iconType: "rent",
+  },
+  {
+    id: "depreciation",
+    name: "اهلاكات 12 خطوط",
+    subLabel: "اهلاك شهري",
+    costPerUnit: 0.27,
+    monthlyTotal: 1191.79,
+    iconType: "depreciation",
+  },
+  {
+    id: "electricity",
+    name: "كهرباء",
+    subLabel: "استهلاك الطاقة",
+    costPerUnit: 0.11,
+    monthlyTotal: 461.11,
+    iconType: "electricity",
+  },
+  {
+    id: "compressed-air",
+    name: "كمبروسر و ضغط هواء",
+    subLabel: "خدمات مساعدة",
+    costPerUnit: 0.08,
+    monthlyTotal: 334.08,
+    iconType: "compressed-air",
+  },
+];

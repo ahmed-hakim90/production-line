@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { addDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
 import { db } from '../../../services/firebase';
 import { Button, Badge } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
@@ -200,16 +201,16 @@ export const GlobalOrganizationModal: React.FC = () => {
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
           <h3 className="text-lg font-bold">{isEdit ? 'تعديل' : 'إضافة'} {MODAL_LABELS[tab]}</h3>
           <button onClick={() => { if (!saving) close(); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
         <div className="p-6 space-y-4">
           {saveMsg && (
             <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-              <span className="material-icons-round text-base">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
+              {saveMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <p className="flex-1">{saveMsg.text}</p>
               <button onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
-                <span className="material-icons-round text-base">close</span>
+                <X size={16} />
               </button>
             </div>
           )}
@@ -324,7 +325,7 @@ export const GlobalOrganizationModal: React.FC = () => {
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => { if (!saving) close(); }}>إغلاق</Button>
             <Button variant="primary" onClick={handleSave} disabled={saving}>
-              {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+              {saving && <Loader2 size={14} className="animate-spin" />}
               {isEdit ? 'حفظ التعديلات' : 'إضافة'}
             </Button>
           </div>

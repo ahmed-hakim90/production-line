@@ -2,6 +2,7 @@ export { CostCenters } from './pages/CostCenters';
 export { CostCenterDistribution } from './pages/CostCenterDistribution';
 export { CostSettings } from './pages/CostSettings';
 export { MonthlyProductionCosts } from './pages/MonthlyProductionCosts';
+export { CostDataHealth } from './pages/CostDataHealth';
 export { AssetsList } from './pages/AssetsList';
 export { AssetDetails } from './pages/AssetDetails';
 export { DepreciationReport } from './pages/DepreciationReport';

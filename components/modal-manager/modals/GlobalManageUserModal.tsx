@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ShieldCheck, Trash2, X } from 'lucide-react';
 import { Badge, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -85,7 +86,7 @@ export const GlobalManageUserModal: React.FC = () => {
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{row.user.displayName || '—'}</p>
           </div>
           <button onClick={close} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors" disabled={submitting}>
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
 
@@ -200,7 +201,7 @@ export const GlobalManageUserModal: React.FC = () => {
                 }
                 disabled={submitting || !roleTargetId}
               >
-                <span className="material-icons-round text-[15px]">verified_user</span>
+                <ShieldCheck size={15} />
                 الموافقة + تفعيل الوصول
               </button>
             )}
@@ -216,7 +217,7 @@ export const GlobalManageUserModal: React.FC = () => {
               onClick={() => void run(() => modalPayload.onHardDelete(), undefined, true)}
               disabled={submitting}
             >
-              <span className="material-icons-round text-[15px]">delete_forever</span>
+              <Trash2 size={15} />
               حذف نهائي
             </button>
           </div>

@@ -23,6 +23,14 @@ import { qualitySettingsService } from '../../quality/services/qualitySettingsSe
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
+import { toast } from '../../../components/Toast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const STATUS_CONFIG: Record<WorkOrderStatus, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' }> = {
   pending: { label: 'قيد الانتظار', variant: 'info' },
@@ -88,6 +96,7 @@ export const WorkOrders: React.FC = () => {
   }));
 
   const uid = useAppStore((s) => s.uid);
+  const userRoleName = useAppStore((s) => s.userRoleName);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
 
   const [showModal, setShowModal] = useState(false);
@@ -195,10 +204,35 @@ export const WorkOrders: React.FC = () => {
   }, [productName]);
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
+  const loggedInSupervisor = useMemo(() => {
+    if (currentEmployee?.id) return currentEmployee;
+    return _rawEmployees.find((e) => e.userId === uid) ?? null;
+  }, [currentEmployee, _rawEmployees, uid]);
+
+  const scopeToLoggedInSupervisor = useMemo(() => {
+    const roleName = String(userRoleName || '').trim();
+    const isSupervisorRole = roleName.includes('مشرف');
+    return isSupervisorRole && Boolean(loggedInSupervisor?.id);
+  }, [userRoleName, loggedInSupervisor]);
+
+  const isOwnedByLoggedInSupervisor = useCallback((wo: WorkOrder) => {
+    if (!loggedInSupervisor) return true;
+    const woSupervisor = String(wo.supervisorId || '').trim().toLowerCase();
+    const supervisorId = String(loggedInSupervisor.id || '').trim().toLowerCase();
+    const supervisorName = String(loggedInSupervisor.name || '').trim().toLowerCase();
+    const supervisorCode = String(loggedInSupervisor.code || '').trim().toLowerCase();
+    const supervisorUserId = String(loggedInSupervisor.userId || '').trim().toLowerCase();
+    return (
+      woSupervisor === supervisorId ||
+      (supervisorName.length > 0 && woSupervisor === supervisorName) ||
+      (supervisorCode.length > 0 && woSupervisor === supervisorCode) ||
+      (supervisorUserId.length > 0 && woSupervisor === supervisorUserId)
+    );
+  }, [loggedInSupervisor]);
 
   const filtered = useMemo(() => {
-    const scoped = currentEmployee?.level === 2
-      ? workOrders.filter((w) => w.supervisorId === currentEmployee.id)
+    const scoped = scopeToLoggedInSupervisor
+      ? workOrders.filter(isOwnedByLoggedInSupervisor)
       : workOrders;
     let list = [...scoped];
     if (filterStatus !== 'all') list = list.filter((w) => w.status === filterStatus);
@@ -215,7 +249,7 @@ export const WorkOrders: React.FC = () => {
       return (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
     });
     return list;
-  }, [workOrders, currentEmployee, filterStatus, filterLine, deferredSearchTerm, productName]);
+  }, [workOrders, scopeToLoggedInSupervisor, isOwnedByLoggedInSupervisor, filterStatus, filterLine, deferredSearchTerm, productName]);
 
   useEffect(() => {
     if (highlightId && highlightRef.current) {
@@ -228,15 +262,15 @@ export const WorkOrders: React.FC = () => {
   }, [highlightId, filtered]);
 
   const kpis = useMemo(() => {
-    const scoped = currentEmployee?.level === 2
-      ? workOrders.filter((w) => w.supervisorId === currentEmployee.id)
+    const scoped = scopeToLoggedInSupervisor
+      ? workOrders.filter(isOwnedByLoggedInSupervisor)
       : workOrders;
     const active = scoped.filter((w) => w.status === 'in_progress' || w.status === 'pending');
     const completed = scoped.filter((w) => w.status === 'completed');
     const totalEstimated = active.reduce((s, w) => s + (w.estimatedCost || 0), 0);
     const totalActual = completed.reduce((s, w) => s + (w.actualCost || 0), 0);
     return { active: active.length, completed: completed.length, totalEstimated, totalActual };
-  }, [workOrders, currentEmployee]);
+  }, [workOrders, scopeToLoggedInSupervisor, isOwnedByLoggedInSupervisor]);
 
   const openCreate = useCallback(() => {
     openModal(MODAL_KEYS.WORK_ORDERS_CREATE, { source: 'workOrders.page' });
@@ -365,7 +399,7 @@ export const WorkOrders: React.FC = () => {
 
     const qualityPolicies = await qualitySettingsService.getPolicies();
     if (qualityPolicies.closeRequiresQualityApproval && wo.qualityStatus !== 'approved') {
-      window.alert('لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة.');
+      toast.warning('لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة.');
       return;
     }
 
@@ -415,12 +449,12 @@ export const WorkOrders: React.FC = () => {
     try {
       const qualityPolicies = await qualitySettingsService.getPolicies();
       if (qualityPolicies.closeRequiresQualityApproval && closingWorkOrder.qualityStatus !== 'approved') {
-        window.alert('لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة.');
+        toast.warning('لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة.');
         return;
       }
       const scanSummary = await scanEventService.buildWorkOrderSummary(closingWorkOrder.id!);
       if (scanSummary.openSessions.length > 0) {
-        window.alert(`لا يمكن إغلاق أمر الشغل لوجود ${scanSummary.openSessions.length} قطعة قيد التشغيل بدون تسجيل خروج.`);
+        toast.warning(`لا يمكن إغلاق أمر الشغل لوجود ${scanSummary.openSessions.length} قطعة قيد التشغيل بدون تسجيل خروج.`);
         return;
       }
       const scannedQty = scanSummary.summary.completedUnits || 0;
@@ -449,7 +483,7 @@ export const WorkOrders: React.FC = () => {
       setClosingNote('');
       setClosingOpenSessions(0);
     } catch (error: any) {
-      window.alert(error?.message || 'فشل إغلاق أمر الشغل أو إنشاء تقرير الإنتاج.');
+      toast.error(error?.message || 'فشل إغلاق أمر الشغل أو إنشاء تقرير الإنتاج.');
     } finally {
       setClosingBusy(false);
     }
@@ -559,18 +593,28 @@ export const WorkOrders: React.FC = () => {
           )}
         </div>
         <div className="erp-filter-sep" />
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className={`erp-filter-select${filterStatus !== 'all' ? ' active' : ''}`}>
-          <option value="all">كل الحالات</option>
-          {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
-        <select value={filterLine} onChange={(e) => setFilterLine(e.target.value)} className={`erp-filter-select${filterLine ? ' active' : ''}`}>
-          <option value="">كل الخطوط</option>
-          {_rawLines.map((l) => (
-            <option key={l.id} value={l.id!}>{l.name}</option>
-          ))}
-        </select>
+        <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as WorkOrderStatus | 'all')}>
+          <SelectTrigger className={`erp-filter-select${filterStatus !== 'all' ? ' active' : ''}`}>
+            <SelectValue placeholder="كل الحالات" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">كل الحالات</SelectItem>
+            {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+              <SelectItem key={k} value={k}>{v.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterLine || 'all'} onValueChange={(value) => setFilterLine(value === 'all' ? '' : value)}>
+          <SelectTrigger className={`erp-filter-select${filterLine ? ' active' : ''}`}>
+            <SelectValue placeholder="كل الخطوط" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">كل الخطوط</SelectItem>
+            {_rawLines.map((l) => (
+              <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {(filterStatus !== 'all' || filterLine) && (
           <button className="erp-filter-clear" onClick={() => { setFilterStatus('all'); setFilterLine(''); }}>
             <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
@@ -858,38 +902,48 @@ export const WorkOrders: React.FC = () => {
               {/* Plan (optional) */}
               <div>
                 <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خطة الإنتاج (اختياري)</label>
-                <select value={form.planId} onChange={(e) => {
-                  const plan = productionPlans.find((p) => p.id === e.target.value);
+                <Select value={form.planId || 'none'} onValueChange={(value) => {
+                  const selectedPlanId = value === 'none' ? '' : value;
+                  const plan = productionPlans.find((p) => p.id === selectedPlanId);
                   setForm((f) => ({
                     ...f,
-                    planId: e.target.value,
+                    planId: selectedPlanId,
                     workOrderType: plan?.planType === 'component_injection' ? 'component_injection' : f.workOrderType,
                     productId: plan?.productId || f.productId,
                   }));
-                }} className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold">
-                  <option value="">بدون خطة</option>
-                  {productionPlans.filter((p) => p.status === 'planned' || p.status === 'in_progress').map((p) => (
-                    <option key={p.id} value={p.id!}>
-                      {shortProductName(p.productId)} — {formatNumber(p.plannedQuantity)} وحدة
-                    </option>
-                  ))}
-                </select>
+                }}>
+                  <SelectTrigger className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-medium">
+                    <SelectValue placeholder="بدون خطة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بدون خطة</SelectItem>
+                    {productionPlans.filter((p) => p.status === 'planned' || p.status === 'in_progress').map((p) => (
+                      <SelectItem key={p.id} value={p.id!}>
+                        {shortProductName(p.productId)} — {formatNumber(p.plannedQuantity)} وحدة
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {canChooseWorkOrderType && (
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع أمر الشغل</label>
-                  <select
+                  <Select
                     value={form.workOrderType}
-                    onChange={(e) => setForm((f) => ({
+                    onValueChange={(value) => setForm((f) => ({
                       ...f,
-                      workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
+                      workOrderType: value === 'component_injection' ? 'component_injection' : 'finished_product',
                     }))}
-                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                   >
-                    <option value="finished_product">أمر شغل منتج نهائي</option>
-                    <option value="component_injection">أمر شغل مكون حقن</option>
-                  </select>
+                    <SelectTrigger className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="finished_product">أمر شغل منتج نهائي</SelectItem>
+                      <SelectItem value="component_injection">أمر شغل مكون حقن</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
@@ -937,25 +991,33 @@ export const WorkOrders: React.FC = () => {
               {/* Line */}
               <div>
                 <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج *</label>
-                <select value={form.lineId} onChange={(e) => setForm((f) => ({ ...f, lineId: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold">
-                  <option value="">اختر الخط</option>
-                  {_rawLines.map((l) => (
-                    <option key={l.id} value={l.id!}>{l.name}</option>
-                  ))}
-                </select>
+                <Select value={form.lineId || 'none'} onValueChange={(value) => setForm((f) => ({ ...f, lineId: value === 'none' ? '' : value }))}>
+                  <SelectTrigger className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-medium">
+                    <SelectValue placeholder="اختر الخط" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">اختر الخط</SelectItem>
+                    {_rawLines.map((l) => (
+                      <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Supervisor */}
               <div>
                 <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المشرف *</label>
-                <select value={form.supervisorId} onChange={(e) => setForm((f) => ({ ...f, supervisorId: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold">
-                  <option value="">اختر المشرف</option>
-                  {supervisors.map((s) => (
-                    <option key={s.id} value={s.id!}>{s.name} {s.code ? `(${s.code})` : ''}</option>
-                  ))}
-                </select>
+                <Select value={form.supervisorId || 'none'} onValueChange={(value) => setForm((f) => ({ ...f, supervisorId: value === 'none' ? '' : value }))}>
+                  <SelectTrigger className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-medium">
+                    <SelectValue placeholder="اختر المشرف" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">اختر المشرف</SelectItem>
+                    {supervisors.map((s) => (
+                      <SelectItem key={s.id} value={s.id!}>{s.name} {s.code ? `(${s.code})` : ''}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-3 gap-4">

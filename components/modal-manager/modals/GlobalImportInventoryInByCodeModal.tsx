@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FileUp, Loader2, Save } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/inventory/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { warehouseService } from '../../../modules/inventory/services/warehouseService';
@@ -214,15 +215,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             <h3 className="text-lg font-bold">استيراد {itemTypeLabel} بالكود</h3>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{importFileName || '—'}</p>
           </div>
-          {/* <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
-              <span className="material-icons-round text-sm">upload_file</span>
-              اختيار ملف
-            </Button>
-            <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600" disabled={importSaving}>
-              <span className="material-icons-round">close</span>
-            </button>
-          </div> */}
+          {/* Optional header actions intentionally disabled. */}
         </div>
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
@@ -265,7 +258,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             <div className="space-y-3">
               <p className="text-sm text-slate-500">اختر ملف Excel للبدء في استيراد {itemTypeLabel}.</p>
               <Button variant="primary" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
-                <span className="material-icons-round text-sm">upload_file</span>
+                <FileUp size={14} />
                 اختيار ملف الاستيراد
               </Button>
             </div>
@@ -336,7 +329,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             إغلاق
           </Button>
           <Button variant="primary" onClick={() => void handleImportSave()} disabled={importSaving || importParsing || !importResult}>
-            <span className="material-icons-round text-sm">{importSaving ? 'hourglass_top' : 'save'}</span>
+            {importSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             حفظ الصفوف الصالحة
           </Button>
         </div>

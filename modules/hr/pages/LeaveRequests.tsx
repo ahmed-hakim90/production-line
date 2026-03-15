@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { leaveRequestService, leaveBalanceService } from '../leaveService';
 import { employeeService } from '../employeeService';
 import { exportHRData } from '@/utils/exportExcel';
+import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import type { FirestoreEmployee } from '@/types';
 import type {
   FirestoreLeaveRequest,
@@ -13,7 +14,7 @@ import type {
   LeaveType,
   ApprovalStatus,
 } from '../types';
-import { LEAVE_TYPE_LABELS, DEFAULT_LEAVE_BALANCE } from '../types';
+import { LEAVE_TYPE_LABELS } from '../types';
 import { PageHeader } from '../../../components/PageHeader';
 
 // ─── Status helpers ─────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ export const LeaveRequests: React.FC = () => {
   const [requests, setRequests] = useState<FirestoreLeaveRequest[]>([]);
   const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>([]);
   const [balance, setBalance] = useState<FirestoreLeaveBalance | null>(null);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [filterEmployee, setFilterEmployee] = useState('');
@@ -52,7 +54,6 @@ export const LeaveRequests: React.FC = () => {
   const [formStartDate, setFormStartDate] = useState('');
   const [formEndDate, setFormEndDate] = useState('');
   const [formReason, setFormReason] = useState('');
-  const [formAffects, setFormAffects] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -76,18 +77,27 @@ export const LeaveRequests: React.FC = () => {
   }, [allEmployees]);
 
   const getEmpName = useCallback((id: string) => empNameMap.get(id) || id, [empNameMap]);
+  const leaveTypeByKey = useMemo(() => leaveTypeMapByKey(leaveTypes), [leaveTypes]);
+  const selectedLeaveType = leaveTypeByKey[formLeaveType];
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allRequests, bal, emps] = await Promise.all([
+      const [allRequests, bal, emps, configuredLeaveTypes] = await Promise.all([
         isHR ? leaveRequestService.getAll() : leaveRequestService.getByEmployee(employeeId),
         leaveBalanceService.getOrCreate(employeeId),
         isHR ? employeeService.getAll() : Promise.resolve([]),
+        getLeaveTypesFromConfig(),
       ]);
       setRequests(allRequests);
       setBalance(bal);
       setAllEmployees(emps);
+      setLeaveTypes(configuredLeaveTypes);
+      setFormLeaveType((prev) =>
+        configuredLeaveTypes.find((row) => row.key === prev)
+          ? prev
+          : (configuredLeaveTypes[0]?.key || 'annual'),
+      );
     } catch (err) {
       console.error('Error loading leave data:', err);
     } finally {
@@ -109,10 +119,12 @@ export const LeaveRequests: React.FC = () => {
       await leaveRequestService.create({
         employeeId,
         leaveType: formLeaveType,
+        leaveTypeLabel: selectedLeaveType?.label || LEAVE_TYPE_LABELS[formLeaveType] || formLeaveType,
+        leaveTypeIsPaid: selectedLeaveType ? selectedLeaveType.isPaid : formLeaveType !== 'unpaid',
         startDate: formStartDate,
         endDate: formEndDate,
         totalDays: formDays,
-        affectsSalary: formAffects,
+        affectsSalary: selectedLeaveType ? !selectedLeaveType.isPaid : formLeaveType === 'unpaid',
         status: 'pending',
         approvalChain: [],
         finalStatus: 'pending',
@@ -129,7 +141,7 @@ export const LeaveRequests: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [employeeId, uid, formLeaveType, formStartDate, formEndDate, formDays, formAffects, formReason, fetchData]);
+  }, [employeeId, uid, formLeaveType, formStartDate, formEndDate, formDays, formReason, fetchData, selectedLeaveType]);
 
   const handleDelete = useCallback(async (id: string) => {
     setDeleting(true);
@@ -196,11 +208,11 @@ export const LeaveRequests: React.FC = () => {
             onClick: () => {
               const rows = requests.map((r) => ({
                 'الموظف': getEmpName(r.employeeId),
-                'النوع': LEAVE_TYPE_LABELS[r.leaveType],
+                'النوع': leaveTypeByKey[r.leaveType]?.label || r.leaveTypeLabel || LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType,
                 'من': r.startDate,
                 'إلى': r.endDate,
                 'الأيام': r.totalDays,
-                'تؤثر على الراتب': r.affectsSalary ? 'نعم' : 'لا',
+                'تؤثر على الراتب': (typeof r.leaveTypeIsPaid === 'boolean' ? !r.leaveTypeIsPaid : r.affectsSalary) ? 'نعم' : 'لا',
                 'الحالة': STATUS_CONFIG[r.finalStatus]?.label ?? r.finalStatus,
                 'السبب': r.reason || '',
               }));
@@ -253,24 +265,22 @@ export const LeaveRequests: React.FC = () => {
                 value={formLeaveType}
                 onChange={(e) => setFormLeaveType(e.target.value as LeaveType)}
               >
-                {(Object.entries(LEAVE_TYPE_LABELS) as [LeaveType, string][]).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
+                {(leaveTypes.length
+                  ? leaveTypes
+                  : Object.entries(LEAVE_TYPE_LABELS).map(([key, label]) => ({ key, label, isPaid: key !== 'unpaid' }))
+                ).map((row) => (
+                  <option key={row.key} value={row.key}>{row.label}</option>
                 ))}
               </select>
             </div>
 
             <div className="flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formAffects}
-                  onChange={(e) => setFormAffects(e.target.checked)}
-                  className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary"
-                />
-                <span className="text-sm font-bold text-[var(--color-text-muted)]">
-                  تؤثر على الراتب
+              <div className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm bg-[#f8f9fa]">
+                <span className="text-[var(--color-text-muted)] font-bold">الأثر على الراتب: </span>
+                <span className={selectedLeaveType?.isPaid === false ? 'text-rose-500 font-bold' : 'text-emerald-600 font-bold'}>
+                  {selectedLeaveType?.isPaid === false ? 'غير مدفوعة (سيتم الخصم)' : 'مدفوعة (بدون خصم)'}
                 </span>
-              </label>
+              </div>
             </div>
 
             <div>
@@ -391,13 +401,13 @@ export const LeaveRequests: React.FC = () => {
                     <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       {isHR && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
                       <td className="py-3 px-3">
-                        <Badge variant="info">{LEAVE_TYPE_LABELS[req.leaveType]}</Badge>
+                        <Badge variant="info">{leaveTypeByKey[req.leaveType]?.label || req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType}</Badge>
                       </td>
                       <td className="py-3 px-3 font-mono text-xs" dir="ltr">{req.startDate}</td>
                       <td className="py-3 px-3 font-mono text-xs" dir="ltr">{req.endDate}</td>
                       <td className="py-3 px-3 font-bold">{req.totalDays}</td>
                       <td className="py-3 px-3">
-                        {req.affectsSalary
+                        {(typeof req.leaveTypeIsPaid === 'boolean' ? !req.leaveTypeIsPaid : req.affectsSalary)
                           ? <span className="text-rose-500 font-bold">نعم</span>
                           : <span className="text-[var(--color-text-muted)]">لا</span>}
                       </td>

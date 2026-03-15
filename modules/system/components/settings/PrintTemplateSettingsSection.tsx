@@ -1,5 +1,5 @@
 import React from 'react';
-import { computePrintTotals, ProductionReportPrint } from '../../../production/components/ProductionReportPrint';
+import { SingleReportPrint } from '../../../production/components/ProductionReportPrint';
 import { Card, Button } from '../UI';
 import type { PaperOrientation, PaperSize, PrintTemplateSettings, PrintThemePreset } from '../../../../types';
 import type { ReportPrintRow } from '../../../production/components/ProductionReportPrint';
@@ -460,11 +460,28 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
             <div className="flex-1 overflow-auto p-6 bg-[#f0f2f5] dark:bg-slate-950 flex justify-center">
               <div className="shadow-2xl">
-                <ProductionReportPrint
-                  title="تقرير الإنتاج اليومي — معاينة"
-                  subtitle="بيانات تجريبية للمعاينة فقط"
-                  rows={sampleRows}
-                  totals={computePrintTotals(sampleRows)}
+                <SingleReportPrint
+                  report={
+                    sampleRows[0] ?? {
+                      reportId: 'preview-1',
+                      reportCode: 'PR-000001',
+                      date: '2026-03-15',
+                      lineName: 'خط 1',
+                      productName: 'منتج تجريبي',
+                      employeeName: 'مشرف تجريبي',
+                      quantityProduced: 1200,
+                      wasteQuantity: 35,
+                      workersCount: 12,
+                      workersProductionCount: 6,
+                      workersPackagingCount: 3,
+                      workersQualityCount: 2,
+                      workersMaintenanceCount: 1,
+                      workersExternalCount: 0,
+                      workHours: 8,
+                      workOrderNumber: 'WO-0001',
+                      costPerUnit: 2.35,
+                    }
+                  }
                   printSettings={localPrint}
                 />
               </div>

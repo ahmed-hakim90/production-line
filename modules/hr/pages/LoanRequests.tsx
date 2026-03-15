@@ -41,7 +41,7 @@ export const LoanRequests: React.FC = () => {
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const uid = useAppStore((s) => s.uid);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
-  const currentUser = useAppStore((s) => s.currentUser);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
 
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
@@ -178,7 +178,7 @@ export const LoanRequests: React.FC = () => {
         await loanService.disburse(
           loan.id,
           employeeId,
-          currentEmployee?.name || currentUser?.displayName || '',
+          currentEmployee?.name || userDisplayName || '',
         );
         setToast({ message: 'تم الصرف بنجاح', type: 'success' });
       }
@@ -189,7 +189,7 @@ export const LoanRequests: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
-  }, [employeeId, currentEmployee, currentUser, fetchData]);
+  }, [employeeId, currentEmployee, userDisplayName, fetchData]);
 
   const handleDeleteLoan = useCallback(async (id: string) => {
     setDeleting(true);

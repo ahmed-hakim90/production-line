@@ -258,6 +258,7 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             <option value="carton">كرتونة</option>
           </select>
         </div>
+
       </div>
     </Card>
   );

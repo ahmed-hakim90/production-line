@@ -25,6 +25,16 @@ import type { ProductionPlan, ProductionReport, PlanPriority, PlanStatus, SmartS
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +65,24 @@ type ViewMode = 'table' | 'kanban' | 'timeline';
 type PlanSortField = '' | 'product' | 'line' | 'priority' | 'plannedQuantity' | 'progress' | 'startDate';
 type SortDirection = 'asc' | 'desc';
 type DateQuickFilter = 'all' | 'today' | 'this_month' | 'custom';
+type GroupByField = 'none' | 'line' | 'product' | 'status' | 'priority';
+type EnrichedPlan = ProductionPlan & {
+  storedStatus: PlanStatus;
+  effectiveStatus: PlanStatus;
+  reportCount: number;
+  produced: number;
+  progressRatio: number;
+  timeRatio: number;
+  smartStatus: SmartStatus;
+  forecastFinishDate: string;
+  remainingDays: number;
+  remaining: number;
+};
+type PlanGroupSection = {
+  key: string;
+  label: string;
+  plans: EnrichedPlan[];
+};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -109,8 +137,10 @@ export const ProductionPlans: React.FC = () => {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [dateQuick, setDateQuick] = useState<DateQuickFilter>('all');
+  const [groupBy, setGroupBy] = useState<GroupByField>('none');
   const [sortField, setSortField] = useState<PlanSortField>('');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [activeDrawerPlanId, setActiveDrawerPlanId] = useState<string | null>(null);
 
   // ── Form state ──
   const [formProductId, setFormProductId] = useState(searchParams.get('productId') || '');
@@ -237,21 +267,42 @@ export const ProductionPlans: React.FC = () => {
   }, [products, formProductInput]);
 
   // ── Enriched plans with computed metrics ──
-  const enrichedPlans = useMemo(() => {
+  const enrichedPlans = useMemo<EnrichedPlan[]>(() => {
     return productionPlans.map((plan) => {
+      const key = `${plan.lineId}_${plan.productId}`;
+      const reportCount = planReports[key]?.length ?? 0;
       const produced = plan.producedQuantity ?? 0;
+      const hasExecutionSignal = produced > 0 || reportCount > 0;
+      const effectiveStatus: PlanStatus =
+        plan.status === 'in_progress' && !hasExecutionSignal
+          ? 'planned'
+          : plan.status;
       const progressRatio = calculateProgressRatio(produced, plan.plannedQuantity);
       const timeRatio = plan.plannedEndDate ? calculateTimeRatio(plan.plannedStartDate || plan.startDate, plan.plannedEndDate) : 0;
-      const smartStatus = calculateSmartStatus(progressRatio, timeRatio, plan.status);
+      const smartStatus = hasExecutionSignal
+        ? calculateSmartStatus(progressRatio, timeRatio, effectiveStatus)
+        : 'on_track';
       const forecastFinishDate = plan.plannedEndDate
         ? calculateForecastFinishDate(plan.plannedStartDate || plan.startDate, produced, plan.plannedQuantity, plan.avgDailyTarget || 0)
         : '—';
       const remainingDays = plan.plannedEndDate ? calculateRemainingDays(plan.plannedEndDate) : 0;
       const remaining = Math.max(plan.plannedQuantity - produced, 0);
 
-      return { ...plan, produced, progressRatio, timeRatio, smartStatus, forecastFinishDate, remainingDays, remaining };
+      return {
+        ...plan,
+        storedStatus: plan.status,
+        effectiveStatus,
+        reportCount,
+        produced,
+        progressRatio,
+        timeRatio,
+        smartStatus,
+        forecastFinishDate,
+        remainingDays,
+        remaining,
+      };
     });
-  }, [productionPlans]);
+  }, [productionPlans, planReports]);
 
   // ── Filtered plans ──
   const filteredPlans = useMemo(() => {
@@ -265,7 +316,7 @@ export const ProductionPlans: React.FC = () => {
           return false;
         }
       }
-      if (filterStatus && p.status !== filterStatus) return false;
+      if (filterStatus && p.effectiveStatus !== filterStatus) return false;
       if (filterLine && p.lineId !== filterLine) return false;
       if (filterProduct && p.productId !== filterProduct) return false;
       if (filterPriority && p.priority !== filterPriority) return false;
@@ -328,6 +379,47 @@ export const ProductionPlans: React.FC = () => {
     return sortDirection === 'asc' ? sorted : sorted.reverse();
   }, [filteredPlans, sortField, sortDirection, _rawProducts, _rawLines]);
 
+  const groupedPlanSections = useMemo<PlanGroupSection[]>(() => {
+    if (groupBy === 'none') {
+      return [{ key: 'all', label: 'كل الخطط', plans: sortedPlans }];
+    }
+
+    const groupedMap = new Map<string, PlanGroupSection>();
+
+    sortedPlans.forEach((plan) => {
+      let key = 'unknown';
+      let label = 'غير محدد';
+
+      if (groupBy === 'line') {
+        key = plan.lineId || 'unknown-line';
+        label = _rawLines.find((line) => line.id === plan.lineId)?.name || 'خط غير معروف';
+      } else if (groupBy === 'product') {
+        key = plan.productId || 'unknown-product';
+        label = _rawProducts.find((product) => product.id === plan.productId)?.name || 'منتج غير معروف';
+      } else if (groupBy === 'status') {
+        key = plan.effectiveStatus;
+        label = STATUS_CONFIG[plan.effectiveStatus].label;
+      } else if (groupBy === 'priority') {
+        const priority = plan.priority || 'medium';
+        key = priority;
+        label = PRIORITY_CONFIG[priority].label;
+      }
+
+      if (!groupedMap.has(key)) {
+        groupedMap.set(key, { key, label, plans: [] });
+      }
+
+      groupedMap.get(key)!.plans.push(plan);
+    });
+
+    return Array.from(groupedMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }, [groupBy, sortedPlans, _rawLines, _rawProducts]);
+
+  const activeDrawerPlan = useMemo(
+    () => enrichedPlans.find((plan) => plan.id === activeDrawerPlanId) || null,
+    [enrichedPlans, activeDrawerPlanId],
+  );
+
   useEffect(() => {
     setSelectedPlanIds((prev) => {
       const visibleIds = new Set(sortedPlans.map((p) => p.id).filter((id): id is string => Boolean(id)));
@@ -374,7 +466,7 @@ export const ProductionPlans: React.FC = () => {
 
   // ── KPIs ──
   const kpis = useMemo(() => {
-    const active = enrichedPlans.filter((p) => p.status === 'in_progress' || p.status === 'planned');
+    const active = enrichedPlans.filter((p) => p.effectiveStatus === 'in_progress' || p.effectiveStatus === 'planned');
     const delayed = enrichedPlans.filter((p) => p.smartStatus === 'delayed' || p.smartStatus === 'critical');
     const totalRemaining = active.reduce((s, p) => s + p.remaining, 0);
     const avgCompletion = active.length > 0
@@ -493,7 +585,7 @@ export const ProductionPlans: React.FC = () => {
     setDeletePlanId(null);
   };
 
-  const hasActiveFilters = filterSearch || filterStatus || filterLine || filterProduct || filterPriority || filterDateFrom || filterDateTo;
+  const hasActiveFilters = filterSearch || filterStatus || filterLine || filterProduct || filterPriority || filterDateFrom || filterDateTo || groupBy !== 'none';
 
   const applyDateQuickFilter = (quick: DateQuickFilter) => {
     setDateQuick(quick);
@@ -530,9 +622,22 @@ export const ProductionPlans: React.FC = () => {
     });
   };
 
+  const getCurrentRunningAction = (plan: EnrichedPlan): string => {
+    if (plan.effectiveStatus === 'in_progress') return 'التنفيذ شغال حالياً على الخطة';
+    if (plan.effectiveStatus === 'planned') return 'جاهزة للتشغيل (يمكن بدء أمر شغل)';
+    if (plan.effectiveStatus === 'paused') return 'التشغيل متوقف مؤقتاً ويحتاج استئناف';
+    if (plan.effectiveStatus === 'completed') return 'الخطة مكتملة، لا يوجد أكشن تشغيلي مفتوح';
+    return 'الخطة ملغاة، تم إيقاف كل الأكشنات';
+  };
+
+  const openPlanDrawer = (planId?: string) => {
+    if (!planId) return;
+    setActiveDrawerPlanId(planId);
+  };
+
   if (loading) {
     return (
-      <div className="space-y-8">
+      <div className="erp-ds-clean space-y-8">
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">خطط الإنتاج</h2>
         <LoadingSkeleton type="table" rows={6} />
       </div>
@@ -540,7 +645,7 @@ export const ProductionPlans: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="erp-ds-clean space-y-6 sm:space-y-8">
       {/* Header */}
       <PageHeader
         title="خطط الإنتاج"
@@ -648,10 +753,15 @@ export const ProductionPlans: React.FC = () => {
 
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج *</label>
-              <select className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={formLineId} onChange={(e) => setFormLineId(e.target.value)}>
-                <option value="">اختر الخط...</option>
-                {_rawLines.map((l) => (<option key={l.id} value={l.id!}>{l.name}</option>))}
-              </select>
+              <Select value={formLineId || 'none'} onValueChange={(value) => setFormLineId(value === 'none' ? '' : value)}>
+                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                  <SelectValue placeholder="اختر الخط..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">اختر الخط...</SelectItem>
+                  {_rawLines.map((l) => (<SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -666,26 +776,35 @@ export const ProductionPlans: React.FC = () => {
 
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">الأولوية</label>
-              <select className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={formPriority} onChange={(e) => setFormPriority(e.target.value as PlanPriority)}>
-                {(Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
-              </select>
+              <Select value={formPriority} onValueChange={(value) => setFormPriority(value as PlanPriority)}>
+                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع الخطة</label>
-              <select
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+              <Select
                 value={formPlanType}
-                onChange={(e) => setFormPlanType(e.target.value === 'component_injection' ? 'component_injection' : 'finished_product')}
+                onValueChange={(value) => setFormPlanType(value === 'component_injection' ? 'component_injection' : 'finished_product')}
               >
-                {can('plans.create') && (
-                  <option value="finished_product">خطة منتج نهائي</option>
-                )}
-                {canManageComponentInjectionPlans && (
-                  <option value="component_injection">خطة مكون حقن</option>
-                )}
-              </select>
+                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {can('plans.create') && (
+                    <SelectItem value="finished_product">خطة منتج نهائي</SelectItem>
+                  )}
+                  {canManageComponentInjectionPlans && (
+                    <SelectItem value="component_injection">خطة مكون حقن</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             {calculations?.plannedEndDate && (
@@ -776,149 +895,245 @@ export const ProductionPlans: React.FC = () => {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="erp-filter-bar">
-        <div className="erp-search-input erp-search-input--table">
-          <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
-          <input
-            type="search"
-            value={filterSearch}
-            onChange={(e) => setFilterSearch(e.target.value)}
-            placeholder="بحث بالخط أو المنتج أو الكود..."
-          />
-        </div>
-        <select
-          className={`erp-filter-select${filterStatus ? ' active' : ''}`}
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-        >
-          <option value="">كل الحالات</option>
-          {(Object.entries(STATUS_CONFIG) as [PlanStatus, typeof STATUS_CONFIG[PlanStatus]][]).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
-        <select
-          className={`erp-filter-select${filterLine ? ' active' : ''}`}
-          value={filterLine}
-          onChange={(e) => setFilterLine(e.target.value)}
-        >
-          <option value="">كل الخطوط</option>
-          {_rawLines.map((l) => (<option key={l.id} value={l.id!}>{l.name}</option>))}
-        </select>
-        <select
-          className={`erp-filter-select${filterProduct ? ' active' : ''}`}
-          value={filterProduct}
-          onChange={(e) => setFilterProduct(e.target.value)}
-        >
-          <option value="">كل المنتجات</option>
-          {_rawProducts.map((p) => (<option key={p.id} value={p.id!}>{p.name}</option>))}
-        </select>
-        <select
-          className={`erp-filter-select${filterPriority ? ' active' : ''}`}
-          value={filterPriority}
-          onChange={(e) => setFilterPriority(e.target.value)}
-        >
-          <option value="">كل الأولويات</option>
-          {(Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
-        <div className="erp-date-seg">
-          <button
-            type="button"
-            className={`erp-date-seg-btn${dateQuick === 'today' ? ' active' : ''}`}
-            onClick={() => applyDateQuickFilter('today')}
-          >
-            اليوم
-          </button>
-          <button
-            type="button"
-            className={`erp-date-seg-btn${dateQuick === 'this_month' ? ' active' : ''}`}
-            onClick={() => applyDateQuickFilter('this_month')}
-          >
-            هذا الشهر
-          </button>
-          <button
-            type="button"
-            className={`erp-date-seg-btn${dateQuick === 'all' ? ' active' : ''}`}
-            onClick={() => applyDateQuickFilter('all')}
-          >
-            الكل
-          </button>
-        </div>
-        <div className="erp-filter-sep" />
-        <select
-          className={`erp-filter-select${sortField ? ' active' : ''}`}
-          value={sortField}
-          onChange={(e) => setSortField(e.target.value as PlanSortField)}
-        >
-          <option value="">ترتيب حسب</option>
-          <option value="product">المنتج</option>
-          <option value="line">الخط</option>
-          <option value="priority">الأولوية</option>
-          <option value="plannedQuantity">الكمية</option>
-          <option value="progress">التقدم</option>
-          <option value="startDate">تاريخ البدء</option>
-        </select>
-        <select
-          className={`erp-filter-select${sortField ? ' active' : ''}`}
-          value={sortDirection}
-          onChange={(e) => setSortDirection(e.target.value as SortDirection)}
-          disabled={!sortField}
-        >
-          <option value="asc">تصاعدي</option>
-          <option value="desc">تنازلي</option>
-        </select>
-        <div className="erp-filter-date">
-          <span className="erp-filter-label">من</span>
-          <input
-            type="date"
-            value={filterDateFrom}
-            onChange={(e) => {
-              setDateQuick('custom');
-              setFilterDateFrom(e.target.value);
-            }}
-          />
-        </div>
-        <div className="erp-filter-date">
-          <span className="erp-filter-label">إلى</span>
-          <input
-            type="date"
-            value={filterDateTo}
-            onChange={(e) => {
-              setDateQuick('custom');
-              setFilterDateTo(e.target.value);
-            }}
-          />
-        </div>
-        <button type="button" className="erp-filter-apply" onClick={handleApplyFilters}>
-          <span className="material-icons-round" style={{ fontSize: 14 }}>filter_alt</span>
-          تطبيق
-        </button>
-        {hasActiveFilters && (
-          <button
-            className="erp-filter-clear"
-            onClick={() => {
-              setFilterSearch('');
-              setFilterStatus('');
-              setFilterLine('');
-              setFilterProduct('');
-              setFilterPriority('');
-              setDateQuick('all');
-              setFilterDateFrom('');
-              setFilterDateTo('');
-            }}
-          >
-            <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
-            مسح
-          </button>
-        )}
-      </div>
+      <SmartFilterBar
+        searchPlaceholder="ابحث بالخط أو المنتج أو الكود..."
+        searchValue={filterSearch}
+        onSearchChange={setFilterSearch}
+        periods={[
+          { label: 'الكل', value: 'all' },
+          { label: 'هذا الشهر', value: 'this_month' },
+          { label: 'اليوم', value: 'today' },
+        ]}
+        activePeriod={dateQuick}
+        onPeriodChange={(value) => applyDateQuickFilter(value as DateQuickFilter)}
+        quickFilters={[
+          {
+            key: 'status',
+            placeholder: 'كل الحالات',
+            options: (Object.entries(STATUS_CONFIG) as [PlanStatus, typeof STATUS_CONFIG[PlanStatus]][]).map(([key, config]) => ({
+              value: key,
+              label: config.label,
+            })),
+            width: 'w-[140px]',
+          },
+        ]}
+        quickFilterValues={{ status: filterStatus || 'all' }}
+        onQuickFilterChange={(_, value) => setFilterStatus(value === 'all' ? '' : value)}
+        advancedFilters={[
+          {
+            key: 'line',
+            label: 'الخط',
+            placeholder: 'كل الخطوط',
+            options: _rawLines.map((line) => ({ value: line.id || '', label: line.name })),
+            width: 'w-[150px]',
+          },
+          {
+            key: 'product',
+            label: 'المنتج',
+            placeholder: 'كل المنتجات',
+            options: _rawProducts.map((product) => ({ value: product.id || '', label: product.name })),
+            width: 'w-[150px]',
+          },
+          {
+            key: 'priority',
+            label: 'الأولوية',
+            placeholder: 'كل الأولويات',
+            options: (Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([key, config]) => ({
+              value: key,
+              label: config.label,
+            })),
+            width: 'w-[140px]',
+          },
+          {
+            key: 'groupBy',
+            label: 'تجميع على',
+            placeholder: 'بدون تجميع',
+            options: [
+              { value: 'line', label: 'الخط' },
+              { value: 'product', label: 'المنتج' },
+              { value: 'status', label: 'الحالة' },
+              { value: 'priority', label: 'الأولوية' },
+            ],
+          },
+          {
+            key: 'sortBy',
+            label: 'ترتيب حسب',
+            placeholder: 'بدون ترتيب',
+            options: [
+              { value: 'product', label: 'المنتج' },
+              { value: 'line', label: 'الخط' },
+              { value: 'priority', label: 'الأولوية' },
+              { value: 'plannedQuantity', label: 'الكمية' },
+              { value: 'progress', label: 'التقدم' },
+              { value: 'startDate', label: 'تاريخ البدء' },
+            ],
+          },
+          {
+            key: 'sortDirection',
+            label: 'اتجاه الترتيب',
+            placeholder: 'تنازلي',
+            options: [
+              { value: 'asc', label: 'تصاعدي' },
+              { value: 'desc', label: 'تنازلي' },
+            ],
+            width: 'w-[130px]',
+          },
+          { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+        ]}
+        advancedFilterValues={{
+          line: filterLine || 'all',
+          product: filterProduct || 'all',
+          priority: filterPriority || 'all',
+          groupBy: groupBy === 'none' ? 'all' : groupBy,
+          sortBy: sortField || 'all',
+          sortDirection: sortDirection,
+          dateFrom: filterDateFrom,
+          dateTo: filterDateTo,
+        }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'line') setFilterLine(value === 'all' ? '' : value);
+          if (key === 'product') setFilterProduct(value === 'all' ? '' : value);
+          if (key === 'priority') setFilterPriority(value === 'all' ? '' : value);
+          if (key === 'groupBy') setGroupBy(value === 'all' ? 'none' : (value as GroupByField));
+          if (key === 'sortBy') setSortField(value === 'all' ? '' : (value as PlanSortField));
+          if (key === 'sortDirection') setSortDirection(value as SortDirection);
+          if (key === 'dateFrom') {
+            setDateQuick('custom');
+            setFilterDateFrom(value);
+          }
+          if (key === 'dateTo') {
+            setDateQuick('custom');
+            setFilterDateTo(value);
+          }
+        }}
+        onApply={handleApplyFilters}
+        applyLabel="تطبيق"
+      />
 
       {/* Content Area */}
-      {viewMode === 'table' && <TableView plans={sortedPlans} />}
+      {viewMode === 'table' && <TableView groups={groupedPlanSections} />}
       {viewMode === 'kanban' && <KanbanView plans={sortedPlans} />}
       {viewMode === 'timeline' && <TimelineView plans={sortedPlans} />}
+
+      {/* Plan Drawer */}
+      <div className={`fixed inset-0 z-50 transition-opacity ${activeDrawerPlan ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className="absolute inset-0 bg-black/35" onClick={() => setActiveDrawerPlanId(null)} />
+        <aside className={`absolute top-0 right-0 h-full w-full max-w-xl bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl transition-transform duration-300 ${activeDrawerPlan ? 'translate-x-0' : 'translate-x-full'}`}>
+          {activeDrawerPlan && (
+            <div className="h-full flex flex-col">
+              <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-bold text-[var(--color-text)]">تفاصيل الخطة</h3>
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    {_rawProducts.find((p) => p.id === activeDrawerPlan.productId)?.name ?? '—'} • {_rawLines.find((l) => l.id === activeDrawerPlan.lineId)?.name ?? '—'}
+                  </p>
+                </div>
+                <button onClick={() => setActiveDrawerPlanId(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
+                  <span className="material-icons-round">close</span>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                    <p className="text-xs text-[var(--color-text-muted)]">الحالة</p>
+                    <div className="mt-1"><Badge variant={STATUS_CONFIG[activeDrawerPlan.effectiveStatus].variant as any}>{STATUS_CONFIG[activeDrawerPlan.effectiveStatus].label}</Badge></div>
+                  </div>
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                    <p className="text-xs text-[var(--color-text-muted)]">الأولوية</p>
+                    <p className={`mt-1 text-sm font-bold ${PRIORITY_CONFIG[activeDrawerPlan.priority || 'medium'].color}`}>
+                      {PRIORITY_CONFIG[activeDrawerPlan.priority || 'medium'].label}
+                    </p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                    <p className="text-xs text-[var(--color-text-muted)]">الكمية</p>
+                    <p className="mt-1 text-sm font-bold text-[var(--color-text)]">
+                      {formatNumber(activeDrawerPlan.produced)} / {formatNumber(activeDrawerPlan.plannedQuantity)}
+                    </p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                    <p className="text-xs text-[var(--color-text-muted)]">المتبقي</p>
+                    <p className="mt-1 text-sm font-bold text-[var(--color-text)]">{formatNumber(activeDrawerPlan.remaining)} وحدة</p>
+                  </div>
+                </div>
+
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--color-text-muted)]">التقدم</span>
+                    <span className="font-bold text-primary">{Math.min(activeDrawerPlan.progressRatio, 100)}%</span>
+                  </div>
+                  <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(activeDrawerPlan.progressRatio, 100)}%` }} />
+                  </div>
+                  <p className={`text-xs font-bold ${SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].color}`}>
+                    الحالة الذكية: {SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].label}
+                  </p>
+                </div>
+
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-2 text-sm">
+                  <p><span className="font-bold text-[var(--color-text-muted)]">تاريخ البدء:</span> {activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate}</p>
+                  <p><span className="font-bold text-[var(--color-text-muted)]">تاريخ الانتهاء المخطط:</span> {activeDrawerPlan.plannedEndDate || '—'}</p>
+                  <p><span className="font-bold text-[var(--color-text-muted)]">الإنهاء المتوقع:</span> {activeDrawerPlan.forecastFinishDate || '—'}</p>
+                  <p><span className="font-bold text-[var(--color-text-muted)]">الأيام المتبقية:</span> {activeDrawerPlan.effectiveStatus === 'completed' ? '0' : Math.max(activeDrawerPlan.remainingDays, 0)}</p>
+                </div>
+
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 text-sm">
+                  <p className="text-xs text-[var(--color-text-muted)] mb-1">الأكشن الشغال حالياً</p>
+                  <p className="font-bold text-[var(--color-text)]">{getCurrentRunningAction(activeDrawerPlan)}</p>
+                </div>
+
+                {canViewCosts && (
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-1 text-sm">
+                    <p><span className="font-bold text-[var(--color-text-muted)]">تكلفة تقديرية:</span> {formatCurrency(activeDrawerPlan.estimatedCost || 0)}</p>
+                    <p><span className="font-bold text-[var(--color-text-muted)]">تكلفة فعلية:</span> {formatCurrency(activeDrawerPlan.actualCost || 0)}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-2">
+                {canEdit && (
+                  <>
+                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, lineId: activeDrawerPlan.lineId, priority: activeDrawerPlan.priority || 'medium' }); setActiveDrawerPlanId(null); }}>
+                      تعديل
+                    </Button>
+                    <Button variant="outline" onClick={() => { setStatusPlan(activeDrawerPlan); setNewStatus(activeDrawerPlan.effectiveStatus); setActiveDrawerPlanId(null); }}>
+                      تغيير الحالة
+                    </Button>
+                  </>
+                )}
+                {(can('workOrders.create') || (activeDrawerPlan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
+                  <Button variant="outline" onClick={() => { navigate(`/work-orders?planId=${activeDrawerPlan.id}&productId=${activeDrawerPlan.productId}`); setActiveDrawerPlanId(null); }}>
+                    أمر شغل
+                  </Button>
+                )}
+                {canAddFollowUp && activeDrawerPlan.id && (
+                  <button
+                    type="button"
+                    data-modal-key={MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE}
+                    onClick={() => {
+                      openModal(MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE, {
+                        planId: activeDrawerPlan.id!,
+                        productId: activeDrawerPlan.productId,
+                        lineId: activeDrawerPlan.lineId,
+                      });
+                      setActiveDrawerPlanId(null);
+                    }}
+                    className="px-4 py-2.5 text-sm rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 font-bold transition-colors"
+                  >
+                    متابعة نقص
+                  </button>
+                )}
+                {can('roles.manage') && activeDrawerPlan.id && (
+                  <button onClick={() => { setDeletePlanId(activeDrawerPlan.id!); setActiveDrawerPlanId(null); }} className="px-4 py-2.5 text-sm rounded-[var(--border-radius-base)] bg-rose-500 text-white hover:bg-rose-600 font-bold transition-colors">
+                    حذف
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
 
       {/* Edit Modal */}
       {editPlan && canEdit && (
@@ -931,9 +1146,14 @@ export const ProductionPlans: React.FC = () => {
             <div className="p-6 space-y-5">
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج</label>
-                <select className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={editForm.lineId} onChange={(e) => setEditForm({ ...editForm, lineId: e.target.value })}>
-                  {_rawLines.map((l) => (<option key={l.id} value={l.id!}>{l.name}</option>))}
-                </select>
+                <Select value={editForm.lineId} onValueChange={(value) => setEditForm({ ...editForm, lineId: value })}>
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {_rawLines.map((l) => (<SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المخططة</label>
@@ -945,11 +1165,16 @@ export const ProductionPlans: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الأولوية</label>
-                <select className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={editForm.priority} onChange={(e) => setEditForm({ ...editForm, priority: e.target.value as PlanPriority })}>
-                  {(Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label}</option>
-                  ))}
-                </select>
+                <Select value={editForm.priority} onValueChange={(value) => setEditForm({ ...editForm, priority: value as PlanPriority })}>
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
@@ -1021,7 +1246,11 @@ export const ProductionPlans: React.FC = () => {
 
   // ─── Table View ────────────────────────────────────────────────────────────
 
-  function TableView({ plans }: { plans: typeof enrichedPlans }) {
+  function TableView({ groups }: { groups: PlanGroupSection[] }) {
+    const totalPlans = groups.reduce((sum, group) => sum + group.plans.length, 0);
+    const hasActionColumn = canEdit || can('roles.manage');
+    const columnCount = (canEdit ? 1 : 0) + 8 + (canViewCosts ? 1 : 0) + (hasActionColumn ? 1 : 0);
+
     return (
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-3">
@@ -1031,7 +1260,10 @@ export const ProductionPlans: React.FC = () => {
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--color-text)]">جميع الخطط</h3>
-              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{plans.length} خطة {hasActiveFilters ? '(مصفاة)' : ''}</p>
+              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">
+                {totalPlans} خطة {hasActiveFilters ? '(مصفاة)' : ''}
+                {groupBy !== 'none' ? ` • ${groups.length} مجموعة` : ''}
+              </p>
             </div>
           </div>
           {canEdit && (
@@ -1058,209 +1290,262 @@ export const ProductionPlans: React.FC = () => {
           )}
         </div>
 
-        {plans.length === 0 ? (
+        {totalPlans === 0 ? (
           <div className="p-12 text-center text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">event_note</span>
             <p className="font-bold text-base">{hasActiveFilters ? 'لا توجد خطط تطابق التصفية' : 'لا توجد خطط إنتاج بعد'}</p>
             <p className="text-sm mt-1">{hasActiveFilters ? 'جرب تغيير معايير التصفية' : 'ابدأ بإنشاء خطة جديدة لتتبع الإنتاج'}</p>
           </div>
         ) : (
-          <div className="space-y-2.5">
-            <div className="md:hidden space-y-2.5 px-3 pb-3">
-              {plans.map((plan) => {
-                const product = _rawProducts.find((p) => p.id === plan.productId);
-                const line = _rawLines.find((l) => l.id === plan.lineId);
-                const statusInfo = STATUS_CONFIG[plan.status];
-                const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
-                const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
-                return (
-                  <div key={plan.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-primary">{product?.name ?? '—'}</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">{line?.name ?? '—'}</p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${priorityInfo.bg} ${priorityInfo.color}`}>{priorityInfo.label}</span>
+          <div className="space-y-4">
+            <div className="md:hidden space-y-3 px-3 pb-3">
+              {groups.map((group) => (
+                <div key={group.key} className="space-y-2.5">
+                  {groupBy !== 'none' && (
+                    <div className="px-1 text-[11px] font-bold text-[var(--color-text-muted)]">
+                      {group.label} ({group.plans.length})
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
-                        <p className="text-[var(--color-text-muted)] mb-0.5">الحالة</p>
-                        <p className={`font-bold ${statusInfo.color}`}>{statusInfo.label}</p>
+                  )}
+                  {group.plans.map((plan) => {
+                    const product = _rawProducts.find((p) => p.id === plan.productId);
+                    const line = _rawLines.find((l) => l.id === plan.lineId);
+                    const statusInfo = STATUS_CONFIG[plan.effectiveStatus];
+                    const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
+                    const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
+
+                    return (
+                      <div
+                        key={plan.id}
+                        className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5 cursor-pointer hover:bg-[#f8f9fa]/40 transition-colors"
+                        onClick={() => openPlanDrawer(plan.id)}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold text-primary">{product?.name ?? '—'}</p>
+                            <p className="text-xs text-[var(--color-text-muted)]">{line?.name ?? '—'}</p>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${priorityInfo.bg} ${priorityInfo.color}`}>{priorityInfo.label}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                            <p className="text-[var(--color-text-muted)] mb-0.5">الحالة</p>
+                            <p className="font-bold text-[var(--color-text)]">{statusInfo.label}</p>
+                          </div>
+                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                            <p className="text-[var(--color-text-muted)] mb-0.5">التقدم</p>
+                            <p className="font-bold text-primary">{Math.min(plan.progressRatio, 100)}%</p>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs font-bold">
+                            <span className="text-[var(--color-text-muted)]">التنفيذ</span>
+                            <span className={smartInfo.color}>{smartInfo.label}</span>
+                          </div>
+                          <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                            <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(plan.progressRatio, 100)}%` }} />
+                          </div>
+                        </div>
+                        <div className="text-xs text-[var(--color-text-muted)] space-y-1">
+                          <p><span className="font-bold">الكمية:</span> {formatNumber(plan.produced)} / {formatNumber(plan.plannedQuantity)}</p>
+                          <p><span className="font-bold">الفترة:</span> {plan.plannedStartDate || plan.startDate} - {plan.plannedEndDate || '—'}</p>
+                          {canViewCosts && <p><span className="font-bold">التكلفة:</span> {formatCurrency(plan.estimatedCost || 0)}</p>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPlanDrawer(plan.id);
+                          }}
+                          className="w-full inline-flex items-center justify-center gap-2 text-xs font-bold rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2 text-primary hover:bg-primary/5 transition-colors"
+                        >
+                          <span className="material-icons-round text-sm">dock_to_right</span>
+                          تفاصيل الخطة
+                        </button>
                       </div>
-                      <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
-                        <p className="text-[var(--color-text-muted)] mb-0.5">التقدم</p>
-                        <p className="font-bold text-primary">{plan.progress}%</p>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-[var(--color-text-muted)]">التنفيذ</span>
-                        <span className={smartInfo.color}>{smartInfo.label}</span>
-                      </div>
-                      <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(plan.progress, 100)}%` }} />
-                      </div>
-                    </div>
-                    <div className="text-xs text-[var(--color-text-muted)] space-y-1">
-                      <p><span className="font-bold">الكمية:</span> {formatNumber(plan.producedQuantity)} / {formatNumber(plan.plannedQuantity)}</p>
-                      <p><span className="font-bold">الفترة:</span> {plan.startDate} - {plan.endDate}</p>
-                      {canViewCosts && <p><span className="font-bold">التكلفة:</span> {formatCurrency(plan.estimatedCost)}</p>}
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
             </div>
             <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-[#f8f9fa]/50 border-b border-[var(--color-border)]">
-                  {canEdit && (
-                    <th className="erp-th text-center w-10">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={toggleSelectAllVisible}
-                        aria-label="تحديد كل الخطط الظاهرة"
-                      />
-                    </th>
-                  )}
-                  <th className="erp-th">المنتج</th>
-                  <th className="erp-th">الخط</th>
-                  <th className="erp-th text-center">الأولوية</th>
-                  <th className="erp-th text-center">الكمية</th>
-                  <th className="erp-th text-center">الفترة</th>
-                  <th className="erp-th text-center">الحالة</th>
-                  <th className="erp-th text-center">التقدم</th>
-                  <th className="erp-th text-center">الحالة الذكية</th>
-                  {canViewCosts && <th className="erp-th text-center">التكلفة</th>}
-                  {(canEdit || can('roles.manage')) && <th className="erp-th text-center">إجراءات</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-border)]">
-                {plans.map((plan) => {
-                  const product = _rawProducts.find((p) => p.id === plan.productId);
-                  const line = _rawLines.find((l) => l.id === plan.lineId);
-                  const statusInfo = STATUS_CONFIG[plan.status];
-                  const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
-                  const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="bg-[#f8f9fa]/50 border-b border-[var(--color-border)]">
+                    {canEdit && (
+                      <th className="erp-th text-center w-10">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          onChange={toggleSelectAllVisible}
+                          aria-label="تحديد كل الخطط الظاهرة"
+                        />
+                      </th>
+                    )}
+                    <th className="erp-th">المنتج</th>
+                    <th className="erp-th">الخط</th>
+                    <th className="erp-th text-center">الأولوية</th>
+                    <th className="erp-th text-center">الكمية</th>
+                    <th className="erp-th text-center">الفترة</th>
+                    <th className="erp-th text-center">الحالة</th>
+                    <th className="erp-th text-center">التقدم</th>
+                    <th className="erp-th text-center">الحالة الذكية</th>
+                    {canViewCosts && <th className="erp-th text-center">التكلفة</th>}
+                    {hasActionColumn && <th className="erp-th text-center">إجراءات</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {groups.map((group) => (
+                    <React.Fragment key={group.key}>
+                      {groupBy !== 'none' && (
+                        <tr className="bg-[#f8f9fa]/70">
+                          <td className="px-4 py-2.5 text-xs font-bold text-[var(--color-text-muted)]" colSpan={columnCount}>
+                            {group.label} ({group.plans.length})
+                          </td>
+                        </tr>
+                      )}
+                      {group.plans.map((plan) => {
+                        const product = _rawProducts.find((p) => p.id === plan.productId);
+                        const line = _rawLines.find((l) => l.id === plan.lineId);
+                        const statusInfo = STATUS_CONFIG[plan.effectiveStatus];
+                        const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
+                        const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
 
-                  return (
-                    <tr key={plan.id} className="hover:bg-[#f8f9fa]/50 transition-colors">
-                      {canEdit && (
-                        <td className="px-4 py-3.5 text-center">
-                          {plan.id && (
-                            <input
-                              type="checkbox"
-                              checked={selectedPlanIds.includes(plan.id)}
-                              onChange={() => togglePlanSelection(plan.id!)}
-                              aria-label="تحديد الخطة"
-                            />
-                          )}
-                        </td>
-                      )}
-                      <td className="px-4 py-3.5">
-                        <button onClick={() => navigate(`/products/${plan.productId}`)} className="text-sm font-bold text-primary hover:underline text-right">
-                          {product?.name ?? '—'}
-                        </button>
-                        <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{product?.code}</p>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <button onClick={() => navigate(`/lines/${plan.lineId}`)} className="text-sm font-bold text-primary hover:underline text-right">
-                          {line?.name ?? '—'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${priorityInfo.bg} ${priorityInfo.color}`}>
-                          {priorityInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <p className="text-sm font-bold text-[var(--color-text)]">{formatNumber(plan.plannedQuantity)}</p>
-                        <p className="text-[10px] text-slate-400">متبقي: {formatNumber(plan.remaining)}</p>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <p className="text-xs font-medium text-slate-500">{plan.plannedStartDate || plan.startDate}</p>
-                        {plan.plannedEndDate && <p className="text-[10px] text-slate-400">→ {plan.plannedEndDate}</p>}
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <div className="flex flex-col items-center gap-1.5">
-                          <span className={`text-sm font-bold ${plan.progressRatio >= 100 ? 'text-emerald-600' : plan.progressRatio >= 50 ? 'text-blue-600' : 'text-amber-600'}`}>
-                            {Math.min(plan.progressRatio, 100)}%
-                          </span>
-                          <div className="w-20 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${plan.progressRatio >= 100 ? 'bg-emerald-500' : plan.progressRatio >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
-                              style={{ width: `${Math.min(plan.progressRatio, 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-[10px] text-[var(--color-text-muted)] font-medium">{formatNumber(plan.produced)} / {formatNumber(plan.plannedQuantity)}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className={`text-xs font-bold ${smartInfo.color}`}>{smartInfo.label}</span>
-                        {plan.remainingDays > 0 && plan.status !== 'completed' && (
-                          <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{plan.remainingDays} يوم متبقي</p>
-                        )}
-                      </td>
-                      {canViewCosts && (
-                        <td className="px-4 py-3.5 text-center">
-                          <p className="text-xs font-bold text-slate-600">{formatCurrency(plan.actualCost || 0)}</p>
-                          {(plan.estimatedCost ?? 0) > 0 && (
-                            <p className="text-[10px] text-slate-400">من {formatCurrency(plan.estimatedCost)}</p>
-                          )}
-                        </td>
-                      )}
-                      {(canEdit || can('roles.manage')) && (
-                        <td className="px-4 py-3.5 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                        return (
+                          <tr
+                            key={plan.id}
+                            className="hover:bg-[#f8f9fa]/50 transition-colors cursor-pointer"
+                            onClick={() => openPlanDrawer(plan.id)}
+                          >
                             {canEdit && (
-                              <>
-                                <button
-                                  onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium' }); }}
-                                  className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
-                                  <span className="material-icons-round text-sm">edit</span>
-                                </button>
-                                <button onClick={() => { setStatusPlan(plan); setNewStatus(plan.status); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all" title="تغيير الحالة">
-                                  <span className="material-icons-round text-sm">swap_horiz</span>
-                                </button>
-                              </>
+                              <td className="px-4 py-3.5 text-center">
+                                {plan.id && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPlanIds.includes(plan.id)}
+                                    onChange={() => togglePlanSelection(plan.id!)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    aria-label="تحديد الخطة"
+                                  />
+                                )}
+                              </td>
                             )}
-                            {(can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.status === 'planned' || plan.status === 'in_progress') && (
-                              <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
-                                <span className="material-icons-round text-sm">assignment</span>
-                              </button>
-                            )}
-                            {canAddFollowUp && plan.id && (
+                            <td className="px-4 py-3.5">
                               <button
-                                type="button"
-                                data-modal-key={MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE}
-                                onClick={() => openModal(MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE, {
-                                  planId: plan.id,
-                                  productId: plan.productId,
-                                  lineId: plan.lineId,
-                                })}
-                                className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all"
-                                title="إضافة متابعة نقص"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/products/${plan.productId}`);
+                                }}
+                                className="text-sm font-bold text-primary hover:underline text-right"
                               >
-                                <span className="material-icons-round text-sm">report_problem</span>
+                                {product?.name ?? '—'}
                               </button>
-                            )}
-                            {can('roles.manage') && (
-                              <button onClick={() => setDeletePlanId(plan.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
-                                <span className="material-icons-round text-sm">delete</span>
+                              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{product?.code}</p>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/lines/${plan.lineId}`);
+                                }}
+                                className="text-sm font-bold text-primary hover:underline text-right"
+                              >
+                                {line?.name ?? '—'}
                               </button>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${priorityInfo.bg} ${priorityInfo.color}`}>
+                                {priorityInfo.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <p className="text-sm font-bold text-[var(--color-text)]">{formatNumber(plan.plannedQuantity)}</p>
+                              <p className="text-[10px] text-slate-400">متبقي: {formatNumber(plan.remaining)}</p>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <p className="text-xs font-medium text-slate-500">{plan.plannedStartDate || plan.startDate}</p>
+                              {plan.plannedEndDate && <p className="text-[10px] text-slate-400">→ {plan.plannedEndDate}</p>}
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <div className="flex flex-col items-center gap-1.5">
+                                <span className={`text-sm font-bold ${plan.progressRatio >= 100 ? 'text-emerald-600' : plan.progressRatio >= 50 ? 'text-blue-600' : 'text-amber-600'}`}>
+                                  {Math.min(plan.progressRatio, 100)}%
+                                </span>
+                                <div className="w-20 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${plan.progressRatio >= 100 ? 'bg-emerald-500' : plan.progressRatio >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                                    style={{ width: `${Math.min(plan.progressRatio, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-[var(--color-text-muted)] font-medium">{formatNumber(plan.produced)} / {formatNumber(plan.plannedQuantity)}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className={`text-xs font-bold ${smartInfo.color}`}>{smartInfo.label}</span>
+                              {plan.remainingDays > 0 && plan.effectiveStatus !== 'completed' && (
+                                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{plan.remainingDays} يوم متبقي</p>
+                              )}
+                            </td>
+                            {canViewCosts && (
+                              <td className="px-4 py-3.5 text-center">
+                                <p className="text-xs font-bold text-slate-600">{formatCurrency(plan.actualCost || 0)}</p>
+                                {(plan.estimatedCost ?? 0) > 0 && (
+                                  <p className="text-[10px] text-slate-400">من {formatCurrency(plan.estimatedCost)}</p>
+                                )}
+                              </td>
                             )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            {hasActionColumn && (
+                              <td className="px-4 py-3.5 text-center">
+                                <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                  {canEdit && (
+                                    <>
+                                      <button
+                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium' }); }}
+                                        className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
+                                        <span className="material-icons-round text-sm">edit</span>
+                                      </button>
+                                      <button onClick={() => { setStatusPlan(plan); setNewStatus(plan.effectiveStatus); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all" title="تغيير الحالة">
+                                        <span className="material-icons-round text-sm">swap_horiz</span>
+                                      </button>
+                                    </>
+                                  )}
+                                  {(can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
+                                    <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
+                                      <span className="material-icons-round text-sm">assignment</span>
+                                    </button>
+                                  )}
+                                  {canAddFollowUp && plan.id && (
+                                    <button
+                                      type="button"
+                                      data-modal-key={MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE}
+                                      onClick={() => openModal(MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE, {
+                                        planId: plan.id,
+                                        productId: plan.productId,
+                                        lineId: plan.lineId,
+                                      })}
+                                      className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all"
+                                      title="إضافة متابعة نقص"
+                                    >
+                                      <span className="material-icons-round text-sm">report_problem</span>
+                                    </button>
+                                  )}
+                                  {can('roles.manage') && (
+                                    <button onClick={() => setDeletePlanId(plan.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
+                                      <span className="material-icons-round text-sm">delete</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -1276,7 +1561,7 @@ export const ProductionPlans: React.FC = () => {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {columns.map((status) => {
-          const colPlans = plans.filter((p) => p.status === status);
+          const colPlans = plans.filter((p) => p.effectiveStatus === status);
           const cfg = STATUS_CONFIG[status];
           return (
             <div key={status} className="bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] p-3 min-h-[200px]">
@@ -1297,7 +1582,7 @@ export const ProductionPlans: React.FC = () => {
                     <div
                       key={plan.id}
                       className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => { if (canEdit) { setStatusPlan(plan); setNewStatus(plan.status); } }}
+                      onClick={() => openPlanDrawer(plan.id)}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <p className="text-sm font-bold text-[var(--color-text)] leading-tight">{product?.name ?? '—'}</p>

@@ -9,6 +9,7 @@ import {
   getCurrentMonth,
   formatCost,
   calculateDailyIndirectCost,
+  buildLineAllocatedCostSummary,
   buildSupervisorHourlyRatesMap,
   buildSupervisorIndirectShareMap,
 } from '../../../utils/costCalculations';
@@ -21,6 +22,7 @@ import { PageHeader } from '../../../components/PageHeader';
 
 type ExtraColumnKey = 'materialsAndPackaging' | 'sellingPrice' | 'profit';
 const EXTRA_COLUMNS_PREF_KEY = 'monthly_costs_extra_columns_v1';
+const CENTER_COLUMNS_PREF_KEY = 'monthly_costs_center_columns_v1';
 const DEFAULT_EXTRA_COLUMNS: Record<ExtraColumnKey, boolean> = {
   materialsAndPackaging: true,
   sellingPrice: true,
@@ -50,6 +52,15 @@ const getPreviousMonth = (month: string): string => {
   const date = new Date(year, mon - 1, 1);
   date.setMonth(date.getMonth() - 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const buildMonthDateRange = (month: string) => {
+  const [y, m] = month.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return {
+    startDate: `${month}-01`,
+    endDate: `${month}-${String(lastDay).padStart(2, '0')}`,
+  };
 };
 
 export const MonthlyProductionCosts: React.FC = () => {
@@ -97,6 +108,7 @@ export const MonthlyProductionCosts: React.FC = () => {
   const [month, setMonth] = useState(getCurrentMonth());
   const [records, setRecords] = useState<MonthlyProductionCost[]>([]);
   const [breakdownMap, setBreakdownMap] = useState<Record<string, { directCost: number; indirectCost: number }>>({});
+  const [centerBreakdownMap, setCenterBreakdownMap] = useState<Record<string, Record<string, number>>>({});
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [calculateProgress, setCalculateProgress] = useState({ done: 0, total: 0, productId: '' });
@@ -116,9 +128,21 @@ export const MonthlyProductionCosts: React.FC = () => {
       return DEFAULT_EXTRA_COLUMNS;
     }
   });
+  const [centerColumnsVisibility, setCenterColumnsVisibility] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = window.localStorage.getItem(CENTER_COLUMNS_PREF_KEY);
+      if (!raw) return {};
+      return JSON.parse(raw) as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
   const [materialsTotalMap, setMaterialsTotalMap] = useState<Record<string, number>>({});
   const [prevMonthAvgMap, setPrevMonthAvgMap] = useState<Record<string, number>>({});
   const mountedRef = useRef(true);
+  const fetchRequestRef = useRef(0);
+  const materialTotalCacheRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     mountedRef.current = true;
@@ -126,20 +150,78 @@ export const MonthlyProductionCosts: React.FC = () => {
   }, []);
 
   const fetchRecords = useCallback(async () => {
+    const requestId = ++fetchRequestRef.current;
     setLoading(true);
     try {
-      const data = await monthlyProductionCostService.getByMonth(month);
       const previousMonth = getPreviousMonth(month);
-      const previousMonthData = await monthlyProductionCostService.getByMonth(previousMonth);
       const hourlyRate = laborSettings?.hourlyRate ?? 0;
-      const startDate = `${month}-01`;
-      const [y, m] = month.split('-').map(Number);
-      const lastDay = new Date(y, m, 0).getDate();
-      const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
-      const allReports = await reportService.getByDateRange(startDate, endDate);
+      const { startDate, endDate } = buildMonthDateRange(month);
+      const [data, previousMonthData, allReports] = await Promise.all([
+        monthlyProductionCostService.getByMonth(month),
+        monthlyProductionCostService.getByMonth(previousMonth),
+        reportService.getByDateRange(startDate, endDate),
+      ]);
+      if (!mountedRef.current || requestId !== fetchRequestRef.current) return;
+      const monthProductQtyTotals = new Map<string, number>();
+      allReports.forEach((report) => {
+        if ((report.quantityProduced || 0) <= 0 || !report.productId) return;
+        monthProductQtyTotals.set(
+          report.productId,
+          (monthProductQtyTotals.get(report.productId) || 0) + (report.quantityProduced || 0),
+        );
+      });
+      const assetById = new Map(assets.map((asset) => [String(asset.id || ''), asset]));
+      const depreciationByCenter = new Map<string, number>();
+      assetDepreciations.forEach((entry) => {
+        if (entry.period !== month) return;
+        const asset = assetById.get(String(entry.assetId || ''));
+        const centerId = String(asset?.centerId || '');
+        if (!centerId) return;
+        depreciationByCenter.set(centerId, (depreciationByCenter.get(centerId) || 0) + Number(entry.depreciationAmount || 0));
+      });
+      const qtyRules = costCenters
+        .filter((center) => center.type === 'indirect' && center.isActive && (center.allocationBasis || 'line_percentage') === 'by_qty' && center.id)
+        .map((center) => {
+          const centerId = String(center.id || '');
+          const centerValue = costCenterValues.find((value) => value.costCenterId === centerId && value.month === month);
+          const valueSource = centerValue?.valueSource || center.valueSource || 'manual';
+          const hasSavedBreakdown = centerValue?.manualAmount !== undefined || centerValue?.salariesAmount !== undefined;
+          const manualAmount = hasSavedBreakdown
+            ? Number(centerValue?.manualAmount || 0)
+            : Number(centerValue?.amount || 0);
+          const salariesAmount = hasSavedBreakdown
+            ? Number(centerValue?.salariesAmount || 0)
+            : 0;
+          const snapshotBase = valueSource === 'manual'
+            ? manualAmount
+            : valueSource === 'salaries'
+              ? (hasSavedBreakdown ? salariesAmount : Number(centerValue?.amount || 0))
+              : (hasSavedBreakdown ? (manualAmount + salariesAmount) : Number(centerValue?.amount || 0));
+          const depreciation = Number(depreciationByCenter.get(centerId) || 0);
+          const resolvedAmount = snapshotBase + depreciation;
+          const allowedProductIds = center.productScope === 'selected'
+            ? center.productIds || []
+            : center.productScope === 'category'
+              ? Array.from(monthProductQtyTotals.keys()).filter((pid) =>
+                (center.productCategories || []).includes(String(productCategoryMap.get(pid) || 'غير مصنف'))
+              )
+            : Array.from(monthProductQtyTotals.keys());
+          const denominator = allowedProductIds.reduce(
+            (sum, pid) => sum + Number(monthProductQtyTotals.get(pid) || 0),
+            0,
+          );
+          return {
+            costCenterId: centerId,
+            resolvedAmount,
+            denominator,
+            allowedProductIds: new Set(allowedProductIds),
+          };
+        })
+        .filter((rule) => rule.resolvedAmount > 0 && rule.denominator > 0);
 
       const lineDateQtyTotals = new Map<string, number>();
       const lineDateHoursTotals = new Map<string, number>();
+      const lineCenterSummaryCache = new Map<string, ReturnType<typeof buildLineAllocatedCostSummary>>();
       allReports.forEach((r) => {
         const key = `${r.lineId}_${r.date}`;
         lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + (r.quantityProduced || 0));
@@ -153,6 +235,12 @@ export const MonthlyProductionCosts: React.FC = () => {
         hourlyRate,
       );
       const nextBreakdown: Record<string, { directCost: number; indirectCost: number }> = {};
+      const nextCenterBreakdown: Record<string, Record<string, number>> = {};
+      const addCenterCost = (productId: string, centerId: string, amount: number) => {
+        if (!centerId || amount <= 0) return;
+        if (!nextCenterBreakdown[productId]) nextCenterBreakdown[productId] = {};
+        nextCenterBreakdown[productId][centerId] = (nextCenterBreakdown[productId][centerId] || 0) + amount;
+      };
       allReports.forEach((r) => {
         if (!r.quantityProduced || r.quantityProduced <= 0) return;
         const current = nextBreakdown[r.productId] || { directCost: 0, indirectCost: 0 };
@@ -163,23 +251,62 @@ export const MonthlyProductionCosts: React.FC = () => {
         if (!indirectCache.has(cacheKey)) {
           indirectCache.set(
             cacheKey,
-            calculateDailyIndirectCost(r.lineId, reportMonth, costCenters, costCenterValues, costAllocations, assets, assetDepreciations)
+            calculateDailyIndirectCost(
+              r.lineId,
+              reportMonth,
+              costCenters,
+              costCenterValues,
+              costAllocations,
+              assets,
+              assetDepreciations,
+              systemSettings.costMonthlyWorkingDays,
+            ),
           );
         }
         const lineIndirect = indirectCache.get(cacheKey) || 0;
         const lineDateKey = `${r.lineId}_${r.date}`;
         const lineDateTotalHours = lineDateHoursTotals.get(lineDateKey) || 0;
+        const lineDateTotalQty = lineDateQtyTotals.get(lineDateKey) || 0;
         const reportHours = Math.max(0, r.workHours || 0);
+        if (!lineCenterSummaryCache.has(cacheKey)) {
+          lineCenterSummaryCache.set(
+            cacheKey,
+            buildLineAllocatedCostSummary(
+              r.lineId,
+              reportMonth,
+              costCenters,
+              costCenterValues,
+              costAllocations,
+              assets,
+              assetDepreciations,
+              systemSettings.costMonthlyWorkingDays,
+            )
+          );
+        }
+        const lineCenterSummary = lineCenterSummaryCache.get(cacheKey);
         if (lineDateTotalHours > 0 && reportHours > 0) {
-          current.indirectCost += lineIndirect * (reportHours / lineDateTotalHours);
+          const shareRatio = reportHours / lineDateTotalHours;
+          current.indirectCost += lineIndirect * shareRatio;
+          lineCenterSummary?.centers.forEach((center) => {
+            addCenterCost(r.productId, center.costCenterId, center.dailyAllocated * shareRatio);
+          });
         } else {
-          const lineDateTotalQty = lineDateQtyTotals.get(lineDateKey) || 0;
           if (lineDateTotalQty > 0) {
-            current.indirectCost += lineIndirect * (r.quantityProduced / lineDateTotalQty);
+            const shareRatio = r.quantityProduced / lineDateTotalQty;
+            current.indirectCost += lineIndirect * shareRatio;
+            lineCenterSummary?.centers.forEach((center) => {
+              addCenterCost(r.productId, center.costCenterId, center.dailyAllocated * shareRatio);
+            });
           }
         }
         if (r.id) {
           current.indirectCost += supervisorShareMap.get(r.id) || 0;
+        }
+        for (const rule of qtyRules) {
+          if (!rule.allowedProductIds.has(r.productId)) continue;
+          const share = rule.resolvedAmount * ((r.quantityProduced || 0) / rule.denominator);
+          current.indirectCost += share;
+          addCenterCost(r.productId, rule.costCenterId, share);
         }
 
         nextBreakdown[r.productId] = current;
@@ -193,23 +320,57 @@ export const MonthlyProductionCosts: React.FC = () => {
             return acc;
           }, {})
         );
-        setBreakdownMap(nextBreakdown);
+        const persistedBreakdown: Record<string, { directCost: number; indirectCost: number }> = {};
+        data.forEach((row) => {
+          if (typeof row.directCost === 'number' && typeof row.indirectCost === 'number') {
+            persistedBreakdown[row.productId] = { directCost: row.directCost, indirectCost: row.indirectCost };
+          }
+        });
+        setBreakdownMap(Object.keys(persistedBreakdown).length > 0 ? persistedBreakdown : nextBreakdown);
+        setCenterBreakdownMap(nextCenterBreakdown);
       }
     } catch {
       // silently fail
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [month, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates, assets, assetDepreciations]);
+  }, [
+    month,
+    laborSettings,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    supervisorHourlyRates,
+    assets,
+    assetDepreciations,
+    systemSettings.costMonthlyWorkingDays,
+  ]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
   useEffect(() => {
     void fetchDepreciationReport(month);
   }, [month, fetchDepreciationReport]);
 
-  const productNameMap = new Map(products.map((p) => [p.id, p.name]));
-  const productCodeMap = new Map(products.map((p) => [p.id, p.code || '']));
-  const productCategoryMap = new Map(products.map((p) => [p.id, p.category || '']));
+  const productNameMap = useMemo(
+    () => new Map(products.map((p) => [p.id, p.name])),
+    [products],
+  );
+  const productCodeMap = useMemo(
+    () => new Map(products.map((p) => [p.id, p.code || ''])),
+    [products],
+  );
+  const productCategoryMap = useMemo(
+    () => new Map(products.map((p) => [p.id, p.category || ''])),
+    [products],
+  );
+  const costCenterNameMap = useMemo(
+    () => new Map(
+      costCenters
+        .filter((center) => center.id)
+        .map((center) => [String(center.id), center.name]),
+    ),
+    [costCenters],
+  );
   const rawProductMap = useMemo(() => {
     return new Map(_rawProducts.map((p) => [p.id || '', p]));
   }, [_rawProducts]);
@@ -219,6 +380,12 @@ export const MonthlyProductionCosts: React.FC = () => {
     setExtraColumns(next);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(EXTRA_COLUMNS_PREF_KEY, JSON.stringify(next));
+    }
+  };
+  const persistCenterColumnsVisibility = (next: Record<string, boolean>) => {
+    setCenterColumnsVisibility(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CENTER_COLUMNS_PREF_KEY, JSON.stringify(next));
     }
   };
 
@@ -231,27 +398,37 @@ export const MonthlyProductionCosts: React.FC = () => {
       setMaterialsTotalMap({});
       return;
     }
-    Promise.all(
-      productIds.map(async (pid) => {
+    const missingProductIds = productIds.filter((pid) => materialTotalCacheRef.current[pid] === undefined);
+    const loadMaterialTotals = async () => {
+      if (missingProductIds.length > 0) {
         try {
-          const materials = await productMaterialService.getByProduct(pid);
-          const total = materials.reduce((s, m) => s + (m.quantityUsed || 0) * (m.unitCost || 0), 0);
-          return [pid, total] as const;
+          const allMaterials = await productMaterialService.getAll();
+          const aggregated: Record<string, number> = {};
+          allMaterials.forEach((material) => {
+            const pid = String(material.productId || '');
+            if (!pid) return;
+            aggregated[pid] = (aggregated[pid] || 0) + (material.quantityUsed || 0) * (material.unitCost || 0);
+          });
+          materialTotalCacheRef.current = aggregated;
         } catch {
-          return [pid, 0] as const;
+          missingProductIds.forEach((pid) => {
+            materialTotalCacheRef.current[pid] = materialTotalCacheRef.current[pid] ?? 0;
+          });
         }
-      })
-    ).then((entries: ReadonlyArray<readonly [string, number]>) => {
+      }
       if (cancelled) return;
       const next: Record<string, number> = {};
-      entries.forEach(([pid, total]) => { next[String(pid)] = total; });
+      productIds.forEach((pid) => {
+        next[pid] = materialTotalCacheRef.current[pid] ?? 0;
+      });
       setMaterialsTotalMap(next);
-    });
+    };
+    void loadMaterialTotals();
     return () => { cancelled = true; };
   }, [records, month]);
 
   const handleCalculateAll = async () => {
-    if (!laborSettings) return;
+    if (!laborSettings || allClosed) return;
     const startDate = `${month}-01`;
     const [y, m] = month.split('-').map(Number);
     const lastDay = new Date(y, m, 0).getDate();
@@ -280,6 +457,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         supervisorHourlyRates,
         assets,
         assetDepreciations,
+        systemSettings.costMonthlyWorkingDays,
         (progress) => {
           if (!mountedRef.current) return;
           setCalculateProgress(progress);
@@ -336,6 +514,40 @@ export const MonthlyProductionCosts: React.FC = () => {
 
   const totalQty = displayRecords.reduce((s, r) => s + r.totalProducedQty, 0);
   const totalCost = displayRecords.reduce((s, r) => s + r.totalProductionCost, 0);
+  const centerColumns = useMemo(() => {
+    const ids = new Set<string>();
+    displayRecords.forEach((record) => {
+      Object.keys(centerBreakdownMap[record.productId] || {}).forEach((centerId) => ids.add(centerId));
+    });
+    costCenters
+      .filter((center) => center.type === 'indirect' && center.isActive && center.id)
+      .forEach((center) => ids.add(String(center.id || '')));
+    return Array.from(ids)
+      .map((centerId) => ({
+        id: centerId,
+        name: costCenterNameMap.get(centerId) || centerId,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  }, [displayRecords, centerBreakdownMap, costCenters, costCenterNameMap]);
+  const visibleCenterColumns = useMemo(
+    () => centerColumns.filter((center) => centerColumnsVisibility[center.id] !== false),
+    [centerColumns, centerColumnsVisibility]
+  );
+  const toggleCenterColumn = useCallback((centerId: string, checked: boolean) => {
+    const next = { ...centerColumnsVisibility, [centerId]: checked };
+    persistCenterColumnsVisibility(next);
+  }, [centerColumnsVisibility]);
+  const showAllCenterColumns = useCallback(() => {
+    const next = { ...centerColumnsVisibility };
+    centerColumns.forEach((center) => {
+      next[center.id] = true;
+    });
+    persistCenterColumnsVisibility(next);
+  }, [centerColumns, centerColumnsVisibility]);
+  const getCenterCostForRecord = useCallback(
+    (productId: string, centerId: string) => centerBreakdownMap[productId]?.[centerId] || 0,
+    [centerBreakdownMap]
+  );
   const getNormalizedBreakdown = useCallback((record: MonthlyProductionCost) => {
     const breakdown = breakdownMap[record.productId];
     if (!breakdown) {
@@ -427,6 +639,11 @@ export const MonthlyProductionCosts: React.FC = () => {
       'الانحراف عن الشهر السابق (%)': prevAvg > 0 ? deviationPercent : '—',
       'الحالة': r.isClosed ? 'مغلق' : 'مفتوح',
       };
+      visibleCenterColumns.forEach((center) => {
+        const centerTotal = getCenterCostForRecord(r.productId, center.id);
+        row[`${center.name} - إجمالي`] = centerTotal;
+        row[`${center.name} - للقطعة`] = qty > 0 ? centerTotal / qty : 0;
+      });
       if (extraColumns.materialsAndPackaging) row['إجمالي تكلفة المواد والتغليف (ج.م/وحدة)'] = materialsAndPackaging;
       if (extraColumns.sellingPrice) row['سعر البيع (ج.م/وحدة)'] = sellingPrice;
       if (extraColumns.profit) row['ربح القطعة (ج.م/وحدة)'] = sellingPrice > 0 ? unitProfit : '—';
@@ -462,7 +679,7 @@ export const MonthlyProductionCosts: React.FC = () => {
             : 'حساب الكل',
           icon: 'calculate',
           onClick: handleCalculateAll,
-          disabled: calculating,
+          disabled: calculating || allClosed,
         } : undefined}
         extra={
           <input
@@ -524,7 +741,7 @@ export const MonthlyProductionCosts: React.FC = () => {
               </p>
             </div>
             {canManage && (
-              <Button onClick={handleCalculateAll} disabled={calculating}>
+              <Button onClick={handleCalculateAll} disabled={calculating || allClosed}>
                 <span className="material-icons-round text-[18px] ml-1">refresh</span>
                 {calculating
                   ? `جاري الحساب... ${calculateProgress.done}/${calculateProgress.total || products.length}`
@@ -635,6 +852,11 @@ export const MonthlyProductionCosts: React.FC = () => {
                   <th className="erp-th">الكمية المنتجة</th>
                   <th className="erp-th">إجمالي التكلفة</th>
                   <th className="erp-th">مباشر / غير مباشر</th>
+                  {visibleCenterColumns.map((center) => (
+                    <th key={center.id} className="erp-th min-w-[180px]">
+                      {center.name}
+                    </th>
+                  ))}
                   <th className="erp-th">متوسط تكلفة الوحدة</th>
                   <th className="erp-th">الانحراف عن {previousMonthLabel}</th>
                   {extraColumns.materialsAndPackaging && (
@@ -688,6 +910,22 @@ export const MonthlyProductionCosts: React.FC = () => {
                         );
                       })()}
                     </td>
+                    {visibleCenterColumns.map((center) => {
+                      const centerTotal = getCenterCostForRecord(r.productId, center.id);
+                      const centerPerPiece = r.totalProducedQty > 0 ? centerTotal / r.totalProducedQty : 0;
+                      return (
+                        <td key={`${r.id}-${center.id}`} className="py-3 px-4">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs tabular-nums font-bold text-[var(--color-text)] leading-5">
+                              {formatCost(centerTotal)} <span className="text-[10px] font-normal opacity-70">إجمالي</span>
+                            </span>
+                            <span className="text-xs tabular-nums font-medium text-[var(--color-text-muted)] leading-5">
+                              {formatCost(centerPerPiece)} <span className="text-[10px] font-normal opacity-70">/ قطعة</span>
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
                     <td className="py-3 px-4 font-mono font-bold text-primary">
                       {formatCost(r.averageUnitCost)}
                     </td>
@@ -760,6 +998,24 @@ export const MonthlyProductionCosts: React.FC = () => {
                       </span>
                     </div>
                   </td>
+                  {visibleCenterColumns.map((center) => {
+                    const centerTotal = displayRecords.reduce(
+                      (sum, record) => sum + getCenterCostForRecord(record.productId, center.id),
+                      0
+                    );
+                    return (
+                      <td key={`total-${center.id}`} className="py-3 px-4">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-xs tabular-nums font-bold text-[var(--color-text)] leading-5">
+                            {formatCost(centerTotal)} <span className="text-[10px] font-normal opacity-70">إجمالي</span>
+                          </span>
+                          <span className="text-xs tabular-nums font-medium text-[var(--color-text-muted)] leading-5">
+                            {formatCost(totalQty > 0 ? centerTotal / totalQty : 0)} <span className="text-[10px] font-normal opacity-70">/ قطعة</span>
+                          </span>
+                        </div>
+                      </td>
+                    );
+                  })}
                   <td className="py-3 px-4 font-mono text-primary">{formatCost(overallAvg)}</td>
                   <td className="py-3 px-4 font-mono text-[var(--color-text-muted)]">—</td>
                   {extraColumns.materialsAndPackaging && (
@@ -873,6 +1129,40 @@ export const MonthlyProductionCosts: React.FC = () => {
                   </div>
                 </label>
               ))}
+              {centerColumns.length > 0 && (
+                <>
+                  <div className="pt-3 mt-2 border-t border-[var(--color-border)] flex items-center justify-between">
+                    <p className="text-sm font-bold text-[var(--color-text)]">أعمدة مراكز التكلفة</p>
+                    <Button variant="outline" onClick={showAllCenterColumns}>
+                      إظهار الكل
+                    </Button>
+                  </div>
+                  {centerColumns.map((center) => {
+                    const checked = centerColumnsVisibility[center.id] !== false;
+                    return (
+                      <label
+                        key={center.id}
+                        className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
+                          checked
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => toggleCenterColumn(center.id, e.target.checked)}
+                          className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
+                        />
+                        <span className={`material-icons-round text-lg ${checked ? 'text-primary' : 'text-slate-400'}`}>account_balance</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-[var(--color-text)] truncate">{center.name}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </>
+              )}
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end">
               <Button variant="outline" onClick={() => setShowColumnsModal(false)}>إغلاق</Button>

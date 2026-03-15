@@ -1,6 +1,8 @@
 import type { Asset, AssetDepreciationRunResult } from '../../../types';
 import { assetDepreciationService } from './assetDepreciationService';
 import { assetService, calculateMonthlyDepreciation } from './assetService';
+import { db, isConfigured } from '../../auth/services/firebase';
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 const toNumber = (value: unknown, fallback = 0): number => {
   const parsed = Number(value);
@@ -65,8 +67,24 @@ const getDepreciationAmount = (asset: Asset): number => {
 
 export const assetDepreciationJobService = {
   async runForPeriod(periodInput?: string): Promise<AssetDepreciationRunResult> {
+    if (!isConfigured) {
+      return {
+        period: toPeriod(periodInput),
+        processedAssets: 0,
+        createdEntries: 0,
+        skippedEntries: 0,
+      };
+    }
     const period = toPeriod(periodInput);
     const activeAssets = await assetService.getActive();
+    let batch = writeBatch(db);
+    let pendingOps = 0;
+    const commitChunk = async () => {
+      if (pendingOps === 0) return;
+      await batch.commit();
+      batch = writeBatch(db);
+      pendingOps = 0;
+    };
 
     let processedAssets = 0;
     let createdEntries = 0;
@@ -112,13 +130,19 @@ export const assetDepreciationJobService = {
           Math.max(0, toNumber(asset.purchaseCost)) - nextAccumulated,
         );
 
-        await assetDepreciationService.upsert({
+        const depDocId = assetDepreciationService.buildDocId(asset.id, cursor);
+        batch.set(doc(db, 'asset_depreciations', depDocId), {
           assetId: asset.id,
           period: cursor,
           depreciationAmount,
           accumulatedDepreciation: nextAccumulated,
           bookValue: nextBookValue,
-        });
+          createdAt: serverTimestamp(),
+        }, { merge: true });
+        pendingOps += 1;
+        if (pendingOps >= 450) {
+          await commitChunk();
+        }
 
         runningAccumulated = nextAccumulated;
         runningBookValue = nextBookValue;
@@ -131,13 +155,20 @@ export const assetDepreciationJobService = {
         continue;
       }
 
-      await assetService.update(asset.id, {
+      batch.set(doc(db, 'assets', asset.id), {
         accumulatedDepreciation: runningAccumulated,
         currentValue: runningBookValue,
-      });
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      pendingOps += 1;
+      if (pendingOps >= 450) {
+        await commitChunk();
+      }
 
       processedAssets += 1;
     }
+
+    await commitChunk();
 
     return {
       period,

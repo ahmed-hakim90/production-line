@@ -66,6 +66,11 @@ export interface LeaveConfig extends ConfigMetadata {
   defaultAnnualBalance: number;
   defaultSickBalance: number;
   defaultEmergencyBalance: number;
+  leaveTypes: {
+    key: string;
+    label: string;
+    isPaid: boolean;
+  }[];
   allowNegativeBalance: boolean;
   carryOverLimit: number;
   maxConsecutiveDays: number;

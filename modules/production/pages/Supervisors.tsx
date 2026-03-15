@@ -22,6 +22,16 @@ import { supervisorLineAssignmentService } from '../services/supervisorLineAssig
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // ─── Performance Score ────────────────────────────────────────────────────────
 
@@ -1046,17 +1056,23 @@ export const Supervisors: React.FC = () => {
   };
 
   const hasActiveFilters = search || filterLine || statFilter;
+  const periodValue = useMemo(() => {
+    if (viewMode === 'today') return 'today';
+    if (startDate === endDate && startDate !== today) return 'yesterday';
+    if (startDate.endsWith('-01')) return 'month';
+    return 'week';
+  }, [viewMode, startDate, endDate, today]);
 
   // ── Loading ─────────────────────────────────────────────────────────────────
 
   if (dataLoading) {
-    return <div className="space-y-6"><LoadingSkeleton type="detail" /></div>;
+    return <div className="erp-ds-clean space-y-6"><LoadingSkeleton type="detail" /></div>;
   }
 
   const toggleStatFilter = (f: StatFilter) => setStatFilter((prev) => prev === f ? '' : f);
 
   return (
-    <div className="erpnext-supervisors space-y-6">
+    <div className="erp-ds-clean erpnext-supervisors space-y-6">
       {/* Header */}
       <PageHeader
         title="المشرفين"
@@ -1133,67 +1149,49 @@ export const Supervisors: React.FC = () => {
           </div>
         </div>
 
-        <div className="erp-filter-bar erpnext-filter-row mb-4">
-          <div className="erp-date-seg">
-            <button className={`erp-date-seg-btn${viewMode === 'today' ? ' active' : ''}`} onClick={handleShowToday}>
-              اليوم
-            </button>
-            <button
-              className={`erp-date-seg-btn${viewMode === 'range' && startDate === endDate && startDate !== today ? ' active' : ''}`}
-              onClick={handleShowYesterday}
-            >
-              أمس
-            </button>
-            <button
-              className={`erp-date-seg-btn${viewMode === 'range' && startDate !== endDate ? ' active' : ''}`}
-              onClick={handleShowWeekly}
-            >
-              أسبوعي
-            </button>
-            <button
-              className={`erp-date-seg-btn${viewMode === 'range' && startDate.endsWith('-01') ? ' active' : ''}`}
-              onClick={handleShowMonthly}
-            >
-              شهري
-            </button>
-          </div>
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">من</span>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </div>
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">إلى</span>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
-          <button className="erp-filter-apply" onClick={handleApplyDateRange} disabled={!startDate || !endDate || reportsLoading}>
-            {reportsLoading
-              ? <span className="material-icons-round" style={{ fontSize: 14, animation: 'spin 1s linear infinite' }}>refresh</span>
-              : <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
-            }
-            عرض
-          </button>
-
-          <div className="erp-filter-sep" />
-
-          <div className="erp-search-input erp-search-input--table flex-1 min-w-0">
-            <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
-            <input
-              type="text"
-              placeholder="بحث باسم المشرف أو الكود..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <select
-            value={filterLine}
-            onChange={(e) => setFilterLine(e.target.value)}
-            className={`erp-filter-select${filterLine ? ' active' : ''}`}
-          >
-            <option value="">كل الخطوط</option>
-            {uniqueLines.map((lId) => <option key={lId} value={lId}>{getLineName(lId)}</option>)}
-          </select>
-        </div>
+        <SmartFilterBar
+          searchPlaceholder="ابحث باسم المشرف أو الكود..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          periods={[
+            { label: 'اليوم', value: 'today' },
+            { label: 'أمس', value: 'yesterday' },
+            { label: 'أسبوعي', value: 'week' },
+            { label: 'شهري', value: 'month' },
+          ]}
+          activePeriod={periodValue}
+          onPeriodChange={(value) => {
+            if (value === 'today') handleShowToday();
+            if (value === 'yesterday') handleShowYesterday();
+            if (value === 'week') handleShowWeekly();
+            if (value === 'month') handleShowMonthly();
+          }}
+          quickFilters={[
+            {
+              key: 'line',
+              placeholder: 'كل الخطوط',
+              options: uniqueLines.map((lineId) => ({ value: lineId, label: getLineName(lineId) })),
+              width: 'w-[130px]',
+            },
+          ]}
+          quickFilterValues={{ line: filterLine || 'all' }}
+          onQuickFilterChange={(_, value) => setFilterLine(value === 'all' ? '' : value)}
+          advancedFilters={[
+            { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+            { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          ]}
+          advancedFilterValues={{
+            dateFrom: startDate,
+            dateTo: endDate,
+          }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'dateFrom') setStartDate(value);
+            if (key === 'dateTo') setEndDate(value);
+          }}
+          onApply={handleApplyDateRange}
+          applyLabel={reportsLoading ? 'جار التحميل...' : 'عرض'}
+          className="mb-4"
+        />
 
         <div className="mb-4 erpnext-date-scope">
           {rangeError && (
@@ -1204,7 +1202,7 @@ export const Supervisors: React.FC = () => {
         </div>
 
         {/* ── Table ─────────────────────────────────────────────────────────── */}
-        <SelectableTable
+        <SelectableTable<SupervisorRow>
           data={filtered}
           columns={columns}
           getId={(sup) => sup.id!}

@@ -59,11 +59,12 @@ export const calculateDailyIndirectCost = (
   costAllocations: CostAllocation[],
   assets: Asset[] = [],
   assetDepreciations: AssetDepreciation[] = [],
+  workingDaysByMonth?: Record<string, number>,
 ): number => {
   let totalDaily = 0;
 
   const indirectCenters = costCenters.filter(
-    (c) => c.type === 'indirect' && c.isActive
+    (c) => c.type === 'indirect' && c.isActive && (c.allocationBasis || 'line_percentage') === 'line_percentage'
   );
 
   for (const center of indirectCenters) {
@@ -81,7 +82,7 @@ export const calculateDailyIndirectCost = (
     if (!lineAlloc || lineAlloc.percentage <= 0) continue;
 
     const monthlyAllocated = value.amount * (lineAlloc.percentage / 100);
-    const workingDays = getWorkingDaysForMonth(value, month);
+    const workingDays = getWorkingDaysForMonth(value, month, workingDaysByMonth);
     totalDaily += workingDays > 0 ? monthlyAllocated / workingDays : 0;
   }
 
@@ -102,7 +103,7 @@ export const calculateDailyIndirectCost = (
       const lineAlloc = allocation.allocations.find((a) => a.lineId === lineId);
       if (!lineAlloc || lineAlloc.percentage <= 0) return;
       const value = costCenterValues.find((v) => v.costCenterId === centerId && v.month === month);
-      const workingDays = getWorkingDaysForMonth(value, month);
+      const workingDays = getWorkingDaysForMonth(value, month, workingDaysByMonth);
       const lineMonthlyDep = monthlyDep * (lineAlloc.percentage / 100);
       totalDaily += workingDays > 0 ? lineMonthlyDep / workingDays : 0;
     });
@@ -123,6 +124,7 @@ export const buildLineAllocatedCostSummary = (
   costAllocations: CostAllocation[],
   assets: Asset[] = [],
   assetDepreciations: AssetDepreciation[] = [],
+  workingDaysByMonth?: Record<string, number>,
 ): LineAllocatedCostSummary => {
   if (!lineId) {
     return {
@@ -152,7 +154,12 @@ export const buildLineAllocatedCostSummary = (
   }
 
   for (const center of costCenters) {
-    if (center.type !== 'indirect' || !center.isActive || !center.id) continue;
+    if (
+      center.type !== 'indirect'
+      || !center.isActive
+      || !center.id
+      || (center.allocationBasis || 'line_percentage') !== 'line_percentage'
+    ) continue;
 
     const allocation = costAllocations.find(
       (a) => a.costCenterId === center.id && a.month === month
@@ -170,7 +177,7 @@ export const buildLineAllocatedCostSummary = (
     const centerMonthlyDep = depreciationByCenter.get(center.id) || 0;
     const monthlyAllocatedFromDep = centerMonthlyDep * (lineAlloc.percentage / 100);
     const monthlyAllocated = monthlyAllocatedFromValue + monthlyAllocatedFromDep;
-    const workingDays = getWorkingDaysForMonth(value, month);
+    const workingDays = getWorkingDaysForMonth(value, month, workingDaysByMonth);
     if (monthlyAllocated <= 0) continue;
 
     centers.push({
@@ -239,6 +246,266 @@ export interface ProductCostData {
   quantityProduced: number;
   costPerUnit: number;
 }
+
+export interface LiveCostComputationOptions {
+  assets?: Asset[];
+  assetDepreciations?: AssetDepreciation[];
+  productCategoryById?: Map<string, string>;
+  supervisorHourlyRates?: Map<string, number>;
+  payrollNetByEmployee?: Map<string, number>;
+  payrollNetByDepartment?: Map<string, number>;
+  workingDaysByMonth?: Record<string, number>;
+}
+
+export interface LiveCostComputationResult {
+  totalProduction: number;
+  totalLaborCost: number;
+  totalIndirectCost: number;
+  totalCost: number;
+  byProduct: Record<string, ProductCostData>;
+  byProductCenter: Record<string, Record<string, number>>;
+  reportUnitCost: Map<string, number>;
+}
+
+const getCenterResolvedAmount = (
+  center: CostCenter,
+  month: string,
+  valueByCenterMonth: Map<string, CostCenterValue>,
+  depreciationByMonthCenter: Map<string, Map<string, number>>,
+  workingDaysByMonth?: Record<string, number>,
+): { resolvedAmount: number; workingDays: number } => {
+  const centerId = String(center.id || '');
+  if (!centerId) return { resolvedAmount: 0, workingDays: 0 };
+  const key = `${centerId}__${month}`;
+  const value = valueByCenterMonth.get(key);
+  const valueSource = value?.valueSource || center.valueSource || 'manual';
+  const hasSavedBreakdown = value?.manualAmount !== undefined || value?.salariesAmount !== undefined;
+  const manualAmount = hasSavedBreakdown
+    ? Number(value?.manualAmount || 0)
+    : Number(value?.amount || 0);
+  const salariesAmount = hasSavedBreakdown
+    ? Number(value?.salariesAmount || 0)
+    : 0;
+  const snapshotBaseAmount = valueSource === 'manual'
+    ? manualAmount
+    : valueSource === 'salaries'
+      ? (hasSavedBreakdown ? salariesAmount : Number(value?.amount || 0))
+      : (hasSavedBreakdown ? (manualAmount + salariesAmount) : Number(value?.amount || 0));
+  const depreciation = Number(depreciationByMonthCenter.get(month)?.get(centerId) || 0);
+  const resolvedAmount = snapshotBaseAmount + depreciation;
+  return { resolvedAmount, workingDays: getWorkingDaysForMonth(value, month, workingDaysByMonth) };
+};
+
+export const computeLiveProductCosts = (
+  reports: ProductionReport[],
+  hourlyRate: number,
+  costCenters: CostCenter[],
+  costCenterValues: CostCenterValue[],
+  costAllocations: CostAllocation[],
+  options: LiveCostComputationOptions = {},
+): LiveCostComputationResult => {
+  const assets = options.assets || [];
+  const assetDepreciations = options.assetDepreciations || [];
+  const productCategoryById = options.productCategoryById || new Map<string, string>();
+  const result: LiveCostComputationResult = {
+    totalProduction: 0,
+    totalLaborCost: 0,
+    totalIndirectCost: 0,
+    totalCost: 0,
+    byProduct: {},
+    byProductCenter: {},
+    reportUnitCost: new Map<string, number>(),
+  };
+  if (reports.length === 0) return result;
+
+  const valueByCenterMonth = new Map<string, CostCenterValue>();
+  costCenterValues.forEach((value) => {
+    valueByCenterMonth.set(`${String(value.costCenterId || '')}__${String(value.month || '')}`, value);
+  });
+  const allocationByCenterMonth = new Map<string, CostAllocation>();
+  costAllocations.forEach((allocation) => {
+    allocationByCenterMonth.set(`${String(allocation.costCenterId || '')}__${String(allocation.month || '')}`, allocation);
+  });
+
+  const depreciationByMonthCenter = new Map<string, Map<string, number>>();
+  if (assets.length > 0 && assetDepreciations.length > 0) {
+    const assetById = new Map(assets.map((asset) => [String(asset.id || ''), asset]));
+    assetDepreciations.forEach((entry) => {
+      const month = String(entry.period || '');
+      if (!month) return;
+      const asset = assetById.get(String(entry.assetId || ''));
+      const centerId = String(asset?.centerId || '');
+      if (!centerId) return;
+      if (!depreciationByMonthCenter.has(month)) depreciationByMonthCenter.set(month, new Map<string, number>());
+      const monthMap = depreciationByMonthCenter.get(month)!;
+      monthMap.set(centerId, (monthMap.get(centerId) || 0) + Number(entry.depreciationAmount || 0));
+    });
+  }
+
+  const activeIndirectCenters = costCenters.filter((center) => center.type === 'indirect' && center.isActive && center.id);
+
+  const monthProductQtyTotals = new Map<string, Map<string, number>>();
+  const monthDateProductQtyTotals = new Map<string, Map<string, Map<string, number>>>();
+  const lineDateQtyTotals = new Map<string, number>();
+  const lineDateHoursTotals = new Map<string, number>();
+  reports.forEach((report) => {
+    const key = `${report.lineId}_${report.date}`;
+    lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + Number(report.quantityProduced || 0));
+    lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, Number(report.workHours || 0)));
+    const month = String(report.date?.slice(0, 7) || getCurrentMonth());
+    if (!monthProductQtyTotals.has(month)) monthProductQtyTotals.set(month, new Map<string, number>());
+    const monthMap = monthProductQtyTotals.get(month)!;
+    if (!monthDateProductQtyTotals.has(month)) monthDateProductQtyTotals.set(month, new Map<string, Map<string, number>>());
+    const dateMapByMonth = monthDateProductQtyTotals.get(month)!;
+    const reportDate = String(report.date || '');
+    if (!dateMapByMonth.has(reportDate)) dateMapByMonth.set(reportDate, new Map<string, number>());
+    const dayMap = dateMapByMonth.get(reportDate)!;
+    if ((report.quantityProduced || 0) > 0 && report.productId) {
+      monthMap.set(report.productId, (monthMap.get(report.productId) || 0) + Number(report.quantityProduced || 0));
+      dayMap.set(report.productId, (dayMap.get(report.productId) || 0) + Number(report.quantityProduced || 0));
+    }
+  });
+
+  const lineMonthDailyCache = new Map<string, { totalDaily: number; centerDaily: Map<string, number> }>();
+  const getLineMonthDaily = (lineId: string, month: string) => {
+    const cacheKey = `${lineId}_${month}`;
+    const cached = lineMonthDailyCache.get(cacheKey);
+    if (cached) return cached;
+    let totalDaily = 0;
+    const centerDaily = new Map<string, number>();
+    activeIndirectCenters.forEach((center) => {
+      if ((center.allocationBasis || 'line_percentage') !== 'line_percentage') return;
+      const centerId = String(center.id || '');
+      const allocation = allocationByCenterMonth.get(`${centerId}__${month}`);
+      if (!allocation) return;
+      const lineAllocation = allocation.allocations.find((item) => item.lineId === lineId);
+      if (!lineAllocation || Number(lineAllocation.percentage || 0) <= 0) return;
+      const { resolvedAmount, workingDays } = getCenterResolvedAmount(
+        center,
+        month,
+        valueByCenterMonth,
+        depreciationByMonthCenter,
+        options.workingDaysByMonth,
+      );
+      if (resolvedAmount <= 0 || workingDays <= 0) return;
+      const dailyShare = (resolvedAmount * (Number(lineAllocation.percentage || 0) / 100)) / workingDays;
+      if (dailyShare <= 0) return;
+      totalDaily += dailyShare;
+      centerDaily.set(centerId, (centerDaily.get(centerId) || 0) + dailyShare);
+    });
+    const built = { totalDaily, centerDaily };
+    lineMonthDailyCache.set(cacheKey, built);
+    return built;
+  };
+
+  const qtyRulesByMonth = new Map<string, Array<{ centerId: string; dailyAmount: number; allowedProductIds: Set<string> }>>();
+  const getQtyRulesForMonth = (month: string) => {
+    const cached = qtyRulesByMonth.get(month);
+    if (cached) return cached;
+    const monthTotals = monthProductQtyTotals.get(month) || new Map<string, number>();
+    const allProductIds = Array.from(monthTotals.keys());
+    const rules = activeIndirectCenters
+      .filter((center) => (center.allocationBasis || 'line_percentage') === 'by_qty')
+      .map((center) => {
+        const centerId = String(center.id || '');
+        const { resolvedAmount, workingDays } = getCenterResolvedAmount(
+          center,
+          month,
+          valueByCenterMonth,
+          depreciationByMonthCenter,
+          options.workingDaysByMonth,
+        );
+        const dailyAmount = workingDays > 0 ? (resolvedAmount / workingDays) : 0;
+        const allowedProductIds = center.productScope === 'selected'
+          ? (center.productIds || []).map((id) => String(id))
+          : center.productScope === 'category'
+            ? allProductIds.filter((productId) => (center.productCategories || []).includes(String(productCategoryById.get(productId) || '')))
+            : allProductIds;
+        return {
+          centerId,
+          dailyAmount,
+          allowedProductIds: new Set(allowedProductIds),
+        };
+      })
+      .filter((rule) => rule.dailyAmount > 0);
+    qtyRulesByMonth.set(month, rules);
+    return rules;
+  };
+
+  const supervisorShareMap = options.supervisorHourlyRates
+    ? buildSupervisorIndirectShareMap(reports, options.supervisorHourlyRates, hourlyRate)
+    : new Map<string, number>();
+
+  reports.forEach((report) => {
+    const qty = Number(report.quantityProduced || 0);
+    if (qty <= 0 || !report.productId) return;
+    const laborCost = Number(report.workersCount || 0) * Number(report.workHours || 0) * hourlyRate;
+    const month = String(report.date?.slice(0, 7) || getCurrentMonth());
+    const lineDateKey = `${report.lineId}_${report.date}`;
+    const lineDateTotalHours = Number(lineDateHoursTotals.get(lineDateKey) || 0);
+    const lineDateTotalQty = Number(lineDateQtyTotals.get(lineDateKey) || 0);
+    const reportHours = Math.max(0, Number(report.workHours || 0));
+    let shareRatio = 0;
+    if (lineDateTotalHours > 0 && reportHours > 0) {
+      shareRatio = reportHours / lineDateTotalHours;
+    } else if (lineDateTotalQty > 0) {
+      shareRatio = qty / lineDateTotalQty;
+    }
+
+    const lineMonthDaily = getLineMonthDaily(report.lineId, month);
+    let indirectCost = lineMonthDaily.totalDaily * shareRatio;
+    if (!result.byProductCenter[report.productId]) result.byProductCenter[report.productId] = {};
+    lineMonthDaily.centerDaily.forEach((dailyCenterCost, centerId) => {
+      const share = dailyCenterCost * shareRatio;
+      if (share <= 0) return;
+      result.byProductCenter[report.productId][centerId] = (result.byProductCenter[report.productId][centerId] || 0) + share;
+    });
+
+    const qtyRules = getQtyRulesForMonth(month);
+    qtyRules.forEach((rule) => {
+      if (!rule.allowedProductIds.has(report.productId)) return;
+      const monthDateMap = monthDateProductQtyTotals.get(month);
+      const dayMap = monthDateMap?.get(String(report.date || ''));
+      const denominator = dayMap
+        ? Array.from(rule.allowedProductIds).reduce((sum, productId) => sum + Number(dayMap.get(productId) || 0), 0)
+        : 0;
+      if (denominator <= 0) return;
+      const share = rule.dailyAmount * (qty / denominator);
+      if (share <= 0) return;
+      indirectCost += share;
+      result.byProductCenter[report.productId][rule.centerId] = (result.byProductCenter[report.productId][rule.centerId] || 0) + share;
+    });
+
+    if (report.id) {
+      indirectCost += Number(supervisorShareMap.get(report.id) || 0);
+    }
+
+    result.totalProduction += qty;
+    result.totalLaborCost += laborCost;
+    result.totalIndirectCost += indirectCost;
+    const totalCost = laborCost + indirectCost;
+    if (report.id) {
+      result.reportUnitCost.set(report.id, totalCost / qty);
+    }
+
+    const existing = result.byProduct[report.productId] || {
+      laborCost: 0,
+      indirectCost: 0,
+      totalCost: 0,
+      quantityProduced: 0,
+      costPerUnit: 0,
+    };
+    existing.laborCost += laborCost;
+    existing.indirectCost += indirectCost;
+    existing.totalCost += totalCost;
+    existing.quantityProduced += qty;
+    existing.costPerUnit = existing.quantityProduced > 0 ? existing.totalCost / existing.quantityProduced : 0;
+    result.byProduct[report.productId] = existing;
+  });
+
+  result.totalCost = result.totalLaborCost + result.totalIndirectCost;
+  return result;
+};
 
 export const buildSupervisorHourlyRatesMap = (
   employees: FirestoreEmployee[]
@@ -651,15 +918,34 @@ export const getDaysInMonth = (month: string): number => {
   return new Date(y, m, 0).getDate();
 };
 
+export const getWorkingDaysExcludingFriday = (month: string): number => {
+  const [y, m] = month.split('-').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
+    return getDaysInMonth(month);
+  }
+  const daysInMonth = getDaysInMonth(month);
+  let workingDays = 0;
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    // Factory weekly holiday: Friday only.
+    const weekDay = new Date(y, m - 1, day).getDay();
+    if (weekDay !== 5) {
+      workingDays += 1;
+    }
+  }
+  return workingDays;
+};
+
 export const getWorkingDaysForMonth = (
   value: Pick<CostCenterValue, 'workingDays'> | undefined | null,
-  month: string
+  month: string,
+  workingDaysByMonth?: Record<string, number>,
 ): number => {
-  const customDays = Number(value?.workingDays ?? 0);
-  if (Number.isFinite(customDays) && customDays > 0) {
-    return customDays;
+  const globalDays = Number(workingDaysByMonth?.[month] ?? 0);
+  if (Number.isFinite(globalDays) && globalDays > 0) {
+    return Math.round(globalDays);
   }
-  return getDaysInMonth(month);
+  void value;
+  return getWorkingDaysExcludingFriday(month);
 };
 
 export const formatCost = (amount: number): string => {

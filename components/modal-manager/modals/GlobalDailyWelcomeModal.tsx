@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check, Sparkles } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -27,7 +28,7 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
       >
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
           <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 text-primary flex items-center justify-center">
-            <span className="material-icons-round">waving_hand</span>
+            <Sparkles size={18} />
           </div>
           <div>
             <h3 className="text-lg font-bold text-[var(--color-text)]">
@@ -46,7 +47,7 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end">
           <button className="btn btn-primary" onClick={close}>
-            <span className="material-icons-round" style={{ fontSize: 16 }}>check</span>
+            <Check size={16} />
             متابعة
           </button>
         </div>

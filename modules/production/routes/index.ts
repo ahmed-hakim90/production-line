@@ -2,7 +2,7 @@ import type { AppRouteDef } from '../../shared/routes';
 import { Lines } from '../pages/Lines';
 import { LineDetails } from '../pages/LineDetails';
 import { ProductionPlans } from '../pages/ProductionPlans';
-import { WorkOrders } from '../pages/WorkOrders';
+import { WorkOrders } from '../pages/WorkOrders/index';
 import { WorkOrderScanner } from '../pages/WorkOrderScanner';
 import { Supervisors } from '../pages/Supervisors';
 import { SupervisorDetails } from '../pages/SupervisorDetails';
@@ -27,8 +27,5 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/reports', permission: 'reports.view', component: Reports },
   { path: '/quick-action', permission: 'quickAction.view', component: QuickAction },
   { path: '/line-workers', permission: 'lineWorkers.view', component: LineWorkerAssignment },
-  { path: '/production/assets', redirectTo: '/costs/assets' },
-  { path: '/production/assets/:id', redirectTo: '/costs/assets' },
-  { path: '/production/depreciation-report', redirectTo: '/costs/depreciation-report' },
   { path: '/users', redirectTo: '/employees' },
 ];

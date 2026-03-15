@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Loader2, Pencil, Save, ShieldPlus, X } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import {
   usePermission,
@@ -124,9 +125,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-              <span className="material-icons-round text-primary text-lg">
-                {editingRole ? 'edit' : 'add_moderator'}
-              </span>
+              {editingRole ? <Pencil size={18} className="text-primary" /> : <ShieldPlus size={18} className="text-primary" />}
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--color-text)]">
@@ -141,7 +140,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
             onClick={handleClose}
             className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] transition-all"
           >
-            <span className="material-icons-round text-lg">close</span>
+            <X size={18} />
           </button>
         </div>
 
@@ -177,10 +176,10 @@ export const GlobalSystemRoleModal: React.FC = () => {
 
           {saveMsg && (
             <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-              <span className="material-icons-round text-base">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
+              {saveMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <p className="flex-1">{saveMsg.text}</p>
               <button onClick={() => setSaveMsg(null)}>
-                <span className="material-icons-round text-base">close</span>
+                <X size={16} />
               </button>
             </div>
           )}
@@ -244,10 +243,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
               onClick={handleSave}
               disabled={saving || !editName.trim()}
             >
-              {saving
-                ? <span className="material-icons-round animate-spin" style={{ fontSize: 15 }}>refresh</span>
-                : <span className="material-icons-round" style={{ fontSize: 15 }}>save</span>
-              }
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
               {editingRole ? 'حفظ التعديلات' : 'إنشاء الدور'}
             </button>
           </div>

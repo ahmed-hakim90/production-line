@@ -1,4 +1,5 @@
-﻿import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import { FileUp, Loader2, Save, X } from 'lucide-react';
 import { Button } from '../../../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -120,7 +121,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
         <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-emerald-600">upload_file</span>
+              <FileUp size={20} className="text-emerald-600" />
             </div>
             <div>
               <h3 className="text-lg font-bold">استيراد خطط الإنتاج من Excel</h3>
@@ -132,7 +133,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
             </div>
           </div>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
 
@@ -147,7 +148,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
 
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={parsing || saving}>
-              {parsing ? <span className="material-icons-round animate-spin text-sm">refresh</span> : <span className="material-icons-round text-sm">upload_file</span>}
+              {parsing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
               اختيار ملف
             </Button>
           </div>
@@ -221,8 +222,8 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={handleClose} disabled={saving}>إغلاق</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || validRows.length === 0}>
-            {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-            <span className="material-icons-round text-sm">save</span>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            <Save size={14} />
             حفظ {validRows.length} خطة
           </Button>
         </div>

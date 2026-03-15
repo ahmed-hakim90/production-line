@@ -13,6 +13,13 @@ import { SelectableTable } from '../../../components/SelectableTable';
 import type { TableColumn } from '../../../components/SelectableTable';
 import { PageHeader } from '../../../components/PageHeader';
 import { exportHRData } from '../../../utils/exportExcel';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // ── Usage Popover ────────────────────────────────────────────────────────────
 function UsagePopover({ count, productNames }: { count: number; productNames: string[] }) {
@@ -314,15 +321,16 @@ export const RawMaterials: React.FC = () => {
 
   const toolbarContent = (
     <div className="flex items-center gap-2 flex-wrap">
-      <select
-        className="erp-filter-select"
-        value={usageFilter}
-        onChange={(e) => setUsageFilter(e.target.value as 'all' | 'used' | 'unused')}
-      >
-        <option value="all">كل المواد</option>
-        <option value="used">مستخدمة في منتجات</option>
-        <option value="unused">غير مستخدمة</option>
-      </select>
+      <Select value={usageFilter} onValueChange={(value) => setUsageFilter(value as 'all' | 'used' | 'unused')}>
+        <SelectTrigger className="erp-filter-select">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">كل المواد</SelectItem>
+          <SelectItem value="used">مستخدمة في منتجات</SelectItem>
+          <SelectItem value="unused">غير مستخدمة</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   );
 

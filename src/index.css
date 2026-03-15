@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: #4F46E5;
+    --color-primary-hover: #4338CA;
+    --color-secondary: #6366F1;
+    --color-success: #059669;
+    --color-danger: #DC2626;
+    --color-warning: #D97706;
+    --color-info: #2563EB;
+    --color-page-bg: #F8FAFC;
+    --color-card-bg: #FFFFFF;
+    --color-border-ui: #E2E8F0;
+    --color-text-1: #0F172A;
+    --color-text-2: #64748B;
+    --color-text-3: #94A3B8;
+    --color-background: #F8FAFC;
+
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 239 84% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 46%;
+    --accent: 239 84% 97%;
+    --accent-foreground: 239 84% 30%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 239 84% 60%;
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-weight: 400;
+  }
+}
+
+/* RTL override for shadcn components */
+[dir="rtl"] .lucide {
+  /* icons don't need flip usually, but chevrons do */
+}
+
+[dir="rtl"] [data-radix-popper-content-wrapper] {
+  direction: rtl;
+}
+
+[dir="rtl"] [role="listbox"],
+[dir="rtl"] [role="menu"],
+[dir="rtl"] [role="dialog"] {
+  direction: rtl;
+  text-align: right;
+}
+
+@media print {
+  /* Keep global print rules non-destructive.
+     react-to-print already renders only target content in its iframe. */
+
+  @page {
+    margin: 12mm 15mm;
+    size: A4;
+  }
+
+  .print-report {
+    width: 100% !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+
+  .no-break {
+    page-break-inside: avoid;
+  }
+}

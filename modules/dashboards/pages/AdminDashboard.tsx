@@ -1,10 +1,60 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  AlertTriangle,
+  Armchair,
+  BadgeCheck,
+  BarChart3,
+  Calculator,
+  CalendarDays,
+  CalendarRange,
+  CheckCircle2,
+  Circle,
+  Clock3,
+  Download,
+  Factory,
+  FilePlus2,
+  FileSpreadsheet,
+  FileText,
+  Gauge,
+  Grip,
+  HeartPulse,
+  History,
+  Info,
+  Landmark,
+  LogIn,
+  LogOut,
+  Monitor,
+  Package2,
+  PencilLine,
+  Search,
+  Settings2,
+  Shield,
+  ShieldCheck,
+  Table2,
+  Trash2,
+  TrendingUp,
+  TrendingDown,
+  User,
+  UserCog,
+  UserPlus,
+  UserX,
+  Users,
+  Wallet,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardSlice } from '../../../store/selectors';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
+import { Card, KPIBox, Badge } from '../components/UI';
+import { PageHeader } from '@/src/components/erp/PageHeader';
+import { KPICard } from '@/src/components/erp/KPICard';
+import { FilterBar } from '@/src/components/erp/FilterBar';
+import { DataTable, type Column } from '@/src/components/erp/DataTable';
+import { StatusBadge } from '@/src/components/erp/StatusBadge';
+import { GhostButton } from '@/src/components/erp/ActionButton';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
 import { reportService } from '@/modules/production/services/reportService';
 import { dashboardStatsService } from '../../../services/dashboardStatsService';
@@ -22,8 +72,17 @@ import { exportProductSummary, exportProductionPlanShortages } from '../../../ut
 import {
   formatCost,
   getCurrentMonth,
-  calculateDailyIndirectCost,
+  buildSupervisorHourlyRatesMap,
+  computeLiveProductCosts,
 } from '../../../utils/costCalculations';
+import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   emptyWorkOrderCardMetricsData,
   getWorkOrderCardMetrics,
@@ -156,6 +215,68 @@ const ACTION_ICONS: Record<string, string> = {
   TOGGLE_USER_ACTIVE: 'toggle_on',
 };
 
+const DASHBOARD_ICON_MAP: Record<string, LucideIcon> = {
+  shield: Shield,
+  warning: AlertTriangle,
+  delete_sweep: Trash2,
+  speed: Gauge,
+  person_off: UserX,
+  info: Info,
+  bolt: Zap,
+  precision_manufacturing: Factory,
+  inventory_2: Package2,
+  search: Search,
+  category: Settings2,
+  download: Download,
+  report_problem: AlertTriangle,
+  fact_check: ShieldCheck,
+  weekend: Armchair,
+  verified: BadgeCheck,
+  assignment: FileText,
+  person: User,
+  payments: Wallet,
+  calculate: Calculator,
+  groups: Users,
+  event: CalendarDays,
+  calendar_month: CalendarRange,
+  schedule: Clock3,
+  request_quote: FileSpreadsheet,
+  computer: Monitor,
+  monitor_heart: HeartPulse,
+  admin_panel_settings: UserCog,
+  show_chart: TrendingUp,
+  bar_chart: BarChart3,
+  history: History,
+  account_balance: Landmark,
+  account_balance_wallet: Wallet,
+  group: Users,
+  check_circle: CheckCircle2,
+  trending_up: TrendingUp,
+  trending_down: TrendingDown,
+  drag_handle: Grip,
+  radio_button_unchecked: Circle,
+  event_repeat: CalendarRange,
+  supervisor_account: UserCog,
+  table_chart: Table2,
+  sync: Settings2,
+  login: LogIn,
+  logout: LogOut,
+  note_add: FilePlus2,
+  edit_note: PencilLine,
+  delete: Trash2,
+  person_add: UserPlus,
+  toggle_on: Settings2,
+};
+
+const renderDashboardIcon = (
+  icon: string,
+  className?: string,
+  style?: React.CSSProperties,
+) => {
+  const Icon = DASHBOARD_ICON_MAP[icon] ?? Circle;
+  return <Icon className={className} style={style} />;
+};
+
 // ── Gauge Chart Component ────────────────────────────────────────────────────
 
 const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }) => {
@@ -223,7 +344,7 @@ const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }
           x={cx}
           y={cy - 10}
           textAnchor="middle"
-          className="text-3xl font-black"
+          className="text-3xl font-medium"
           fill={color}
           style={{ fontSize: '32px', fontWeight: 900 }}
         >
@@ -273,6 +394,9 @@ export const AdminDashboard: React.FC = () => {
     systemSettings,
   } = useDashboardSlice();
   const productionPlanFollowUps = useAppStore((s) => s.productionPlanFollowUps);
+  const appLoading = useAppStore((s) => s.loading);
+  const productsLoading = useAppStore((s) => s.productsLoading);
+  const linesLoading = useAppStore((s) => s.linesLoading);
   const pageControl = useMemo(
     () => getExportImportPageControl(systemSettings.exportImport, 'adminDashboard'),
     [systemSettings.exportImport]
@@ -293,6 +417,7 @@ export const AdminDashboard: React.FC = () => {
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [rangeAggregate, setRangeAggregate] = useState<{ totalProduction: number; totalWaste: number; totalCost: number; reportsCount: number } | null>(null);
+  const [monthlyCostSummary, setMonthlyCostSummary] = useState<MonthlyDashboardCostSummary | null>(null);
 
   // ── System metrics state ─────────────────────────────────────────────────
   const [productSearch, setProductSearch] = useState('');
@@ -301,9 +426,6 @@ export const AdminDashboard: React.FC = () => {
   const [rolesDistribution, setRolesDistribution] = useState<{ roleName: string; color: string; count: number }[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([]);
   const [systemLoading, setSystemLoading] = useState(true);
-  const [reportCompliance, setReportCompliance] = useState<ReportComplianceSnapshot | null>(null);
-  const [complianceLoading, setComplianceLoading] = useState(true);
-  const [complianceError, setComplianceError] = useState<string | null>(null);
   const [yesterdayCompliance, setYesterdayCompliance] = useState<ReportComplianceSnapshot | null>(null);
   const [yesterdayComplianceLoading, setYesterdayComplianceLoading] = useState(true);
   const [yesterdayComplianceError, setYesterdayComplianceError] = useState<string | null>(null);
@@ -312,6 +434,7 @@ export const AdminDashboard: React.FC = () => {
   const [workOrderCardMetricsData, setWorkOrderCardMetricsData] = useState<WorkOrderCardMetricsData>(
     () => emptyWorkOrderCardMetricsData(),
   );
+  const [referenceDataLoadingTimedOut, setReferenceDataLoadingTimedOut] = useState(false);
 
   const dateRange = useMemo(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -319,10 +442,16 @@ export const AdminDashboard: React.FC = () => {
     }
     return getPresetRange(preset);
   }, [preset, customStart, customEnd]);
-  const isAfterComplianceCutoff = useMemo(
-    () => new Date(clockNow).getHours() >= COMPLIANCE_CUTOFF_HOUR,
-    [clockNow],
-  );
+  const fullMonthKey = useMemo(() => {
+    const { start, end } = dateRange;
+    if (!start || !end || start.length < 10 || end.length < 10) return null;
+    const monthKey = start.slice(0, 7);
+    if (end.slice(0, 7) !== monthKey) return null;
+    if (start.slice(8, 10) !== '01') return null;
+    const [y, m] = monthKey.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    return end === `${monthKey}-${String(lastDay).padStart(2, '0')}` ? monthKey : null;
+  }, [dateRange]);
   const yesterdayOperationalDate = useMemo(() => {
     const d = new Date(clockNow);
     d.setDate(d.getDate() - 1);
@@ -333,6 +462,27 @@ export const AdminDashboard: React.FC = () => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const hasReferenceDataGap = useMemo(() => {
+    if (reports.length === 0) return false;
+    return _rawProducts.length === 0 || _rawLines.length === 0;
+  }, [reports.length, _rawProducts.length, _rawLines.length]);
+
+  useEffect(() => {
+    if (!hasReferenceDataGap) {
+      setReferenceDataLoadingTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setReferenceDataLoadingTimedOut(true), 12000);
+    return () => window.clearTimeout(timer);
+  }, [hasReferenceDataGap]);
+
+  const isFinalLoading = loading
+    || systemLoading
+    || appLoading
+    || productsLoading
+    || linesLoading
+    || (hasReferenceDataGap && !referenceDataLoadingTimedOut);
 
   const activeWorkOrders = useMemo(
     () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress'),
@@ -381,6 +531,22 @@ export const AdminDashboard: React.FC = () => {
     return () => { cancelled = true; };
   }, [dateRange.start, dateRange.end]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!fullMonthKey) {
+      setMonthlyCostSummary(null);
+      return () => { cancelled = true; };
+    }
+    monthlyProductionCostService.getDashboardMonthlySummary(fullMonthKey)
+      .then((summary) => {
+        if (!cancelled) setMonthlyCostSummary(summary);
+      })
+      .catch(() => {
+        if (!cancelled) setMonthlyCostSummary(null);
+      });
+    return () => { cancelled = true; };
+  }, [fullMonthKey]);
+
   // Fetch system metrics (one-time, not affected by period)
   useEffect(() => {
     let cancelled = false;
@@ -405,35 +571,26 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const loadCompliance = async () => {
-      setComplianceLoading(true);
-      setComplianceError(null);
       setYesterdayComplianceLoading(true);
       setYesterdayComplianceError(null);
       try {
-        const [todaySnapshot, yesterdaySnapshot] = await Promise.all([
-          reportComplianceService.getTodaySnapshot(_rawEmployees, _rawLines),
-          reportComplianceService.getSnapshotForDate(
-            selectedComplianceDate,
-            _rawEmployees,
-            _rawLines,
-            { scope: 'assigned_only' },
-          ),
-        ]);
+        const yesterdaySnapshot = await reportComplianceService.getSnapshotForDate(
+          selectedComplianceDate,
+          _rawEmployees,
+          _rawLines,
+          { scope: 'assigned_only' },
+        );
         if (!cancelled) {
-          setReportCompliance(todaySnapshot);
           setYesterdayCompliance(yesterdaySnapshot);
         }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : 'تعذر تحميل متابعة التزام التقارير.';
-          setComplianceError(message);
-          setReportCompliance(null);
           setYesterdayComplianceError(message);
           setYesterdayCompliance(null);
         }
       } finally {
         if (!cancelled) {
-          setComplianceLoading(false);
           setYesterdayComplianceLoading(false);
         }
       }
@@ -447,6 +604,65 @@ export const AdminDashboard: React.FC = () => {
   }, [_rawEmployees, _rawLines, selectedComplianceDate]);
 
   const hourlyRate = laborSettings?.hourlyRate ?? 0;
+  const productCategoryById = useMemo(
+    () => new Map(_rawProducts.map((product) => [String(product.id || ''), String(product.model || '')])),
+    [_rawProducts]
+  );
+  const supervisorHourlyRates = useMemo(
+    () => buildSupervisorHourlyRatesMap(_rawEmployees),
+    [_rawEmployees]
+  );
+  const payrollNetByEmployee = useMemo(() => {
+    const map = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (!employee.id || employee.isActive === false) return;
+      map.set(String(employee.id), Number(employee.baseSalary || 0));
+    });
+    return map;
+  }, [_rawEmployees]);
+  const payrollNetByDepartment = useMemo(() => {
+    const map = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (employee.isActive === false) return;
+      const departmentId = String(employee.departmentId || '');
+      if (!departmentId) return;
+      map.set(departmentId, (map.get(departmentId) || 0) + Number(employee.baseSalary || 0));
+    });
+    return map;
+  }, [_rawEmployees]);
+  const liveCostComputation = useMemo(
+    () => computeLiveProductCosts(
+      reports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      }
+    ),
+    [
+      reports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      assets,
+      assetDepreciations,
+      productCategoryById,
+      supervisorHourlyRates,
+      payrollNetByEmployee,
+      payrollNetByDepartment,
+      systemSettings.costMonthlyWorkingDays,
+    ]
+  );
+  const monthlyCostMode = Boolean(fullMonthKey && monthlyCostSummary);
 
   // ── KPI Calculations ──────────────────────────────────────────────────────
 
@@ -454,50 +670,24 @@ export const AdminDashboard: React.FC = () => {
     const reportsTotalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
     const reportsTotalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
     const hasAggregateData = Boolean(rangeAggregate && rangeAggregate.reportsCount > 0);
-    const totalProduction = hasAggregateData ? (rangeAggregate?.totalProduction || 0) : reportsTotalProduction;
+    const totalProduction = monthlyCostMode
+      ? Number(monthlyCostSummary?.totals.producedQty || 0)
+      : (hasAggregateData ? (rangeAggregate?.totalProduction || 0) : reportsTotalProduction);
     const totalWaste = hasAggregateData ? (rangeAggregate?.totalWaste || 0) : reportsTotalWaste;
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
       : 0;
 
-    let totalLaborCost = 0;
-    let totalIndirectCost = 0;
-    reports.forEach((r) => {
-      totalLaborCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-    });
-
-    const lineMonthIndirectCache = new Map<string, number>();
-    const lineDateTotals = new Map<string, number>();
-    reports.forEach((r) => {
-      const key = `${r.lineId}_${r.date}`;
-      lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
-    });
-
-    reports.forEach((r) => {
-      if (!r.quantityProduced || r.quantityProduced <= 0) return;
-      const month = r.date?.slice(0, 7) || getCurrentMonth();
-      const cacheKey = `${r.lineId}_${month}`;
-      if (!lineMonthIndirectCache.has(cacheKey)) {
-        lineMonthIndirectCache.set(cacheKey,
-          calculateDailyIndirectCost(r.lineId, month, costCenters, costCenterValues, costAllocations)
-        );
-      }
-      const lineIndirect = lineMonthIndirectCache.get(cacheKey) || 0;
-      const lineDateKey = `${r.lineId}_${r.date}`;
-      const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-      if (lineDateTotal > 0) {
-        totalIndirectCost += lineIndirect * (r.quantityProduced / lineDateTotal);
-      }
-    });
+    const totalLaborCost = monthlyCostMode
+      ? Number(monthlyCostSummary?.totals.directCost || 0)
+      : liveCostComputation.totalLaborCost;
+    const totalIndirectCost = monthlyCostMode
+      ? Number(monthlyCostSummary?.totals.indirectCost || 0)
+      : liveCostComputation.totalIndirectCost;
 
     const computedTotalCost = totalLaborCost + totalIndirectCost;
-    const aggregateTotalCost = rangeAggregate?.totalCost || 0;
-    // Backward compatibility: some historical dashboardStats docs may miss totalCost.
-    // In that case, prefer live computed cost instead of displaying misleading zero.
-    const totalCost = (hasAggregateData && aggregateTotalCost > 0)
-      ? aggregateTotalCost
-      : computedTotalCost;
+    const totalCost = computedTotalCost;
     const avgCostPerUnit = totalProduction > 0 ? totalCost / totalProduction : 0;
 
     const standardConfigs = lineProductConfigs;
@@ -541,7 +731,7 @@ export const AdminDashboard: React.FC = () => {
       totalIndirectCost,
       totalCost,
     };
-  }, [reports, rangeAggregate, hourlyRate, costCenters, costCenterValues, costAllocations, lineProductConfigs, productionPlans, planReports]);
+  }, [reports, rangeAggregate, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
   // ── Cost Allocation Completion % ──────────────────────────────────────────
 
@@ -594,28 +784,15 @@ export const AdminDashboard: React.FC = () => {
       byDate.set(r.date, prev);
     });
 
-    const lineMonthIndirectCache = new Map<string, number>();
-    const lineDateTotals = new Map<string, number>();
-    reports.forEach((r) => {
-      const key = `${r.lineId}_${r.date}`;
-      lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
-    });
-
     const dateIndirect = new Map<string, number>();
     reports.forEach((r) => {
       if (!r.quantityProduced || r.quantityProduced <= 0) return;
-      const month = r.date?.slice(0, 7) || getCurrentMonth();
-      const cacheKey = `${r.lineId}_${month}`;
-      if (!lineMonthIndirectCache.has(cacheKey)) {
-        lineMonthIndirectCache.set(cacheKey,
-          calculateDailyIndirectCost(r.lineId, month, costCenters, costCenterValues, costAllocations)
-        );
-      }
-      const lineIndirect = lineMonthIndirectCache.get(cacheKey) || 0;
-      const lineDateKey = `${r.lineId}_${r.date}`;
-      const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-      if (lineDateTotal > 0) {
-        dateIndirect.set(r.date, (dateIndirect.get(r.date) || 0) + lineIndirect * (r.quantityProduced / lineDateTotal));
+      const reportUnitCost = r.id ? Number(liveCostComputation.reportUnitCost.get(r.id) || 0) : 0;
+      if (reportUnitCost <= 0) return;
+      const laborCost = (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
+      const indirectPart = (reportUnitCost * r.quantityProduced) - laborCost;
+      if (indirectPart > 0) {
+        dateIndirect.set(r.date, (dateIndirect.get(r.date) || 0) + indirectPart);
       }
     });
 
@@ -629,7 +806,7 @@ export const AdminDashboard: React.FC = () => {
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [reports, hourlyRate, costCenters, costCenterValues, costAllocations]);
+  }, [reports, hourlyRate, liveCostComputation.reportUnitCost]);
 
   const topLines = useMemo(() => {
     const lineMap = new Map<string, number>();
@@ -893,39 +1070,10 @@ export const AdminDashboard: React.FC = () => {
   // ── Product Summary (products worked on during the period) ────────────────
 
   const productSummary = useMemo(() => {
-    const map = new Map<string, { qty: number; laborCost: number; indirectCost: number }>();
-
-    const lineMonthIndirectCache = new Map<string, number>();
-    const lineDateTotals = new Map<string, number>();
-    reports.forEach((r) => {
-      const key = `${r.lineId}_${r.date}`;
-      lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
-    });
-
-    reports.forEach((r) => {
-      if (!r.quantityProduced || r.quantityProduced <= 0) return;
-      const prev = map.get(r.productId) || { qty: 0, laborCost: 0, indirectCost: 0 };
-      prev.qty += r.quantityProduced;
-      prev.laborCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-
-      const month = r.date?.slice(0, 7) || getCurrentMonth();
-      const cacheKey = `${r.lineId}_${month}`;
-      if (!lineMonthIndirectCache.has(cacheKey)) {
-        lineMonthIndirectCache.set(cacheKey,
-          calculateDailyIndirectCost(r.lineId, month, costCenters, costCenterValues, costAllocations)
-        );
-      }
-      const lineIndirect = lineMonthIndirectCache.get(cacheKey) || 0;
-      const lineDateKey = `${r.lineId}_${r.date}`;
-      const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-      if (lineDateTotal > 0) {
-        prev.indirectCost += lineIndirect * (r.quantityProduced / lineDateTotal);
-      }
-
-      map.set(r.productId, prev);
-    });
-
-    return Array.from(map.entries())
+    const sourceRows = monthlyCostMode
+      ? (Object.entries(monthlyCostSummary?.perProduct || {}) as Array<[string, { producedQty: number; averageUnitCost: number }]>)
+      : (Object.entries(liveCostComputation.byProduct) as Array<[string, { quantityProduced: number; costPerUnit: number }]>);
+    return sourceRows
       .map(([productId, d]) => {
         const product = _rawProducts.find((p) => p.id === productId);
         return {
@@ -933,12 +1081,12 @@ export const AdminDashboard: React.FC = () => {
           name: product?.name || productId,
           code: product?.code || '',
           category: product?.model || 'غير مصنفة',
-          qty: d.qty,
-          avgCost: d.qty > 0 ? (d.laborCost + d.indirectCost) / d.qty : 0,
+          qty: monthlyCostMode ? Number((d as { producedQty: number }).producedQty || 0) : Number((d as { quantityProduced: number }).quantityProduced || 0),
+          avgCost: monthlyCostMode ? Number((d as { averageUnitCost: number }).averageUnitCost || 0) : Number((d as { costPerUnit: number }).costPerUnit || 0),
         };
       })
       .sort((a, b) => b.qty - a.qty);
-  }, [reports, _rawProducts, hourlyRate, costCenters, costCenterValues, costAllocations]);
+  }, [monthlyCostMode, monthlyCostSummary, liveCostComputation.byProduct, _rawProducts]);
 
   const productSummaryCategories = useMemo(() => {
     const categories = productSummary
@@ -1119,7 +1267,6 @@ export const AdminDashboard: React.FC = () => {
           background: 'var(--color-card)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--border-radius-base)',
-          boxShadow: 'var(--shadow-dropdown)',
           padding: '10px 14px',
           fontSize: 12.5,
         }}
@@ -1146,7 +1293,6 @@ export const AdminDashboard: React.FC = () => {
           background: 'var(--color-card)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--border-radius-base)',
-          boxShadow: 'var(--shadow-dropdown)',
           padding: '10px 14px',
           fontSize: 12.5,
         }}
@@ -1169,17 +1315,41 @@ export const AdminDashboard: React.FC = () => {
       ' ' + date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const complianceRows = useMemo(
+    () => [
+      ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
+      ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
+    ],
+    [yesterdayCompliance]
+  );
+
+  const complianceColumns: Column<(typeof complianceRows)[number]>[] = useMemo(
+    () => [
+      { key: 'name', header: 'المشرف', cell: (row) => <span className="font-medium text-[#0F172A]">{row.name}</span>, sortable: true },
+      { key: 'reports', header: 'التقارير', cell: (row) => `${row.submittedReports} / ${row.expectedReports}` },
+      { key: 'submittedLines', header: 'تم الإرسال', cell: (row) => (row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—') },
+      { key: 'missingLines', header: 'غير مرسل', cell: (row) => (row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—') },
+      {
+        key: 'status',
+        header: 'الحالة',
+        align: 'center',
+        cell: (row) => <StatusBadge label={row.submitted ? 'تم الإرسال' : 'لم يرسل'} type={row.submitted ? 'success' : 'danger'} />,
+      },
+    ],
+    []
+  );
+
   // ── Loading State ─────────────────────────────────────────────────────────
 
-  if (loading && reports.length === 0) {
+  if (isFinalLoading && reports.length === 0) {
     return (
       <div className="erp-dashboard-theme space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-rose-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-            <span className="material-icons-round text-rose-600 text-2xl">shield</span>
-          </div>
+        <PageHeader title="لوحة مدير النظام" subtitle="جاري تحميل البيانات..." />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <KPICard key={`admin-loading-kpi-${idx}`} label="" value="" loading />
+          ))}
         </div>
-        <LoadingSkeleton rows={6} type="card" />
       </div>
     );
   }
@@ -1198,7 +1368,7 @@ export const AdminDashboard: React.FC = () => {
                                            ' erp-alert-info'
               } erp-animate-in`}
             >
-              <span className="material-icons-round text-[18px] shrink-0">{alert.icon}</span>
+              {renderDashboardIcon(alert.icon, 'text-[18px] shrink-0')}
               <span>{alert.message}</span>
             </div>
           ))}
@@ -1208,69 +1378,62 @@ export const AdminDashboard: React.FC = () => {
      
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="erp-page-head">
-        <div className="erp-page-title-block flex items-center gap-3">
-          {/* <div
-            className="w-10 h-10 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0"
-            style={{ background: '#fee2e2' }}
-          >
-            <span className="material-icons-round text-rose-600" style={{ fontSize: 20 }}>shield</span>
-          </div> */}
-          <div>
-            {/* <h2 className="page-title">لوحة مدير النظام</h2> */}
-            <p className="page-subtitle">نظرة شاملة على الإنتاج والنظام والصحة العامة</p>
-          </div>
-        </div>
-        {(loading || systemLoading) && (
-          <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
-            <span className="material-icons-round text-[14px] animate-spin">sync</span>
-            جاري التحديث...
-          </span>
-        )}
-      </div>
+      <PageHeader
+        title="لوحة مدير النظام"
+        subtitle="نظرة شاملة على الإنتاج والنظام والصحة العامة"
+        actions={
+          isFinalLoading ? (
+            <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
+              {renderDashboardIcon('sync', 'text-[14px] animate-spin')}
+              جاري التحديث...
+            </span>
+          ) : undefined
+        }
+      />
 
       {/* ── Period Filter ───────────────────────────────────────────────────── */}
-      <div className="erp-filter-bar">
-        <div className="erp-date-seg">
-          {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => (
-            <button
-              key={key}
-              onClick={() => setPreset(key)}
-              className={`erp-date-seg-btn${preset === key ? ' active' : ''}`}
-            >
-              {PRESET_LABELS[key]}
-            </button>
-          ))}
-        </div>
-        <div className="erp-filter-sep hidden sm:block" />
-        <div className="erp-filter-date">
-          <span className="erp-filter-label">من</span>
-          <input
-            type="date"
-            value={customStart || dateRange.start}
-            onChange={(e) => { setCustomStart(e.target.value); setPreset('custom'); }}
-          />
-        </div>
-        <div className="erp-filter-date">
-          <span className="erp-filter-label">إلى</span>
-          <input
-            type="date"
-            value={customEnd || dateRange.end}
-            onChange={(e) => { setCustomEnd(e.target.value); setPreset('custom'); }}
-          />
-        </div>
-        <span className="text-xs text-[var(--color-text-muted)] font-medium w-full sm:w-auto sm:me-auto">{dateRange.start} ← {dateRange.end}</span>
-      </div>
+      <FilterBar
+        periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
+          value: key,
+          label: PRESET_LABELS[key],
+        }))}
+        activePeriod={preset}
+        onPeriodChange={(value) => setPreset(value as PeriodPreset)}
+        extra={(
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ms-auto">
+            <div className="erp-filter-date">
+              <span className="erp-filter-label">من</span>
+              <input
+                type="date"
+                value={customStart || dateRange.start}
+                onChange={(e) => { setCustomStart(e.target.value); setPreset('custom'); }}
+              />
+            </div>
+            <div className="erp-filter-date">
+              <span className="erp-filter-label">إلى</span>
+              <input
+                type="date"
+                value={customEnd || dateRange.end}
+                onChange={(e) => { setCustomEnd(e.target.value); setPreset('custom'); }}
+              />
+            </div>
+            <span className="text-xs font-medium text-[var(--color-text-muted)]">{dateRange.start} ← {dateRange.end}</span>
+            <span className="text-xs font-medium text-[var(--color-text-muted)]">
+              {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
+            </span>
+          </div>
+        )}
+      />
 
       {reportsError && (
         <div className="erp-alert erp-alert-warning">
-          <span className="material-icons-round text-[18px] shrink-0">warning</span>
+          {renderDashboardIcon('warning', 'text-[18px] shrink-0')}
           <span>تعذر تحميل بيانات التقارير: {reportsError}</span>
         </div>
       )}
-      {!loading && !reportsError && reports.length === 0 && (
+      {!isFinalLoading && !reportsError && reports.length === 0 && (
         <div className="erp-alert erp-alert-info">
-          <span className="material-icons-round text-[18px] shrink-0">info</span>
+          {renderDashboardIcon('info', 'text-[18px] shrink-0')}
           <span>لا توجد تقارير إنتاج في الفترة المحددة.</span>
         </div>
       )}
@@ -1281,19 +1444,19 @@ export const AdminDashboard: React.FC = () => {
         <Card>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="material-icons-round text-primary">bolt</span>
+              {renderDashboardIcon('bolt', 'text-primary')}
               <h3 className="text-sm font-bold text-[var(--color-text)]">إجراءات سريعة</h3>
             </div>
             <div className="flex flex-wrap gap-2 sm:mr-auto">
               {quickActions.map((action) => (
-                <button
+                <GhostButton
                   key={action.id}
                   onClick={() => runQuickAction(action)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] border text-sm font-bold transition-all ${QUICK_ACTION_COLOR_CLASSES[action.color]}`}
+                  className={`h-9 px-3 text-sm font-medium ${QUICK_ACTION_COLOR_CLASSES[action.color]}`}
                 >
-                  <span className="material-icons-round text-sm">{action.icon}</span>
+                  {renderDashboardIcon(action.icon, 'text-sm')}
                   <span>{action.label}</span>
-                </button>
+                </GhostButton>
               ))}
             </div>
           </div>
@@ -1306,100 +1469,79 @@ export const AdminDashboard: React.FC = () => {
       {/* ── Operational KPIs ────────────────────────────────────────────────── */}
       {isVisible('operational_kpis') && (
       <div>
-        <h3 className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span className="material-icons-round text-base">precision_manufacturing</span>
+        <h3 className="text-sm font-medium text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
+          {renderDashboardIcon('precision_manufacturing', 'text-base')}
           مؤشرات تشغيلية
         </h3>
         <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
-          <div className={`flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${canViewCosts ? 'xl:grid-cols-6' : 'xl:grid-cols-3'} sm:gap-4`}>
-            <div className="min-w-[220px] sm:min-w-0">
-              <KPIBox
-                label="إجمالي الإنتاج"
-                value={formatNumber(kpis.totalProduction)}
-                icon="inventory"
-                unit="وحدة"
-                colorClass="bg-primary/10 text-primary"
-              />
+          {isFinalLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+              {Array.from({ length: canViewCosts ? 6 : 3 }).map((_, idx) => (
+                <KPICard key={`admin-kpi-loading-${idx}`} label="" value="" loading />
+              ))}
             </div>
-            {canViewCosts && (
-              <div className="min-w-[220px] sm:min-w-0">
-                <KPIBox
-                  label={`إجمالي التكلفة (${PRESET_LABELS[preset]})`}
-                  value={formatCost(kpis.totalCost)}
-                  icon="account_balance_wallet"
-                  unit="ج.م"
-                  colorClass="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400"
-                />
-              </div>
-            )}
-            {canViewCosts && (
-              <div className="min-w-[220px] sm:min-w-0">
-                <KPIBox
-                  label="تكلفة الوحدة"
-                  value={formatCost(kpis.avgCostPerUnit)}
-                  icon="payments"
-                  unit="ج.م"
-                  colorClass="bg-amber-100 text-amber-600"
-                />
-              </div>
-            )}
-            {canViewCosts && (() => {
-              const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
-              const directShare = totalTrackedCost > 0 ? ((kpis.totalLaborCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
-              return (
-                <div className="min-w-[220px] sm:min-w-0">
-                  <KPIBox
+          ) : (
+            <div className={`flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${canViewCosts ? 'xl:grid-cols-6' : 'xl:grid-cols-3'} sm:gap-4`}>
+              <KPICard label="إجمالي الإنتاج" value={formatNumber(kpis.totalProduction)} unit="وحدة" iconType="metric" color="indigo" />
+              {canViewCosts && (
+                <KPICard label={`إجمالي التكلفة (${PRESET_LABELS[preset]})`} value={formatCost(kpis.totalCost)} unit="ج.م" iconType="money" color="green" />
+              )}
+              {canViewCosts && (
+                <KPICard label="تكلفة الوحدة" value={formatCost(kpis.avgCostPerUnit)} unit="ج.م" iconType="money" color="amber" />
+              )}
+              {canViewCosts && (() => {
+                const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+                const directShare = totalTrackedCost > 0 ? ((kpis.totalLaborCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
+                return (
+                  <KPICard
                     label="التكاليف المباشرة"
                     value={formatCost(kpis.totalLaborCost)}
-                    icon="groups"
                     unit="ج.م"
-                    colorClass="bg-blue-100 text-blue-600"
+                    iconType="money"
+                    color="indigo"
                     trend={`${directShare}% من توزيع التكاليف`}
-                    trendUp={true}
+                    trendUp
                   />
-                </div>
-              );
-            })()}
-            {canViewCosts && (() => {
-              const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
-              const indirectShare = totalTrackedCost > 0 ? ((kpis.totalIndirectCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
-              return (
-                <div className="min-w-[220px] sm:min-w-0">
-                  <KPIBox
+                );
+              })()}
+              {canViewCosts && (() => {
+                const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+                const indirectShare = totalTrackedCost > 0 ? ((kpis.totalIndirectCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
+                return (
+                  <KPICard
                     label="التكاليف غير المباشرة"
                     value={formatCost(kpis.totalIndirectCost)}
-                    icon="account_balance"
                     unit="ج.م"
-                    colorClass="bg-emerald-100 text-emerald-600"
+                    iconType="money"
+                    color="green"
                     trend={`${indirectShare}% من توزيع التكاليف`}
                     trendUp={false}
                   />
-                </div>
-              );
-            })()}
-            {(() => {
-              const effColor = getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false);
-              return (
-                <div className="min-w-[220px] sm:min-w-0">
-                  <KPIBox
+                );
+              })()}
+              {(() => {
+                const effColor = getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false);
+                const mappedColor = effColor === 'good' ? 'green' : effColor === 'warning' ? 'amber' : 'red';
+                return (
+                  <KPICard
                     label="الكفاءة العامة"
                     value={`${kpis.efficiency}%`}
-                    icon="speed"
-                    colorClass={KPI_COLOR_CLASSES[effColor]}
+                    iconType="trend"
+                    color={mappedColor}
                     trend={effColor === 'good' ? 'ممتاز' : effColor === 'warning' ? 'جيد' : 'يحتاج تحسين'}
                     trendUp={effColor !== 'danger'}
                   />
-                </div>
-              );
-            })()}
-          </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
       </div>
       )}
 
       {/* <Card>
         <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-blue-500">bolt</span>
+          {renderDashboardIcon('bolt', 'text-blue-500')}
           <h3 className="text-lg font-bold">الإنتاج اللحظي (الباركود)</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1418,13 +1560,15 @@ export const AdminDashboard: React.FC = () => {
           <Card>
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex items-center gap-2">
-                <span className="material-icons-round text-primary">inventory_2</span>
+                {renderDashboardIcon('inventory_2', 'text-primary')}
                 <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
                 <Badge variant="info">{productSummary.length} منتج</Badge>
               </div>
               <div className="erp-filter-bar w-full">
               <div className="relative flex-1 min-w-0 w-full md:w-auto md:min-w-[250px]">
-                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">search</span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">
+                    {renderDashboardIcon('search', 'text-[var(--color-text-muted)]')}
+                  </span>
                   <input
                     type="text"
                     placeholder="بحث بالكود أو الاسم..."
@@ -1435,17 +1579,20 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                
                 <div className="relative flex-1 min-w-0 w-full md:w-auto md:min-w-[190px]">
-                  <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-sm">category</span>
-                  <select
-                    value={productCategoryFilter}
-                    onChange={(e) => setProductCategoryFilter(e.target.value)}
-                    className="erp-filter-select pr-9 w-full appearance-none"
-                  >
-                    <option value="all">كل الفئات</option>
-                    {productSummaryCategories.map((category) => (
-                      <option key={category} value={category}>{category}</option>
-                    ))}
-                  </select>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">
+                    {renderDashboardIcon('category', 'text-[var(--color-text-muted)]')}
+                  </span>
+                  <Select value={productCategoryFilter} onValueChange={setProductCategoryFilter}>
+                    <SelectTrigger className="erp-filter-select pr-9 w-full">
+                      <SelectValue placeholder="كل الفئات" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الفئات</SelectItem>
+                      {productSummaryCategories.map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {canExportFromPage && (
                 <button
@@ -1453,7 +1600,7 @@ export const AdminDashboard: React.FC = () => {
                   className="erp-filter-apply flex items-center justify-center gap-1.5 w-full md:w-auto md:mr-auto"
                   title="تصدير Excel"
                 >
-                  <span className="material-icons-round text-sm">download</span>
+                  {renderDashboardIcon('download', 'text-sm')}
                   <span>Excel</span>
                 </button>
                 )}
@@ -1574,9 +1721,10 @@ export const AdminDashboard: React.FC = () => {
                                     ? 'bg-emerald-50 text-emerald-600'
                                     : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
                               }`}>
-                                <span className="material-icons-round text-[13px]">
-                                  {trend.direction === 'up' ? 'trending_up' : trend.direction === 'down' ? 'trending_down' : 'drag_handle'}
-                                </span>
+                                {renderDashboardIcon(
+                                  trend.direction === 'up' ? 'trending_up' : trend.direction === 'down' ? 'trending_down' : 'drag_handle',
+                                  'text-[13px]'
+                                )}
                                 <span>{trend.label}</span>
                               </span>
                             </td>
@@ -1614,7 +1762,7 @@ export const AdminDashboard: React.FC = () => {
       <Card>
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <span className="material-icons-round text-amber-600">report_problem</span>
+            {renderDashboardIcon('report_problem', 'text-amber-600')}
             <h3 className="text-sm font-bold text-[var(--color-text)]">نواقص المكونات</h3>
             <Badge variant="warning">{shortageRows.length}</Badge>
           </div>
@@ -1624,14 +1772,14 @@ export const AdminDashboard: React.FC = () => {
               onClick={() => exportProductionPlanShortages(shortageRows)}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
             >
-              <span className="material-icons-round text-sm">download</span>
+              {renderDashboardIcon('download', 'text-sm')}
               <span>Excel</span>
             </button>
           )}
         </div>
         {shortageRows.length === 0 ? (
           <div className="erp-alert erp-alert-info">
-            <span className="material-icons-round text-[18px] shrink-0">info</span>
+            {renderDashboardIcon('info', 'text-[18px] shrink-0')}
             <span>لا توجد نواقص مكونات مسجلة حاليًا.</span>
           </div>
         ) : (
@@ -1662,7 +1810,7 @@ export const AdminDashboard: React.FC = () => {
       <Card>
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <span className="material-icons-round text-rose-500">fact_check</span>
+            {renderDashboardIcon('fact_check', 'text-rose-500')}
             <h3 className="text-sm font-bold text-[var(--color-text)]">التزام المشرفين بالتقرير</h3>
           </div>
           <div className="flex items-center gap-2">
@@ -1684,12 +1832,12 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
         {yesterdayComplianceLoading ? (
-          <p className="text-xs text-[var(--color-text-muted)]">جاري تحميل الحالة...</p>
+          <DataTable columns={complianceColumns} data={[]} isLoading emptyMessage="جاري تحميل الحالة..." />
         ) : yesterdayComplianceError ? (
-          <p className="text-xs text-rose-600 font-bold">{yesterdayComplianceError}</p>
+          <p className="text-xs text-rose-600 font-medium">{yesterdayComplianceError}</p>
         ) : yesterdayCompliance?.isFactoryHoliday ? (
           <div className="erp-alert erp-alert-info">
-            <span className="material-icons-round text-[18px] shrink-0">weekend</span>
+            {renderDashboardIcon('weekend', 'text-[18px] shrink-0')}
             <span>{yesterdayCompliance.holidayReason || 'إجازة المصنع'}</span>
           </div>
         ) : (
@@ -1698,15 +1846,15 @@ export const AdminDashboard: React.FC = () => {
               <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1"> إجمالي المشرفين المطلوب منهم</p>
               
-                <p className="text-2xl font-black text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
+                <p className="text-2xl font-medium text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
                 <p className="text-xs text-emerald-700 font-bold mb-1">تم ارسال تقرير</p>
-                <p className="text-2xl font-black text-emerald-600">{yesterdayCompliance?.submittedCount ?? 0}</p>
+                <p className="text-2xl font-medium text-emerald-600">{yesterdayCompliance?.submittedCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
                 <p className="text-xs text-rose-700 font-bold mb-1">لم يرسل تقرير</p>
-                <p className="text-2xl font-black text-rose-600">{yesterdayCompliance?.missingCount ?? 0}</p>
+                <p className="text-2xl font-medium text-rose-600">{yesterdayCompliance?.missingCount ?? 0}</p>
               </div>
             </div>
             {(yesterdayCompliance?.assignedSupervisorsCount ?? 0) === 0 ? (
@@ -1740,36 +1888,12 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-sm" data-no-table-enhance="true">
-                    <thead className="erp-thead">
-                      <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
-                        <th className="erp-th">المشرف</th>
-                        <th className="erp-th">التقارير</th>
-                        <th className="erp-th">تم الإرسال</th>
-                        <th className="erp-th">غير مرسل</th>
-                        <th className="erp-th">الحالة</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
-                        ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
-                      ].map((row) => (
-                        <tr key={row.employeeId} className="border-b border-[var(--color-border)]">
-                          <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.name}</td>
-                          <td className="py-2.5 px-3 text-[var(--color-text-muted)] font-bold">{row.submittedReports} / {row.expectedReports}</td>
-                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—'}</td>
-                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—'}</td>
-                          <td className="py-2.5 px-3">
-                            <Badge variant={row.submitted ? 'success' : 'danger'}>
-                              {row.submitted ? 'تم ارسال' : 'لم يرسل'}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="hidden md:block">
+                  <DataTable
+                    columns={complianceColumns}
+                    data={complianceRows}
+                    emptyMessage="لا يوجد مشرفون مكلّفون في هذا التاريخ."
+                  />
                 </div>
               </div>
             )}
@@ -1778,7 +1902,7 @@ export const AdminDashboard: React.FC = () => {
       </Card>
       <Card>
         <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-violet-500">verified</span>
+          {renderDashboardIcon('verified', 'text-violet-500')}
           <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -1807,13 +1931,13 @@ export const AdminDashboard: React.FC = () => {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="material-icons-round text-amber-500">assignment</span>
+                {renderDashboardIcon('assignment', 'text-amber-500')}
                 <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
                 <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalQty)}</span>
-                <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
+                <span className={`font-medium ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
               </div>
             </div>
 
@@ -1853,7 +1977,7 @@ export const AdminDashboard: React.FC = () => {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="material-icons-round text-amber-500 text-lg">assignment</span>
+                        {renderDashboardIcon('assignment', 'text-amber-500 text-lg')}
                         <span className="text-sm font-bold text-amber-700">أمر شغل #{wo.workOrderNumber}</span>
                       </div>
                       <Badge variant={wo.status === 'in_progress' ? 'warning' : 'neutral'}>
@@ -1862,19 +1986,19 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
+                      {renderDashboardIcon('inventory_2', 'text-[var(--color-text-muted)] text-base')}
                       <p className="text-sm font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
-                        <span className="material-icons-round text-indigo-400 text-base">person</span>
+                        {renderDashboardIcon('person', 'text-indigo-400 text-base')}
                         <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
                       </div>
                       {canViewCosts && (
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
-                            <span className="material-icons-round text-emerald-500 text-sm">payments</span>
+                            {renderDashboardIcon('payments', 'text-emerald-500 text-sm')}
                             <span className="text-[10px] text-slate-400">التكلفة المقدرة</span>
                             <span className="text-sm font-bold text-emerald-600">
                               {metrics.estimatedUnitCost !== null ? formatCost(metrics.estimatedUnitCost) : '—'}
@@ -1882,7 +2006,7 @@ export const AdminDashboard: React.FC = () => {
                             <span className="text-[10px] text-slate-400">/قطعة</span>
                           </div>
                           <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
-                            <span className="material-icons-round text-primary text-sm">calculate</span>
+                            {renderDashboardIcon('calculate', 'text-primary text-sm')}
                             <span className="text-[10px] text-slate-400">التكلفة الفعلية</span>
                             <span className="text-sm font-bold text-primary">
                               {metrics.actualUnitCostToDate !== null ? formatCost(metrics.actualUnitCostToDate) : '—'}
@@ -1923,34 +2047,34 @@ export const AdminDashboard: React.FC = () => {
 
                     <div className="flex items-center gap-5 text-xs text-[var(--color-text-muted)] pt-1">
                       <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">precision_manufacturing</span>
+                        {renderDashboardIcon('precision_manufacturing', 'text-sm')}
                         <span className="font-bold">{lineName}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">groups</span>
+                        {renderDashboardIcon('groups', 'text-sm')}
                         <span className="font-bold">متوسط العمالة: {avgWorkersLabel}</span>
                       </div>
                       <div className="flex items-center gap-1 mr-auto">
-                        <span className="material-icons-round text-sm">event</span>
+                        {renderDashboardIcon('event', 'text-sm')}
                         <span className="font-bold">{wo.targetDate}</span>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-muted)]">
                       <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">calendar_month</span>
+                        {renderDashboardIcon('calendar_month', 'text-sm')}
                         <span className="font-bold">
                           أيام تشغيل (بدون الجمعة): {metrics.estimatedWorkDays !== null ? metrics.estimatedWorkDays : '—'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="material-icons-round text-sm">schedule</span>
+                        {renderDashboardIcon('schedule', 'text-sm')}
                         <span className="font-bold">
                           أيام متبقية (مقدر): {metrics.remainingDaysByBenchmark !== null ? metrics.remainingDaysByBenchmark.toFixed(1) : '—'}
                         </span>
                       </div>
                       {canViewCosts && (
                         <div className="flex items-center gap-1">
-                          <span className="material-icons-round text-sm">payments</span>
+                          {renderDashboardIcon('payments', 'text-sm')}
                           <span className="font-bold">
                             تكلفة الأيام المقدرة: {metrics.estimatedTotalCost !== null ? `${formatCost(metrics.estimatedTotalCost)} ج.م` : '—'}
                           </span>
@@ -1958,7 +2082,7 @@ export const AdminDashboard: React.FC = () => {
                       )}
                       {canViewCosts && (
                         <div className="flex items-center gap-1 mr-auto">
-                          <span className="material-icons-round text-sm">request_quote</span>
+                          {renderDashboardIcon('request_quote', 'text-sm')}
                           <span className="font-bold">
                             تكلفة متبقية (مقدرة): {metrics.estimatedRemainingCost !== null ? `${formatCost(metrics.estimatedRemainingCost)} ج.م` : '—'}
                           </span>
@@ -1978,7 +2102,7 @@ export const AdminDashboard: React.FC = () => {
       {/* ── System KPIs ─────────────────────────────────────────────────────── */}
       {isVisible('system_kpis') && <div>
         <h3 className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span className="material-icons-round text-base">computer</span>
+          {renderDashboardIcon('computer', 'text-base')}
           مؤشرات النظام
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -2026,10 +2150,10 @@ export const AdminDashboard: React.FC = () => {
       {/* ── Production Health Score + Charts ─────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Health Score Gauge */}
-        {/* {isVisible('health_score') && 
+        {/* {isVisible('health_score') &&
         <Card>
           <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-rose-500">monitor_heart</span>
+            {renderDashboardIcon('monitor_heart', 'text-rose-500')}
             <h3 className="text-lg font-bold">صحة الإنتاج</h3>
           </div>
           <div className="flex justify-center py-4">
@@ -2043,7 +2167,7 @@ export const AdminDashboard: React.FC = () => {
               { label: 'تحقيق الخطط', value: kpis.planAchievementRate, weight: '25%', icon: 'fact_check' },
             ].map((metric) => (
               <div key={metric.label} className="flex items-center gap-3">
-                <span className="material-icons-round text-[14px] text-[var(--color-text-muted)]">{metric.icon}</span>
+                {renderDashboardIcon(metric.icon, 'text-[14px] text-[var(--color-text-muted)]')}
                 <span className="text-[12px] font-medium text-[var(--color-text-muted)] flex-1">{metric.label}</span>
                 <span className="text-[10px] text-[var(--color-text-muted)]">({metric.weight})</span>
                 <div className="erp-progress-wrap" style={{ width: 80 }}>
@@ -2065,7 +2189,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Roles Distribution Pie */}
         {isVisible('roles_distribution') && <Card>
           <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-indigo-500">admin_panel_settings</span>
+            {renderDashboardIcon('admin_panel_settings', 'text-indigo-500')}
             <h3 className="text-lg font-bold">توزيع الأدوار</h3>
           </div>
           {rolesChartData.length > 0 ? (
@@ -2112,7 +2236,7 @@ export const AdminDashboard: React.FC = () => {
       {isVisible('production_cost_chart') && canViewCosts && (
         <Card>
           <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-primary">show_chart</span>
+            {renderDashboardIcon('show_chart', 'text-primary')}
             <h3 className="text-lg font-bold">الإنتاج مقابل تكلفة الوحدة</h3>
           </div>
           {dailyChartData.length > 0 ? (
@@ -2135,7 +2259,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="h-72 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
-              <span className="material-icons-round ml-2">bar_chart</span>
+              {renderDashboardIcon('bar_chart', 'ml-2')}
               لا توجد بيانات للفترة المحددة
             </div>
           )}
@@ -2147,7 +2271,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Activity Log Snapshot */}
         {isVisible('activity_log') && <Card>
           <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-blue-500">history</span>
+            {renderDashboardIcon('history', 'text-blue-500')}
             <h3 className="text-lg font-bold">آخر النشاطات</h3>
             <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">آخر 10 إجراءات</span>
           </div>
@@ -2160,9 +2284,7 @@ export const AdminDashboard: React.FC = () => {
                   className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--border-radius-base)] hover:bg-[#f8f9fa] transition-colors group cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="material-icons-round text-sm text-slate-500">
-                      {ACTION_ICONS[log.action] || 'info'}
-                    </span>
+                    {renderDashboardIcon(ACTION_ICONS[log.action] || 'info', 'text-sm text-slate-500')}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
@@ -2183,7 +2305,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
-              <span className="material-icons-round text-3xl mb-2 block opacity-30">history</span>
+              {renderDashboardIcon('history', 'text-3xl mb-2 block opacity-30')}
               {systemLoading ? 'جاري التحميل...' : 'لا توجد نشاطات مسجلة'}
             </div>
           )}
@@ -2193,7 +2315,7 @@ export const AdminDashboard: React.FC = () => {
         {isVisible('cost_centers_summary') && canViewCosts && (
           <Card>
             <div className="flex items-center gap-2 mb-4">
-              <span className="material-icons-round text-emerald-500">account_balance</span>
+              {renderDashboardIcon('account_balance', 'text-emerald-500')}
               <h3 className="text-lg font-bold">ملخص مراكز التكلفة</h3>
               <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">الشهر الحالي</span>
             </div>
@@ -2226,9 +2348,9 @@ export const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           {cc.allocated ? (
-                            <span className="material-icons-round text-emerald-500 text-sm">check_circle</span>
+                            renderDashboardIcon('check_circle', 'text-emerald-500 text-sm')
                           ) : (
-                            <span className="material-icons-round text-[var(--color-text-muted)] dark:text-slate-600 text-sm">radio_button_unchecked</span>
+                            renderDashboardIcon('radio_button_unchecked', 'text-[var(--color-text-muted)] dark:text-slate-600 text-sm')
                           )}
                         </td>
                       </tr>
@@ -2238,7 +2360,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
             ) : (
               <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
-                <span className="material-icons-round text-3xl mb-2 block opacity-30">account_balance</span>
+                {renderDashboardIcon('account_balance', 'text-3xl mb-2 block opacity-30')}
                 لا توجد مراكز تكلفة
               </div>
             )}
@@ -2248,7 +2370,7 @@ export const AdminDashboard: React.FC = () => {
         {isVisible('monthly_depreciation_summary') && canViewCosts && (
           <Card>
             <div className="flex items-center gap-2 mb-4">
-              <span className="material-icons-round text-violet-500">event_repeat</span>
+              {renderDashboardIcon('event_repeat', 'text-violet-500')}
               <h3 className="text-lg font-bold">ملخص الاهلاكات الشهرية</h3>
               <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">{monthlyDepreciationSummary.month}</span>
             </div>
@@ -2284,7 +2406,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
             ) : (
               <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
-                <span className="material-icons-round text-3xl mb-2 block opacity-30">event_repeat</span>
+                {renderDashboardIcon('event_repeat', 'text-3xl mb-2 block opacity-30')}
                 لا توجد اهلاكات مسجلة لهذا الشهر
               </div>
             )}
@@ -2297,7 +2419,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Top 5 Lines */}
         {isVisible('top_lines') && <Card>
           <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
+            {renderDashboardIcon('precision_manufacturing', 'text-emerald-500')}
             <h3 className="text-lg font-bold">أعلى 5 خطوط إنتاج</h3>
           </div>
           {topLines.length > 0 ? (
@@ -2322,7 +2444,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Top 5 Products */}
         {isVisible('top_products') && <Card>
           <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-violet-500">inventory_2</span>
+            {renderDashboardIcon('inventory_2', 'text-violet-500')}
             <h3 className="text-lg font-bold">أعلى 5 منتجات</h3>
           </div>
           {topProducts.length > 0 ? (
@@ -2347,7 +2469,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Top 5 Supervisors */}
         {isVisible('top_supervisors') && <Card>
           <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-amber-500">supervisor_account</span>
+            {renderDashboardIcon('supervisor_account', 'text-amber-500')}
             <h3 className="text-lg font-bold">أعلى 5 مشرفين في الأداء</h3>
           </div>
           {topSupervisors.length > 0 ? (
@@ -2373,7 +2495,7 @@ export const AdminDashboard: React.FC = () => {
       {/* ── Product Performance Table ────────────────────────────────────────── */}
       {isVisible('product_performance') && <Card>
         <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-primary">table_chart</span>
+          {renderDashboardIcon('table_chart', 'text-primary')}
           <h3 className="text-lg font-bold">ملخص أداء المنتجات</h3>
         </div>
         {topProducts.length > 0 ? (

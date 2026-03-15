@@ -1,315 +1,565 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAppStore } from '../../../store/useAppStore';
-import { Card, Badge, Button, SearchableSelect } from '../components/UI';
-import { getTodayDateString } from '../../../utils/calculations';
-import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
-import type { SupervisorLineAssignment as SupervisorLineAssignmentRecord } from '../../../types';
-import { PageHeader } from '../../../components/PageHeader';
+import React, { memo, useEffect, useMemo, useState } from 'react';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { useSupervisorStore } from '../stores/useSupervisorStore';
+import type {
+  HistoryPeriod,
+  SupervisorDistributionLine,
+  SupervisorDistributionSupervisor,
+} from '../services/supervisorDistributionService';
 
-const isActiveForDate = (item: SupervisorLineAssignmentRecord, date: string): boolean => {
-  const from = String(item.effectiveFrom || '');
-  const to = String(item.effectiveTo || '');
-  if (!item.isActive) return false;
-  if (!from || from > date) return false;
-  if (to && to < from) return false;
-  if (to && to < date) return false;
-  return true;
+type ViewMode = 'grid' | 'list';
+
+interface SearchableSupervisorFieldProps {
+  supervisors: SupervisorDistributionSupervisor[];
+  selectedSupervisorId: string | null;
+  onSelect: (supervisorId: string | null) => void;
+  placeholder: string;
+}
+
+interface LineCardProps {
+  line: SupervisorDistributionLine;
+  supervisors: SupervisorDistributionSupervisor[];
+  selectedSupervisorId: string | null;
+  pending: boolean;
+  onPendingChange: (lineId: string, supervisorId: string | null) => void;
+  onSave: (lineId: string) => void;
+  onUnassign: (lineId: string) => void;
+  onShowHistory: (line: SupervisorDistributionLine) => void;
+  isSaving: boolean;
+}
+
+const todayYmd = (): string => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
-export const SupervisorLineAssignment: React.FC = () => {
-  const lines = useAppStore((s) => s._rawLines);
-  const employees = useAppStore((s) => s._rawEmployees);
-  const userDisplayName = useAppStore((s) => s.userDisplayName);
-  const userEmail = useAppStore((s) => s.userEmail);
+const toAr = (value: number): string => value.toLocaleString('ar-EG');
 
-  const [selectedDate, setSelectedDate] = useState(getTodayDateString());
-  const [allAssignments, setAllAssignments] = useState<SupervisorLineAssignmentRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [savingLineId, setSavingLineId] = useState('');
-  const [draftByLine, setDraftByLine] = useState<Record<string, string>>({});
-  const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [lineSearch, setLineSearch] = useState('');
+const normalize = (value: string): string => String(value || '').trim().toLowerCase();
 
-  const supervisors = useMemo(
-    () => employees.filter((e) => e.level === 2 && e.isActive !== false && e.id),
-    [employees],
+const getInitials = (name: string): string => {
+  const parts = String(name || '').split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '—';
+  const first = parts[0]?.slice(0, 1) || '';
+  const second = parts[1]?.slice(0, 1) || '';
+  return `${first}.${second || first}`;
+};
+
+const getShortName = (name: string): string => {
+  const parts = String(name || '').split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '—';
+  return parts.slice(0, 2).join(' ');
+};
+
+const SearchableSupervisorField: React.FC<SearchableSupervisorFieldProps> = ({
+  supervisors,
+  selectedSupervisorId,
+  onSelect,
+  placeholder,
+}) => {
+  const [open, setOpen] = useState(false);
+  const selectedSupervisor = useMemo(
+    () => supervisors.find((item) => item.id === selectedSupervisorId) || null,
+    [supervisors, selectedSupervisorId],
   );
-  const supervisorOptions = useMemo(
-    () => supervisors.map((s) => ({ value: s.id!, label: s.code ? `${s.name} (${s.code})` : s.name })),
-    [supervisors],
-  );
-
-  const loadAssignments = useCallback(async () => {
-    setLoading(true);
-    setFeedback(null);
-    try {
-      const rows = await supervisorLineAssignmentService.getAll();
-      setAllAssignments(rows);
-    } catch (error) {
-      setFeedback({ type: 'error', text: (error as Error)?.message || 'تعذر تحميل توزيعات المشرفين.' });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [query, setQuery] = useState(selectedSupervisor?.name || '');
 
   useEffect(() => {
-    loadAssignments();
-  }, [loadAssignments]);
+    setQuery(selectedSupervisor?.name || '');
+  }, [selectedSupervisor?.id, selectedSupervisor?.name]);
 
-  const historyByLine = useMemo(() => {
-    const map = new Map<string, SupervisorLineAssignmentRecord[]>();
-    for (const row of allAssignments) {
-      const lineId = String(row.lineId || '').trim();
-      if (!lineId) continue;
-      const list = map.get(lineId) || [];
-      list.push(row);
-      map.set(lineId, list);
-    }
-    map.forEach((list) => list.sort((a, b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || ''))));
-    return map;
-  }, [allAssignments]);
-
-  const currentByLine = useMemo(() => {
-    const map = new Map<string, SupervisorLineAssignmentRecord>();
-    historyByLine.forEach((rows, lineId) => {
-      const active = rows.find((row) => isActiveForDate(row, selectedDate));
-      if (active) map.set(lineId, active);
-    });
-    return map;
-  }, [historyByLine, selectedDate]);
-
-  useEffect(() => {
-    const next: Record<string, string> = {};
-    lines.forEach((line) => {
-      if (!line.id) return;
-      next[line.id] = currentByLine.get(line.id)?.supervisorId || '';
-    });
-    setDraftByLine(next);
-  }, [lines, currentByLine]);
-
-  const getSupervisorName = useCallback((supervisorId: string): string => {
-    return supervisors.find((s) => s.id === supervisorId)?.name || supervisorId || '—';
-  }, [supervisors]);
-
-  const actorName = String(userDisplayName || userEmail || 'system').trim();
-  const today = getTodayDateString();
-  const yesterday = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
-  }, []);
-
-  const filteredLines = useMemo(() => {
-    const q = lineSearch.trim().toLowerCase();
-    if (!q) return lines;
-    return lines.filter((line) => {
-      const lineName = String(line.name || '').toLowerCase();
-      const currentSupervisor = line.id ? getSupervisorName(currentByLine.get(line.id)?.supervisorId || '') : '';
-      return lineName.includes(q) || currentSupervisor.toLowerCase().includes(q);
-    });
-  }, [lineSearch, lines, currentByLine, getSupervisorName]);
-
-  const assignedCount = useMemo(
-    () => lines.filter((line) => line.id && currentByLine.has(line.id)).length,
-    [lines, currentByLine],
-  );
-  const totalLines = lines.length;
-  const unassignedCount = Math.max(totalLines - assignedCount, 0);
-
-  const handleAssign = async (lineId: string) => {
-    const supervisorId = String(draftByLine[lineId] || '').trim();
-    if (!lineId || !supervisorId) {
-      setFeedback({ type: 'error', text: 'اختر مشرفًا أولاً.' });
-      return;
-    }
-    const lineName = lines.find((line) => line.id === lineId)?.name || lineId;
-    const supervisorName = getSupervisorName(supervisorId);
-    setSavingLineId(lineId);
-    setFeedback(null);
-    try {
-      await supervisorLineAssignmentService.assignOrReassign({
-        lineId,
-        supervisorId,
-        effectiveFrom: selectedDate,
-        changedBy: actorName,
-        lineName,
-        supervisorName,
-      });
-      setFeedback({ type: 'success', text: `تم حفظ تكليف ${supervisorName} على ${lineName}.` });
-      await loadAssignments();
-    } catch (error) {
-      setFeedback({ type: 'error', text: (error as Error)?.message || 'تعذر حفظ التوزيع.' });
-    } finally {
-      setSavingLineId('');
-    }
-  };
-
-  const handleRemove = async (lineId: string) => {
-    setSavingLineId(lineId);
-    setFeedback(null);
-    try {
-      await supervisorLineAssignmentService.removeAssignment(lineId, selectedDate, actorName);
-      setFeedback({ type: 'success', text: 'تم فك التعيين مع الاحتفاظ بالسجل التاريخي.' });
-      await loadAssignments();
-    } catch (error) {
-      setFeedback({ type: 'error', text: (error as Error)?.message || 'تعذر فك التعيين.' });
-    } finally {
-      setSavingLineId('');
-    }
-  };
+  const filtered = useMemo(() => {
+    const text = normalize(query);
+    if (!text) return supervisors.slice(0, 20);
+    return supervisors
+      .filter((item) => {
+        const byName = normalize(item.name).includes(text);
+        const byCode = normalize(String(item.code || '')).includes(text);
+        return byName || byCode;
+      })
+      .slice(0, 20);
+  }, [query, supervisors]);
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="توزيع المشرفين على الخطوط"
-        subtitle="تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط."
-        icon="assignment_ind"
+    <div className="relative w-full">
+      <input
+        type="search"
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal outline-none focus:border-[rgb(var(--color-primary))]"
+        placeholder={placeholder}
+        value={query}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          window.setTimeout(() => setOpen(false), 100);
+        }}
+        onChange={(event) => {
+          const value = event.target.value;
+          setQuery(value);
+          setOpen(true);
+          if (!value.trim()) onSelect(null);
+        }}
       />
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white">
+          {filtered.length === 0 && (
+            <div className="px-3 py-2 text-xs font-normal text-gray-500">لا توجد نتائج مطابقة</div>
+          )}
+          {filtered.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="flex w-full items-center justify-between px-3 py-2 text-right text-sm font-normal text-gray-700 hover:bg-gray-50"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onSelect(item.id);
+                setQuery(item.name);
+                setOpen(false);
+              }}
+            >
+              <span>{item.name}</span>
+              <span className="text-xs text-gray-400">{item.code ?? '—'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">إجمالي الخطوط</p>
-          <p className="text-2xl font-extrabold text-[var(--color-text)] tabular-nums">{totalLines}</p>
-        </Card>
-        <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">تم تعيين مشرف</p>
-          <p className="text-2xl font-extrabold text-emerald-600 tabular-nums">{assignedCount}</p>
-        </Card>
-        <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">بدون مشرف</p>
-          <p className="text-2xl font-extrabold text-amber-600 tabular-nums">{unassignedCount}</p>
-        </Card>
+const LineCard = memo(({
+  line,
+  supervisors,
+  selectedSupervisorId,
+  pending,
+  onPendingChange,
+  onSave,
+  onUnassign,
+  onShowHistory,
+  isSaving,
+}: LineCardProps) => {
+  const activeSupervisor = useMemo(
+    () => supervisors.find((item) => item.id === selectedSupervisorId) || null,
+    [supervisors, selectedSupervisorId],
+  );
+  const hasSupervisor = Boolean(activeSupervisor);
+
+  return (
+    <article
+      className="rounded-xl border border-gray-200 bg-white p-3"
+      style={{ borderRightWidth: 3, borderRightColor: hasSupervisor ? 'rgb(var(--color-primary))' : '#D85A30' }}
+    >
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium text-gray-800">{line.name}</h3>
+          {pending && <span className="h-2 w-2 rounded-full bg-amber-500" title="تغييرات غير محفوظة" />}
+        </div>
+        <div
+          className={`rounded-full px-2 py-0.5 text-xs font-normal ${
+            hasSupervisor ? 'text-[rgb(var(--color-primary))]' : 'text-[#791F1F]'
+          }`}
+          style={{ backgroundColor: hasSupervisor ? 'rgb(var(--color-primary) / 0.12)' : '#FCEBEB' }}
+        >
+          ● {hasSupervisor ? `الحالي: ${getShortName(activeSupervisor?.name || '')}` : 'بدون مشرف'}
+        </div>
       </div>
 
-      {feedback && (
-        <div
-          className={`rounded-[var(--border-radius-lg)] border px-4 py-3 text-sm font-bold ${
-            feedback.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-              : 'bg-rose-50 border-rose-200 text-rose-700'
-          }`}
-        >
-          {feedback.text}
+      {!hasSupervisor && (
+        <div className="mb-3 flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-sm font-normal text-gray-500">
+            —
+          </div>
+          <SearchableSupervisorField
+            supervisors={supervisors}
+            selectedSupervisorId={selectedSupervisorId}
+            onSelect={(id) => onPendingChange(line.id, id)}
+            placeholder="اختر المشرف..."
+          />
         </div>
       )}
 
-      <Card className="!p-0 overflow-hidden">
-        <div className="erp-filter-bar">
-          <div className="erp-date-seg">
+      {hasSupervisor && (
+        <div className="mb-3 space-y-3">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium"
+              style={{ backgroundColor: 'rgb(var(--color-primary) / 0.12)', color: 'rgb(var(--color-primary))' }}
+            >
+              {getInitials(activeSupervisor?.name || '')}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-gray-800">{activeSupervisor?.name}</p>
+              <p className="text-xs font-normal text-gray-400">المعرف: {activeSupervisor?.code ?? '—'}</p>
+            </div>
             <button
-              className={`erp-date-seg-btn${selectedDate === today ? ' active' : ''}`}
-              onClick={() => setSelectedDate(today)}
+              type="button"
+              className="rounded-lg border border-red-200 px-2 py-1 text-xs font-normal text-red-700 hover:bg-red-50 disabled:opacity-50"
+              onClick={() => onUnassign(line.id)}
+              disabled={isSaving}
+            >
+              فك
+            </button>
+          </div>
+          <SearchableSupervisorField
+            supervisors={supervisors}
+            selectedSupervisorId={selectedSupervisorId}
+            onSelect={(id) => onPendingChange(line.id, id)}
+            placeholder="غيّر المشرف..."
+          />
+        </div>
+      )}
+
+      <footer className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
+        <button
+          type="button"
+          className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-normal text-gray-600"
+          onClick={() => onShowHistory(line)}
+          data-modal-key={MODAL_KEYS.PRODUCTION_SUPERVISOR_ASSIGNMENT_HISTORY}
+          disabled={isSaving}
+        >
+          عرض السجل
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-normal text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => onUnassign(line.id)}
+          disabled={!hasSupervisor || isSaving}
+        >
+          فك التعيين
+        </button>
+        <button
+          type="button"
+          className="mr-auto rounded-lg px-3 py-1 text-xs font-normal text-white disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ backgroundColor: 'rgb(var(--color-primary))' }}
+          onClick={() => onSave(line.id)}
+          disabled={!pending || isSaving}
+        >
+          حفظ / تغيير
+        </button>
+      </footer>
+    </article>
+  );
+});
+
+LineCard.displayName = 'LineCard';
+
+export const SupervisorLineAssignment: React.FC = () => {
+  const { openModal } = useGlobalModalManager();
+  const lines = useSupervisorStore((state) => state.lines);
+  const supervisors = useSupervisorStore((state) => state.supervisors);
+  const pendingChanges = useSupervisorStore((state) => state.pendingChanges);
+  const isLoading = useSupervisorStore((state) => state.isLoading);
+  const isSaving = useSupervisorStore((state) => state.isSaving);
+  const toast = useSupervisorStore((state) => state.toast);
+  const fetchLines = useSupervisorStore((state) => state.fetchLines);
+  const fetchSupervisors = useSupervisorStore((state) => state.fetchSupervisors);
+  const setPendingChange = useSupervisorStore((state) => state.setPendingChange);
+  const saveChange = useSupervisorStore((state) => state.saveChange);
+  const saveAll = useSupervisorStore((state) => state.saveAll);
+  const unassign = useSupervisorStore((state) => state.unassign);
+  const clearToast = useSupervisorStore((state) => state.clearToast);
+
+  const [period, setPeriod] = useState<HistoryPeriod>('today');
+  const [referenceDate, setReferenceDate] = useState(todayYmd());
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [refreshing, setRefreshing] = useState(false);
+  const [savingLineId, setSavingLineId] = useState('');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => clearToast(), 2600);
+    return () => window.clearTimeout(timer);
+  }, [toast?.message, clearToast]);
+
+  useEffect(() => {
+    void Promise.all([fetchLines(), fetchSupervisors()]);
+  }, [fetchLines, fetchSupervisors]);
+
+  const linesWithSelection = useMemo(() => {
+    return lines.map((line) => {
+      const hasPending = Object.prototype.hasOwnProperty.call(pendingChanges, line.id);
+      const selectedSupervisorId = hasPending ? pendingChanges[line.id] : line.currentSupervisorId;
+      return { ...line, selectedSupervisorId, hasPending };
+    });
+  }, [lines, pendingChanges]);
+
+  const filteredLines = useMemo(() => {
+    const search = normalize(debouncedSearch);
+    if (!search) return linesWithSelection;
+    return linesWithSelection.filter((line) => {
+      const supervisorName = normalize(
+        supervisors.find((item) => item.id === line.selectedSupervisorId)?.name || '',
+      );
+      return normalize(line.name).includes(search) || supervisorName.includes(search);
+    });
+  }, [debouncedSearch, linesWithSelection, supervisors]);
+
+  const withoutSupervisor = useMemo(
+    () => filteredLines.filter((line) => !line.selectedSupervisorId),
+    [filteredLines],
+  );
+  const withSupervisor = useMemo(
+    () => filteredLines.filter((line) => Boolean(line.selectedSupervisorId)),
+    [filteredLines],
+  );
+
+  const totalLines = linesWithSelection.length;
+  const assignedCount = linesWithSelection.filter((line) => Boolean(line.selectedSupervisorId)).length;
+  const unassignedCount = Math.max(totalLines - assignedCount, 0);
+  const pendingCount = Object.keys(pendingChanges).length;
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchLines(), fetchSupervisors()]);
+    setRefreshing(false);
+  };
+
+  const handleSaveSingle = async (lineId: string) => {
+    setSavingLineId(lineId);
+    await saveChange(lineId);
+    setSavingLineId('');
+  };
+
+  const handleUnassign = async (lineId: string) => {
+    setSavingLineId(lineId);
+    await unassign(lineId);
+    setSavingLineId('');
+  };
+
+  const handleShowHistory = (line: SupervisorDistributionLine) => {
+    openModal(MODAL_KEYS.PRODUCTION_SUPERVISOR_ASSIGNMENT_HISTORY, {
+      lineId: line.id,
+      lineName: line.name,
+      period,
+      referenceDate,
+    });
+  };
+
+  return (
+    <div dir="rtl" className="erp-ds-clean min-h-full space-y-4 bg-gray-50 p-4 font-sans">
+      <section className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M16 7a3 3 0 1 1 0 6a3 3 0 0 1 0-6Z" />
+                <path d="M8 8a2.5 2.5 0 1 1 0 5a2.5 2.5 0 0 1 0-5Z" />
+                <path d="M13 17.2c.7-1.3 2.1-2.2 3.8-2.2c2.4 0 4.2 1.6 4.2 3.5V20h-8" />
+                <path d="M2 19c0-1.9 1.8-3.5 4.2-3.5S10.5 17.1 10.5 19V20H2v-1Z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-medium text-gray-800">توزيع المشرفين على الخطوط</h1>
+              <p className="text-xs font-normal text-gray-500">
+                تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-normal text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void saveAll()}
+              disabled={pendingCount === 0 || isSaving}
+            >
+              حفظ الكل {pendingCount > 0 ? `(${toAr(pendingCount)})` : ''}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg px-4 py-2 text-sm font-normal text-white disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ backgroundColor: 'rgb(var(--color-primary))' }}
+              onClick={() => void handleRefresh()}
+              disabled={refreshing || isSaving}
+            >
+              {refreshing ? 'جاري التحديث...' : 'تحديث'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
+              <span className="text-sm">#</span>
+            </div>
+            <div>
+              <p className="text-xs font-normal text-gray-500">إجمالي الخطوط</p>
+              <p className="text-xl font-medium text-gray-800">{toAr(totalLines)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg text-[rgb(var(--color-primary))]" style={{ backgroundColor: 'rgb(var(--color-primary) / 0.12)' }}>
+              <span className="text-sm">✓</span>
+            </div>
+            <div>
+              <p className="text-xs font-normal text-gray-500">تم تعيين مشرف</p>
+              <p className="text-xl font-medium" style={{ color: 'rgb(var(--color-primary))' }}>{toAr(assignedCount)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg text-[#BA7517]" style={{ backgroundColor: '#FAEEDA' }}>
+              <span className="text-sm">!</span>
+            </div>
+            <div>
+              <p className="text-xs font-normal text-gray-500">بدون مشرف</p>
+              <p className="text-xl font-medium" style={{ color: '#BA7517' }}>{toAr(unassignedCount)}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center rounded-lg border border-gray-200 p-1">
+            <button
+              type="button"
+              className="rounded-lg px-3 py-1 text-sm font-normal"
+              style={period === 'today' ? { backgroundColor: 'rgb(var(--color-primary))', color: '#fff' } : undefined}
+              onClick={() => setPeriod('today')}
             >
               اليوم
             </button>
             <button
-              className={`erp-date-seg-btn${selectedDate === yesterday ? ' active' : ''}`}
-              onClick={() => setSelectedDate(yesterday)}
+              type="button"
+              className="rounded-lg px-3 py-1 text-sm font-normal"
+              style={period === 'yesterday' ? { backgroundColor: 'rgb(var(--color-primary))', color: '#fff' } : undefined}
+              onClick={() => setPeriod('yesterday')}
             >
               أمس
             </button>
           </div>
 
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">تاريخ السريان</span>
+          <input
+            type="date"
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal"
+            value={referenceDate}
+            onChange={(event) => setReferenceDate(event.target.value)}
+          />
+
+          <div className="relative w-full min-w-[220px] flex-1">
+            <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-gray-400">⌕</span>
             <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              type="search"
+              className="w-full rounded-lg border border-gray-200 py-2 pr-8 pl-3 text-sm font-normal outline-none focus:border-[rgb(var(--color-primary))]"
+              placeholder="ابحث بالخط أو المشرف الحالي..."
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
             />
           </div>
 
-          <button className="erp-filter-apply" onClick={() => void loadAssignments()} disabled={loading}>
-            <span className={`material-icons-round text-sm ${loading ? 'animate-spin' : ''}`}>refresh</span>
-            تحديث
-          </button>
-
-          <div className="erp-search-input erp-search-input--table flex-1 min-w-0">
-            <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
-            <input
-              type="text"
-              placeholder="بحث بالخط أو المشرف الحالي"
-              value={lineSearch}
-              onChange={(e) => setLineSearch(e.target.value)}
-            />
+          <div className="flex items-center rounded-lg border border-gray-200 p-1">
+            <button
+              type="button"
+              className={`rounded-lg px-2 py-1 text-xs font-normal ${viewMode === 'grid' ? 'bg-gray-100' : ''}`}
+              onClick={() => setViewMode('grid')}
+              title="عرض شبكي"
+            >
+              ⊞
+            </button>
+            <button
+              type="button"
+              className={`rounded-lg px-2 py-1 text-xs font-normal ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
+              onClick={() => setViewMode('list')}
+              title="عرض قائمة"
+            >
+              ☰
+            </button>
           </div>
         </div>
-      </Card>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filteredLines.map((line) => {
-          if (!line.id) return null;
-          const current = currentByLine.get(line.id);
-          const history = historyByLine.get(line.id) || [];
-          const expanded = expandedLines.has(line.id);
-          const busy = savingLineId === line.id;
-          return (
-            <Card key={line.id}>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-bold text-[var(--color-text)]">{line.name}</h3>
-                  <Badge variant={current ? 'success' : 'neutral'}>
-                    {current ? `الحالي: ${getSupervisorName(current.supervisorId)}` : 'بدون مشرف'}
-                  </Badge>
-                </div>
-                <SearchableSelect
-                  placeholder="اختر المشرف"
-                  options={supervisorOptions}
-                  value={draftByLine[line.id] || ''}
-                  onChange={(value) => setDraftByLine((prev) => ({ ...prev, [line.id!]: value }))}
+      {toast && (
+        <div
+          className={`rounded-lg border px-3 py-2 text-sm font-normal ${
+            toast.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-red-200 bg-red-50 text-red-700'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
+      {isLoading && lines.length === 0 ? (
+        <section className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm font-normal text-gray-500">
+          جاري تحميل البيانات...
+        </section>
+      ) : (
+        <>
+          <section>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">خطوط بدون مشرف</p>
+              <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: '#FAEEDA', color: '#BA7517' }}>
+                {toAr(withoutSupervisor.length)}
+              </span>
+            </div>
+            <div className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+              {withoutSupervisor.map((line) => (
+                <LineCard
+                  key={line.id}
+                  line={line}
+                  supervisors={supervisors}
+                  selectedSupervisorId={line.selectedSupervisorId}
+                  pending={line.hasPending}
+                  onPendingChange={setPendingChange}
+                  onSave={(lineId) => void handleSaveSingle(lineId)}
+                  onUnassign={(lineId) => void handleUnassign(lineId)}
+                  onShowHistory={handleShowHistory}
+                  isSaving={isSaving || savingLineId === line.id}
                 />
-                <div className="flex items-center gap-2">
-                  <Button variant="primary" onClick={() => void handleAssign(line.id!)} disabled={busy || !draftByLine[line.id]}>
-                    {busy && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                    حفظ/تغيير
-                  </Button>
-                  <Button variant="outline" onClick={() => void handleRemove(line.id!)} disabled={busy || !current}>
-                    فك التعيين
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setExpandedLines((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(line.id!)) next.delete(line.id!);
-                        else next.add(line.id!);
-                        return next;
-                      });
-                    }}
-                  >
-                    {expanded ? 'إخفاء السجل' : 'عرض السجل'}
-                  </Button>
+              ))}
+              {withoutSupervisor.length === 0 && (
+                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-normal text-gray-500">
+                  لا توجد خطوط في هذا القسم حسب الفلاتر الحالية.
                 </div>
+              )}
+            </div>
+          </section>
 
-                {expanded && (
-                  <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
-                    <div className="px-3 py-2 bg-[#f8f9fa] text-xs font-bold text-[var(--color-text-muted)]">سجل التغييرات</div>
-                    <div className="max-h-52 overflow-y-auto divide-y divide-[var(--color-border)]">
-                      {history.length === 0 ? (
-                        <p className="px-3 py-3 text-xs text-[var(--color-text-muted)]">لا يوجد سجل حتى الآن.</p>
-                      ) : history.map((item) => (
-                        <div key={item.id || `${item.lineId}-${item.supervisorId}-${item.effectiveFrom}`} className="px-3 py-2 text-xs space-y-1">
-                          <p className="font-bold text-[var(--color-text)]">{getSupervisorName(item.supervisorId)}</p>
-                          <p className="text-[var(--color-text-muted)]">
-                            من {item.effectiveFrom} إلى {item.effectiveTo || 'مستمر'}
-                          </p>
-                          <p className="text-[var(--color-text-muted)]">الإجراء: {item.reason || 'assign'} - بواسطة: {item.changedBy || '—'}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-          );
-        })}
-        {filteredLines.length === 0 && (
-          <Card>
-            <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد خطوط مطابقة لنتيجة البحث الحالية.</p>
-          </Card>
-        )}
-      </div>
+          <section>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">خطوط بها مشرف</p>
+              <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: 'rgb(var(--color-primary) / 0.12)', color: 'rgb(var(--color-primary))' }}>
+                {toAr(withSupervisor.length)}
+              </span>
+            </div>
+            <div className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+              {withSupervisor.map((line) => (
+                <LineCard
+                  key={line.id}
+                  line={line}
+                  supervisors={supervisors}
+                  selectedSupervisorId={line.selectedSupervisorId}
+                  pending={line.hasPending}
+                  onPendingChange={setPendingChange}
+                  onSave={(lineId) => void handleSaveSingle(lineId)}
+                  onUnassign={(lineId) => void handleUnassign(lineId)}
+                  onShowHistory={handleShowHistory}
+                  isSaving={isSaving || savingLineId === line.id}
+                />
+              ))}
+              {withSupervisor.length === 0 && (
+                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-normal text-gray-500">
+                  لا توجد خطوط في هذا القسم حسب الفلاتر الحالية.
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 };

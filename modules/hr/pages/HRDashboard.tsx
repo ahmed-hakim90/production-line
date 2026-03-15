@@ -1,10 +1,11 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, KPIBox, LoadingSkeleton, Badge, Button, SearchableSelect } from '../components/UI';
 import { getDocs } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
-import { attendanceLogService } from '../attendanceService';
+import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
 import { leaveRequestService } from '../leaveService';
 import { loanService } from '../loanService';
 import { departmentsRef, allowanceTypesRef } from '../collections';
@@ -13,12 +14,12 @@ import { getPayrollMonth } from '../payroll';
 import { formatNumber, formatCurrency } from '@/utils/calculations';
 import type { FirestoreEmployee } from '@/types';
 import type {
-  FirestoreAttendanceLog,
   FirestoreLeaveRequest,
   FirestoreEmployeeLoan,
   FirestoreDepartment,
   FirestoreAllowanceType,
 } from '../types';
+import type { AttendanceRecord } from '@/modules/attendance/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../types';
 
 function getToday(): string {
@@ -56,7 +57,7 @@ export const HRDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
-  const [attendance, setAttendance] = useState<FirestoreAttendanceLog[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [leaves, setLeaves] = useState<FirestoreLeaveRequest[]>([]);
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
   const [allowanceTypes, setAllowanceTypes] = useState<FirestoreAllowanceType[]>([]);
@@ -71,17 +72,29 @@ export const HRDashboard: React.FC = () => {
   const [qaLoanInstallment, setQaLoanInstallment] = useState(0);
   const [qaLoanMonths, setQaLoanMonths] = useState(1);
   const [qaLoanType, setQaLoanType] = useState<'monthly_advance' | 'installment'>('monthly_advance');
+  const [qaLoanPickMethod, setQaLoanPickMethod] = useState<'search' | 'codes'>('search');
+  const [qaLoanCodeInput, setQaLoanCodeInput] = useState('');
+  const [qaLoanImportMsg, setQaLoanImportMsg] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
   const [qaLeaveType, setQaLeaveType] = useState<'annual' | 'sick' | 'unpaid' | 'emergency'>('annual');
   const [qaLeaveStart, setQaLeaveStart] = useState('');
   const [qaLeaveEnd, setQaLeaveEnd] = useState('');
   const [qaLeaveReason, setQaLeaveReason] = useState('');
+  const [qaLeavePickMethod, setQaLeavePickMethod] = useState<'search' | 'codes'>('search');
+  const [qaLeaveCodeInput, setQaLeaveCodeInput] = useState('');
+  const [qaLeaveImportMsg, setQaLeaveImportMsg] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
   const [qaAllowTypeId, setQaAllowTypeId] = useState('');
   const [qaAllowAmount, setQaAllowAmount] = useState(0);
   const [qaAllowRecurring, setQaAllowRecurring] = useState(false);
+  const [qaAllowCodeInput, setQaAllowCodeInput] = useState('');
+  const [qaAllowImportMsg, setQaAllowImportMsg] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
+  const [qaAllowPickMethod, setQaAllowPickMethod] = useState<'search' | 'codes'>('search');
   const [qaPenaltyName, setQaPenaltyName] = useState('');
   const [qaPenaltyAmount, setQaPenaltyAmount] = useState(0);
   const [qaPenaltyReason, setQaPenaltyReason] = useState('');
   const [qaPenaltyCategory, setQaPenaltyCategory] = useState<'disciplinary' | 'manual' | 'other'>('disciplinary');
+  const [qaPenaltyPickMethod, setQaPenaltyPickMethod] = useState<'search' | 'codes'>('search');
+  const [qaPenaltyCodeInput, setQaPenaltyCodeInput] = useState('');
+  const [qaPenaltyImportMsg, setQaPenaltyImportMsg] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
 
   // Staging — items waiting to be saved (batch)
   type QaStagedItem = {
@@ -109,7 +122,7 @@ export const HRDashboard: React.FC = () => {
       const [emps, depts, att, lvs, lns, allTypes, pm] = await Promise.all([
         employeeService.getAll(),
         getDocs(departmentsRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreDepartment)),
-        attendanceLogService.getByDateRange(monthStart, today),
+        attendanceProcessingService.getRecordsByDateRange(monthStart, today),
         leaveRequestService.getAll(),
         loanService.getAll(),
         getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
@@ -144,8 +157,13 @@ export const HRDashboard: React.FC = () => {
   const resetQa = () => {
     setQaEmpId(''); setQaEmpIds([]);
     setQaLoanAmount(0); setQaLoanInstallment(0); setQaLoanMonths(1); setQaLoanType('monthly_advance');
+    setQaLoanPickMethod('search'); setQaLoanCodeInput(''); setQaLoanImportMsg(null);
     setQaLeaveType('annual'); setQaLeaveStart(''); setQaLeaveEnd(''); setQaLeaveReason('');
+    setQaLeavePickMethod('search'); setQaLeaveCodeInput(''); setQaLeaveImportMsg(null);
     setQaAllowTypeId(''); setQaAllowAmount(0); setQaAllowRecurring(false);
+    setQaAllowCodeInput(''); setQaAllowImportMsg(null);
+    setQaAllowPickMethod('search');
+    setQaPenaltyPickMethod('search'); setQaPenaltyCodeInput(''); setQaPenaltyImportMsg(null);
     setQaPenaltyName(''); setQaPenaltyAmount(0); setQaPenaltyReason(''); setQaPenaltyCategory('disciplinary');
   };
 
@@ -158,31 +176,57 @@ export const HRDashboard: React.FC = () => {
 
   // Stage handlers — add to local table without saving
   const stageQaLoan = () => {
-    if (!qaEmpId || qaLoanAmount <= 0) return;
-    const emp = getEmpObj(qaEmpId);
+    const targetEmpIds = qaEmpIds.length > 0
+      ? qaEmpIds
+      : (qaEmpId ? [qaEmpId] : []);
+    if (targetEmpIds.length === 0 || qaLoanAmount <= 0) return;
     const finalMonths = qaLoanType === 'monthly_advance' ? 1 : qaLoanMonths;
     const finalInstallment = qaLoanType === 'monthly_advance' ? qaLoanAmount : qaLoanInstallment;
-    setQaStaged((prev) => [...prev, {
-      type: 'loan', empId: qaEmpId, empName: emp?.name || '', empCode: (emp as any)?.code || '',
-      detail: qaLoanType === 'monthly_advance' ? 'سلفة شهرية' : `سلفة مقسطة (${finalMonths} شهر)`,
-      amount: qaLoanAmount,
-      loanType: qaLoanType, loanAmount: qaLoanAmount,
-      installmentAmount: finalInstallment, totalInstallments: finalMonths,
-    }]);
-    setQaEmpId(''); setQaLoanAmount(0); setQaLoanInstallment(0); setQaLoanMonths(1);
+    const stagedItems = targetEmpIds.map((id) => {
+      const emp = getEmpObj(id);
+      return {
+        type: 'loan' as const,
+        empId: id,
+        empName: emp?.name || '',
+        empCode: (emp as any)?.code || '',
+        detail: qaLoanType === 'monthly_advance' ? 'سلفة شهرية' : `سلفة مقسطة (${finalMonths} شهر)`,
+        amount: qaLoanAmount,
+        loanType: qaLoanType,
+        loanAmount: qaLoanAmount,
+        installmentAmount: finalInstallment,
+        totalInstallments: finalMonths,
+      };
+    });
+    setQaStaged((prev) => [...prev, ...stagedItems]);
+    setQaEmpId(''); setQaEmpIds([]); setQaLoanAmount(0); setQaLoanInstallment(0); setQaLoanMonths(1);
+    setQaLoanCodeInput(''); setQaLoanImportMsg(null);
   };
 
   const stageQaLeave = () => {
-    if (!qaEmpId || !qaLeaveStart || !qaLeaveEnd) return;
-    const emp = getEmpObj(qaEmpId);
+    const targetEmpIds = qaEmpIds.length > 0
+      ? qaEmpIds
+      : (qaEmpId ? [qaEmpId] : []);
+    if (targetEmpIds.length === 0 || !qaLeaveStart || !qaLeaveEnd) return;
     const days = Math.max(1, Math.ceil((new Date(qaLeaveEnd).getTime() - new Date(qaLeaveStart).getTime()) / 86400000) + 1);
-    setQaStaged((prev) => [...prev, {
-      type: 'leave', empId: qaEmpId, empName: emp?.name || '', empCode: (emp as any)?.code || '',
-      detail: `${LEAVE_TYPE_LABELS[qaLeaveType]} (${days} يوم)`, amount: 0,
-      leaveType: qaLeaveType, startDate: qaLeaveStart, endDate: qaLeaveEnd,
-      totalDays: days, reason: qaLeaveReason.trim() || '—',
-    }]);
-    setQaEmpId(''); setQaLeaveStart(''); setQaLeaveEnd(''); setQaLeaveReason('');
+    const stagedItems = targetEmpIds.map((id) => {
+      const emp = getEmpObj(id);
+      return {
+        type: 'leave' as const,
+        empId: id,
+        empName: emp?.name || '',
+        empCode: (emp as any)?.code || '',
+        detail: `${LEAVE_TYPE_LABELS[qaLeaveType]} (${days} يوم)`,
+        amount: 0,
+        leaveType: qaLeaveType,
+        startDate: qaLeaveStart,
+        endDate: qaLeaveEnd,
+        totalDays: days,
+        reason: qaLeaveReason.trim() || '—',
+      };
+    });
+    setQaStaged((prev) => [...prev, ...stagedItems]);
+    setQaEmpId(''); setQaEmpIds([]); setQaLeaveStart(''); setQaLeaveEnd(''); setQaLeaveReason('');
+    setQaLeaveCodeInput(''); setQaLeaveImportMsg(null);
   };
 
   const selectedQaAllowType = useMemo(
@@ -216,17 +260,241 @@ export const HRDashboard: React.FC = () => {
     setQaEmpIds([]); setQaAllowTypeId(''); setQaAllowAmount(0); setQaAllowRecurring(false);
   };
 
+  const normalizeEmpCode = useCallback((value: string) =>
+    String(value || '')
+      .replace(/[\u200E\u200F]/g, '')
+      .trim()
+      .toUpperCase(),
+  [], []);
+
+  const splitImportedCodes = useCallback((raw: string) =>
+    Array.from(new Set(
+      raw
+        .split(/[\n\r,;|\t ]+/)
+        .map((code) => normalizeEmpCode(code))
+        .filter(Boolean),
+    )),
+  [normalizeEmpCode]);
+
+  const importEmployeesByCodes = useCallback((
+    codes: string[],
+    setImportMsg: React.Dispatch<React.SetStateAction<{ type: 'success' | 'warning' | 'error'; text: string } | null>>,
+  ) => {
+    const activeByCode = new Map<string, string>();
+    for (const emp of employees) {
+      const empCode = normalizeEmpCode(String((emp as any)?.code || ''));
+      if (!emp.id || !emp.isActive || !empCode) continue;
+      if (!activeByCode.has(empCode)) activeByCode.set(empCode, emp.id);
+    }
+
+    const matchedIds: string[] = [];
+    const missingCodes: string[] = [];
+    for (const code of codes) {
+      const empId = activeByCode.get(code);
+      if (empId) matchedIds.push(empId);
+      else missingCodes.push(code);
+    }
+
+    if (matchedIds.length === 0) {
+      setImportMsg({
+        type: 'error',
+        text: 'لم يتم العثور على موظفين نشطين بالأكواد المرفوعة.',
+      });
+      return;
+    }
+
+    let addedCount = 0;
+    let alreadySelectedCount = 0;
+    setQaEmpIds((prev) => {
+      const seen = new Set(prev);
+      const next = [...prev];
+      for (const id of matchedIds) {
+        if (seen.has(id)) {
+          alreadySelectedCount += 1;
+          continue;
+        }
+        seen.add(id);
+        next.push(id);
+        addedCount += 1;
+      }
+      return next;
+    });
+
+    const statusType: 'success' | 'warning' = missingCodes.length > 0 || alreadySelectedCount > 0 ? 'warning' : 'success';
+    const statusText = [
+      `تمت إضافة ${addedCount} موظف`,
+      alreadySelectedCount > 0 ? `(${alreadySelectedCount} موجودين مسبقًا)` : '',
+      missingCodes.length > 0 ? `- لم يتم العثور على ${missingCodes.length} كود` : '',
+    ].filter(Boolean).join(' ');
+
+    setImportMsg({ type: statusType, text: statusText });
+  }, [employees, normalizeEmpCode]);
+
+  const extractCodesFromFile = useCallback(async (file: File): Promise<string[]> => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'xlsx' || ext === 'xls') {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(ws, {
+        header: 1,
+        raw: false,
+        defval: '',
+      });
+      if (!rows || rows.length === 0) return [];
+      const firstRow = (rows[0] || []).map((v) => normalizeEmpCode(String(v || '')));
+      const possibleHeaders = new Set(['CODE', 'EMPLOYEECODE', 'EMPLOYEE_CODE', 'EMPLOYEE CODE', 'EMPCODE', 'كود', 'كودالموظف', 'الكود']);
+      let codeColIdx = firstRow.findIndex((cell) => possibleHeaders.has(cell.replace(/\s+/g, '')));
+      let startIndex = 0;
+      if (codeColIdx >= 0) startIndex = 1;
+      else codeColIdx = 0;
+      const mergedCodes = rows
+        .slice(startIndex)
+        .map((row) => String((row || [])[codeColIdx] || ''))
+        .join('\n');
+      return splitImportedCodes(mergedCodes);
+    }
+    const text = await file.text();
+    return splitImportedCodes(text);
+  }, [normalizeEmpCode, splitImportedCodes]);
+
+  const handleQaLeaveCodesImport = useCallback(() => {
+    const codes = splitImportedCodes(qaLeaveCodeInput);
+    if (codes.length === 0) {
+      setQaLeaveImportMsg({ type: 'error', text: 'أدخل كود موظف واحد على الأقل قبل الاستيراد.' });
+      return;
+    }
+    importEmployeesByCodes(codes, setQaLeaveImportMsg);
+    setQaLeaveCodeInput('');
+  }, [importEmployeesByCodes, qaLeaveCodeInput, splitImportedCodes]);
+
+  const handleQaLoanCodesImport = useCallback(() => {
+    const codes = splitImportedCodes(qaLoanCodeInput);
+    if (codes.length === 0) {
+      setQaLoanImportMsg({ type: 'error', text: 'أدخل كود موظف واحد على الأقل قبل الاستيراد.' });
+      return;
+    }
+    importEmployeesByCodes(codes, setQaLoanImportMsg);
+    setQaLoanCodeInput('');
+  }, [importEmployeesByCodes, qaLoanCodeInput, splitImportedCodes]);
+
+  const handleQaLoanFileImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const codes = await extractCodesFromFile(file);
+      if (codes.length === 0) {
+        setQaLoanImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+      } else {
+        importEmployeesByCodes(codes, setQaLoanImportMsg);
+      }
+    } catch (error) {
+      console.error('Failed to import loan codes', error);
+      setQaLoanImportMsg({ type: 'error', text: 'حدث خطأ أثناء قراءة الملف.' });
+    } finally {
+      event.target.value = '';
+    }
+  }, [extractCodesFromFile, importEmployeesByCodes]);
+
+  const handleQaLeaveFileImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const codes = await extractCodesFromFile(file);
+      if (codes.length === 0) {
+        setQaLeaveImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+      } else {
+        importEmployeesByCodes(codes, setQaLeaveImportMsg);
+      }
+    } catch (error) {
+      console.error('Failed to import leave codes', error);
+      setQaLeaveImportMsg({ type: 'error', text: 'حدث خطأ أثناء قراءة الملف.' });
+    } finally {
+      event.target.value = '';
+    }
+  }, [extractCodesFromFile, importEmployeesByCodes]);
+
+  const handleQaAllowCodesImport = useCallback(() => {
+    const codes = splitImportedCodes(qaAllowCodeInput);
+    if (codes.length === 0) {
+      setQaAllowImportMsg({ type: 'error', text: 'أدخل كود موظف واحد على الأقل قبل الاستيراد.' });
+      return;
+    }
+    importEmployeesByCodes(codes, setQaAllowImportMsg);
+    setQaAllowCodeInput('');
+  }, [importEmployeesByCodes, qaAllowCodeInput, splitImportedCodes]);
+
+  const handleQaAllowFileImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const codes = await extractCodesFromFile(file);
+
+      if (codes.length === 0) {
+        setQaAllowImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+      } else {
+        importEmployeesByCodes(codes, setQaAllowImportMsg);
+      }
+    } catch (error) {
+      console.error('Failed to import allowance codes', error);
+      setQaAllowImportMsg({ type: 'error', text: 'حدث خطأ أثناء قراءة الملف.' });
+    } finally {
+      event.target.value = '';
+    }
+  }, [extractCodesFromFile, importEmployeesByCodes]);
+
   const stageQaPenalty = () => {
-    if (!qaEmpId || !qaPenaltyName.trim() || qaPenaltyAmount <= 0) return;
-    const emp = getEmpObj(qaEmpId);
-    setQaStaged((prev) => [...prev, {
-      type: 'penalty', empId: qaEmpId, empName: emp?.name || '', empCode: (emp as any)?.code || '',
-      detail: `جزاء: ${qaPenaltyName.trim()}`, amount: qaPenaltyAmount,
-      penaltyName: qaPenaltyName.trim(), penaltyCategory: qaPenaltyCategory,
-      penaltyReason: qaPenaltyReason.trim() || '—',
-    }]);
-    setQaEmpId(''); setQaPenaltyName(''); setQaPenaltyAmount(0); setQaPenaltyReason('');
+    const targetEmpIds = qaEmpIds.length > 0
+      ? qaEmpIds
+      : (qaEmpId ? [qaEmpId] : []);
+    if (targetEmpIds.length === 0 || !qaPenaltyName.trim() || qaPenaltyAmount <= 0) return;
+
+    const stagedItems = targetEmpIds.map((id) => {
+      const emp = getEmpObj(id);
+      return {
+        type: 'penalty' as const,
+        empId: id,
+        empName: emp?.name || '',
+        empCode: (emp as any)?.code || '',
+        detail: `جزاء: ${qaPenaltyName.trim()}`,
+        amount: qaPenaltyAmount,
+        penaltyName: qaPenaltyName.trim(),
+        penaltyCategory: qaPenaltyCategory,
+        penaltyReason: qaPenaltyReason.trim() || '—',
+      };
+    });
+    setQaStaged((prev) => [...prev, ...stagedItems]);
+    setQaEmpId(''); setQaEmpIds([]); setQaPenaltyName(''); setQaPenaltyAmount(0); setQaPenaltyReason('');
+    setQaPenaltyCodeInput(''); setQaPenaltyImportMsg(null);
   };
+
+  const handleQaPenaltyCodesImport = useCallback(() => {
+    const codes = splitImportedCodes(qaPenaltyCodeInput);
+    if (codes.length === 0) {
+      setQaPenaltyImportMsg({ type: 'error', text: 'أدخل كود موظف واحد على الأقل قبل الاستيراد.' });
+      return;
+    }
+    importEmployeesByCodes(codes, setQaPenaltyImportMsg);
+    setQaPenaltyCodeInput('');
+  }, [importEmployeesByCodes, qaPenaltyCodeInput, splitImportedCodes]);
+
+  const handleQaPenaltyFileImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const codes = await extractCodesFromFile(file);
+      if (codes.length === 0) {
+        setQaPenaltyImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+      } else {
+        importEmployeesByCodes(codes, setQaPenaltyImportMsg);
+      }
+    } catch (error) {
+      console.error('Failed to import penalty codes', error);
+      setQaPenaltyImportMsg({ type: 'error', text: 'حدث خطأ أثناء قراءة الملف.' });
+    } finally {
+      event.target.value = '';
+    }
+  }, [extractCodesFromFile, importEmployeesByCodes]);
 
   const removeStagedItem = (index: number) => {
     setQaStaged((prev) => prev.filter((_, i) => i !== index));
@@ -313,17 +581,17 @@ export const HRDashboard: React.FC = () => {
   const attKpis = useMemo(() => {
     const today = getToday();
     const todayLogs = attendance.filter((a) => a.date === today);
-    const present = todayLogs.filter((a) => !a.isAbsent && !a.isWeeklyOff).length;
-    const absent = todayLogs.filter((a) => a.isAbsent).length;
+    const present = todayLogs.filter((a) => a.status !== 'absent').length;
+    const absent = todayLogs.filter((a) => a.status === 'absent').length;
     const late = todayLogs.filter((a) => a.lateMinutes > 0).length;
 
     const monthLogs = attendance;
     const totalLateMins = monthLogs.reduce((s, a) => s + (a.lateMinutes || 0), 0);
-    const workingLogs = monthLogs.filter((a) => !a.isAbsent && !a.isWeeklyOff);
+    const workingLogs = monthLogs.filter((a) => a.status !== 'absent');
     const avgHours = workingLogs.length > 0
-      ? workingLogs.reduce((s, a) => s + (a.totalHours || 0), 0) / workingLogs.length
+      ? workingLogs.reduce((s, a) => s + ((a.workedMinutes || 0) / 60), 0) / workingLogs.length
       : 0;
-    const totalAbsences = monthLogs.filter((a) => a.isAbsent).length;
+    const totalAbsences = monthLogs.filter((a) => a.status === 'absent').length;
 
     return { todayPresent: present, todayAbsent: absent, todayLate: late, totalLateMins, avgHours, totalAbsences };
   }, [attendance]);
@@ -491,8 +759,8 @@ export const HRDashboard: React.FC = () => {
 
       {/* ── Quick Action Dialogs ─────────────────────────────────────────── */}
       {qaOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }}>
-          <div className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-2xl border border-[var(--color-border)] max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="erp-modal-overlay" onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }}>
+          <div className="erp-modal-panel relative w-[96vw] max-w-3xl max-h-[92dvh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
 
             {/* ── Saving overlay ── */}
             {qaSaving && (
@@ -512,13 +780,8 @@ export const HRDashboard: React.FC = () => {
             )}
 
             {/* ── Dialog Header ── */}
-            <div className={`px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between rounded-t-2xl ${
-              qaOpen === 'loan' ? 'bg-violet-50 dark:bg-violet-900/20' :
-              qaOpen === 'leave' ? 'bg-sky-50 dark:bg-sky-900/20' :
-              qaOpen === 'allowance' ? 'bg-emerald-50' :
-              'bg-rose-50'
-            }`}>
-              <h3 className="text-base font-bold flex items-center gap-2">
+            <div className="erp-modal-head">
+              <h3 className="erp-modal-title flex items-center gap-2.5">
                 <span className={`material-icons-round text-lg ${
                   qaOpen === 'loan' ? 'text-violet-600' :
                   qaOpen === 'leave' ? 'text-sky-600' :
@@ -532,145 +795,433 @@ export const HRDashboard: React.FC = () => {
                   <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-black">{qaStaged.length}</span>
                 )}
               </h3>
-              <button onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+              <button onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }} className="erp-modal-close" aria-label="إغلاق">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
 
             {/* ── Dialog Body ── */}
-            <div className="p-5 space-y-4">
+            <div className="erp-modal-body space-y-4">
 
               {/* ─── LOAN — inline form ─── */}
               {qaOpen === 'loan' && (
-                <div className="flex items-end gap-2">
-                  <div className="flex-1 min-w-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الموظف</label>
-                    <SearchableSelect options={empOptions} value={qaEmpId} onChange={setQaEmpId} placeholder="اختر..." />
-                  </div>
-                  <div className="w-32 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">النوع</label>
-                    <select className={inputCls} value={qaLoanType} onChange={(e) => setQaLoanType(e.target.value as any)}>
-                      <option value="monthly_advance">شهرية</option>
-                      <option value="installment">مقسطة</option>
-                    </select>
-                  </div>
-                  <div className="w-28 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المبلغ</label>
-                    <input type="number" min={0} className={inputCls} value={qaLoanAmount || ''} onChange={(e) => setQaLoanAmount(Number(e.target.value))} placeholder="0" />
-                  </div>
-                  {qaLoanType === 'installment' && (
-                    <>
-                      <div className="w-24 shrink-0">
-                        <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">القسط</label>
-                        <input type="number" min={0} className={inputCls} value={qaLoanInstallment || ''} onChange={(e) => setQaLoanInstallment(Number(e.target.value))} placeholder="0" />
+                <div className="space-y-2">
+                  <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
+                    <div className="min-w-[240px]">
+                      <label className="erp-filter-label mb-1 block">طريقة اختيار الموظفين</label>
+                      <div className="erp-date-seg">
+                        <button
+                          type="button"
+                          onClick={() => { setQaLoanPickMethod('search'); setQaLoanImportMsg(null); }}
+                          className={`erp-date-seg-btn ${qaLoanPickMethod === 'search' ? 'active' : ''}`}
+                        >
+                          بحث يدوي
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setQaLoanPickMethod('codes'); setQaLoanImportMsg(null); }}
+                          className={`erp-date-seg-btn ${qaLoanPickMethod === 'codes' ? 'active' : ''}`}
+                        >
+                          استيراد أكواد
+                        </button>
                       </div>
-                      <div className="w-20 shrink-0">
-                        <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الأشهر</label>
-                        <input type="number" min={1} className={inputCls} value={qaLoanMonths} onChange={(e) => setQaLoanMonths(Number(e.target.value) || 1)} />
+                    </div>
+
+                    {qaLoanPickMethod === 'search' && (
+                      <div className="min-w-[220px] flex-1">
+                        <label className="erp-filter-label mb-1 block">الموظف</label>
+                        <SearchableSelect options={empOptions} value={qaEmpId} onChange={setQaEmpId} placeholder="اختر..." />
                       </div>
-                    </>
+                    )}
+
+                    {qaLoanPickMethod === 'codes' && (
+                      <div className="min-w-[220px] flex-1">
+                        <label className="erp-filter-label mb-1 block">إضافة موظف (اختياري)</label>
+                        <SearchableSelect
+                          options={empOptions.filter((o) => !qaEmpIds.includes(o.value))}
+                          value=""
+                          onChange={(val) => { if (val) addEmpToList(val); }}
+                          placeholder="ابحث وأضف..."
+                        />
+                      </div>
+                    )}
+
+                    <div className="min-w-[130px]">
+                      <label className="erp-filter-label mb-1 block">النوع</label>
+                      <select className="erp-filter-select w-full" value={qaLoanType} onChange={(e) => setQaLoanType(e.target.value as any)}>
+                        <option value="monthly_advance">شهرية</option>
+                        <option value="installment">مقسطة</option>
+                      </select>
+                    </div>
+                    <div className="min-w-[120px]">
+                      <label className="erp-filter-label mb-1 block">المبلغ</label>
+                      <input type="number" min={0} className={inputCls} value={qaLoanAmount || ''} onChange={(e) => setQaLoanAmount(Number(e.target.value))} placeholder="0" />
+                    </div>
+                    {qaLoanType === 'installment' && (
+                      <>
+                        <div className="min-w-[110px]">
+                          <label className="erp-filter-label mb-1 block">القسط</label>
+                          <input type="number" min={0} className={inputCls} value={qaLoanInstallment || ''} onChange={(e) => setQaLoanInstallment(Number(e.target.value))} placeholder="0" />
+                        </div>
+                        <div className="min-w-[96px]">
+                          <label className="erp-filter-label mb-1 block">الأشهر</label>
+                          <input type="number" min={1} className={inputCls} value={qaLoanMonths} onChange={(e) => setQaLoanMonths(Number(e.target.value) || 1)} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {qaLoanPickMethod === 'codes' && (
+                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
+                        <label className="erp-filter-apply cursor-pointer">
+                          <span className="material-icons-round text-sm">upload_file</span>
+                          رفع ملف
+                          <input
+                            type="file"
+                            accept=".csv,.txt,.xlsx,.xls"
+                            onChange={handleQaLoanFileImport}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        className={`${inputCls} min-h-[88px] font-mono text-xs`}
+                        value={qaLoanCodeInput}
+                        onChange={(e) => setQaLoanCodeInput(e.target.value)}
+                        placeholder={'ألصق الأكواد (كل كود في سطر أو مفصول بفاصلة)\nمثال:\nE-142\nE-160'}
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={handleQaLoanCodesImport}
+                          className="erp-filter-apply"
+                        >
+                          <span className="material-icons-round text-sm">playlist_add</span>
+                          استيراد الأكواد
+                        </button>
+                        {qaLoanImportMsg && (
+                          <p className={`text-[11px] font-bold ${
+                            qaLoanImportMsg.type === 'error'
+                              ? 'text-rose-600'
+                              : qaLoanImportMsg.type === 'warning'
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                          }`}>
+                            {qaLoanImportMsg.text}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   )}
-                  <button
-                    onClick={stageQaLoan}
-                    disabled={!qaEmpId || qaLoanAmount <= 0}
-                    className="shrink-0 w-10 h-10 flex items-center justify-center rounded-[var(--border-radius-lg)] bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <span className="material-icons-round text-lg">add</span>
-                  </button>
+
+                  {qaEmpIds.length > 0 && (
+                    <div className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5">
+                      <div className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">الموظفون المحددون ({qaEmpIds.length})</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {qaEmpIds.map((eid) => {
+                          const emp = getEmpObj(eid);
+                          return (
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-violet-50 border border-violet-200 text-xs font-bold text-violet-700">
+                              {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
+                              <button onClick={() => removeEmpFromList(eid)} className="text-violet-400 hover:text-rose-500 transition-colors mr-0.5">
+                                <span className="material-icons-round text-sm">close</span>
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={stageQaLoan}
+                      disabled={(qaEmpIds.length === 0 && !qaEmpId) || qaLoanAmount <= 0}
+                      className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <span className="material-icons-round text-sm">add</span>
+                      إضافة إلى الجدول
+                    </button>
+                  </div>
                 </div>
               )}
 
               {/* ─── LEAVE — inline form ─── */}
               {qaOpen === 'leave' && (
-                <div className="flex items-end gap-2">
-                  <div className="flex-1 min-w-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الموظف</label>
-                    <SearchableSelect options={empOptions} value={qaEmpId} onChange={setQaEmpId} placeholder="اختر..." />
+                <div className="space-y-2">
+                  <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
+                    <div className="min-w-[240px]">
+                      <label className="erp-filter-label mb-1 block">طريقة اختيار الموظفين</label>
+                      <div className="erp-date-seg">
+                        <button
+                          type="button"
+                          onClick={() => { setQaLeavePickMethod('search'); setQaLeaveImportMsg(null); }}
+                          className={`erp-date-seg-btn ${qaLeavePickMethod === 'search' ? 'active' : ''}`}
+                        >
+                          بحث يدوي
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setQaLeavePickMethod('codes'); setQaLeaveImportMsg(null); }}
+                          className={`erp-date-seg-btn ${qaLeavePickMethod === 'codes' ? 'active' : ''}`}
+                        >
+                          استيراد أكواد
+                        </button>
+                      </div>
+                    </div>
+
+                    {qaLeavePickMethod === 'search' && (
+                      <div className="min-w-[220px] flex-1">
+                        <label className="erp-filter-label mb-1 block">الموظف</label>
+                        <SearchableSelect options={empOptions} value={qaEmpId} onChange={setQaEmpId} placeholder="اختر..." />
+                      </div>
+                    )}
+
+                    {qaLeavePickMethod === 'codes' && (
+                      <div className="min-w-[220px] flex-1">
+                        <label className="erp-filter-label mb-1 block">إضافة موظف (اختياري)</label>
+                        <SearchableSelect
+                          options={empOptions.filter((o) => !qaEmpIds.includes(o.value))}
+                          value=""
+                          onChange={(val) => { if (val) addEmpToList(val); }}
+                          placeholder="ابحث وأضف..."
+                        />
+                      </div>
+                    )}
+
+                    <div className="min-w-[130px]">
+                      <label className="erp-filter-label mb-1 block">نوع الإجازة</label>
+                      <select className="erp-filter-select w-full" value={qaLeaveType} onChange={(e) => setQaLeaveType(e.target.value as any)}>
+                        {(Object.entries(LEAVE_TYPE_LABELS) as [string, string][]).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="erp-filter-date">
+                      <span className="erp-filter-label !mb-0">من</span>
+                      <input type="date" value={qaLeaveStart} onChange={(e) => setQaLeaveStart(e.target.value)} />
+                    </div>
+                    <div className="erp-filter-date">
+                      <span className="erp-filter-label !mb-0">إلى</span>
+                      <input type="date" value={qaLeaveEnd} onChange={(e) => setQaLeaveEnd(e.target.value)} min={qaLeaveStart} />
+                    </div>
                   </div>
-                  <div className="w-28 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">النوع</label>
-                    <select className={inputCls} value={qaLeaveType} onChange={(e) => setQaLeaveType(e.target.value as any)}>
-                      {(Object.entries(LEAVE_TYPE_LABELS) as [string, string][]).map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
-                      ))}
-                    </select>
+
+                  {qaLeavePickMethod === 'codes' && (
+                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
+                        <label className="erp-filter-apply cursor-pointer">
+                          <span className="material-icons-round text-sm">upload_file</span>
+                          رفع ملف
+                          <input
+                            type="file"
+                            accept=".csv,.txt,.xlsx,.xls"
+                            onChange={handleQaLeaveFileImport}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        className={`${inputCls} min-h-[88px] font-mono text-xs`}
+                        value={qaLeaveCodeInput}
+                        onChange={(e) => setQaLeaveCodeInput(e.target.value)}
+                        placeholder={'ألصق الأكواد (كل كود في سطر أو مفصول بفاصلة)\nمثال:\nE-142\nE-160'}
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={handleQaLeaveCodesImport}
+                          className="erp-filter-apply"
+                        >
+                          <span className="material-icons-round text-sm">playlist_add</span>
+                          استيراد الأكواد
+                        </button>
+                        {qaLeaveImportMsg && (
+                          <p className={`text-[11px] font-bold ${
+                            qaLeaveImportMsg.type === 'error'
+                              ? 'text-rose-600'
+                              : qaLeaveImportMsg.type === 'warning'
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                          }`}>
+                            {qaLeaveImportMsg.text}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {qaEmpIds.length > 0 && (
+                    <div className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5">
+                      <div className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">الموظفون المحددون ({qaEmpIds.length})</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {qaEmpIds.map((eid) => {
+                          const emp = getEmpObj(eid);
+                          return (
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-sky-50 border border-sky-200 text-xs font-bold text-sky-700">
+                              {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
+                              <button onClick={() => removeEmpFromList(eid)} className="text-sky-400 hover:text-rose-500 transition-colors mr-0.5">
+                                <span className="material-icons-round text-sm">close</span>
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={stageQaLeave}
+                      disabled={(qaEmpIds.length === 0 && !qaEmpId) || !qaLeaveStart || !qaLeaveEnd}
+                      className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <span className="material-icons-round text-sm">add</span>
+                      إضافة إلى الجدول
+                    </button>
                   </div>
-                  <div className="w-32 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">8&8 </label>
-                    <input type="date" className={inputCls} value={qaLeaveStart} onChange={(e) => setQaLeaveStart(e.target.value)} />
-                  </div>
-                  <div className="w-32 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">إلى</label>
-                    <input type="date" className={inputCls} value={qaLeaveEnd} onChange={(e) => setQaLeaveEnd(e.target.value)} min={qaLeaveStart} />
-                  </div>
-                  <button
-                    onClick={stageQaLeave}
-                    disabled={!qaEmpId || !qaLeaveStart || !qaLeaveEnd}
-                    className="shrink-0 w-10 h-10 flex items-center justify-center rounded-[var(--border-radius-lg)] bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <span className="material-icons-round text-lg">add</span>
-                  </button>
                 </div>
               )}
 
               {/* ─── ALLOWANCE — inline form ─── */}
               {qaOpen === 'allowance' && (
                 <>
-                  <div className="flex items-end gap-2">
-                    <div className="w-40 shrink-0">
-                      <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">نوع البدل</label>
-                      <select className={inputCls} value={qaAllowTypeId} onChange={(e) => {
-                        setQaAllowTypeId(e.target.value);
-                        const t = allowanceTypes.find((a) => a.id === e.target.value);
-                        if (t && t.calculationType === 'fixed') setQaAllowAmount(t.value);
-                      }}>
-                        <option value="">— اختر —</option>
-                        {allowanceTypes.map((a) => (
-                          <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
-                      </select>
+                  <div className="space-y-2">
+                    <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
+                      <div className="min-w-[180px]">
+                        <label className="erp-filter-label mb-1 block">نوع البدل</label>
+                        <select className="erp-filter-select w-full" value={qaAllowTypeId} onChange={(e) => {
+                          setQaAllowTypeId(e.target.value);
+                          const t = allowanceTypes.find((a) => a.id === e.target.value);
+                          if (t && t.calculationType === 'fixed') setQaAllowAmount(t.value);
+                        }}>
+                          <option value="">— اختر —</option>
+                          {allowanceTypes.map((a) => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedQaAllowType?.calculationType === 'fixed' && (
+                        <div className="min-w-[120px]">
+                          <label className="erp-filter-label mb-1 block">المبلغ</label>
+                          <input type="number" min={0} className={inputCls} value={qaAllowAmount || ''} onChange={(e) => setQaAllowAmount(Number(e.target.value))} />
+                        </div>
+                      )}
+
+                      <div className="min-w-[240px]">
+                        <label className="erp-filter-label mb-1 block">طريقة اختيار الموظفين</label>
+                        <div className="erp-date-seg">
+                          <button
+                            type="button"
+                            onClick={() => { setQaAllowPickMethod('search'); setQaAllowImportMsg(null); }}
+                            className={`erp-date-seg-btn ${qaAllowPickMethod === 'search' ? 'active' : ''}`}
+                          >
+                            بحث يدوي
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setQaAllowPickMethod('codes'); setQaAllowImportMsg(null); }}
+                            className={`erp-date-seg-btn ${qaAllowPickMethod === 'codes' ? 'active' : ''}`}
+                          >
+                            استيراد أكواد
+                          </button>
+                        </div>
+                      </div>
+
+                      {qaAllowPickMethod === 'search' && (
+                        <div className="min-w-[220px] flex-1">
+                          <label className="erp-filter-label mb-1 block">إضافة موظف</label>
+                          <SearchableSelect
+                            options={empOptions.filter((o) => !qaEmpIds.includes(o.value))}
+                            value=""
+                            onChange={(val) => { if (val) addEmpToList(val); }}
+                            placeholder="ابحث وأضف..."
+                          />
+                        </div>
+                      )}
+
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" checked={qaAllowRecurring} onChange={(e) => setQaAllowRecurring(e.target.checked)} className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary" />
+                        <span className="erp-filter-label !mb-0">متكرر</span>
+                      </label>
                     </div>
-                    {selectedQaAllowType?.calculationType === 'fixed' && (
-                      <div className="w-24 shrink-0">
-                        <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المبلغ</label>
-                        <input type="number" min={0} className={inputCls} value={qaAllowAmount || ''} onChange={(e) => setQaAllowAmount(Number(e.target.value))} />
+
+                    {qaAllowPickMethod === 'codes' && (
+                      <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
+                          <label className="erp-filter-apply cursor-pointer">
+                            <span className="material-icons-round text-sm">upload_file</span>
+                            رفع ملف
+                            <input
+                              type="file"
+                              accept=".csv,.txt,.xlsx,.xls"
+                              onChange={handleQaAllowFileImport}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                        <textarea
+                          className={`${inputCls} min-h-[88px] font-mono text-xs`}
+                          value={qaAllowCodeInput}
+                          onChange={(e) => setQaAllowCodeInput(e.target.value)}
+                          placeholder={'ألصق الأكواد (كل كود في سطر أو مفصول بفاصلة)\nمثال:\nE-142\nE-160'}
+                        />
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={handleQaAllowCodesImport}
+                            className="erp-filter-apply"
+                          >
+                            <span className="material-icons-round text-sm">playlist_add</span>
+                            استيراد الأكواد
+                          </button>
+                          {qaAllowImportMsg && (
+                            <p className={`text-[11px] font-bold ${
+                              qaAllowImportMsg.type === 'error'
+                                ? 'text-rose-600'
+                                : qaAllowImportMsg.type === 'warning'
+                                  ? 'text-amber-600'
+                                  : 'text-emerald-600'
+                            }`}>
+                              {qaAllowImportMsg.text}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
-                      <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">إضافة موظف</label>
-                      <SearchableSelect
-                        options={empOptions.filter((o) => !qaEmpIds.includes(o.value))}
-                        value=""
-                        onChange={(val) => { if (val) addEmpToList(val); }}
-                        placeholder="ابحث وأضف..."
-                      />
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={stageQaAllowance}
+                        disabled={qaEmpIds.length === 0 || !qaAllowTypeId}
+                        className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <span className="material-icons-round text-sm">add</span>
+                        إضافة إلى الجدول
+                      </button>
                     </div>
-                    <label className="shrink-0 flex items-center gap-1.5 cursor-pointer pb-1">
-                      <input type="checkbox" checked={qaAllowRecurring} onChange={(e) => setQaAllowRecurring(e.target.checked)} className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary" />
-                      <span className="text-[11px] font-bold text-slate-500">متكرر</span>
-                    </label>
-                    <button
-                      onClick={stageQaAllowance}
-                      disabled={qaEmpIds.length === 0 || !qaAllowTypeId}
-                      className="shrink-0 w-10 h-10 flex items-center justify-center rounded-[var(--border-radius-lg)] bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <span className="material-icons-round text-lg">add</span>
-                    </button>
                   </div>
                   {qaEmpIds.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {qaEmpIds.map((eid) => {
-                        const emp = getEmpObj(eid);
-                        return (
-                          <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700">
-                            {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
-                            <span className="text-[11px] text-emerald-500">{formatCurrency(resolveAllowAmountForEmp(eid))}</span>
-                            <button onClick={() => removeEmpFromList(eid)} className="text-emerald-400 hover:text-rose-500 transition-colors mr-0.5">
-                              <span className="material-icons-round text-sm">close</span>
-                            </button>
-                          </span>
-                        );
-                      })}
+                    <div className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5">
+                      <div className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">الموظفون المحددون ({qaEmpIds.length})</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {qaEmpIds.map((eid) => {
+                          const emp = getEmpObj(eid);
+                          return (
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700">
+                              {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
+                              <span className="text-[11px] text-emerald-500">{formatCurrency(resolveAllowAmountForEmp(eid))}</span>
+                              <button onClick={() => removeEmpFromList(eid)} className="text-emerald-400 hover:text-rose-500 transition-colors mr-0.5">
+                                <span className="material-icons-round text-sm">close</span>
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </>
@@ -678,34 +1229,142 @@ export const HRDashboard: React.FC = () => {
 
               {/* ─── PENALTY — inline form ─── */}
               {qaOpen === 'penalty' && (
-                <div className="flex items-end gap-2">
-                  <div className="flex-1 min-w-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الموظف</label>
-                    <SearchableSelect options={empOptions} value={qaEmpId} onChange={setQaEmpId} placeholder="اختر..." />
+                <div className="space-y-2">
+                  <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
+                    <div className="min-w-[240px]">
+                      <label className="erp-filter-label mb-1 block">طريقة اختيار الموظفين</label>
+                      <div className="erp-date-seg">
+                        <button
+                          type="button"
+                          onClick={() => { setQaPenaltyPickMethod('search'); setQaPenaltyImportMsg(null); }}
+                          className={`erp-date-seg-btn ${qaPenaltyPickMethod === 'search' ? 'active' : ''}`}
+                        >
+                          بحث يدوي
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setQaPenaltyPickMethod('codes'); setQaPenaltyImportMsg(null); }}
+                          className={`erp-date-seg-btn ${qaPenaltyPickMethod === 'codes' ? 'active' : ''}`}
+                        >
+                          استيراد أكواد
+                        </button>
+                      </div>
+                    </div>
+
+                    {qaPenaltyPickMethod === 'search' && (
+                      <div className="flex-1 min-w-0">
+                        <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الموظف</label>
+                        <SearchableSelect options={empOptions} value={qaEmpId} onChange={setQaEmpId} placeholder="اختر..." />
+                      </div>
+                    )}
+
+                    {qaPenaltyPickMethod === 'codes' && (
+                      <div className="min-w-[220px] flex-1">
+                        <label className="erp-filter-label mb-1 block">إضافة موظف (اختياري)</label>
+                        <SearchableSelect
+                          options={empOptions.filter((o) => !qaEmpIds.includes(o.value))}
+                          value=""
+                          onChange={(val) => { if (val) addEmpToList(val); }}
+                          placeholder="ابحث وأضف..."
+                        />
+                      </div>
+                    )}
+
                   </div>
-                  <div className="w-32 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">اسم الجزاء</label>
-                    <input className={inputCls} value={qaPenaltyName} onChange={(e) => setQaPenaltyName(e.target.value)} placeholder="إنذار..." />
+
+                  <div className="flex items-end gap-2">
+                    <div className="w-32 shrink-0">
+                      <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">اسم الجزاء</label>
+                      <input className={inputCls} value={qaPenaltyName} onChange={(e) => setQaPenaltyName(e.target.value)} placeholder="إنذار..." />
+                    </div>
+                    <div className="w-24 shrink-0">
+                      <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المبلغ</label>
+                      <input type="number" min={0} className={inputCls} value={qaPenaltyAmount || ''} onChange={(e) => setQaPenaltyAmount(Number(e.target.value))} placeholder="0" />
+                    </div>
+                    <div className="w-28 shrink-0">
+                      <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الفئة</label>
+                      <select className={inputCls} value={qaPenaltyCategory} onChange={(e) => setQaPenaltyCategory(e.target.value as any)}>
+                        <option value="disciplinary">تأديبي</option>
+                        <option value="manual">يدوي</option>
+                        <option value="other">أخرى</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="w-24 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المبلغ</label>
-                    <input type="number" min={0} className={inputCls} value={qaPenaltyAmount || ''} onChange={(e) => setQaPenaltyAmount(Number(e.target.value))} placeholder="0" />
+
+                  {qaPenaltyPickMethod === 'codes' && (
+                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
+                        <label className="erp-filter-apply cursor-pointer">
+                          <span className="material-icons-round text-sm">upload_file</span>
+                          رفع ملف
+                          <input
+                            type="file"
+                            accept=".csv,.txt,.xlsx,.xls"
+                            onChange={handleQaPenaltyFileImport}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        className={`${inputCls} min-h-[88px] font-mono text-xs`}
+                        value={qaPenaltyCodeInput}
+                        onChange={(e) => setQaPenaltyCodeInput(e.target.value)}
+                        placeholder={'ألصق الأكواد (كل كود في سطر أو مفصول بفاصلة)\nمثال:\nE-142\nE-160'}
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={handleQaPenaltyCodesImport}
+                          className="erp-filter-apply"
+                        >
+                          <span className="material-icons-round text-sm">playlist_add</span>
+                          استيراد الأكواد
+                        </button>
+                        {qaPenaltyImportMsg && (
+                          <p className={`text-[11px] font-bold ${
+                            qaPenaltyImportMsg.type === 'error'
+                              ? 'text-rose-600'
+                              : qaPenaltyImportMsg.type === 'warning'
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                          }`}>
+                            {qaPenaltyImportMsg.text}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {qaEmpIds.length > 0 && (
+                    <div className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5">
+                      <div className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">الموظفون المحددون ({qaEmpIds.length})</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {qaEmpIds.map((eid) => {
+                          const emp = getEmpObj(eid);
+                          return (
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
+                              {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
+                              <button onClick={() => removeEmpFromList(eid)} className="text-rose-400 hover:text-rose-600 transition-colors mr-0.5">
+                                <span className="material-icons-round text-sm">close</span>
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={stageQaPenalty}
+                      disabled={(qaEmpIds.length === 0 && !qaEmpId) || !qaPenaltyName.trim() || qaPenaltyAmount <= 0}
+                      className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <span className="material-icons-round text-sm">add</span>
+                      إضافة إلى الجدول
+                    </button>
                   </div>
-                  <div className="w-28 shrink-0">
-                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الفئة</label>
-                    <select className={inputCls} value={qaPenaltyCategory} onChange={(e) => setQaPenaltyCategory(e.target.value as any)}>
-                      <option value="disciplinary">تأديبي</option>
-                      <option value="manual">يدوي</option>
-                      <option value="other">أخرى</option>
-                    </select>
-                  </div>
-                  <button
-                    onClick={stageQaPenalty}
-                    disabled={!qaEmpId || !qaPenaltyName.trim() || qaPenaltyAmount <= 0}
-                    className="shrink-0 w-10 h-10 flex items-center justify-center rounded-[var(--border-radius-lg)] bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <span className="material-icons-round text-lg">add</span>
-                  </button>
                 </div>
               )}
 
@@ -747,16 +1406,16 @@ export const HRDashboard: React.FC = () => {
                     )}
                   </div>
                 </div>
-              ) : (
+              ) : !(qaOpen === 'allowance' && qaEmpIds.length > 0) ? (
                 <div className="text-center py-6 text-[var(--color-text-muted)] dark:text-slate-600">
                   <span className="material-icons-round text-3xl block mb-1">playlist_add</span>
                   <p className="text-xs font-medium">أدخل البيانات واضغط + لإضافتها للجدول</p>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* ── Dialog Footer ── */}
-            <div className="px-5 py-3 border-t border-[var(--color-border)] flex items-center justify-between">
+            <div className="erp-modal-footer !justify-between !bg-[var(--color-card)]">
               <Button variant="outline" size="sm" onClick={() => { setQaOpen(''); resetQa(); setQaStaged([]); }} disabled={qaSaving}>
                 إلغاء
               </Button>

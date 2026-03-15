@@ -120,8 +120,8 @@ export const QualityReports: React.FC = () => {
       return acc;
     }, {});
     return Object.entries(grouped)
-      .map(([reasonLabel, quantity]) => ({ reasonLabel, quantity }))
-      .sort((a, b) => b.quantity - a.quantity)
+      .map(([reasonLabel, quantity]) => ({ reasonLabel, quantity: Number(quantity) || 0 }))
+      .sort((a, b) => Number(b.quantity) - Number(a.quantity))
       .slice(0, 5);
   }, [defects]);
 

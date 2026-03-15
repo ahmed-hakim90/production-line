@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Download,
+  Home,
+  Lock,
+  Menu,
+  RefreshCw,
+  Search,
+  Sidebar,
+} from 'lucide-react';
 import { useCurrentRole } from '@/utils/permissions';
 import { NotificationBell } from '@/components/NotificationBell';
 import { TasksNavButton } from '@/components/background-jobs/JobsPanel';
@@ -7,6 +16,7 @@ import { useSidebar, useSidebarActiveRoute } from './useSidebar';
 import { MENU_CONFIG } from '@/config/menu.config';
 import { CommandPalette } from '@/components/CommandPalette';
 import { useCommandPalette } from '@/components/useCommandPalette';
+import { resolveMenuIcon } from './menuIconMap';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -16,6 +26,11 @@ interface BeforeInstallPromptEvent extends Event {
 export interface TopbarProps {
   onMenuToggle: () => void;
   onSidebarCollapseToggle: () => void;
+}
+
+function renderTopbarIcon(name?: string, className?: string, size = 16) {
+  const NavIcon = resolveMenuIcon(name);
+  return <NavIcon size={size} className={className} />;
 }
 
 function useScrolled(threshold = 4): boolean {
@@ -109,7 +124,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
             aria-label="فتح القائمة"
           >
-            <span className="material-icons-round text-[18px]">menu</span>
+            <Menu size={18} />
           </button>
 
           {/* Desktop sidebar collapse toggle */}
@@ -118,9 +133,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
             title={collapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'}
           >
-            <span className={`material-icons-round text-[18px] transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}>
-              keyboard_double_arrow_right
-            </span>
+            <Sidebar size={18} className={`transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
           </button>
 
           {/* Breadcrumb */}
@@ -130,12 +143,12 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
                 onClick={() => navigate('/')}
                 className="flex items-center gap-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
               >
-                <span className="material-icons-round text-[13px]">{breadcrumb.groupIcon}</span>
+                {renderTopbarIcon(breadcrumb.groupIcon, undefined, 13)}
                 <span className="truncate max-w-[80px]">{breadcrumb.group}</span>
               </button>
-              <span className="material-icons-round text-[12px] text-[var(--color-border)] shrink-0">chevron_left</span>
+              <span className="text-[var(--color-border)] shrink-0" aria-hidden="true">›</span>
               <span className="font-semibold text-[var(--color-text)] truncate flex items-center gap-1">
-                <span className="material-icons-round text-[13px] text-primary shrink-0">{breadcrumb.pageIcon}</span>
+                {renderTopbarIcon(breadcrumb.pageIcon, 'text-primary shrink-0', 13)}
                 <span>{breadcrumb.page}</span>
               </span>
             </nav>
@@ -144,14 +157,14 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               onClick={() => navigate('/')}
               className="hidden sm:flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--color-text)] hover:text-primary transition-colors"
             >
-              <span className="material-icons-round text-[15px]">home</span>
+              <Home size={15} />
               <span>الرئيسية</span>
             </button>
           )}
 
           {breadcrumb && (
             <div className="sm:hidden flex items-center gap-1 min-w-0">
-              <span className="material-icons-round text-[14px] text-primary shrink-0">{breadcrumb.pageIcon}</span>
+              {renderTopbarIcon(breadcrumb.pageIcon, 'text-primary shrink-0', 14)}
               <span className="text-[12px] font-semibold text-[var(--color-text)] truncate">{breadcrumb.page}</span>
             </div>
           )}
@@ -163,7 +176,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             onClick={() => setCmdOpen(true)}
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-[#f0f2f5] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group"
           >
-            <span className="material-icons-round text-[15px] group-hover:text-primary transition-colors">search</span>
+            <Search size={15} className="group-hover:text-primary transition-colors" />
             <span className="flex-1 text-start">البحث في النظام...</span>
             <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
               Ctrl K
@@ -180,7 +193,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             className="md:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors"
             title="بحث"
           >
-            <span className="material-icons-round text-[18px]">search</span>
+            <Search size={18} />
           </button>
 
           {/* Install PWA */}
@@ -189,7 +202,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               onClick={handleInstall}
               className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[11.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
             >
-              <span className="material-icons-round text-[14px]">download</span>
+              <Download size={14} />
               تثبيت
             </button>
           )}
@@ -197,7 +210,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Read-only badge */}
           {isReadOnly && (
             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-sm)] text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-              <span className="material-icons-round text-[13px]">lock</span>
+              <Lock size={13} />
               قراءة فقط
             </span>
           )}
@@ -209,9 +222,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors disabled:opacity-50"
             title="تحديث"
           >
-            <span className={`material-icons-round text-[18px] ${refreshing ? 'animate-spin text-primary' : ''}`}>
-              refresh
-            </span>
+            <RefreshCw size={18} className={refreshing ? 'animate-spin text-primary' : ''} />
           </button>
 
           {/* Background tasks */}

@@ -14,6 +14,7 @@ import { HR_ROUTES } from './modules/hr/routes';
 import { COST_ROUTES } from './modules/costs/routes';
 import { SYSTEM_ROUTES } from './modules/system/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
+import { ATTENDANCE_ROUTES } from './modules/attendance/routes';
 import type { AppRouteDef } from './modules/shared/routes';
 import { useAppStore } from './store/useAppStore';
 import { useAuthUiSlice } from './store/selectors';
@@ -24,11 +25,12 @@ import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from './components/modal-manager/modalKeys';
 import { ModalHost } from './components/modal-manager/ModalHost';
-import { ToastContainer } from './components/Toast';
+import { toast, ToastContainer } from './components/Toast';
 import { useJobsStore } from './components/background-jobs/useJobsStore';
 import { presenceService } from './services/presenceService';
 import { pushService } from './services/pushService';
 import { sessionTrackerService } from './modules/system/audit';
+import { BarChart3, Boxes, Factory, Hammer, Users, type LucideIcon } from 'lucide-react';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
@@ -57,6 +59,19 @@ const getTodayYmd = (): string => {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+};
+
+const AUTH_ICON_MAP: Record<string, LucideIcon> = {
+  factory: Factory,
+  precision_manufacturing: Hammer,
+  inventory_2: Boxes,
+  groups: Users,
+  bar_chart: BarChart3,
+};
+
+const renderAuthIcon = (name: string, className?: string, size = 20) => {
+  const Icon = AUTH_ICON_MAP[name] ?? Factory;
+  return <Icon size={size} className={className} />;
 };
 
 const playNotificationTone = () => {
@@ -114,6 +129,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...COST_ROUTES,
   ...SYSTEM_ROUTES,
   ...INVENTORY_ROUTES,
+  ...ATTENDANCE_ROUTES,
 ];
 
 const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
@@ -214,6 +230,7 @@ const App: React.FC = () => {
   const subscribeToLineStatuses = useAppStore((s) => s.subscribeToLineStatuses);
   const subscribeToWorkOrders = useAppStore((s) => s.subscribeToWorkOrders);
   const subscribeToScanEventsToday = useAppStore((s) => s.subscribeToScanEventsToday);
+  const syncAttendanceFromDevices = useAppStore((s) => s.syncAttendanceFromDevices);
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const uid = useAppStore((s) => s.uid);
   const userEmail = useAppStore((s) => s.userEmail);
@@ -363,6 +380,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isAuthenticated || isPendingApproval || !uid) return;
+    const timer = window.setInterval(() => {
+      void syncAttendanceFromDevices({ mode: 'scheduled' }).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [isAuthenticated, isPendingApproval, uid, syncAttendanceFromDevices]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || !uid) return;
     void pushService.registerDevice(uid, currentEmployeeId || '');
   }, [isAuthenticated, isPendingApproval, uid, currentEmployeeId]);
 
@@ -391,6 +416,35 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const nativeAlert = window.alert.bind(window);
+    window.alert = (message?: string) => {
+      toast.error(String(message ?? 'حدث تنبيه'));
+    };
+
+    const onUnhandledError = (event: ErrorEvent) => {
+      const message = event.error?.message || event.message || 'حدث خطأ غير متوقع';
+      toast.error(message);
+    };
+
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message = typeof reason === 'string'
+        ? reason
+        : (reason?.message || 'حدث خطأ غير متوقع');
+      toast.error(message);
+    };
+
+    window.addEventListener('error', onUnhandledError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
+    return () => {
+      window.alert = nativeAlert;
+      window.removeEventListener('error', onUnhandledError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    };
+  }, []);
+
   if (!authResolved) {
     return (
       <div className="erp-auth-page has-panel" dir="rtl">
@@ -398,7 +452,7 @@ const App: React.FC = () => {
         <div className="erp-auth-panel">
           {/* decorative circles handled by ::before / ::after */}
           <div className="erp-auth-panel-logo">
-            <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
+            {renderAuthIcon('factory', undefined, 26)}
           </div>
           <h1 className="erp-auth-panel-name">Hakimo ERP</h1>
           <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
@@ -410,7 +464,7 @@ const App: React.FC = () => {
               { icon: 'bar_chart',               text: 'تقارير وتحليلات متقدمة' },
             ].map(({ icon, text }) => (
               <div key={icon} className="erp-auth-panel-feature">
-                <span className="material-icons-round">{icon}</span>
+                {renderAuthIcon(icon, undefined, 20)}
                 <span>{text}</span>
               </div>
             ))}
@@ -423,7 +477,7 @@ const App: React.FC = () => {
             {/* App icon with spinning ring */}
             <div className="erp-auth-loading-icon-shell">
               <div className="erp-auth-loading-icon">
-                <span className="material-icons-round">factory</span>
+                {renderAuthIcon('factory', undefined, 20)}
               </div>
               {/* spinning ring around icon */}
               <div className="erp-auth-loading-ring" />

@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Bell,
+  BellOff,
+  Briefcase,
+  CheckCircle2,
+  ClipboardCheck,
+  Megaphone,
+  PencilLine,
+  ShieldAlert,
+  ShieldCheck,
+  Circle,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAppStore, useShallowStore } from '../store/useAppStore';
 import type { AppNotification } from '../types';
 
@@ -22,6 +35,25 @@ const TYPE_COLORS: Record<string, string> = {
   manual_broadcast: 'text-indigo-500',
   daily_report_missing: 'text-rose-500',
 };
+
+const NOTIFICATION_ICON_MAP: Record<string, LucideIcon> = {
+  assignment: Briefcase,
+  campaign: Megaphone,
+  check_circle: CheckCircle2,
+  edit_note: PencilLine,
+  notifications: Bell,
+  notifications_none: BellOff,
+  rule: ShieldAlert,
+  verified: ShieldCheck,
+  warning_amber: ClipboardCheck,
+};
+
+function renderNotificationIcon(name?: string, className?: string, size = 18) {
+  if (!name) return null;
+  const Lucide = NOTIFICATION_ICON_MAP[name];
+  if (Lucide) return <Lucide size={size} className={className} />;
+  return <Circle size={size} className={className} />;
+}
 
 function timeAgo(createdAt: any): string {
   if (!createdAt) return '';
@@ -96,7 +128,7 @@ export const NotificationBell: React.FC = () => {
         onClick={() => setOpen(!open)}
         className="relative p-2 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] rounded-full transition-colors group"
       >
-        <span className="material-icons-round">notifications</span>
+        <Bell size={20} />
         {unreadCount > 0 && (
           <span className="absolute top-1 left-1 min-w-[18px] h-[18px] flex items-center justify-center bg-rose-500 text-white text-[10px] font-bold rounded-full border-2 border-[var(--color-card)] px-1">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -108,7 +140,7 @@ export const NotificationBell: React.FC = () => {
         <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 z-50 erp-notif-panel">
           <div className="erp-notif-head">
             <div className="flex items-center gap-2">
-              <span className="material-icons-round text-[var(--color-text-muted)] text-[18px]">notifications</span>
+              <Bell size={18} className="text-[var(--color-text-muted)]" />
               <span className="text-[13px] font-bold text-[var(--color-text)]">الإشعارات</span>
               {unreadCount > 0 && (
                 <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold">
@@ -129,12 +161,7 @@ export const NotificationBell: React.FC = () => {
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="text-center py-10">
-                <span
-                  className="material-icons-round text-4xl text-[var(--color-text-muted)] mb-2 block"
-                  style={{ opacity: 0.35 }}
-                >
-                  notifications_none
-                </span>
+                <BellOff size={40} className="text-[var(--color-text-muted)] mb-2 block mx-auto" style={{ opacity: 0.35 }} />
                 <p className="text-xs text-[var(--color-text-muted)]">لا توجد إشعارات</p>
               </div>
             ) : (
@@ -144,8 +171,8 @@ export const NotificationBell: React.FC = () => {
                   onClick={() => handleClick(n)}
                   className={`erp-notif-item${!n.isRead ? ' unread' : ''}`}
                 >
-                  <span className={`material-icons-round text-[20px] mt-0.5 shrink-0 ${TYPE_COLORS[n.type] || 'text-[var(--color-text-muted)]'}`}>
-                    {TYPE_ICONS[n.type] || 'notifications'}
+                  <span className={`mt-0.5 shrink-0 ${TYPE_COLORS[n.type] || 'text-[var(--color-text-muted)]'}`}>
+                    {renderNotificationIcon(TYPE_ICONS[n.type] || 'notifications', undefined, 20)}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-[var(--color-text)] truncate">{n.title}</p>

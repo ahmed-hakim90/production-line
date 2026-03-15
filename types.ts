@@ -582,6 +582,15 @@ export interface CostCenter {
   id?: string;
   name: string;
   type: 'indirect' | 'direct';
+  allocationBasis?: 'line_percentage' | 'by_qty';
+  productScope?: 'all' | 'selected' | 'category';
+  productIds?: string[];
+  productCategories?: string[];
+  valueSource?: 'manual' | 'salaries' | 'combined';
+  employeeScope?: 'selected' | 'department';
+  employeeIds?: string[];
+  employeeDepartmentIds?: string[];
+  manualAdjustment?: number;
   isActive: boolean;
   createdAt?: any;
 }
@@ -591,6 +600,16 @@ export interface CostCenterValue {
   costCenterId: string;
   month: string;
   amount: number;
+  manualAmount?: number;
+  salariesAmount?: number;
+  valueSource?: 'manual' | 'salaries' | 'combined';
+  employeeScopeSnapshot?: 'selected' | 'department';
+  employeeIdsSnapshot?: string[];
+  employeeDepartmentIdsSnapshot?: string[];
+  productScopeSnapshot?: 'all' | 'selected' | 'category';
+  productIdsSnapshot?: string[];
+  productCategoriesSnapshot?: string[];
+  allocationBasisSnapshot?: 'line_percentage' | 'by_qty';
   workingDays?: number;
 }
 
@@ -599,6 +618,10 @@ export interface CostAllocation {
   costCenterId: string;
   month: string;
   allocations: { lineId: string; percentage: number }[];
+  productScope?: 'all' | 'selected' | 'category';
+  productIds?: string[];
+  productCategories?: string[];
+  allocationBasis?: 'line_percentage' | 'by_qty';
 }
 
 export interface LaborSettings {
@@ -657,6 +680,23 @@ export interface MonthlyProductionCost {
   productId: string;
   month: string;            // "YYYY-MM"
   totalProducedQty: number;
+  directCost?: number;
+  indirectCost?: number;
+  indirectCenterSnapshots?: Array<{
+    costCenterId: string;
+    centerName: string;
+    valueSource: 'manual' | 'salaries' | 'combined';
+    allocationBasis: 'line_percentage' | 'by_qty';
+    productScope: 'all' | 'selected' | 'category';
+    productIds: string[];
+    productCategories: string[];
+    employeeScope: 'selected' | 'department';
+    employeeIds: string[];
+    employeeDepartmentIds: string[];
+    manualAmount: number;
+    salariesAmount: number;
+    resolvedAmount: number;
+  }>;
   totalProductionCost: number;
   averageUnitCost: number;  // totalProductionCost / totalProducedQty
   isClosed: boolean;
@@ -778,6 +818,7 @@ export interface ThemeSettings {
   warningColor: string;
   dangerColor: string;
   backgroundColor: string;
+  cssVars?: Record<string, string>;
   darkMode: ThemeMode;
   baseFontFamily: string;
   baseFontSize: number;
@@ -827,6 +868,17 @@ export interface ExportImportSettings {
   pages: Record<string, ExportImportPageControl>;
 }
 
+export interface AttendanceIntegrationSettings {
+  watchFolderPath: string;
+  watchFolderEnabled: boolean;
+  importFilePattern: string;
+  watchFactoryId?: string;
+  shiftStartTime: string;
+  workingMinutesPerDay: number;
+  lateGraceMinutes: number;
+  overtimeThresholdMinutes: number;
+}
+
 export interface SystemSettings {
   dashboardWidgets: Record<string, WidgetConfig[]>;
   customDashboardWidgets?: CustomWidgetConfig[];
@@ -834,12 +886,14 @@ export interface SystemSettings {
   kpiThresholds: Record<string, KPIThreshold>;
   printTemplate: PrintTemplateSettings;
   planSettings: PlanSettings;
+  costMonthlyWorkingDays?: Record<string, number>;
   branding?: BrandingSettings;
   theme?: ThemeSettings;
   dashboardDisplay?: DashboardDisplaySettings;
   alertToggles?: AlertToggleSettings;
   quickActions?: QuickActionItem[];
   exportImport?: ExportImportSettings;
+  attendanceIntegration?: AttendanceIntegrationSettings;
 }
 
 // ─── Dynamic Roles & Permissions ─────────────────────────────────────────────

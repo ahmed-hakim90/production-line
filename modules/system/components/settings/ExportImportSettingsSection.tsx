@@ -1,4 +1,19 @@
 import React from 'react';
+import {
+  Boxes,
+  Check,
+  Circle,
+  FileText,
+  IdCard,
+  ImageUp,
+  Info,
+  Loader2,
+  PackageSearch,
+  Save,
+  ScrollText,
+  UserPlus,
+  type LucideIcon,
+} from 'lucide-react';
 import { Card, Button } from '../UI';
 import { EXPORT_IMPORT_PAGE_REGISTRY, getExportImportPageControl } from '../../../../utils/exportImportControls';
 import type { ExportImportSettings } from '../../../../types';
@@ -19,6 +34,34 @@ type ExportImportSettingsSectionProps = {
   onSave: () => void;
 };
 
+const SETTINGS_ICON_MAP: Record<string, LucideIcon> = {
+  description: FileText,
+  assignment: ScrollText,
+  inventory_2: Boxes,
+  receipt_long: ScrollText,
+  groups: IdCard,
+  person: IdCard,
+  summarize: PackageSearch,
+  badge: IdCard,
+  upload_file: ImageUp,
+  person_add: UserPlus,
+  check: Check,
+  info: Info,
+};
+
+const SettingsIcon = ({
+  name,
+  className,
+  size = 16,
+}: {
+  name: string;
+  className?: string;
+  size?: number;
+}) => {
+  const Icon = SETTINGS_ICON_MAP[name] ?? Circle;
+  return <Icon size={size} className={className} />;
+};
+
 export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionProps> = ({
   isAdmin,
   saving,
@@ -36,8 +79,8 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
           <p className="page-subtitle">تحكم مركزي في إظهار/إخفاء أزرار الاستيراد والتصدير وشكلها لكل صفحة.</p>
         </div>
         <Button onClick={onSave} disabled={saving}>
-          {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-          <span className="material-icons-round text-sm">save</span>
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          <Save size={14} />
           حفظ إعدادات التصدير/الاستيراد
         </Button>
       </div>
@@ -133,7 +176,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-all">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
-                  <span className={`material-icons-round ${item.color}`}>{item.icon}</span>
+                  <SettingsIcon name={item.icon} className={item.color} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -143,7 +186,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                   <ul className="space-y-0.5">
                     {item.features.map((f, i) => (
                       <li key={i} className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
-                        <span className="material-icons-round text-[10px] text-emerald-400">check</span>
+                        <SettingsIcon name="check" className="text-[10px] text-emerald-400" size={10} />
                         {f}
                       </li>
                     ))}
@@ -165,7 +208,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-all">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
-                  <span className={`material-icons-round ${item.color}`}>{item.icon}</span>
+                  <SettingsIcon name={item.icon} className={item.color} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -175,7 +218,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                   <ul className="space-y-0.5">
                     {item.features.map((f, i) => (
                       <li key={i} className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
-                        <span className="material-icons-round text-[10px] text-emerald-400">check</span>
+                        <SettingsIcon name="check" className="text-[10px] text-emerald-400" size={10} />
                         {f}
                       </li>
                     ))}
@@ -197,7 +240,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
           ].map((t) => (
             <div key={t.label} className="p-4 rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] bg-[#f8f9fa]/50/30">
               <div className="flex items-center gap-2 mb-1">
-                <span className="material-icons-round text-primary text-base">{t.icon}</span>
+                <SettingsIcon name={t.icon} className="text-primary text-base" />
                 <h4 className="text-sm font-bold text-[var(--color-text)]">{t.label}</h4>
               </div>
               <p className="text-xs text-[var(--color-text-muted)] mb-2">{t.desc}</p>
@@ -208,7 +251,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
       </Card>
 
       <div className="p-4 rounded-[var(--border-radius-lg)] bg-amber-50 dark:bg-amber-900/10 border border-amber-200 flex items-start gap-3">
-        <span className="material-icons-round text-amber-500 mt-0.5">info</span>
+        <SettingsIcon name="info" className="text-amber-500 mt-0.5" />
         <div className="text-sm text-amber-700">
           <p className="font-bold mb-1">ملاحظات هامة</p>
           <ul className="space-y-1 text-xs text-amber-600">

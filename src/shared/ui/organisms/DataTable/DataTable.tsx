@@ -2,6 +2,32 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useTableSettings } from '@/core/ui-engine/table-settings/useTableSettings';
 import { TABLE_WIDTH_CLASS } from '@/core/ui-engine/table-settings/tableSettings.types';
 import { formatOperationDateTime } from '@/utils/calculations';
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronsUpDown,
+  CheckSquare,
+  Download,
+  Eye,
+  FileDown,
+  Pencil,
+  Search,
+  Settings2,
+  Trash2,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DataTableProps } from './DataTable.types';
 
 function asComparableValue(value: unknown): string | number {
@@ -12,6 +38,23 @@ function asComparableValue(value: unknown): string | number {
 
 function isColumnSortable(sortable?: boolean): boolean {
   return sortable !== false;
+}
+
+const ACTION_ICON_MAP: Record<string, LucideIcon> = {
+  check: Check,
+  delete: Trash2,
+  download: Download,
+  edit: Pencil,
+  file_download: FileDown,
+  preview: Eye,
+  view: Eye,
+};
+
+function renderActionIcon(icon?: string, className?: string) {
+  if (!icon) return null;
+  const Lucide = ACTION_ICON_MAP[icon];
+  if (Lucide) return <Lucide size={13} className={className} />;
+  return <span className={`material-icons-round text-[13px] ${className ?? ''}`}>{icon}</span>;
 }
 
 export function DataTable<T>({
@@ -172,71 +215,69 @@ export function DataTable<T>({
 
   /* ── Column visibility menu ── */
   const columnsVisibilityControl = enableColumnVisibility ? (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setShowColumnsMenu((p) => !p)}
-        className={[
-          'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors',
-          showColumnsMenu
-            ? 'border-[rgb(var(--color-primary)/0.4)] bg-[rgb(var(--color-primary)/0.06)] text-[rgb(var(--color-primary))]'
-            : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]',
-        ].join(' ')}
-      >
-        <span className="material-icons-round text-[14px]">view_column</span>
-        الأعمدة
-      </button>
-      {showColumnsMenu && (
-        <div
-          className="absolute top-10 z-20 erp-col-menu"
-          style={{ insetInlineEnd: 0 }}
+    <Popover open={showColumnsMenu} onOpenChange={setShowColumnsMenu}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant={showColumnsMenu ? 'secondary' : 'outline'}
+          size="sm"
+          className="inline-flex items-center gap-1.5 text-[12px] font-medium"
         >
-          <div className="flex items-center justify-between px-2 pb-2 mb-1 border-b border-[var(--color-border)]">
-            <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide">التحكم في الأعمدة</span>
-            <button
-              className="text-[11.5px] font-medium text-[rgb(var(--color-primary))] hover:underline"
-              onClick={reset}
-            >
-              إعادة الإعدادات
-            </button>
-          </div>
+          <Settings2 size={14} />
+          الأعمدة
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[340px] p-3">
+        <div className="flex items-center justify-between pb-2 mb-1 border-b border-[var(--color-border)]">
+          <span className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide">التحكم في الأعمدة</span>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11.5px]" onClick={reset}>
+            إعادة الإعدادات
+          </Button>
+        </div>
+        <div className="max-h-[300px] overflow-auto space-y-1">
           {resolvedColumns.map((column, index) => (
             <div key={column.id} className="erp-col-item">
-              <input
-                type="checkbox"
-                checked={column.visible}
-                onChange={() => toggleVisibility(column.id)}
-              />
+              <Checkbox checked={column.visible} onCheckedChange={() => toggleVisibility(column.id)} />
               <span className="text-[12.5px] font-medium text-[var(--color-text)] flex-1 truncate">{column.header}</span>
               <div className="flex items-center gap-0.5">
                 {(['xs', 'sm', 'md', 'lg', 'xl'] as const).map((size) => (
-                  <button
+                  <Button
+                    type="button"
                     key={size}
+                    variant={column.width === size ? 'secondary' : 'outline'}
+                    size="sm"
                     onClick={() => setWidth(column.id, size)}
-                    className={[
-                      'px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors',
-                      column.width === size
-                        ? 'border-[rgb(var(--color-primary)/0.5)] text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.08)]'
-                        : 'border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]',
-                    ].join(' ')}
+                    className="h-6 px-1.5 text-[9px] font-bold"
                   >
                     {size.toUpperCase()}
-                  </button>
+                  </Button>
                 ))}
-                <button onClick={() => moveColumn(column.id, 'left')} disabled={index === 0}
-                  className="p-0.5 rounded hover:bg-[#f0f2f5] disabled:opacity-25 transition-colors">
-                  <span className="material-icons-round text-[12px] text-[var(--color-text-muted)]">west</span>
-                </button>
-                <button onClick={() => moveColumn(column.id, 'right')} disabled={index === resolvedColumns.length - 1}
-                  className="p-0.5 rounded hover:bg-[#f0f2f5] disabled:opacity-25 transition-colors">
-                  <span className="material-icons-round text-[12px] text-[var(--color-text-muted)]">east</span>
-                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => moveColumn(column.id, 'left')}
+                  disabled={index === 0}
+                  className="h-6 w-6"
+                >
+                  <ArrowLeft size={12} className="text-[var(--color-text-muted)]" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => moveColumn(column.id, 'right')}
+                  disabled={index === resolvedColumns.length - 1}
+                  className="h-6 w-6"
+                >
+                  <ArrowRight size={12} className="text-[var(--color-text-muted)]" />
+                </Button>
               </div>
             </div>
           ))}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   ) : null;
 
   /* ── Loading skeleton ── */
@@ -245,7 +286,7 @@ export function DataTable<T>({
       <div className="animate-pulse space-y-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4"
         style={{ boxShadow: 'var(--shadow-card)' }}>
         {[...Array(6)].map((_, idx) => (
-          <div key={idx} className="h-9 rounded-[var(--border-radius-sm)] bg-[#e8eaed]" />
+          <Skeleton key={idx} className="h-9 rounded-[var(--border-radius-sm)] bg-[#e8eaed]" />
         ))}
       </div>
     );
@@ -257,35 +298,39 @@ export function DataTable<T>({
       {/* ── Bulk action bar (ERPNext style) ── */}
       {canSelectRows && activeSelectedIds.size > 0 && (
         <div className="erp-bulk-bar erp-animate-in">
-          <span className="material-icons-round text-[16px] text-[rgb(var(--color-primary))]">check_box</span>
+          <CheckSquare size={16} className="text-[rgb(var(--color-primary))]" />
           <span className="erp-bulk-count">{activeSelectedIds.size} عنصر محدد</span>
           <div className="flex-1" />
           {bulkActions.map((action) => (
-            <button
+            <Button
+              type="button"
               key={action.label}
               onClick={() => action.action(selectedItems)}
               disabled={action.disabled}
               className={[
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-semibold transition-colors border',
+                'inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold',
                 action.variant === 'danger'
-                  ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                  ? 'bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100'
                   : action.variant === 'primary'
-                    ? 'bg-[rgb(var(--color-primary))] border-[rgb(var(--color-primary))] text-white hover:opacity-90'
-                    : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text)] hover:bg-[#f0f2f5]',
+                    ? 'bg-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary))] text-white hover:opacity-90'
+                    : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[#f0f2f5]',
                 action.disabled ? 'opacity-50 cursor-not-allowed' : '',
               ].join(' ')}
             >
-              {action.icon && <span className="material-icons-round text-[13px]">{action.icon}</span>}
+              {renderActionIcon(action.icon)}
               {action.label}
-            </button>
+            </Button>
           ))}
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => setSelectedIds(new Set())}
-            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#f0f2f5] border border-transparent hover:border-[var(--color-border)] transition-colors"
+            className="h-7 w-7 p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#f0f2f5] border border-transparent hover:border-[var(--color-border)]"
             title="إلغاء التحديد"
           >
-            <span className="material-icons-round text-[14px]">close</span>
-          </button>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       )}
 
@@ -299,20 +344,24 @@ export function DataTable<T>({
           {/* Built-in quick search */}
           {enableSearch && (
             <div className="erp-search-input erp-search-input--table">
-              <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 15, flexShrink: 0 }}>search</span>
-              <input
+              <Search className="text-[var(--color-text-muted)]" style={{ width: 15, height: 15, flexShrink: 0 }} />
+              <Input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={searchPlaceholder}
+                className="!border-0 !bg-transparent !shadow-none !ring-0 focus-visible:!ring-0"
               />
               {searchTerm && (
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setSearchTerm('')}
-                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', flexShrink: 0 }}
+                  className="h-5 w-5 p-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                   title="مسح البحث"
                 >
-                  <span className="material-icons-round" style={{ fontSize: 14 }}>close</span>
-                </button>
+                  <X style={{ width: 14, height: 14 }} />
+                </Button>
               )}
             </div>
           )}
@@ -331,21 +380,16 @@ export function DataTable<T>({
 
         {/* Table */}
         <div className="erp-table-scroll">
-          <table className="w-full text-right border-collapse">
-            <thead className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
-              <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+          <Table className="w-full text-right border-collapse">
+            <TableHeader className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
+              <TableRow style={{ borderBottom: '1px solid var(--color-border)' }}>
                 {canSelectRows && (
-                  <th className="w-10 px-3 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleAllSelection}
-                      className="w-3.5 h-3.5 rounded text-primary"
-                    />
-                  </th>
+                  <TableHead className="w-10 px-3 py-2.5">
+                    <Checkbox checked={allSelected} onCheckedChange={toggleAllSelection} />
+                  </TableHead>
                 )}
                 {visibleColumns.map((column) => (
-                  <th
+                  <TableHead
                     key={column.id}
                     className={[
                       'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)] whitespace-nowrap',
@@ -358,39 +402,43 @@ export function DataTable<T>({
                     <span className="inline-flex items-center gap-1">
                       {column.header}
                       {isColumnSortable(column.sortable) && (
-                        <span className={`material-icons-round text-[12px] ${sortColumnId === column.id ? 'text-primary' : 'text-[var(--color-border)]'}`}>
-                          {sortColumnId === column.id
-                            ? (sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward')
-                            : 'unfold_more'}
-                        </span>
+                        sortColumnId === column.id ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp size={12} className="text-primary" />
+                          ) : (
+                            <ArrowDown size={12} className="text-primary" />
+                          )
+                        ) : (
+                          <ChevronsUpDown size={12} className="text-[var(--color-border)]" />
+                        )
                       )}
                     </span>
-                  </th>
+                  </TableHead>
                 ))}
                 {renderActions && (
-                  <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)] text-left whitespace-nowrap">
+                  <TableHead className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)] text-left whitespace-nowrap">
                     {actionsHeader}
-                  </th>
+                  </TableHead>
                 )}
-              </tr>
-            </thead>
+              </TableRow>
+            </TableHeader>
 
-            <tbody>
+            <TableBody>
               {pageRows.length === 0 && (
-                <tr>
-                  <td colSpan={totalColumns} className="px-6 py-14 text-center">
+                <TableRow>
+                  <TableCell colSpan={totalColumns} className="px-6 py-14 text-center">
                     <span className="material-icons-round text-[40px] opacity-25 block mb-2 text-[var(--color-text-muted)]">{emptyIcon}</span>
                     <p className="text-[13.5px] font-semibold text-[var(--color-text)]">{emptyTitle}</p>
                     {emptySubtitle && <p className="text-[12px] text-[var(--color-text-muted)] mt-1">{emptySubtitle}</p>}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
 
               {pageRows.map((row) => {
                 const rowId = getId(row);
                 const isSelected = activeSelectedIds.has(rowId);
                 return (
-                  <tr
+                  <TableRow
                     key={rowId}
                     onClick={() => onRowClick?.(row)}
                     data-selected={isSelected ? 'true' : undefined}
@@ -420,17 +468,12 @@ export function DataTable<T>({
                     }}
                   >
                     {canSelectRows && (
-                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelection(rowId)}
-                          className="w-3.5 h-3.5 rounded text-primary"
-                        />
-                      </td>
+                      <TableCell className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox checked={isSelected} onCheckedChange={() => toggleSelection(rowId)} />
+                      </TableCell>
                     )}
                     {visibleColumns.map((column) => (
-                      <td
+                      <TableCell
                         key={column.id}
                         className={`px-3 py-2.5 text-[12.5px] text-[var(--color-text)] ${TABLE_WIDTH_CLASS[column.width]} ${column.className ?? ''}`}
                       >
@@ -441,18 +484,18 @@ export function DataTable<T>({
                               const formattedDateTime = formatOperationDateTime(rawValue);
                               return formattedDateTime ?? String(rawValue ?? '');
                             })()}
-                      </td>
+                      </TableCell>
                     ))}
                     {renderActions && (
-                      <td className="px-3 py-2.5 text-left" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="px-3 py-2.5 text-left" onClick={(e) => e.stopPropagation()}>
                         {renderActions(row)}
-                      </td>
+                      </TableCell>
                     )}
-                  </tr>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         {/* Pagination footer */}
@@ -461,21 +504,27 @@ export function DataTable<T>({
             صفحة {currentPage} من {totalPages} — إجمالي {sortedRows.length} سجل
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
-              className="p-1 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] disabled:opacity-30 transition-colors"
+              className="h-7 w-7 p-1 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] disabled:opacity-30"
               title="الأولى"
             >
-              <span className="material-icons-round text-[14px]">first_page</span>
-            </button>
-            <button
+              <ChevronsRight size={14} />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)] hover:bg-[#f0f2f5] disabled:opacity-30 transition-colors"
+              className="h-7 px-2.5 text-[12px] font-medium hover:bg-[#f0f2f5] disabled:opacity-30"
             >
               السابق
-            </button>
+            </Button>
 
             {/* Page numbers */}
             <div className="flex items-center gap-1">
@@ -486,37 +535,43 @@ export function DataTable<T>({
                 else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
                 else page = currentPage - 2 + i;
                 return (
-                  <button
+                  <Button
+                    type="button"
+                    variant={page === currentPage ? 'default' : 'ghost'}
+                    size="icon"
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={[
-                      'w-7 h-7 rounded-[var(--border-radius-sm)] text-[12px] font-medium transition-colors',
-                      page === currentPage
-                        ? 'bg-primary text-white'
-                        : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5]',
-                    ].join(' ')}
+                    className={page === currentPage
+                      ? 'h-7 w-7 bg-primary text-white'
+                      : 'h-7 w-7 text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'}
                   >
                     {page}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
 
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text)] hover:bg-[#f0f2f5] disabled:opacity-30 transition-colors"
+              className="h-7 px-2.5 text-[12px] font-medium hover:bg-[#f0f2f5] disabled:opacity-30"
             >
               التالي
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
-              className="p-1 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] disabled:opacity-30 transition-colors"
+              className="h-7 w-7 p-1 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] disabled:opacity-30"
               title="الأخيرة"
             >
-              <span className="material-icons-round text-[14px]">last_page</span>
-            </button>
+              <ChevronsLeft size={14} />
+            </Button>
           </div>
         </div>
 

@@ -22,6 +22,7 @@ Tracks migration from page-scoped modals to Global Modal Manager architecture.
 - `vehicles.create`
 - `organization.create`
 - `system.dailyWelcome`
+- `production.supervisorAssignment.history`
 
 ## In Progress
 

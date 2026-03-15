@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Loader2, Package2, Plus, Save, X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -138,7 +139,7 @@ export const GlobalComponentScrapModal: React.FC = () => {
         <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-rose-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-rose-600">inventory_2</span>
+              <Package2 size={18} className="text-rose-600" />
             </div>
             <div>
               <h3 className="text-lg font-bold">هالك المكونات</h3>
@@ -146,13 +147,13 @@ export const GlobalComponentScrapModal: React.FC = () => {
             </div>
           </div>
           <button onClick={close} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
         <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {loading && (
             <div className="text-sm font-bold text-[var(--color-text-muted)] flex items-center gap-2">
-              <span className="material-icons-round animate-spin text-base">refresh</span>
+              <Loader2 size={16} className="animate-spin" />
               جاري تحميل مكونات المنتج...
             </div>
           )}
@@ -170,7 +171,7 @@ export const GlobalComponentScrapModal: React.FC = () => {
                   onClick={addRow}
                   disabled={rows.length >= options.length}
                 >
-                  <span className="material-icons-round text-sm">add</span>
+                  <Plus size={14} />
                   إضافة مكون
                 </Button>
               </div>
@@ -246,7 +247,7 @@ export const GlobalComponentScrapModal: React.FC = () => {
             إغلاق
           </Button>
           <Button variant="primary" onClick={handleSave} disabled={!canSave}>
-            <span className="material-icons-round text-sm">save</span>
+            <Save size={14} />
             حفظ هالك المكونات
           </Button>
         </div>

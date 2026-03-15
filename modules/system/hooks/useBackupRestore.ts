@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import {
@@ -135,7 +135,7 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     setBackupLoading(false);
   }, [userEmail, loadBackupHistory]);
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 

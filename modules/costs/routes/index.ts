@@ -6,12 +6,14 @@ import { MonthlyProductionCosts } from '../pages/MonthlyProductionCosts';
 import { AssetsList } from '../pages/AssetsList';
 import { AssetDetails } from '../pages/AssetDetails';
 import { DepreciationReport } from '../pages/DepreciationReport';
+import { CostDataHealth } from '../pages/CostDataHealth';
 
 export const COST_ROUTES: AppRouteDef[] = [
   { path: '/cost-centers', permission: 'costs.view', component: CostCenters },
   { path: '/cost-centers/:id', permission: 'costs.view', component: CostCenterDistribution },
   { path: '/cost-settings', permission: 'costs.manage', component: CostSettings },
   { path: '/monthly-costs', permission: 'costs.view', component: MonthlyProductionCosts },
+  { path: '/costs/health', permission: 'costs.view', component: CostDataHealth },
   { path: '/costs/assets', permission: 'assets.view', component: AssetsList },
   { path: '/costs/assets/:id', permission: 'assets.view', component: AssetDetails },
   { path: '/costs/depreciation-report', permission: 'assets.depreciation.view', component: DepreciationReport },

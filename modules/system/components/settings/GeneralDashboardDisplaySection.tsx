@@ -1,4 +1,5 @@
 import React from 'react';
+import { BellRing, Columns3, GripVertical, Landmark, type LucideIcon } from 'lucide-react';
 import { Card } from '../UI';
 import type { DashboardDisplaySettings } from '../../../../types';
 
@@ -6,6 +7,18 @@ type GeneralDashboardDisplaySectionProps = {
   isAdmin: boolean;
   localDashboardDisplay: DashboardDisplaySettings;
   setLocalDashboardDisplay: React.Dispatch<React.SetStateAction<DashboardDisplaySettings>>;
+};
+
+const DASHBOARD_DISPLAY_ICON_MAP: Record<string, LucideIcon> = {
+  account_balance: Landmark,
+  notifications_active: BellRing,
+  drag_indicator: GripVertical,
+  view_column: Columns3,
+};
+
+const DashboardDisplayIcon = ({ name }: { name: string }) => {
+  const Icon = DASHBOARD_DISPLAY_ICON_MAP[name] ?? Columns3;
+  return <Icon size={18} className="text-primary" />;
 };
 
 export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySectionProps> = ({
@@ -25,7 +38,7 @@ export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySec
         ]).map((setting) => (
           <div key={setting.key} className="flex items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-primary">{setting.icon}</span>
+              <DashboardDisplayIcon name={setting.icon} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">{setting.label}</p>
@@ -43,7 +56,7 @@ export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySec
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-primary">view_column</span>
+              <DashboardDisplayIcon name="view_column" />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">عدد العناصر في الصف</p>

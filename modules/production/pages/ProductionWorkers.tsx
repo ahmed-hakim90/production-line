@@ -16,6 +16,16 @@ import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
 
@@ -629,15 +639,21 @@ export const ProductionWorkers: React.FC = () => {
   };
 
   const hasActiveFilters = search || filterDepartment || filterLine || filterStatus || filterScoreRange || filterDateFrom || filterDateTo || statFilter;
+  const periodValue = useMemo(() => {
+    if (filterDateFrom === today && filterDateTo === today) return 'today';
+    if (filterDateFrom === filterDateTo && filterDateFrom !== '' && filterDateFrom !== today) return 'yesterday';
+    if (filterDateFrom.endsWith('-01') && filterDateTo !== '') return 'month';
+    return 'week';
+  }, [filterDateFrom, filterDateTo, today]);
 
   if (dataLoading) {
-    return <div className="space-y-6"><LoadingSkeleton type="detail" /></div>;
+    return <div className="erp-ds-clean space-y-6"><LoadingSkeleton type="detail" /></div>;
   }
 
   const toggleStatFilter = (f: StatFilter) => setStatFilter((prev) => prev === f ? '' : f);
 
   return (
-    <div className="space-y-6">
+    <div className="erp-ds-clean space-y-6">
       {/* Header */}
       <PageHeader
         title="عمال الإنتاج"
@@ -701,84 +717,84 @@ export const ProductionWorkers: React.FC = () => {
 
       {/* Advanced Filters */}
       <Card>
-        <div className="erp-filter-bar mb-4">
-          <div className="erp-date-seg">
-            <button
-              className={`erp-date-seg-btn${filterDateFrom === today && filterDateTo === today ? ' active' : ''}`}
-              onClick={handleShowToday}
-            >
-              اليوم
-            </button>
-            <button
-              className={`erp-date-seg-btn${filterDateFrom === filterDateTo && filterDateFrom !== today && filterDateFrom !== '' ? ' active' : ''}`}
-              onClick={handleShowYesterday}
-            >
-              أمس
-            </button>
-            <button
-              className={`erp-date-seg-btn${filterDateFrom !== '' && filterDateTo !== '' && filterDateFrom !== filterDateTo ? ' active' : ''}`}
-              onClick={handleShowWeekly}
-            >
-              أسبوعي
-            </button>
-            <button
-              className={`erp-date-seg-btn${filterDateFrom.endsWith('-01') && filterDateTo !== '' ? ' active' : ''}`}
-              onClick={handleShowMonthly}
-            >
-              شهري
-            </button>
-          </div>
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">من</span>
-            <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} />
-          </div>
-          <div className="erp-filter-date">
-            <span className="erp-filter-label">إلى</span>
-            <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} />
-          </div>
-          <button className="erp-filter-apply" onClick={() => undefined}>
-            <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
-            عرض
-          </button>
-          <div className="erp-filter-sep" />
-          <div className="erp-search-input erp-search-input--table flex-1 min-w-0">
-            <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">search</span>
-            <input
-              type="text"
-              placeholder="بحث بالاسم أو الرمز..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <select
-            value={filterLine}
-            onChange={(e) => setFilterLine(e.target.value)}
-            className={`erp-filter-select${filterLine ? ' active' : ''}`}
-          >
-            <option value="">كل الخطوط</option>
-            {uniqueLines.map((lId) => <option key={lId} value={lId}>{getLineName(lId)}</option>)}
-          </select>
-        </div>
+        <SmartFilterBar
+          searchPlaceholder="ابحث بالاسم أو الرمز..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          periods={[
+            { label: 'اليوم', value: 'today' },
+            { label: 'أمس', value: 'yesterday' },
+            { label: 'أسبوعي', value: 'week' },
+            { label: 'شهري', value: 'month' },
+          ]}
+          activePeriod={periodValue}
+          onPeriodChange={(value) => {
+            if (value === 'today') handleShowToday();
+            if (value === 'yesterday') handleShowYesterday();
+            if (value === 'week') handleShowWeekly();
+            if (value === 'month') handleShowMonthly();
+          }}
+          quickFilters={[
+            {
+              key: 'line',
+              placeholder: 'كل الخطوط',
+              options: uniqueLines.map((lineId) => ({ value: lineId, label: getLineName(lineId) })),
+              width: 'w-[130px]',
+            },
+          ]}
+          quickFilterValues={{ line: filterLine || 'all' }}
+          onQuickFilterChange={(_, value) => setFilterLine(value === 'all' ? '' : value)}
+          advancedFilters={[
+            {
+              key: 'department',
+              label: 'القسم',
+              placeholder: 'كل الأقسام',
+              options: uniqueDepartments.map((departmentId) => ({ value: departmentId, label: getDepartmentName(departmentId) })),
+              width: 'w-[160px]',
+            },
+            {
+              key: 'status',
+              label: 'الحالة',
+              placeholder: 'كل الحالات',
+              options: [
+                { value: 'active', label: 'نشط' },
+                { value: 'inactive', label: 'غير نشط' },
+              ],
+            },
+            {
+              key: 'scoreRange',
+              label: 'مستوى الأداء',
+              placeholder: 'كل المستويات',
+              options: [
+                { value: 'high', label: 'ممتاز (85+)' },
+                { value: 'mid', label: 'جيد (70-84)' },
+                { value: 'low', label: 'ضعيف (<70)' },
+              ],
+              width: 'w-[160px]',
+            },
+            { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+            { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          ]}
+          advancedFilterValues={{
+            department: filterDepartment || 'all',
+            status: filterStatus || 'all',
+            scoreRange: filterScoreRange || 'all',
+            dateFrom: filterDateFrom,
+            dateTo: filterDateTo,
+          }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'department') setFilterDepartment(value === 'all' ? '' : value);
+            if (key === 'status') setFilterStatus(value === 'all' ? '' : (value as 'active' | 'inactive'));
+            if (key === 'scoreRange') setFilterScoreRange(value === 'all' ? '' : (value as 'high' | 'mid' | 'low'));
+            if (key === 'dateFrom') setFilterDateFrom(value);
+            if (key === 'dateTo') setFilterDateTo(value);
+          }}
+          onApply={() => undefined}
+          applyLabel="عرض"
+          className="mb-4"
+        />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className="erp-filter-select">
-            <option value="">كل الأقسام</option>
-            {uniqueDepartments.map((dId) => <option key={dId} value={dId}>{getDepartmentName(dId)}</option>)}
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="erp-filter-select">
-            <option value="">كل الحالات</option>
-            <option value="active">نشط</option>
-            <option value="inactive">غير نشط</option>
-          </select>
-          <select value={filterScoreRange} onChange={(e) => setFilterScoreRange(e.target.value as any)} className="erp-filter-select">
-            <option value="">كل مستويات الأداء</option>
-            <option value="high">ممتاز (85+)</option>
-            <option value="mid">جيد (70–84)</option>
-            <option value="low">ضعيف (&lt;70)</option>
-          </select>
-        </div>
-
-        <SelectableTable
+        <SelectableTable<WorkerRow>
           data={filtered}
           columns={columns}
           getId={(w) => w.id!}

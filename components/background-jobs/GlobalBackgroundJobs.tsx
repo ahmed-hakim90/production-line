@@ -1,4 +1,5 @@
-﻿import React from 'react';
+import React from 'react';
+import { X } from 'lucide-react';
 import { JobsPanel } from './JobsPanel';
 import { useJobsStore } from './useJobsStore';
 
@@ -45,7 +46,7 @@ export const GlobalBackgroundJobs: React.FC = () => {
                 className="p-2 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] transition-colors"
                 title="Close"
               >
-                <span className="material-icons-round">close</span>
+                <X size={18} />
               </button>
             </div>
 

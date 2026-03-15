@@ -32,7 +32,7 @@ const addDays = (dateYmd: string, days: number): string => {
 };
 
 const isActiveForDate = (item: SupervisorLineAssignment, date: string): boolean => {
-  if (!item.isActive) return false;
+  if (item.isActive === false) return false;
   const from = String(item.effectiveFrom || '');
   const to = String(item.effectiveTo || '');
   if (!from || from > date) return false;
@@ -110,7 +110,7 @@ export const supervisorLineAssignmentService = {
     const activeOnDate = lineRows.find((row) => isActiveForDate(row, effectiveFrom));
     if (activeOnDate?.supervisorId === supervisorId) return activeOnDate.id || null;
 
-    const toClose = lineRows.filter((row) => row.isActive);
+    const toClose = lineRows.filter((row) => row.isActive !== false);
     const closeAt = addDays(effectiveFrom, -1);
     for (const row of toClose) {
       if (!row.id) continue;

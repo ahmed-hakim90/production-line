@@ -1,5 +1,40 @@
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  BarChart3,
+  Boxes,
+  Calculator,
+  CheckCircle2,
+  CirclePlus,
+  Clock3,
+  Cog,
+  ExternalLink,
+  FileBarChart2,
+  FileText,
+  FlaskConical,
+  Landmark,
+  Loader2,
+  Lock,
+  Pencil,
+  Plus,
+  ReceiptText,
+  RefreshCcw,
+  Save,
+  Sigma,
+  Timer,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+  Truck,
+  Users,
+  Wallet,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, KPIBox, Button, LoadingSkeleton } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
@@ -16,10 +51,11 @@ import {
   getReportWaste,
 } from '../../../utils/calculations';
 import {
-  buildProductCosts,
-  buildProductAvgCost,
   buildProductCostByLine,
   buildProductCostHistory,
+  computeLiveProductCosts,
+  buildSupervisorHourlyRatesMap,
+  buildLineAllocatedCostSummary,
   formatCost,
   getCurrentMonth,
 } from '../../../utils/costCalculations';
@@ -52,6 +88,13 @@ import {
 } from 'recharts';
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const normalizeMaterialText = (value: string) =>
   value
@@ -70,6 +113,53 @@ const toDateInputValue = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
+const PRODUCT_DETAILS_ICON_MAP: Record<string, LucideIcon> = {
+  inventory_2: Boxes,
+  arrow_forward: ArrowLeft,
+  close: X,
+  warning: AlertTriangle,
+  schedule: Clock3,
+  timer: Timer,
+  emoji_events: Trophy,
+  trending_up: TrendingUp,
+  trending_down: TrendingDown,
+  calculate: Calculator,
+  refresh: Loader2,
+  sync: RefreshCcw,
+  lock: Lock,
+  receipt_long: ReceiptText,
+  local_shipping: Truck,
+  currency_yuan: Wallet,
+  category: Boxes,
+  package_2: Boxes,
+  precision_manufacturing: Cog,
+  groups: Users,
+  summarize: FileBarChart2,
+  account_balance: Landmark,
+  functions: Sigma,
+  sell: Wallet,
+  add_circle: CirclePlus,
+  science: FlaskConical,
+  edit: Pencil,
+  delete: Trash2,
+  bar_chart: BarChart3,
+  description: FileText,
+  check_circle: CheckCircle2,
+  error: AlertCircle,
+  save: Save,
+  add: Plus,
+};
+
+const ProductDetailsIcon = ({
+  name,
+  ...iconProps
+}: {
+  name: string;
+} & React.ComponentProps<'svg'>) => {
+  const Icon = PRODUCT_DETAILS_ICON_MAP[name] ?? ExternalLink;
+  return <Icon {...iconProps} />;
+};
+
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -77,20 +167,25 @@ export const ProductDetails: React.FC = () => {
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawLines = useAppStore((s) => s._rawLines);
+  const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const employees = useAppStore((s) => s.employees);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const todayReports = useAppStore((s) => s.todayReports);
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
+  const assets = useAppStore((s) => s.assets);
+  const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
+  const systemSettings = useAppStore((s) => s.systemSettings);
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
 
   const [reports, setReports] = useState<ProductionReport[]>([]);
+  const [currentMonthReports, setCurrentMonthReports] = useState<ProductionReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -283,13 +378,41 @@ export const ProductDetails: React.FC = () => {
 
   useEffect(() => { loadMonthlyCosts(); }, [loadMonthlyCosts]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadCurrentMonthReports = async () => {
+      try {
+        const [year, mon] = currentMonth.split('-').map(Number);
+        const lastDay = new Date(year, mon, 0).getDate();
+        const data = await reportService.getByDateRange(
+          `${currentMonth}-01`,
+          `${currentMonth}-${String(lastDay).padStart(2, '0')}`
+        );
+        if (!cancelled) setCurrentMonthReports(data);
+      } catch {
+        if (!cancelled) setCurrentMonthReports([]);
+      }
+    };
+    void loadCurrentMonthReports();
+    return () => { cancelled = true; };
+  }, [currentMonth]);
+
   const handleRecalculate = useCallback(async () => {
     if (!id || recalculating) return;
     setRecalculating(true);
     try {
       const hourly = laborSettings?.hourlyRate ?? 0;
       await monthlyProductionCostService.calculate(
-        id, currentMonth, hourly, costCenters, costCenterValues, costAllocations
+        id,
+        currentMonth,
+        hourly,
+        costCenters,
+        costCenterValues,
+        costAllocations,
+        undefined,
+        assets,
+        assetDepreciations,
+        systemSettings.costMonthlyWorkingDays,
       );
       await loadMonthlyCosts();
     } catch (err) {
@@ -297,7 +420,19 @@ export const ProductDetails: React.FC = () => {
     } finally {
       setRecalculating(false);
     }
-  }, [id, recalculating, laborSettings, costCenters, costCenterValues, costAllocations, currentMonth, loadMonthlyCosts]);
+  }, [
+    id,
+    recalculating,
+    laborSettings,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    assets,
+    assetDepreciations,
+    currentMonth,
+    loadMonthlyCosts,
+    systemSettings.costMonthlyWorkingDays,
+  ]);
 
   const monthlyCostChange = useMemo(() => {
     if (!currentMonthCost || !previousMonthCost) return null;
@@ -389,9 +524,37 @@ export const ProductDetails: React.FC = () => {
 
   const todayCost = useMemo(() => {
     if (!canViewCosts || !id) return null;
-    const costs = buildProductCosts([id], todayReports, laborSettings, costCenters, costCenterValues, costAllocations);
-    return costs[id] ?? null;
-  }, [canViewCosts, id, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+    const hourlyRate = laborSettings?.hourlyRate ?? 0;
+    const productCategoryById = new Map(_rawProducts.map((product) => [String(product.id || ''), String(product.model || '')]));
+    const supervisorHourlyRates = buildSupervisorHourlyRatesMap(_rawEmployees);
+    const payrollNetByEmployee = new Map<string, number>();
+    const payrollNetByDepartment = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (!employee.id || employee.isActive === false) return;
+      payrollNetByEmployee.set(String(employee.id), Number(employee.baseSalary || 0));
+      const departmentId = String(employee.departmentId || '');
+      if (departmentId) {
+        payrollNetByDepartment.set(departmentId, (payrollNetByDepartment.get(departmentId) || 0) + Number(employee.baseSalary || 0));
+      }
+    });
+    const costs = computeLiveProductCosts(
+      todayReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      }
+    );
+    return costs.byProduct[id] ?? null;
+  }, [canViewCosts, id, todayReports, laborSettings, costCenters, costCenterValues, costAllocations, assets, assetDepreciations, _rawProducts, _rawEmployees, systemSettings.costMonthlyWorkingDays]);
 
   const getLineName = (lineId: string) => _rawLines.find((l) => l.id === lineId)?.name ?? '—';
 
@@ -399,8 +562,230 @@ export const ProductDetails: React.FC = () => {
 
   const historicalAvgCost = useMemo(() => {
     if (!canViewCosts || !id || scopedReports.length === 0) return null;
-    return buildProductAvgCost(id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations);
-  }, [canViewCosts, id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations]);
+    const productCategoryById = new Map(_rawProducts.map((product) => [String(product.id || ''), String(product.model || '')]));
+    const supervisorHourlyRates = buildSupervisorHourlyRatesMap(_rawEmployees);
+    const payrollNetByEmployee = new Map<string, number>();
+    const payrollNetByDepartment = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (!employee.id || employee.isActive === false) return;
+      payrollNetByEmployee.set(String(employee.id), Number(employee.baseSalary || 0));
+      const departmentId = String(employee.departmentId || '');
+      if (departmentId) {
+        payrollNetByDepartment.set(departmentId, (payrollNetByDepartment.get(departmentId) || 0) + Number(employee.baseSalary || 0));
+      }
+    });
+    const costs = computeLiveProductCosts(
+      scopedReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      }
+    );
+    return costs.byProduct[id] ?? null;
+  }, [canViewCosts, id, scopedReports, hourlyRate, costCenters, costCenterValues, costAllocations, assets, assetDepreciations, _rawProducts, _rawEmployees, systemSettings.costMonthlyWorkingDays]);
+
+  const currentMonthLiveCost = useMemo(() => {
+    if (!id || !canViewCosts || currentMonthReports.length === 0) return null;
+    const productCategoryById = new Map(_rawProducts.map((product) => [String(product.id || ''), String(product.model || '')]));
+    const supervisorHourlyRates = buildSupervisorHourlyRatesMap(_rawEmployees);
+    const payrollNetByEmployee = new Map<string, number>();
+    const payrollNetByDepartment = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (!employee.id || employee.isActive === false) return;
+      payrollNetByEmployee.set(String(employee.id), Number(employee.baseSalary || 0));
+      const departmentId = String(employee.departmentId || '');
+      if (departmentId) {
+        payrollNetByDepartment.set(departmentId, (payrollNetByDepartment.get(departmentId) || 0) + Number(employee.baseSalary || 0));
+      }
+    });
+    const costs = computeLiveProductCosts(
+      currentMonthReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      }
+    );
+    return {
+      productCost: costs.byProduct[id] || null,
+      centerShares: costs.byProductCenter[id] || {},
+    };
+  }, [id, canViewCosts, currentMonthReports, _rawProducts, _rawEmployees, hourlyRate, costCenters, costCenterValues, costAllocations, assets, assetDepreciations, systemSettings.costMonthlyWorkingDays]);
+
+  const monthlyUnitDirectCost = useMemo(() => {
+    if (currentMonthCost && currentMonthCost.totalProducedQty > 0) {
+      return Number(currentMonthCost.directCost || 0) / Number(currentMonthCost.totalProducedQty || 0);
+    }
+    if (currentMonthLiveCost?.productCost?.quantityProduced) {
+      return currentMonthLiveCost.productCost.laborCost / currentMonthLiveCost.productCost.quantityProduced;
+    }
+    return 0;
+  }, [currentMonthCost, currentMonthLiveCost]);
+
+  const monthlyUnitIndirectCost = useMemo(() => {
+    if (currentMonthCost && currentMonthCost.totalProducedQty > 0) {
+      return Number(currentMonthCost.indirectCost || 0) / Number(currentMonthCost.totalProducedQty || 0);
+    }
+    if (currentMonthLiveCost?.productCost?.quantityProduced) {
+      return currentMonthLiveCost.productCost.indirectCost / currentMonthLiveCost.productCost.quantityProduced;
+    }
+    return 0;
+  }, [currentMonthCost, currentMonthLiveCost]);
+
+  const monthlyIndustrialTotal = useMemo(() => {
+    if (currentMonthCost && currentMonthCost.totalProducedQty > 0) {
+      return {
+        perUnit: monthlyUnitDirectCost + monthlyUnitIndirectCost,
+        monthlyTotal: Number(currentMonthCost.directCost || 0) + Number(currentMonthCost.indirectCost || 0),
+      };
+    }
+    if (currentMonthLiveCost?.productCost) {
+      return {
+        perUnit: monthlyUnitDirectCost + monthlyUnitIndirectCost,
+        monthlyTotal: Number(currentMonthLiveCost.productCost.laborCost || 0) + Number(currentMonthLiveCost.productCost.indirectCost || 0),
+      };
+    }
+    return { perUnit: 0, monthlyTotal: 0 };
+  }, [currentMonthCost, currentMonthLiveCost, monthlyUnitDirectCost, monthlyUnitIndirectCost]);
+
+  const monthlyProductCenterShares = useMemo(() => {
+    if (!id || !canViewCosts || currentMonthReports.length === 0) return {} as Record<string, number>;
+    const monthProductQtyTotals = new Map<string, number>();
+    const lineDateQtyTotals = new Map<string, number>();
+    const lineDateHoursTotals = new Map<string, number>();
+    currentMonthReports.forEach((report) => {
+      if ((report.quantityProduced || 0) > 0 && report.productId) {
+        monthProductQtyTotals.set(report.productId, (monthProductQtyTotals.get(report.productId) || 0) + Number(report.quantityProduced || 0));
+      }
+      const key = `${report.lineId}_${report.date}`;
+      lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + Number(report.quantityProduced || 0));
+      lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, Number(report.workHours || 0)));
+    });
+
+    const productCategoryMap = new Map(products.map((p) => [p.id, p.category || '']));
+    const assetById = new Map(assets.map((asset) => [String(asset.id || ''), asset]));
+    const depreciationByCenter = new Map<string, number>();
+    assetDepreciations.forEach((entry) => {
+      if (entry.period !== currentMonth) return;
+      const asset = assetById.get(String(entry.assetId || ''));
+      const centerId = String(asset?.centerId || '');
+      if (!centerId) return;
+      depreciationByCenter.set(centerId, (depreciationByCenter.get(centerId) || 0) + Number(entry.depreciationAmount || 0));
+    });
+
+    const qtyRules = costCenters
+      .filter((center) => center.type === 'indirect' && center.isActive && (center.allocationBasis || 'line_percentage') === 'by_qty' && center.id)
+      .map((center) => {
+        const centerId = String(center.id || '');
+        const centerValue = costCenterValues.find((value) => value.costCenterId === centerId && value.month === currentMonth);
+        const valueSource = centerValue?.valueSource || center.valueSource || 'manual';
+        const hasSavedBreakdown = centerValue?.manualAmount !== undefined || centerValue?.salariesAmount !== undefined;
+        const manualAmount = hasSavedBreakdown
+          ? Number(centerValue?.manualAmount || 0)
+          : Number(centerValue?.amount || 0);
+        const salariesAmount = hasSavedBreakdown
+          ? Number(centerValue?.salariesAmount || 0)
+          : 0;
+        const snapshotBase = valueSource === 'manual'
+          ? manualAmount
+          : valueSource === 'salaries'
+            ? (hasSavedBreakdown ? salariesAmount : Number(centerValue?.amount || 0))
+            : (hasSavedBreakdown ? (manualAmount + salariesAmount) : Number(centerValue?.amount || 0));
+        const depreciation = Number(depreciationByCenter.get(centerId) || 0);
+        const resolvedAmount = snapshotBase + depreciation;
+        const allowedProductIds = center.productScope === 'selected'
+          ? center.productIds || []
+          : center.productScope === 'category'
+            ? Array.from(monthProductQtyTotals.keys()).filter((pid) =>
+              (center.productCategories || []).includes(String(productCategoryMap.get(pid) || 'غير مصنف'))
+            )
+            : Array.from(monthProductQtyTotals.keys());
+        const denominator = allowedProductIds.reduce((sum, pid) => sum + Number(monthProductQtyTotals.get(pid) || 0), 0);
+        return { centerId, resolvedAmount, denominator, allowedProductIds: new Set(allowedProductIds) };
+      })
+      .filter((rule) => rule.resolvedAmount > 0 && rule.denominator > 0);
+
+    const lineCenterSummaryCache = new Map<string, ReturnType<typeof buildLineAllocatedCostSummary>>();
+    const centerMap: Record<string, number> = {};
+    const addCenterCost = (centerId: string, amount: number) => {
+      if (!centerId || amount <= 0) return;
+      centerMap[centerId] = (centerMap[centerId] || 0) + amount;
+    };
+
+    currentMonthReports.forEach((report) => {
+      if (!report.quantityProduced || report.quantityProduced <= 0) return;
+      const reportMonth = report.date?.slice(0, 7) || currentMonth;
+      const cacheKey = `${report.lineId}_${reportMonth}`;
+      const lineDateKey = `${report.lineId}_${report.date}`;
+      const lineDateTotalHours = lineDateHoursTotals.get(lineDateKey) || 0;
+      const lineDateTotalQty = lineDateQtyTotals.get(lineDateKey) || 0;
+      const reportHours = Math.max(0, report.workHours || 0);
+      const shareRatio = (lineDateTotalHours > 0 && reportHours > 0)
+        ? (reportHours / lineDateTotalHours)
+        : (lineDateTotalQty > 0 ? (Number(report.quantityProduced || 0) / lineDateTotalQty) : 0);
+      if (!lineCenterSummaryCache.has(cacheKey)) {
+        lineCenterSummaryCache.set(
+          cacheKey,
+          buildLineAllocatedCostSummary(
+            report.lineId,
+            reportMonth,
+            costCenters,
+            costCenterValues,
+            costAllocations,
+            assets,
+            assetDepreciations,
+            systemSettings.costMonthlyWorkingDays,
+          ),
+        );
+      }
+      const lineCenterSummary = lineCenterSummaryCache.get(cacheKey);
+      if (report.productId === id) {
+        lineCenterSummary?.centers.forEach((center) => {
+          addCenterCost(center.costCenterId, center.dailyAllocated * shareRatio);
+        });
+      }
+      if (report.productId === id) {
+        for (const rule of qtyRules) {
+          if (!rule.allowedProductIds.has(report.productId)) continue;
+          const share = rule.resolvedAmount * ((report.quantityProduced || 0) / rule.denominator);
+          addCenterCost(rule.centerId, share);
+        }
+      }
+    });
+
+    return centerMap;
+  }, [
+    id,
+    canViewCosts,
+    currentMonthReports,
+    products,
+    _rawEmployees,
+    hourlyRate,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    assets,
+    assetDepreciations,
+    currentMonth,
+    systemSettings.costMonthlyWorkingDays,
+  ]);
 
   const costByLine = useMemo(() => {
     if (!canViewCosts || !id || scopedReports.length === 0) return [];
@@ -572,12 +957,10 @@ export const ProductDetails: React.FC = () => {
     return (
       <div className="space-y-6">
         <div className="text-center py-16 text-slate-400">
-          <span className="material-icons-round text-6xl mb-4 block opacity-30">
-            inventory_2
-          </span>
+          <ProductDetailsIcon name="inventory_2" className="text-6xl mb-4 block opacity-30" />
           <p className="font-bold text-lg">المنتج غير موجود</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate('/products')}>
-            <span className="material-icons-round text-sm">arrow_forward</span>
+            <ProductDetailsIcon name="arrow_forward" className="text-sm" />
             العودة للمنتجات
           </Button>
         </div>
@@ -695,27 +1078,29 @@ export const ProductDetails: React.FC = () => {
 
           <div className="erp-filter-sep" />
 
-          <select
-            className={`erp-filter-select${reportFilterLineId ? ' active' : ''}`}
-            value={reportFilterLineId}
-            onChange={(e) => setReportFilterLineId(e.target.value)}
-          >
-            <option value="">كل الخطوط</option>
-            {_rawLines.map((l) => (
-              <option key={l.id} value={l.id}>{l.name}</option>
-            ))}
-          </select>
+          <Select value={reportFilterLineId || 'all'} onValueChange={(value) => setReportFilterLineId(value === 'all' ? '' : value)}>
+            <SelectTrigger className={`erp-filter-select${reportFilterLineId ? ' active' : ''}`}>
+              <SelectValue placeholder="كل الخطوط" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الخطوط</SelectItem>
+              {_rawLines.map((l) => (
+                <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          <select
-            className={`erp-filter-select${reportFilterEmployeeId ? ' active' : ''}`}
-            value={reportFilterEmployeeId}
-            onChange={(e) => setReportFilterEmployeeId(e.target.value)}
-          >
-            <option value="">كل المشرفين</option>
-            {employees.filter((e) => e.level === 2).map((emp) => (
-              <option key={emp.id} value={emp.id}>{emp.name}</option>
-            ))}
-          </select>
+          <Select value={reportFilterEmployeeId || 'all'} onValueChange={(value) => setReportFilterEmployeeId(value === 'all' ? '' : value)}>
+            <SelectTrigger className={`erp-filter-select${reportFilterEmployeeId ? ' active' : ''}`}>
+              <SelectValue placeholder="كل المشرفين" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل المشرفين</SelectItem>
+              {employees.filter((e) => e.level === 2).map((emp) => (
+                <SelectItem key={emp.id} value={emp.id!}>{emp.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {activeReportFilterCount > 0 && (
             <button
@@ -726,7 +1111,7 @@ export const ProductDetails: React.FC = () => {
                 setReportFilterEmployeeId('');
               }}
             >
-              <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
+              <ProductDetailsIcon name="close" style={{ fontSize: 13 }} />
               مسح ({activeReportFilterCount})
             </button>
           )}
@@ -813,7 +1198,7 @@ export const ProductDetails: React.FC = () => {
       {/* Error Banner */}
       {fetchError && (
         <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-rose-500">warning</span>
+          <ProductDetailsIcon name="warning" className="text-rose-500" />
           <p className="text-sm font-medium text-rose-700">{fetchError}</p>
         </div>
       )}
@@ -874,7 +1259,7 @@ export const ProductDetails: React.FC = () => {
         <Card>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-amber-600 text-2xl">schedule</span>
+              <ProductDetailsIcon name="schedule" className="text-amber-600 text-2xl" />
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">متوسط وقت التجميع الفعلي</p>
@@ -887,7 +1272,7 @@ export const ProductDetails: React.FC = () => {
         <Card>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-primary text-2xl">timer</span>
+              <ProductDetailsIcon name="timer" className="text-primary text-2xl" />
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">وقت التجميع القياسي</p>
@@ -900,7 +1285,7 @@ export const ProductDetails: React.FC = () => {
         <Card>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-emerald-600 text-2xl">emoji_events</span>
+              <ProductDetailsIcon name="emoji_events" className="text-emerald-600 text-2xl" />
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">أفضل خط إنتاج أداءً</p>
@@ -911,7 +1296,7 @@ export const ProductDetails: React.FC = () => {
         <Card>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-blue-600 text-2xl">trending_up</span>
+              <ProductDetailsIcon name="trending_up" className="text-blue-600 text-2xl" />
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">متوسط الإنتاج اليومي</p>
@@ -963,7 +1348,7 @@ export const ProductDetails: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <span className="material-icons-round text-indigo-600 text-xl">calculate</span>
+                <ProductDetailsIcon name="calculate" className="text-indigo-600 text-xl" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-[var(--color-text)]">متوسط تكلفة الإنتاج الشهري</h3>
@@ -976,9 +1361,9 @@ export const ProductDetails: React.FC = () => {
               onClick={handleRecalculate}
             >
               {recalculating ? (
-                <span className="material-icons-round animate-spin text-sm">refresh</span>
+                <ProductDetailsIcon name="refresh" className="animate-spin text-sm" />
               ) : (
-                <span className="material-icons-round text-sm">sync</span>
+                <ProductDetailsIcon name="sync" className="text-sm" />
               )}
               {recalculating ? 'جاري الحساب...' : 'إعادة حساب المتوسط'}
             </Button>
@@ -986,7 +1371,7 @@ export const ProductDetails: React.FC = () => {
 
           {currentMonthCost?.isClosed && (
             <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-base)]">
-              <span className="material-icons-round text-amber-500 text-sm">lock</span>
+              <ProductDetailsIcon name="lock" className="text-amber-500 text-sm" />
               <span className="text-xs font-bold text-amber-700">هذا الشهر مغلق — لا يمكن إعادة الحساب</span>
             </div>
           )}
@@ -1036,9 +1421,10 @@ export const ProductDetails: React.FC = () => {
               {monthlyCostChange !== null ? (
                 <>
                   <div className="flex items-center justify-center gap-1">
-                    <span className={`material-icons-round text-lg ${monthlyCostChange <= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                      {monthlyCostChange <= 0 ? 'trending_down' : 'trending_up'}
-                    </span>
+                    <ProductDetailsIcon
+                      name={monthlyCostChange <= 0 ? 'trending_down' : 'trending_up'}
+                      className={`text-lg ${monthlyCostChange <= 0 ? 'text-emerald-600' : 'text-rose-500'}`}
+                    />
                     <p className={`text-xl font-bold ${monthlyCostChange <= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                       {Math.abs(monthlyCostChange)}%
                     </p>
@@ -1061,7 +1447,7 @@ export const ProductDetails: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-teal-50 dark:bg-teal-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <span className="material-icons-round text-teal-600 text-xl">receipt_long</span>
+                <ProductDetailsIcon name="receipt_long" className="text-teal-600 text-xl" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-[var(--color-text)]">تفصيل تكلفة المنتج</h3>
@@ -1084,7 +1470,7 @@ export const ProductDetails: React.FC = () => {
                 <tr className="bg-teal-50/50 dark:bg-teal-900/10">
                   <td colSpan={2} className="px-5 py-2 text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
-                      <span className="material-icons-round text-sm">receipt_long</span>
+                      <ProductDetailsIcon name="receipt_long" className="text-sm" />
                       تكاليف المنتج (مواد + تغليف)
                     </div>
                   </td>
@@ -1092,7 +1478,7 @@ export const ProductDetails: React.FC = () => {
                 <tr className="hover:bg-[#f8f9fa]/50">
                   <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-amber-500 text-base">local_shipping</span>
+                      <ProductDetailsIcon name="local_shipping" className="text-amber-500 text-base" />
                       تكلفة الوحدة الصينية
                     </div>
                   </td>
@@ -1101,7 +1487,7 @@ export const ProductDetails: React.FC = () => {
                 <tr className="hover:bg-[#f8f9fa]/50">
                   <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-amber-500 text-base">currency_yuan</span>
+                      <ProductDetailsIcon name="currency_yuan" className="text-amber-500 text-base" />
                       السعر باليوان الصيني
                       {chineseRate > 0 && (
                         <span className="text-[10px] text-[var(--color-text-muted)] font-medium">
@@ -1117,7 +1503,7 @@ export const ProductDetails: React.FC = () => {
                 <tr className="hover:bg-[#f8f9fa]/50">
                   <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-blue-500 text-base">category</span>
+                      <ProductDetailsIcon name="category" className="text-blue-500 text-base" />
                       تكلفة المواد الخام
                       <span className="text-[10px] text-[var(--color-text-muted)] font-medium">({materials.length} مادة)</span>
                     </div>
@@ -1127,7 +1513,7 @@ export const ProductDetails: React.FC = () => {
                 <tr className="hover:bg-[#f8f9fa]/50">
                   <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-orange-500 text-base">inventory_2</span>
+                      <ProductDetailsIcon name="inventory_2" className="text-orange-500 text-base" />
                       تكلفة العلبة الداخلية
                     </div>
                   </td>
@@ -1136,7 +1522,7 @@ export const ProductDetails: React.FC = () => {
                 <tr className="hover:bg-[#f8f9fa]/50">
                   <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-purple-500 text-base">package_2</span>
+                      <ProductDetailsIcon name="package_2" className="text-purple-500 text-base" />
                       نصيب الكرتونة
                       {(costBreakdown?.unitsPerCarton ?? 0) > 0 && (
                         <span className="text-[10px] text-[var(--color-text-muted)] font-medium">
@@ -1152,7 +1538,7 @@ export const ProductDetails: React.FC = () => {
                 <tr className="bg-rose-50/50 dark:bg-rose-900/10">
                   <td colSpan={2} className="px-5 py-2 text-xs font-bold text-rose-600 uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
-                      <span className="material-icons-round text-sm">precision_manufacturing</span>
+                      <ProductDetailsIcon name="precision_manufacturing" className="text-sm" />
                       تكاليف صناعية (مباشرة وغير مباشرة)
                     </div>
                   </td>
@@ -1160,20 +1546,75 @@ export const ProductDetails: React.FC = () => {
                 <tr className="hover:bg-[#f8f9fa]/50">
                   <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-rose-500 text-base">precision_manufacturing</span>
-                      نصيب المصاريف الصناعية
-                      <span className="text-[10px] text-[var(--color-text-muted)] font-medium">(متوسط شهري)</span>
+                      <ProductDetailsIcon name="groups" className="text-blue-600 text-base" />
+                      التكاليف الصناعية المباشرة
+                      <span className="text-[10px] text-[var(--color-text-muted)] font-medium">(متوسط شهري / قطعة)</span>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-center text-sm font-bold">{formatCost(costBreakdown?.productionOverheadShare ?? 0)} ج.م</td>
+                  <td className="px-5 py-3 text-center text-sm font-bold">
+                    {formatCost(monthlyUnitDirectCost)} ج.م
+                  </td>
                 </tr>
+                <tr className="hover:bg-[#f8f9fa]/50">
+                  <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
+                    <div className="flex items-center gap-2">
+                      <ProductDetailsIcon name="precision_manufacturing" className="text-rose-500 text-base" />
+                      التكاليف الصناعية غير المباشرة
+                      <span className="text-[10px] text-[var(--color-text-muted)] font-medium">(متوسط شهري / قطعة)</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-center text-sm font-bold">
+                    {formatCost(monthlyUnitIndirectCost || (costBreakdown?.productionOverheadShare ?? 0))} ج.م
+                  </td>
+                </tr>
+                <tr className="bg-indigo-50/60 dark:bg-indigo-900/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/20">
+                  <td className="px-5 py-3 pr-10 text-sm font-black text-indigo-700 dark:text-indigo-300">
+                    <div className="flex items-center gap-2">
+                      <ProductDetailsIcon name="summarize" className="text-indigo-600 text-base" />
+                      إجمالي تكاليف صناعية (مباشرة وغير مباشرة) للمنتج
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-center text-sm font-black text-indigo-700 dark:text-indigo-300">
+                    <div className="flex flex-col items-center leading-5">
+                      <span>{formatCost(monthlyIndustrialTotal.perUnit)} ج.م/قطعة</span>
+                      <span className="text-[11px] font-medium text-[var(--color-text-muted)]">
+                        {formatCost(monthlyIndustrialTotal.monthlyTotal)} ج.م (إجمالي شهري مرجعي)
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+                {(Object.entries(monthlyProductCenterShares) as Array<[string, number]>)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([centerId, totalShare]) => {
+                    const centerName = costCenters.find((center) => String(center.id || '') === centerId)?.name || centerId;
+                    const qty = Number(currentMonthCost?.totalProducedQty || currentMonthLiveCost?.productCost?.quantityProduced || 0);
+                    return (
+                      <tr key={`center-share-${centerId}`} className="hover:bg-[#f8f9fa]/50">
+                        <td className="px-5 py-3 pr-10 text-sm font-bold text-[var(--color-text)]">
+                          <div className="flex items-center gap-2">
+                            <ProductDetailsIcon name="account_balance" className="text-indigo-500 text-base" />
+                            {centerName}
+                            <span className="text-[10px] text-[var(--color-text-muted)] font-medium">نصيب المنتج (/قطعة + إجمالي شهري مرجعي)</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-center text-sm font-bold">
+                          <div className="flex flex-col items-center leading-5">
+                            <span>{formatCost(qty > 0 ? totalShare / qty : 0)} ج.م/قطعة</span>
+                            <span className="text-[11px] text-[var(--color-text-muted)] font-medium">
+                              {formatCost(totalShare)} ج.م (إجمالي شهري للمنتج)
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
               <tfoot>
                 <tr className="bg-primary/5 border-t-2 border-primary/20">
                   <td className="px-5 py-3 text-sm font-bold text-primary">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-base">functions</span>
-                      إجمالي التكلفة المحسوبة
+                      <ProductDetailsIcon name="functions" className="text-base" />
+                      إجمالي التكلفة المحسوبة (/قطعة)
                     </div>
                   </td>
                   <td className="px-5 py-3 text-center">
@@ -1187,7 +1628,7 @@ export const ProductDetails: React.FC = () => {
                     <tr className="border-t border-[var(--color-border)]">
                       <td className="px-5 py-3 text-sm font-bold text-[var(--color-text)]">
                         <div className="flex items-center gap-2">
-                          <span className="material-icons-round text-green-500 text-base">sell</span>
+                          <ProductDetailsIcon name="sell" className="text-green-500 text-base" />
                           سعر البيع
                         </div>
                       </td>
@@ -1196,9 +1637,10 @@ export const ProductDetails: React.FC = () => {
                     <tr className={`${(rawProduct!.sellingPrice! - (costBreakdown?.totalCalculatedCost ?? 0)) >= 0 ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-rose-50/50 dark:bg-rose-900/10'}`}>
                       <td className="px-5 py-3 text-sm font-black">
                         <div className="flex items-center gap-2">
-                          <span className={`material-icons-round text-base ${(rawProduct!.sellingPrice! - (costBreakdown?.totalCalculatedCost ?? 0)) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {(rawProduct!.sellingPrice! - (costBreakdown?.totalCalculatedCost ?? 0)) >= 0 ? 'trending_up' : 'trending_down'}
-                          </span>
+                          <ProductDetailsIcon
+                            name={(rawProduct!.sellingPrice! - (costBreakdown?.totalCalculatedCost ?? 0)) >= 0 ? 'trending_up' : 'trending_down'}
+                            className={`text-base ${(rawProduct!.sellingPrice! - (costBreakdown?.totalCalculatedCost ?? 0)) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}
+                          />
                           هامش الربح
                         </div>
                       </td>
@@ -1233,14 +1675,14 @@ export const ProductDetails: React.FC = () => {
                   data-modal-key={MODAL_KEYS.PRODUCT_MATERIALS_CREATE}
                   className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
                 >
-                  <span className="material-icons-round text-sm">add_circle</span>
+                  <ProductDetailsIcon name="add_circle" className="text-sm" />
                   إضافة مادة
                 </button>
               )}
             </div>
             {materials.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
-                <span className="material-icons-round text-3xl mb-2 block opacity-30">science</span>
+                <ProductDetailsIcon name="science" className="text-3xl mb-2 block opacity-30" />
                 <p className="text-sm font-bold">لا توجد مواد خام مسجلة</p>
               </div>
             ) : (
@@ -1267,10 +1709,10 @@ export const ProductDetails: React.FC = () => {
                         <td className="px-5 py-2.5 text-center">
                           <div className="flex items-center justify-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openEditMaterial(m)} className="p-1 text-[var(--color-text-muted)] hover:text-primary rounded transition-colors">
-                              <span className="material-icons-round text-sm">edit</span>
+                              <ProductDetailsIcon name="edit" className="text-sm" />
                             </button>
                             <button onClick={() => m.id && handleDeleteMaterial(m.id)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded transition-colors">
-                              <span className="material-icons-round text-sm">delete</span>
+                              <ProductDetailsIcon name="delete" className="text-sm" />
                             </button>
                           </div>
                         </td>
@@ -1304,9 +1746,10 @@ export const ProductDetails: React.FC = () => {
                 <div className={`rounded-[var(--border-radius-lg)] p-4 border text-center ${costTrend.improving ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200' : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200'}`}>
                   <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">اتجاه التكلفة</p>
                   <div className="flex items-center justify-center gap-1">
-                    <span className={`material-icons-round text-lg ${costTrend.improving ? 'text-emerald-600' : 'text-rose-500'}`}>
-                      {costTrend.improving ? 'trending_down' : 'trending_up'}
-                    </span>
+                    <ProductDetailsIcon
+                      name={costTrend.improving ? 'trending_down' : 'trending_up'}
+                      className={`text-lg ${costTrend.improving ? 'text-emerald-600' : 'text-rose-500'}`}
+                    />
                     <p className={`text-xl font-bold ${costTrend.improving ? 'text-emerald-600' : 'text-rose-500'}`}>
                       {Math.abs(costTrend.pctChange)}%
                     </p>
@@ -1388,7 +1831,7 @@ export const ProductDetails: React.FC = () => {
           <div className="animate-pulse h-64 bg-[#f8f9fa] rounded-[var(--border-radius-base)]"></div>
         ) : chartData.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
-            <span className="material-icons-round text-4xl mb-2 block opacity-30">bar_chart</span>
+            <ProductDetailsIcon name="bar_chart" className="text-4xl mb-2 block opacity-30" />
             <p className="font-bold">لا توجد بيانات إنتاج بعد</p>
             <p className="text-sm mt-1">ستظهر البيانات هنا عند إضافة تقارير إنتاج لهذا المنتج</p>
           </div>
@@ -1468,7 +1911,7 @@ export const ProductDetails: React.FC = () => {
                 {filteredReports.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                      <span className="material-icons-round text-4xl mb-2 block opacity-30">description</span>
+                      <ProductDetailsIcon name="description" className="text-4xl mb-2 block opacity-30" />
                       <p className="font-bold">لا توجد تقارير مطابقة للفلاتر</p>
                       <p className="text-sm mt-1">أضف تقارير إنتاج من صفحة "التقارير"</p>
                     </td>
@@ -1517,27 +1960,26 @@ export const ProductDetails: React.FC = () => {
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">{editingMaterial ? 'تعديل مادة خام' : 'إضافة مادة خام'}</h3>
               <button onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <span className="material-icons-round">close</span>
+                <ProductDetailsIcon name="close" />
               </button>
             </div>
             <div className="p-6 space-y-5">
               {materialSaveMsg && (
                 <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${materialSaveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                  <span className="material-icons-round text-base">{materialSaveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
+                  <ProductDetailsIcon name={materialSaveMsg.type === 'success' ? 'check_circle' : 'error'} className="text-base" />
                   <p className="flex-1">{materialSaveMsg.text}</p>
                   <button onClick={() => setMaterialSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
-                    <span className="material-icons-round text-base">close</span>
+                    <ProductDetailsIcon name="close" className="text-base" />
                   </button>
                 </div>
               )}
 
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">المادة الخام (من المخزن) *</label>
-                <select
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={materialForm.materialId}
-                  onChange={(e) => {
-                    const nextId = e.target.value;
+                <Select
+                  value={materialForm.materialId || 'none'}
+                  onValueChange={(value) => {
+                    const nextId = value === 'none' ? '' : value;
                     const selected = rawMaterials.find((row) => row.id === nextId);
                     setMaterialForm({
                       ...materialForm,
@@ -1546,13 +1988,18 @@ export const ProductDetails: React.FC = () => {
                     });
                   }}
                 >
-                  <option value="">اختر مادة خام</option>
-                  {rawMaterials.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {row.name} {row.code ? `(${row.code})` : ''}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                    <SelectValue placeholder="اختر مادة خام" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">اختر مادة خام</SelectItem>
+                    {rawMaterials.map((row) => (
+                      <SelectItem key={row.id} value={row.id!}>
+                        {row.name} {row.code ? `(${row.code})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-[11px] text-slate-400">
                   المواد هنا من تعريف "المواد الخام" فقط، ولن تظهر في بحث المنتجات.
                 </p>
@@ -1593,9 +2040,9 @@ export const ProductDetails: React.FC = () => {
               <Button variant="outline" onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }}>إلغاء</Button>
               <Button variant="primary" onClick={handleSaveMaterial} disabled={savingMaterial || !materialForm.materialId}>
                 {savingMaterial ? (
-                  <span className="material-icons-round animate-spin text-sm">refresh</span>
+                  <ProductDetailsIcon name="refresh" className="animate-spin text-sm" />
                 ) : (
-                  <span className="material-icons-round text-sm">{editingMaterial ? 'save' : 'add'}</span>
+                  <ProductDetailsIcon name={editingMaterial ? 'save' : 'add'} className="text-sm" />
                 )}
                 {editingMaterial ? 'حفظ التعديلات' : 'إضافة المادة'}
               </Button>

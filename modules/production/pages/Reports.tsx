@@ -1,5 +1,39 @@
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  ClipboardCopy,
+  Download,
+  ExternalLink,
+  FileUp,
+  FileText,
+  Loader2,
+  Pencil,
+  Plus,
+  Printer,
+  Save,
+  Search,
+  Share2,
+  Trash2,
+  User,
+  UserPlus,
+  UserX,
+  Users,
+  WalletCards,
+  X,
+  Ban,
+  CalendarCheck2,
+  ChevronsUpDown,
+  Filter,
+  SlidersHorizontal,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
@@ -35,12 +69,23 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { stockService } from '../../inventory/services/stockService';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
 import { categoryService } from '../../catalog/services/categoryService';
 import { catalogRawMaterialService } from '../../catalog/services/catalogRawMaterialService';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 const emptyForm = {
   reportType: 'finished_product' as 'finished_product' | 'component_injection',
@@ -64,6 +109,7 @@ const emptyForm = {
 const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>): number =>
   (report.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const NOTE_PREVIEW_LENGTH = 10;
+type ReportGroupBy = 'none' | 'supervisor' | 'line' | 'product';
 
 type FactoryGeneralRow = {
   key: string;
@@ -99,6 +145,50 @@ type FactoryGeneralSortKey =
   | 'decomposedBalance'
   | 'finishedBalance'
   | 'finalProductBalance';
+
+const REPORT_ICON_MAP: Record<string, LucideIcon> = {
+  refresh: Loader2,
+  search: Search,
+  close: X,
+  groups: Users,
+  assignment: FileText,
+  share: Share2,
+  print: Printer,
+  edit: Pencil,
+  delete: Trash2,
+  warning: AlertTriangle,
+  arrow_forward: ArrowLeft,
+  unfold_more: ChevronsUpDown,
+  arrow_upward: ArrowUp,
+  arrow_downward: ArrowDown,
+  check_circle: CheckCircle2,
+  open_in_new: ExternalLink,
+  price_check: WalletCards,
+  event_available: CalendarCheck2,
+  block: Ban,
+  save: Save,
+  add: Plus,
+  delete_forever: Trash2,
+  delete_sweep: Trash2,
+  upload_file: FileUp,
+  download: Download,
+  description: FileText,
+  error: AlertCircle,
+  content_copy: ClipboardCopy,
+  person_add: UserPlus,
+  person_off: UserX,
+  person: User,
+};
+
+const ReportIcon = ({
+  name,
+  ...iconProps
+}: {
+  name: string;
+} & React.ComponentProps<'svg'>) => {
+  const Icon = REPORT_ICON_MAP[name] ?? AlertCircle;
+  return <Icon {...iconProps} />;
+};
 
 const normalizeWarehouseName = (value: string): string =>
   String(value || '')
@@ -253,6 +343,8 @@ export const Reports: React.FC = () => {
   // Work order detail popup
   const [viewWOReport, setViewWOReport] = useState<ProductionReport | null>(null);
   const [viewQualityReport, setViewQualityReport] = useState<ProductionReport | null>(null);
+  const [selectedReportDrawer, setSelectedReportDrawer] = useState<ProductionReport | null>(null);
+  const [reportDrawerTab, setReportDrawerTab] = useState<'summary' | 'cost' | 'notes'>('summary');
 
 
   // Date range filter
@@ -275,13 +367,16 @@ export const Reports: React.FC = () => {
   const [filterLineId, setFilterLineId] = useState('');
   const [filterProductCategory, setFilterProductCategory] = useState('');
   const [filterEmployeeId, setFilterEmployeeId] = useState('');
+  const [reportGroupBy, setReportGroupBy] = useState<ReportGroupBy>('none');
   const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
+  const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
   const reportCodesBackfilledRef = useRef(false);
   const currentEmployee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid) ?? null,
     [_rawEmployees, uid],
   );
   const isSupervisorReporter = currentEmployee?.level === 2;
+  const shouldRestrictSupervisorLines = isSupervisorReporter && !editId;
 
   const openCreate = useCallback(() => {
     setEditId(null);
@@ -323,6 +418,32 @@ export const Reports: React.FC = () => {
         : { ...prev, employeeId: currentEmployee.id }
     ));
   }, [showModal, isSupervisorReporter, currentEmployee?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!showModal || !shouldRestrictSupervisorLines || !currentEmployee?.id) {
+      setAssignedLineIds(new Set());
+      return () => { mounted = false; };
+    }
+    supervisorLineAssignmentService.getActiveByDate(form.date)
+      .then((rows) => {
+        if (!mounted) return;
+        const ids = new Set(
+          rows
+            .filter((row) => String(row.supervisorId || '').trim() === currentEmployee.id)
+            .map((row) => String(row.lineId || '').trim())
+            .filter(Boolean),
+        );
+        setAssignedLineIds(ids);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAssignedLineIds(new Set());
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [showModal, shouldRestrictSupervisorLines, currentEmployee?.id, form.date]);
 
   useEffect(() => {
     if (reportCodesBackfilledRef.current) return;
@@ -502,6 +623,54 @@ export const Reports: React.FC = () => {
     () => sortReports(applyReportFilters(allReports)),
     [allReports, applyReportFilters, sortReports],
   );
+  const groupedReports = useMemo(() => {
+    if (reportGroupBy === 'none') return [];
+
+    const groups = new Map<string, {
+      key: string;
+      label: string;
+      reports: ProductionReport[];
+      produced: number;
+      waste: number;
+    }>();
+
+    displayedReports.forEach((report) => {
+      let key = 'unknown';
+      let label = 'غير محدد';
+
+      if (reportGroupBy === 'supervisor') {
+        const supervisorId = String(report.employeeId || '');
+        key = supervisorId || 'supervisor_unknown';
+        label = employees.find((s) => s.id === supervisorId)?.name ?? 'بدون مشرف';
+      } else if (reportGroupBy === 'line') {
+        const lineId = String(report.lineId || '');
+        key = lineId || 'line_unknown';
+        label = _rawLines.find((line) => line.id === lineId)?.name ?? '—';
+      } else if (reportGroupBy === 'product') {
+        const productId = String(report.productId || '');
+        key = productId || 'product_unknown';
+        if (report.reportType === 'component_injection') {
+          label = rawMaterialOptions.find((m) => m.id === productId)?.name ?? '—';
+        } else {
+          label = _rawProducts.find((p) => p.id === productId)?.name ?? '—';
+        }
+      }
+
+      const current = groups.get(key) || {
+        key,
+        label,
+        reports: [],
+        produced: 0,
+        waste: 0,
+      };
+      current.reports.push(report);
+      current.produced += Number(report.quantityProduced || 0);
+      current.waste += Number(deriveReportWaste(report) || 0);
+      groups.set(key, current);
+    });
+
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }, [reportGroupBy, displayedReports, employees, _rawLines, rawMaterialOptions, _rawProducts]);
 
   const categoryUsageCount = useMemo(() => {
     const counts = new Map<string, number>();
@@ -833,6 +1002,7 @@ export const Reports: React.FC = () => {
       const rid = (report as ProductionReport).id;
       return {
         reportId: rid,
+        reportCode: (report as ProductionReport).reportCode,
         date: report.date,
         lineName: getLineName(report.lineId),
         productName: getProductName(report.productId, report.reportType),
@@ -999,109 +1169,123 @@ export const Reports: React.FC = () => {
   };
 
   const activeFilterCount = (filterLineId ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
+  const reportPeriod = useMemo(() => {
+    const todayValue = getOperationalDateString(8);
+    if (viewMode === 'today') return 'today';
+    if (viewMode === 'general') return 'all';
+    if (startDate === endDate && startDate !== todayValue) return 'yesterday';
+    if (endDate === todayValue) {
+      const now = new Date();
+      const monthlyStart = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+      if (startDate === monthlyStart) return 'month';
+      const weeklyStartDate = new Date();
+      weeklyStartDate.setDate(weeklyStartDate.getDate() - 6);
+      if (startDate === toDateInputValue(weeklyStartDate)) return 'week';
+    }
+    return 'all';
+  }, [viewMode, startDate, endDate]);
   const handleLoadMoreRange = async () => {
     if (viewMode !== 'range' || rangeLoading || !rangeHasMore) return;
     await loadRangeReports(startDate, endDate, true);
   };
 
   const tableToolbarFilters = (
-    <>
-      {/* ── Date quick-select (segmented control) ── */}
-      <div className="erp-date-seg">
+    <SmartFilterBar
+      searchPlaceholder="ابحث بالخط أو المشرف أو الصنف..."
+      searchValue={factorySearch}
+      onSearchChange={setFactorySearch}
+      periods={[
+        { label: 'اليوم', value: 'today' },
+        { label: 'أمس', value: 'yesterday' },
+        { label: 'أسبوعي', value: 'week' },
+        { label: 'شهري', value: 'month' },
+        { label: 'الكل', value: 'all' },
+      ]}
+      activePeriod={reportPeriod}
+      onPeriodChange={(value) => {
+        if (value === 'today') void handleShowToday();
+        if (value === 'yesterday') void handleShowYesterday();
+        if (value === 'week') void handleShowWeekly();
+        if (value === 'month') void handleShowMonthly();
+        if (value === 'all') setViewMode('general');
+      }}
+      quickFilters={[
+        {
+          key: 'lineId',
+          placeholder: 'كل الخطوط',
+          options: _rawLines.map((line) => ({ value: line.id || '', label: line.name })),
+          width: 'w-[140px]',
+        },
+      ]}
+      quickFilterValues={{ lineId: filterLineId || 'all' }}
+      onQuickFilterChange={(_, value) => setFilterLineId(value === 'all' ? '' : value)}
+      advancedFilters={[
+        {
+          key: 'category',
+          label: 'الفئة',
+          placeholder: 'كل الفئات',
+          options: productCategoryOptions.map((category) => ({
+            value: category,
+            label: `${category} (${categoryUsageCount.get(category) || 0})`,
+          })),
+          width: 'w-[170px]',
+        },
+        ...(!myEmployeeId
+          ? [{
+            key: 'employeeId',
+            label: 'المشرف',
+            placeholder: 'كل المشرفين',
+            options: employees.filter((employee) => employee.level === 2).map((employee) => ({
+              value: employee.id || '',
+              label: employee.name,
+            })),
+            width: 'w-[170px]',
+          }]
+          : []),
+        {
+          key: 'groupBy',
+          label: 'تجميع',
+          placeholder: 'بدون تجميع',
+          options: [
+            { value: 'supervisor', label: 'تجميع بالمشرف' },
+            { value: 'line', label: 'تجميع بالخط' },
+            { value: 'product', label: 'تجميع بالمنتج' },
+          ],
+        },
+        { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+        { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+      ]}
+      advancedFilterValues={{
+        category: filterProductCategory || 'all',
+        employeeId: filterEmployeeId || 'all',
+        groupBy: reportGroupBy === 'none' ? 'all' : reportGroupBy,
+        dateFrom: startDate,
+        dateTo: endDate,
+      }}
+      onAdvancedFilterChange={(key, value) => {
+        if (key === 'category') setFilterProductCategory(value === 'all' ? '' : value);
+        if (key === 'employeeId') setFilterEmployeeId(value === 'all' ? '' : value);
+        if (key === 'groupBy') setReportGroupBy(value === 'all' ? 'none' : (value as ReportGroupBy));
+        if (key === 'dateFrom') setStartDate(value);
+        if (key === 'dateTo') setEndDate(value);
+      }}
+      onApply={handleFetchRange}
+      applyLabel={(reportsLoading || rangeLoading) ? 'جار التحميل...' : 'عرض'}
+      extra={activeFilterCount > 0 ? (
         <button
-          className={`erp-date-seg-btn${viewMode === 'today' ? ' active' : ''}`}
-          onClick={handleShowToday}
+          type="button"
+          className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+          onClick={() => {
+            setFilterLineId('');
+            setFilterProductCategory('');
+            setFilterEmployeeId('');
+          }}
         >
-          اليوم
-        </button>
-        <button
-          className={`erp-date-seg-btn${viewMode === 'range' && startDate === endDate && startDate !== getOperationalDateString(8) ? ' active' : ''}`}
-          onClick={handleShowYesterday}
-        >
-          أمس
-        </button>
-        <button
-          className={`erp-date-seg-btn${viewMode === 'range' && endDate === getOperationalDateString(8) && (() => { const d = new Date(); d.setDate(d.getDate() - 6); return startDate === toDateInputValue(d); })() ? ' active' : ''}`}
-          onClick={handleShowWeekly}
-        >
-          أسبوعي
-        </button>
-        <button
-          className={`erp-date-seg-btn${viewMode === 'range' && endDate === getOperationalDateString(8) && (() => { const now = new Date(); return startDate === toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)); })() ? ' active' : ''}`}
-          onClick={handleShowMonthly}
-        >
-          شهري
-        </button>
-      </div>
-
-      {/* ── Date range ── */}
-      <div className="erp-filter-date">
-        <span className="erp-filter-label">من</span>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-      </div>
-      <div className="erp-filter-date">
-        <span className="erp-filter-label">إلى</span>
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-      </div>
-      <button className="erp-filter-apply" onClick={handleFetchRange}>
-        {(reportsLoading || rangeLoading)
-          ? <span className="material-icons-round" style={{ fontSize: 14, animation: 'spin 1s linear infinite' }}>refresh</span>
-          : <span className="material-icons-round" style={{ fontSize: 14 }}>search</span>
-        }
-        عرض
-      </button>
-
-      <div className="erp-filter-sep" />
-
-      {/* ── Dropdown filters ── */}
-      <select
-        className={`erp-filter-select${filterLineId ? ' active' : ''}`}
-        value={filterLineId}
-        onChange={(e) => setFilterLineId(e.target.value)}
-      >
-        <option value="">كل الخطوط</option>
-        {_rawLines.map((l) => (
-          <option key={l.id} value={l.id!}>{l.name}</option>
-        ))}
-      </select>
-
-      <select
-        className={`erp-filter-select${filterProductCategory ? ' active' : ''}`}
-        value={filterProductCategory}
-        onChange={(e) => setFilterProductCategory(e.target.value)}
-      >
-        <option value="">كل الفئات</option>
-        {productCategoryOptions.map((category) => (
-          <option key={category} value={category}>
-            {category} ({categoryUsageCount.get(category) || 0})
-          </option>
-        ))}
-      </select>
-
-      {!myEmployeeId && (
-        <select
-          className={`erp-filter-select${filterEmployeeId ? ' active' : ''}`}
-          value={filterEmployeeId}
-          onChange={(e) => setFilterEmployeeId(e.target.value)}
-        >
-          <option value="">كل المشرفين</option>
-          {employees.filter((e) => e.level === 2).map((emp) => (
-            <option key={emp.id} value={emp.id}>{emp.name}</option>
-          ))}
-        </select>
-      )}
-
-      {/* ── Clear filters ── */}
-      {activeFilterCount > 0 && (
-        <button
-          className="erp-filter-clear"
-          onClick={() => { setFilterLineId(''); setFilterProductCategory(''); setFilterEmployeeId(''); }}
-        >
-          <span className="material-icons-round" style={{ fontSize: 13 }}>close</span>
           مسح ({activeFilterCount})
         </button>
-      )}
-    </>
+      ) : undefined}
+      className="mb-0"
+    />
   );
 
   const openEdit = (report: ProductionReport) => {
@@ -1150,10 +1334,15 @@ export const Reports: React.FC = () => {
   const selectableLines = useMemo(
     () => (
       form.reportType === 'component_injection'
-        ? _rawLines.filter((line) => line.id && injectionLineIds.has(line.id))
-        : _rawLines
+        ? (shouldRestrictSupervisorLines
+            ? _rawLines.filter((line) => line.id && assignedLineIds.has(String(line.id)))
+            : _rawLines
+          ).filter((line) => line.id && injectionLineIds.has(line.id))
+        : (shouldRestrictSupervisorLines
+            ? _rawLines.filter((line) => line.id && assignedLineIds.has(String(line.id)))
+            : _rawLines)
     ),
-    [form.reportType, _rawLines, injectionLineIds],
+    [form.reportType, _rawLines, injectionLineIds, shouldRestrictSupervisorLines, assignedLineIds],
   );
 
   const selectableProducts = useMemo(
@@ -1171,6 +1360,13 @@ export const Reports: React.FC = () => {
       setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
     }
   }, [form.reportType, form.lineId, injectionLineIds]);
+
+  useEffect(() => {
+    if (!showModal || !shouldRestrictSupervisorLines || !form.lineId) return;
+    const isAllowed = selectableLines.some((line) => line.id === form.lineId);
+    if (isAllowed) return;
+    setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
+  }, [showModal, shouldRestrictSupervisorLines, form.lineId, selectableLines]);
 
   const hasDuplicateLineSupervisorReport = useCallback(
     async (
@@ -1449,7 +1645,7 @@ export const Reports: React.FC = () => {
     setSyncingMissingTransfers(true);
     try {
       const summary = await syncMissingProductionEntryTransfers(startDate, endDate);
-      window.alert(
+      toast.warning(
         `تمت المزامنة بنجاح.\n` +
         `تم الفحص: ${summary.processed}\n` +
         `تم الإنشاء: ${summary.created}\n` +
@@ -1457,7 +1653,7 @@ export const Reports: React.FC = () => {
         `فشل: ${summary.failed}`,
       );
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر تنفيذ مزامنة التحويلات الناقصة.');
+      toast.error(error?.message || 'تعذر تنفيذ مزامنة التحويلات الناقصة.');
     } finally {
       setSyncingMissingTransfers(false);
     }
@@ -1517,7 +1713,7 @@ export const Reports: React.FC = () => {
         });
       }
 
-      window.alert(
+      toast.warning(
         `تمت معالجة الربط بنجاح.\n` +
         `تم الفحص: ${summary.processed}\n` +
         `تم الربط: ${summary.linked}\n` +
@@ -1526,7 +1722,7 @@ export const Reports: React.FC = () => {
       );
     } catch (error: any) {
       failJob(jobId, error?.message || 'تعذر تنفيذ ربط التقارير القديمة.', 'Failed');
-      window.alert(error?.message || 'تعذر تنفيذ ربط التقارير القديمة.');
+      toast.error(error?.message || 'تعذر تنفيذ ربط التقارير القديمة.');
     } finally {
       setBackfillingUnlinkedReports(false);
     }
@@ -1597,7 +1793,7 @@ export const Reports: React.FC = () => {
         });
       }
 
-      window.alert(
+      toast.warning(
         `تم تنفيذ فك الربط.\n` +
         `تم الفحص: ${summary.processed}\n` +
         `تم فك الربط: ${summary.unlinked}\n` +
@@ -1606,7 +1802,7 @@ export const Reports: React.FC = () => {
       );
     } catch (error: any) {
       failJob(jobId, error?.message || 'تعذر تنفيذ فك الربط.', 'Failed');
-      window.alert(error?.message || 'تعذر تنفيذ فك الربط.');
+      toast.error(error?.message || 'تعذر تنفيذ فك الربط.');
     } finally {
       setUnlinkingReportWorkOrders(false);
     }
@@ -1905,7 +2101,7 @@ export const Reports: React.FC = () => {
             title="عرض العمالة"
           >
             {r.workersCount}
-            <span className="material-icons-round text-xs">groups</span>
+            <ReportIcon name="groups" className="text-xs" />
           </button>
         ),
       },
@@ -1933,7 +2129,7 @@ export const Reports: React.FC = () => {
               title="عرض تفاصيل أمر الشغل"
             >
               {wo.workOrderNumber}
-              <span className="material-icons-round text-xs">assignment</span>
+              <ReportIcon name="assignment" className="text-xs" />
             </button>
           );
         },
@@ -2076,21 +2272,21 @@ export const Reports: React.FC = () => {
       {can("print") && (
         <>
           <button onClick={() => triggerSingleShare(report)} className="p-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all" title="مشاركة عبر واتساب" disabled={exporting}>
-            <span className="material-icons-round text-lg">share</span>
+            <ReportIcon name="share" className="text-lg" />
           </button>
           <button onClick={() => triggerSinglePrint(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="طباعة التقرير">
-            <span className="material-icons-round text-lg">print</span>
+            <ReportIcon name="print" className="text-lg" />
           </button>
         </>
       )}
       {can("reports.edit") && (
         <button onClick={() => openEdit(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل التقرير">
-          <span className="material-icons-round text-lg">edit</span>
+          <ReportIcon name="edit" className="text-lg" />
         </button>
       )}
       {can("reports.delete") && (
         <button type="button" onClick={() => requestDeleteReport(report)} className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف التقرير">
-          <span className="material-icons-round text-lg">delete</span>
+          <ReportIcon name="delete" className="text-lg" />
         </button>
       )}
     </div>
@@ -2191,7 +2387,7 @@ export const Reports: React.FC = () => {
         title={`فرز حسب ${label}`}
       >
         <span>{label}</span>
-        <span className={`material-icons-round text-sm ${isActive ? 'text-primary' : 'text-[var(--color-text-muted)]'}`}>{icon}</span>
+        <ReportIcon name={icon} className={`text-sm ${isActive ? 'text-primary' : 'text-[var(--color-text-muted)]'}`} />
       </button>
     );
   }, [factorySortKey, factorySortDirection, toggleFactorySort]);
@@ -2202,7 +2398,7 @@ export const Reports: React.FC = () => {
   const hasImportPreview = importMode === 'updateDate' ? !!importDateUpdateResult : !!importResult;
 
   return (
-    <div className="space-y-6">
+    <div className="erp-ds-clean space-y-6">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -2332,10 +2528,10 @@ export const Reports: React.FC = () => {
       {/* WhatsApp Share Feedback */}
       {shareToast && (
         <div className="erp-alert erp-alert-success erp-animate-in">
-          <span className="material-icons-round text-[18px] shrink-0">share</span>
+          <ReportIcon name="share" className="text-[18px] shrink-0" />
           <p className="flex-1">{shareToast}</p>
           <button onClick={() => setShareToast(null)} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span className="material-icons-round text-[16px]">close</span>
+            <ReportIcon name="close" className="text-[16px]" />
           </button>
         </div>
       )}
@@ -2343,7 +2539,7 @@ export const Reports: React.FC = () => {
       {/* Reports Table */}
       {rangeError && (viewMode === 'range' || viewMode === 'general') && (
         <div className="erp-alert erp-alert-warning">
-          <span className="material-icons-round text-[18px] shrink-0">warning</span>
+          <ReportIcon name="warning" className="text-[18px] shrink-0" />
           <span>{rangeError}</span>
         </div>
       )}
@@ -2351,7 +2547,7 @@ export const Reports: React.FC = () => {
         <Card className="!p-0 overflow-hidden">
           <div className="p-4 border-b border-[var(--color-border)] bg-[#f8f9fa]/40 flex flex-col md:flex-row md:items-center gap-3">
             <Button variant="secondary" onClick={handleBackToReports}>
-              <span className="material-icons-round text-sm">arrow_forward</span>
+              <ReportIcon name="arrow_forward" className="text-sm" />
               رجوع إلى التقارير
             </Button>
             <input
@@ -2426,21 +2622,70 @@ export const Reports: React.FC = () => {
           )}
         </Card>
       ) : (
-        <SelectableTable<ProductionReport>
-          data={displayedReports}
-          columns={reportColumns}
-          selectAllScope="filtered"
-          enableColumnVisibility
-          toolbarContent={tableToolbarFilters}
-          highlightRowId={highlightReportId}
-          getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
-          bulkActions={reportBulkActions}
-          renderActions={renderReportActions}
-          emptyIcon="bar_chart"
-          emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-          emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
-          footer={reportTableFooter}
-        />
+        reportGroupBy !== 'none' ? (
+          <div className="space-y-4">
+            <Card className="!p-0 overflow-hidden">
+              {tableToolbarFilters}
+            </Card>
+            {groupedReports.length === 0 ? (
+              <Card>
+                <div className="py-16 text-center text-[var(--color-text-muted)]">
+                  لا توجد تقارير{viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}
+                </div>
+              </Card>
+            ) : groupedReports.map((group) => (
+              <Card key={group.key} className="!p-0 overflow-hidden">
+                <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60 flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-black text-[var(--color-text)]">{group.label || 'غير محدد'}</span>
+                  <span className="text-xs font-bold text-[var(--color-text-muted)]">{group.reports.length} تقرير</span>
+                  <span className="text-xs font-bold text-emerald-600">إنتاج: {formatNumber(group.produced)}</span>
+                  <span className="text-xs font-bold text-rose-500">هالك: {formatNumber(group.waste)}</span>
+                </div>
+                <SelectableTable<ProductionReport>
+                  tableId={`production-reports-${reportGroupBy}-${group.key}`}
+                  data={group.reports}
+                  columns={reportColumns}
+                  selectAllScope="filtered"
+                  enableColumnVisibility
+                  toolbarContent={null}
+                  highlightRowId={highlightReportId}
+                  getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
+                  bulkActions={reportBulkActions}
+                  renderActions={renderReportActions}
+                  onRowClick={(row) => {
+                    setSelectedReportDrawer(row);
+                    setReportDrawerTab('summary');
+                  }}
+                  emptyIcon="bar_chart"
+                  emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
+                  emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+                />
+              </Card>
+            ))}
+            {reportTableFooter}
+          </div>
+        ) : (
+          <SelectableTable<ProductionReport>
+            tableId="production-reports-main"
+            data={displayedReports}
+            columns={reportColumns}
+            selectAllScope="filtered"
+            enableColumnVisibility
+            toolbarContent={tableToolbarFilters}
+            highlightRowId={highlightReportId}
+            getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
+            bulkActions={reportBulkActions}
+            renderActions={renderReportActions}
+            onRowClick={(row) => {
+              setSelectedReportDrawer(row);
+              setReportDrawerTab('summary');
+            }}
+            emptyIcon="bar_chart"
+            emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
+            emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+            footer={reportTableFooter}
+          />
+        )
       )}
       {viewMode === 'range' && (
         <div className="flex items-center justify-center">
@@ -2477,6 +2722,179 @@ export const Reports: React.FC = () => {
         ))}
       </div>
 
+      {/* ══ Report Drawer ══ */}
+      {selectedReportDrawer && (() => {
+        const row = selectedReportDrawer;
+        const unitCost = row.id ? Number(reportCosts.get(row.id) || 0) : 0;
+        const totalCost = unitCost * Number(row.quantityProduced || 0);
+        const linkedWo = row.workOrderId ? woMap.get(row.workOrderId) : null;
+        const reportTypeLabel = row.reportType === 'component_injection' ? 'تقرير حقن مكونات' : 'تقرير منتج نهائي';
+        return (
+          <>
+            <div
+              className="fixed inset-0 bg-black/35 z-[60]"
+              onClick={() => setSelectedReportDrawer(null)}
+            />
+            <aside
+              className="fixed top-0 right-0 h-screen w-[min(460px,96vw)] bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl z-[61] overflow-y-auto flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-[var(--color-text)] text-sm">
+                    {row.reportCode || '—'} <span className="text-[var(--color-text-muted)]">| {row.date}</span>
+                  </h3>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">{reportTypeLabel}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReportDrawer(null)}
+                  className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                >
+                  <ReportIcon name="close" />
+                </button>
+              </div>
+
+              <div className="px-4 py-3 border-b border-[var(--color-border)]">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-xs text-[var(--color-text-muted)] block mb-1">الخط</span>
+                    <span className="font-bold">{getLineName(row.lineId)}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-[var(--color-text-muted)] block mb-1">المشرف</span>
+                    <span className="font-bold">{getEmployeeName(row.employeeId)}</span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <span className="text-xs text-[var(--color-text-muted)] block mb-1">المنتج</span>
+                  <span className="font-bold text-sm">{getProductName(row.productId, row.reportType)}</span>
+                </div>
+              </div>
+
+              <div className="px-4 pt-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { label: 'summary', text: 'الملخص' },
+                    { label: 'cost', text: 'التكلفة' },
+                    { label: 'notes', text: 'الملاحظات' },
+                  ] as const).map((tab) => (
+                    <button
+                      key={tab.label}
+                      type="button"
+                      onClick={() => setReportDrawerTab(tab.label)}
+                      className={`h-8 rounded-[var(--border-radius-base)] text-xs font-bold border ${
+                        reportDrawerTab === tab.label
+                          ? 'border-primary/30 bg-primary/10 text-primary'
+                          : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                      }`}
+                    >
+                      {tab.text}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 flex-1">
+                {reportDrawerTab === 'summary' && (
+                  <div className="space-y-3 text-sm">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">الكمية المنتجة</span>
+                        <span className="font-black text-emerald-600">{formatNumber(row.quantityProduced)}</span>
+                      </div>
+                      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">هالك</span>
+                        <span className="font-black text-rose-600">{formatNumber(deriveReportWaste(row))}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">عدد العمال</span>
+                        <span className="font-bold">{formatNumber(row.workersCount)}</span>
+                      </div>
+                      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">ساعات العمل</span>
+                        <span className="font-bold">{formatNumber(row.workHours)}</span>
+                      </div>
+                    </div>
+                    <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-xs font-bold text-[var(--color-text-muted)]">
+                      إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
+                    </div>
+                  </div>
+                )}
+
+                {reportDrawerTab === 'cost' && (
+                  <div className="space-y-3 text-sm">
+                    {canViewCosts ? (
+                      <>
+                        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                          <span className="text-xs text-[var(--color-text-muted)] block mb-1">تكلفة الوحدة</span>
+                          <span className="font-black text-primary">
+                            {unitCost > 0 ? `${formatCost(unitCost)} ج.م` : '—'}
+                          </span>
+                        </div>
+                        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                          <span className="text-xs text-[var(--color-text-muted)] block mb-1">التكلفة الإجمالية</span>
+                          <span className="font-black text-[var(--color-text)]">
+                            {unitCost > 0 ? `${formatCost(totalCost)} ج.م` : '—'}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-sm text-[var(--color-text-muted)]">
+                        لا تملك صلاحية عرض التكلفة.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {reportDrawerTab === 'notes' && (
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-sm">
+                    {row.notes?.trim() ? row.notes : 'لا توجد ملاحظات.'}
+                  </div>
+                )}
+              </div>
+
+              <div className="sticky bottom-10 bg-[var(--color-card)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[var(--color-border)] grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerSinglePrint(row);
+                  }}
+                  className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
+                >
+                  طباعة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openEdit(row);
+                    setSelectedReportDrawer(null);
+                  }}
+                  className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
+                >
+                  تعديل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (linkedWo) {
+                      setViewWOReport(row);
+                      setSelectedReportDrawer(null);
+                    }
+                  }}
+                  disabled={!linkedWo}
+                  className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold disabled:opacity-50"
+                >
+                  أمر الشغل
+                </button>
+              </div>
+            </aside>
+          </>
+        );
+      })()}
+
       {/* ══ Create / Edit Report Modal ══ */}
       {showModal && (canCreateFinishedReports || can("reports.edit") || canManageComponentInjectionReports) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2491,35 +2909,39 @@ export const Reports: React.FC = () => {
                   : (form.reportType === 'component_injection' ? 'إنشاء تقرير مكون حقن' : 'إنشاء تقرير إنتاج')}
               </h3>
               <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <span className="material-icons-round">close</span>
+                <ReportIcon name="close" />
               </button>
             </div>
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
               {saveToast && saveToastType === 'success' && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-2 animate-in fade-in duration-300">
-                  <span className="material-icons-round text-emerald-500 text-lg">check_circle</span>
+                  <ReportIcon name="check_circle" className="text-emerald-500 text-lg" />
                   <p className="text-sm font-bold text-emerald-700 flex-1">{saveToast}</p>
                   <button onClick={() => setSaveToast(null)} className="text-emerald-400 hover:text-emerald-600 transition-colors">
-                    <span className="material-icons-round text-sm">close</span>
+                    <ReportIcon name="close" className="text-sm" />
                   </button>
                 </div>
               )}
               {canChooseReportType && (
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع التقرير</label>
-                  <select
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
+                  <Select
                     value={form.reportType}
-                    onChange={(e) => {
-                      const nextType = e.target.value === 'component_injection' ? 'component_injection' : 'finished_product';
+                    onValueChange={(value) => {
+                      const nextType = value === 'component_injection' ? 'component_injection' : 'finished_product';
                       if (nextType === 'component_injection' && !canManageComponentInjectionReports) return;
                       if (nextType === 'finished_product' && forceInjectionOnly) return;
                       setForm({ ...form, reportType: nextType, workOrderId: '' });
                     }}
                   >
-                    <option value="finished_product">تقرير إنتاج عادي</option>
-                    <option value="component_injection">تقرير مكون حقن</option>
-                  </select>
+                    <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="finished_product">تقرير إنتاج عادي</SelectItem>
+                      <SelectItem value="component_injection">تقرير مكون حقن</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
               {/* Work Order Selector */}
@@ -2536,14 +2958,14 @@ export const Reports: React.FC = () => {
                 return (
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-                      <span className="material-icons-round text-sm align-middle ml-1 text-primary">assignment</span>
+                      <ReportIcon name="assignment" className="text-sm align-middle ml-1 text-primary inline" />
                       أمر شغل (اختياري)
                     </label>
-                    <select
-                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
-                      value={form.workOrderId}
-                      onChange={(e) => {
-                        const wo = activeWOs.find((w) => w.id === e.target.value);
+                    <Select
+                      value={form.workOrderId || 'none'}
+                      onValueChange={(value) => {
+                        const selectedWorkOrderId = value === 'none' ? '' : value;
+                        const wo = activeWOs.find((w) => w.id === selectedWorkOrderId);
                         if (!wo) {
                           setForm({ ...form, workOrderId: '' });
                           return;
@@ -2558,18 +2980,23 @@ export const Reports: React.FC = () => {
                         });
                       }}
                     >
-                      <option value="">اختر أمر شغل لتعبئة البيانات تلقائياً</option>
-                      {activeWOs.map((wo) => {
-                        const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
-                        const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
-                        const remaining = wo.quantity - (wo.producedQuantity || 0);
-                        return (
-                          <option key={wo.id} value={wo.id!}>
-                            {wo.workOrderNumber} — {pName} — {lName} — متبقي: {remaining} وحدة
-                          </option>
-                        );
-                      })}
-                    </select>
+                      <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                        <SelectValue placeholder="اختر أمر شغل لتعبئة البيانات تلقائياً" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">اختر أمر شغل لتعبئة البيانات تلقائياً</SelectItem>
+                        {activeWOs.map((wo) => {
+                          const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
+                          const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
+                          const remaining = wo.quantity - (wo.producedQuantity || 0);
+                          return (
+                            <SelectItem key={wo.id} value={wo.id!}>
+                              {wo.workOrderNumber} — {pName} — {lName} — متبقي: {remaining} وحدة
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
                 );
               })()}
@@ -2685,7 +3112,7 @@ export const Reports: React.FC = () => {
                           ? `إجمالي الهالك: ${totalComponentScrapQty}`
                           : (form.productId ? 'تحديد هالك المكونات' : 'اختر المنتج أولاً')}
                       </span>
-                      <span className="material-icons-round text-base">open_in_new</span>
+                      <ReportIcon name="open_in_new" className="text-base" />
                     </button>
                   </div>
                 )}
@@ -2740,7 +3167,7 @@ export const Reports: React.FC = () => {
                           }
                           className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
                         >
-                          <span className="material-icons-round text-xs">groups</span>
+                          <ReportIcon name="groups" className="text-xs" />
                           تم جلب {getOperatorsCount(formLineWorkers, form.employeeId)} عامل تشغيل مسجل — اضغط للعرض
                         </button>
                       )}
@@ -2842,7 +3269,7 @@ export const Reports: React.FC = () => {
                 return (
                   <div className="mx-4 sm:mx-6 mb-2 bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex flex-wrap items-center gap-4 sm:gap-6">
                     <div className="flex items-center gap-2">
-                      <span className="material-icons-round text-primary text-lg">price_check</span>
+                      <ReportIcon name="price_check" className="text-primary text-lg" />
                       <span className="text-xs font-bold text-slate-500">تكلفة تقديرية:</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs font-bold">
@@ -2867,7 +3294,7 @@ export const Reports: React.FC = () => {
                 <>
                   {linked && (
                     <div className="mx-4 sm:mx-6 mb-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
-                      <span className="material-icons-round text-emerald-600 text-lg">event_available</span>
+                      <ReportIcon name="event_available" className="text-emerald-600 text-lg" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-emerald-700">خطة مرتبطة</p>
                         <p className="text-[11px] text-emerald-600 dark:text-emerald-500">
@@ -2879,13 +3306,13 @@ export const Reports: React.FC = () => {
                   )}
                   {blockWithoutPlan && (
                     <div className="mx-4 sm:mx-6 mb-2 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
-                      <span className="material-icons-round text-rose-500 text-lg">block</span>
+                      <ReportIcon name="block" className="text-rose-500 text-lg" />
                       <p className="text-xs font-bold text-rose-600">لا يوجد خطة إنتاج نشطة لهذا الخط والمنتج — التقارير بدون خطة غير مسموحة</p>
                     </div>
                   )}
                   {overProduced && (
                     <div className="mx-4 sm:mx-6 mb-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
-                      <span className="material-icons-round text-amber-500 text-lg">warning</span>
+                      <ReportIcon name="warning" className="text-amber-500 text-lg" />
                       <p className="text-xs font-bold text-amber-600">تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح</p>
                     </div>
                   )}
@@ -2899,8 +3326,8 @@ export const Reports: React.FC = () => {
                   onClick={() => handleSave(true)}
                   disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workHours || (form.reportType !== 'component_injection' && formWorkersTotal <= 0)}
                 >
-                  {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                  <span className="material-icons-round text-sm">print</span>
+                  {saving && <ReportIcon name="refresh" className="animate-spin text-sm" />}
+                  <ReportIcon name="print" className="text-sm" />
                   حفظ وطباعة
                 </Button>
               )}
@@ -2909,20 +3336,20 @@ export const Reports: React.FC = () => {
                 onClick={() => handleSave(false)}
                 disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workHours || (form.reportType !== 'component_injection' && formWorkersTotal <= 0)}
               >
-                {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                <span className="material-icons-round text-sm">{editId ? 'save' : 'add'}</span>
+                {saving && <ReportIcon name="refresh" className="animate-spin text-sm" />}
+                <ReportIcon name={editId ? 'save' : 'add'} className="text-sm" />
                 {editId ? 'حفظ التعديلات' : 'حفظ التقرير'}
               </Button>
             </div>
             {saveToast && saveToastType === 'error' && (
               <div className="absolute inset-0 z-20 bg-black/35 backdrop-blur-[1px] flex items-center justify-center p-6">
                 <div className="w-full max-w-md bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-start gap-3">
-                  <span className="material-icons-round text-rose-500 text-xl shrink-0">error</span>
+                  <ReportIcon name="error" className="text-rose-500 text-xl shrink-0" />
                   <p className="text-sm font-bold text-rose-700 flex-1 text-center">
                     {saveToast}
                   </p>
                   <button onClick={() => setSaveToast(null)} className="text-rose-400 hover:text-rose-600 transition-colors shrink-0">
-                    <span className="material-icons-round text-sm">close</span>
+                    <ReportIcon name="close" className="text-sm" />
                   </button>
                 </div>
               </div>
@@ -2936,7 +3363,7 @@ export const Reports: React.FC = () => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
+              <ReportIcon name="delete_forever" className="text-rose-500 text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف التقرير</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا التقرير؟</p>
@@ -2954,9 +3381,9 @@ export const Reports: React.FC = () => {
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
                 {deleteBusy ? (
-                  <span className="material-icons-round text-sm animate-spin">refresh</span>
+                  <ReportIcon name="refresh" className="text-sm animate-spin" />
                 ) : (
-                  <span className="material-icons-round text-sm">delete</span>
+                  <ReportIcon name="delete" className="text-sm" />
                 )}
                 {deleteBusy ? 'جاري الحذف...' : 'نعم، احذف'}
               </button>
@@ -2970,7 +3397,7 @@ export const Reports: React.FC = () => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-rose-500 text-3xl">delete_sweep</span>
+              <ReportIcon name="delete_sweep" className="text-rose-500 text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">حذف {bulkDeleteItems.length} تقرير</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف التقارير المحددة؟ لا يمكن التراجع عن هذا الإجراء.</p>
@@ -2988,9 +3415,9 @@ export const Reports: React.FC = () => {
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 {bulkDeleting ? (
-                  <span className="material-icons-round animate-spin text-sm">refresh</span>
+                  <ReportIcon name="refresh" className="animate-spin text-sm" />
                 ) : (
-                  <span className="material-icons-round text-sm">delete</span>
+                  <ReportIcon name="delete" className="text-sm" />
                 )}
                 {bulkDeleting ? 'جاري الحذف...' : `حذف ${bulkDeleteItems.length} تقرير`}
               </button>
@@ -3007,13 +3434,13 @@ export const Reports: React.FC = () => {
             <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                  <span className="material-icons-round text-emerald-600">upload_file</span>
+                  <ReportIcon name="upload_file" className="text-emerald-600" />
                 </div>
                 <div>
                   <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold">استيراد تقارير من Excel</h3>
                     <button onClick={() => downloadReportsTemplate(templateLookups)} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
-                      <span className="material-icons-round text-sm">download</span>
+                      <ReportIcon name="download" className="text-sm" />
                       تحميل نموذج
                     </button>
                   </div>
@@ -3033,7 +3460,7 @@ export const Reports: React.FC = () => {
                   onClick={() => { setShowImportModal(false); resetImportState(); }}
                   className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
                 >
-                <span className="material-icons-round">close</span>
+                <ReportIcon name="close" />
               </button>
             </div>
 
@@ -3041,22 +3468,22 @@ export const Reports: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {importParsing ? (
                 <div className="text-center py-12">
-                  <span className="material-icons-round text-4xl text-primary animate-spin block mb-3">refresh</span>
+                  <ReportIcon name="refresh" className="text-4xl text-primary animate-spin block mb-3" />
                   <p className="font-bold text-[var(--color-text-muted)]">جاري قراءة الملف...</p>
                 </div>
               ) : importMode === 'create' && importResult && importResult.rows.length === 0 ? (
                 <div className="text-center py-12">
-                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] block mb-3">warning</span>
+                  <ReportIcon name="warning" className="text-5xl text-[var(--color-text-muted)] block mb-3" />
                   <p className="font-bold text-[var(--color-text-muted)]">لا توجد بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد أن الملف يحتوي على أعمدة: التاريخ، خط الإنتاج، المنتج، المشرف، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
                   <button onClick={() => downloadReportsTemplate(templateLookups)} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
-                    <span className="material-icons-round text-sm">download</span>
+                    <ReportIcon name="download" className="text-sm" />
                     تحميل نموذج التقارير
                   </button>
                 </div>
               ) : importMode === 'updateDate' && importDateUpdateResult && importDateUpdateResult.rows.length === 0 ? (
                 <div className="text-center py-12">
-                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] block mb-3">warning</span>
+                  <ReportIcon name="warning" className="text-5xl text-[var(--color-text-muted)] block mb-3" />
                   <p className="font-bold text-[var(--color-text-muted)]">لا توجد بيانات صالحة للتحديث</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">استخدم ملف يحتوي على كود التقرير + واحد أو أكثر من: تاريخ جديد، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
                 </div>
@@ -3064,16 +3491,16 @@ export const Reports: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-2">
                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-blue-600">
-                      <span className="material-icons-round text-sm">description</span>
+                      <ReportIcon name="description" className="text-sm" />
                       {importDateUpdateResult.totalRows} صف
                     </div>
                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-[var(--border-radius-base)] text-xs font-bold text-emerald-600">
-                      <span className="material-icons-round text-sm">check_circle</span>
+                      <ReportIcon name="check_circle" className="text-sm" />
                       {importDateUpdateResult.validCount} صالح
                     </div>
                     {importDateUpdateResult.errorCount > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
-                        <span className="material-icons-round text-sm">error</span>
+                        <ReportIcon name="error" className="text-sm" />
                         {importDateUpdateResult.errorCount} خطأ
                       </div>
                     )}
@@ -3097,9 +3524,11 @@ export const Reports: React.FC = () => {
                               </p>
                             </div>
                             {isValid ? (
-                              <span className="material-icons-round text-emerald-500 text-sm shrink-0">check_circle</span>
+                              <ReportIcon name="check_circle" className="text-emerald-500 text-sm shrink-0" />
                             ) : (
-                              <span className="material-icons-round text-rose-500 text-sm shrink-0" title={row.errors.join('\n')}>error</span>
+                              <span title={row.errors.join('\n')}>
+                                <ReportIcon name="error" className="text-rose-500 text-sm shrink-0" />
+                              </span>
                             )}
                           </div>
                           <div className={`mt-2 text-sm ${row.updatedFieldsCount > 0 ? '' : 'text-rose-500'}`}>
@@ -3137,9 +3566,11 @@ export const Reports: React.FC = () => {
                               <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.rowIndex}</td>
                               <td className="px-3 py-2">
                                 {isValid ? (
-                                  <span className="material-icons-round text-emerald-500 text-sm">check_circle</span>
+                                  <ReportIcon name="check_circle" className="text-emerald-500 text-sm" />
                                 ) : (
-                                  <span className="material-icons-round text-rose-500 text-sm" title={row.errors.join('\n')}>error</span>
+                                  <span title={row.errors.join('\n')}>
+                                    <ReportIcon name="error" className="text-rose-500 text-sm" />
+                                  </span>
                                 )}
                               </td>
                               <td className={`px-3 py-2 font-mono text-xs ${row.reportCode ? '' : 'text-rose-500'}`}>{row.reportCode || '—'}</td>
@@ -3165,7 +3596,7 @@ export const Reports: React.FC = () => {
                   {importDateUpdateResult.errorCount > 0 && (
                     <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-4">
                       <p className="text-sm font-bold text-rose-600 mb-2">
-                        <span className="material-icons-round text-sm align-middle ml-1">error</span>
+                        <ReportIcon name="error" className="text-sm align-middle ml-1 inline" />
                         الصفوف التالية تحتاج تعديل ولن يتم تحديثها:
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -3183,28 +3614,28 @@ export const Reports: React.FC = () => {
                   {/* Summary Badges */}
                   <div className="flex flex-wrap gap-2">
                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-blue-600">
-                      <span className="material-icons-round text-sm">description</span>
+                      <ReportIcon name="description" className="text-sm" />
                       {importResult.totalRows} صف
                     </div>
                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-[var(--border-radius-base)] text-xs font-bold text-emerald-600">
-                      <span className="material-icons-round text-sm">check_circle</span>
+                      <ReportIcon name="check_circle" className="text-sm" />
                       {importResult.validCount} صالح
                     </div>
                     {importResult.errorCount > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
-                        <span className="material-icons-round text-sm">error</span>
+                        <ReportIcon name="error" className="text-sm" />
                         {importResult.errorCount} خطأ
                       </div>
                     )}
                     {importResult.warningCount > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 rounded-[var(--border-radius-base)] text-xs font-bold text-amber-600">
-                        <span className="material-icons-round text-sm">warning</span>
+                        <ReportIcon name="warning" className="text-sm" />
                         {importResult.warningCount} تحذير
                       </div>
                     )}
                     {importResult.duplicateCount > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-orange-600 dark:text-orange-400">
-                        <span className="material-icons-round text-sm">content_copy</span>
+                        <ReportIcon name="content_copy" className="text-sm" />
                         {importResult.duplicateCount} مكرر
                       </div>
                     )}
@@ -3231,13 +3662,19 @@ export const Reports: React.FC = () => {
                               <p className="text-sm font-medium mt-1">{row.date}</p>
                             </div>
                             {!isValid ? (
-                              <span className="material-icons-round text-rose-500 text-sm shrink-0" title={row.errors.join('\n')}>error</span>
+                              <span title={row.errors.join('\n')}>
+                                <ReportIcon name="error" className="text-rose-500 text-sm shrink-0" />
+                              </span>
                             ) : row.isDuplicate ? (
-                              <span className="material-icons-round text-orange-500 text-sm shrink-0" title="تقرير مكرر">content_copy</span>
+                              <span title="تقرير مكرر">
+                                <ReportIcon name="content_copy" className="text-orange-500 text-sm shrink-0" />
+                              </span>
                             ) : hasWarnings ? (
-                              <span className="material-icons-round text-amber-500 text-sm shrink-0" title={row.warnings.join('\n')}>warning</span>
+                              <span title={row.warnings.join('\n')}>
+                                <ReportIcon name="warning" className="text-amber-500 text-sm shrink-0" />
+                              </span>
                             ) : (
-                              <span className="material-icons-round text-emerald-500 text-sm shrink-0">check_circle</span>
+                              <ReportIcon name="check_circle" className="text-emerald-500 text-sm shrink-0" />
                             )}
                           </div>
 
@@ -3299,13 +3736,19 @@ export const Reports: React.FC = () => {
                               <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.rowIndex}</td>
                               <td className="px-3 py-2">
                                 {!isValid ? (
-                                  <span className="material-icons-round text-rose-500 text-sm" title={row.errors.join('\n')}>error</span>
+                                  <span title={row.errors.join('\n')}>
+                                    <ReportIcon name="error" className="text-rose-500 text-sm" />
+                                  </span>
                                 ) : row.isDuplicate ? (
-                                  <span className="material-icons-round text-orange-500 text-sm" title="تقرير مكرر">content_copy</span>
+                                  <span title="تقرير مكرر">
+                                    <ReportIcon name="content_copy" className="text-orange-500 text-sm" />
+                                  </span>
                                 ) : hasWarnings ? (
-                                  <span className="material-icons-round text-amber-500 text-sm" title={row.warnings.join('\n')}>warning</span>
+                                  <span title={row.warnings.join('\n')}>
+                                    <ReportIcon name="warning" className="text-amber-500 text-sm" />
+                                  </span>
                                 ) : (
-                                  <span className="material-icons-round text-emerald-500 text-sm">check_circle</span>
+                                  <ReportIcon name="check_circle" className="text-emerald-500 text-sm" />
                                 )}
                               </td>
                               <td className="px-3 py-2 font-medium">{row.date}</td>
@@ -3327,7 +3770,7 @@ export const Reports: React.FC = () => {
                   {importResult.errorCount > 0 && (
                     <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-4">
                       <p className="text-sm font-bold text-rose-600 mb-2">
-                        <span className="material-icons-round text-sm align-middle ml-1">error</span>
+                        <ReportIcon name="error" className="text-sm align-middle ml-1 inline" />
                         الصفوف التالية تحتاج تعديل ولن يتم حفظها:
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -3344,7 +3787,7 @@ export const Reports: React.FC = () => {
                   {importResult.warningCount > 0 && (
                     <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
                       <p className="text-sm font-bold text-amber-600 mb-2">
-                        <span className="material-icons-round text-sm align-middle ml-1">warning</span>
+                        <ReportIcon name="warning" className="text-sm align-middle ml-1 inline" />
                         تنبيهات (سيتم الحفظ لكن يرجى المراجعة):
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -3379,7 +3822,7 @@ export const Reports: React.FC = () => {
                   <>
                     <Button variant="outline" onClick={() => { setShowImportModal(false); resetImportState(); }}>إلغاء</Button>
                     <Button variant="primary" onClick={handleImportSave}>
-                      <span className="material-icons-round text-sm">save</span>
+                      <ReportIcon name="save" className="text-sm" />
                       {importMode === 'updateDate' ? `تحديث ${importValidCount} صف` : `حفظ ${importValidCount} تقرير`}
                     </Button>
                   </>
@@ -3416,12 +3859,12 @@ export const Reports: React.FC = () => {
             <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="material-icons-round text-primary">assignment</span>
+                  <ReportIcon name="assignment" className="text-primary" />
                   <h3 className="font-bold">{wo.workOrderNumber}</h3>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
                 </div>
                 <button onClick={() => setViewWOReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
-                  <span className="material-icons-round">close</span>
+                  <ReportIcon name="close" />
                 </button>
               </div>
               <div className="p-5 space-y-4">
@@ -3438,14 +3881,14 @@ export const Reports: React.FC = () => {
                   <div className="space-y-3">
                     {compareRows.map((cr) => (
                       <div key={cr.label} className="flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/50">
-                        <span className="material-icons-round text-primary text-lg">{cr.icon}</span>
+                        <ReportIcon name={cr.icon} className="text-primary text-lg" />
                         <span className="text-sm font-bold text-[var(--color-text-muted)] w-16">{cr.label}</span>
                         <div className="flex-1 flex items-center gap-2">
                           <div className="flex-1 text-center">
                             <span className="text-xs text-[var(--color-text-muted)] block">مخطط</span>
                             <span className="text-sm font-bold text-[var(--color-text)]">{cr.planned}</span>
                           </div>
-                          <span className="material-icons-round text-[var(--color-text-muted)] text-sm">arrow_forward</span>
+                          <ReportIcon name="arrow_forward" className="text-[var(--color-text-muted)] text-sm" />
                           <div className="flex-1 text-center">
                             <span className="text-xs text-[var(--color-text-muted)] block">فعلي</span>
                             <span className="text-sm font-bold text-primary">{cr.actual}</span>
@@ -3478,7 +3921,7 @@ export const Reports: React.FC = () => {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold">تقرير الجودة المرتبط</h3>
                   <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
-                    <span className="material-icons-round">close</span>
+                    <ReportIcon name="close" />
                   </button>
                 </div>
                 <p className="text-sm text-slate-500">لا يوجد تقرير جودة مرتبط بهذا التقرير حتى الآن.</p>
@@ -3502,7 +3945,7 @@ export const Reports: React.FC = () => {
                   </p>
                 </div>
                 <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
-                  <span className="material-icons-round">close</span>
+                  <ReportIcon name="close" />
                 </button>
               </div>
               <div className="p-5 space-y-4">
@@ -3573,12 +4016,12 @@ export const Reports: React.FC = () => {
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md max-h-[80vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <span className="material-icons-round text-primary">groups</span>
+                <ReportIcon name="groups" className="text-primary" />
                 <h3 className="font-bold">عمالة {getLineName(viewWorkersData.lineId)}</h3>
                 <span className="text-xs text-[var(--color-text-muted)] font-medium">{viewWorkersData.date}</span>
               </div>
               <button onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600">
-                <span className="material-icons-round">close</span>
+                <ReportIcon name="close" />
               </button>
             </div>
             <div className="p-4 border-b border-[var(--color-border)] space-y-2">
@@ -3597,9 +4040,9 @@ export const Reports: React.FC = () => {
                   disabled={!viewWorkersPickerId || viewWorkersBusy}
                 >
                   {viewWorkersBusy ? (
-                    <span className="material-icons-round animate-spin text-sm">refresh</span>
+                    <ReportIcon name="refresh" className="animate-spin text-sm" />
                   ) : (
-                    <span className="material-icons-round text-sm">person_add</span>
+                    <ReportIcon name="person_add" className="text-sm" />
                   )}
                   إضافة
                 </Button>
@@ -3645,12 +4088,12 @@ export const Reports: React.FC = () => {
             <div className="p-4 overflow-y-auto flex-1">
               {viewWorkersLoading ? (
                 <div className="text-center py-8">
-                  <span className="material-icons-round text-3xl text-primary animate-spin block mb-2">refresh</span>
+                  <ReportIcon name="refresh" className="text-3xl text-primary animate-spin block mb-2" />
                   <p className="text-sm text-slate-500">جاري التحميل...</p>
                 </div>
               ) : viewWorkersData.workers.length === 0 ? (
                 <div className="text-center py-8">
-                  <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] block mb-2">person_off</span>
+                  <ReportIcon name="person_off" className="text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] block mb-2" />
                   <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمالة مسجلة على هذا الخط في هذا اليوم</p>
                 </div>
               ) : (
@@ -3662,7 +4105,7 @@ export const Reports: React.FC = () => {
                     {viewWorkersData.workers.map((w, i) => (
                       <div key={w.id || i} className="flex items-center gap-3 py-2.5">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                          <span className="material-icons-round text-primary text-sm">person</span>
+                          <ReportIcon name="person" className="text-primary text-sm" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
@@ -3675,7 +4118,7 @@ export const Reports: React.FC = () => {
                           className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50"
                           title="حذف العامل من هذا الخط"
                         >
-                          <span className="material-icons-round text-base">delete</span>
+                          <ReportIcon name="delete" className="text-base" />
                         </button>
                       </div>
                     ))}

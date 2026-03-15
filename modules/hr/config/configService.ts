@@ -79,7 +79,7 @@ export async function getAllConfigModules(): Promise<HRConfigMap> {
       return [name, config] as const;
     }),
   );
-  return Object.fromEntries(results) as HRConfigMap;
+  return Object.fromEntries(results) as unknown as HRConfigMap;
 }
 
 /**

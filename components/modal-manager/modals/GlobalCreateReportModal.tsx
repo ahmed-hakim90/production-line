@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ExternalLink, Info, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { getOperationalDateString } from '../../../utils/calculations';
@@ -75,7 +76,14 @@ export const GlobalCreateReportModal: React.FC = () => {
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || forceInjectionOnly;
   const isComponentEntryLocked = payload?.reportType === 'component_injection';
-  const canChooseReportType = canCreateFinishedReports && canManageComponentInjectionReports && !isComponentEntryLocked;
+  const availableReportTypes = useMemo<Array<ReportFormState['reportType']>>(() => {
+    if (isComponentEntryLocked) return ['component_injection'];
+    const types: Array<ReportFormState['reportType']> = [];
+    if (canCreateFinishedReports) types.push('finished_product');
+    if (canManageComponentInjectionReports) types.push('component_injection');
+    return types;
+  }, [isComponentEntryLocked, canCreateFinishedReports, canManageComponentInjectionReports]);
+  const canChooseReportType = availableReportTypes.length > 1;
 
   const currentEmployee = useMemo(
     () => rawEmployees.find((e) => e.userId === uid) ?? null,
@@ -190,19 +198,19 @@ export const GlobalCreateReportModal: React.FC = () => {
 
   useEffect(() => {
     if (!isOpen) return;
-    const requestedType = payload?.reportType === 'component_injection' ? 'component_injection' : 'finished_product';
-    if (requestedType === 'component_injection') {
-      setForm((prev) => ({ ...prev, reportType: 'component_injection' }));
-      return;
-    }
-    if (canCreateFinishedReports) {
-      setForm((prev) => ({ ...prev, reportType: 'finished_product' }));
-      return;
-    }
-    if (canManageComponentInjectionReports) {
-      setForm((prev) => ({ ...prev, reportType: 'component_injection' }));
-    }
-  }, [isOpen, payload?.reportType, canCreateFinishedReports, canManageComponentInjectionReports]);
+    const requestedType: ReportFormState['reportType'] =
+      payload?.reportType === 'component_injection' ? 'component_injection' : 'finished_product';
+
+    const initialType = availableReportTypes.includes(requestedType)
+      ? requestedType
+      : (availableReportTypes[0] ?? 'finished_product');
+
+    setForm((prev) => (
+      prev.reportType === initialType
+        ? prev
+        : { ...prev, reportType: initialType, workOrderId: '' }
+    ));
+  }, [isOpen, payload?.reportType, availableReportTypes]);
 
   if (!isOpen) return null;
   if (!canCreateFinishedReports && !can('reports.edit') && !canManageComponentInjectionReports) return null;
@@ -282,14 +290,14 @@ export const GlobalCreateReportModal: React.FC = () => {
           <div className="absolute inset-0 z-30 bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4">
             <div className="w-full max-w-md bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-xl)] shadow-2xl p-5 space-y-4">
               <div className="flex items-center gap-2">
-                <span className="material-icons-round text-rose-500">error</span>
+                <AlertCircle size={18} className="text-rose-500" />
                 <h4 className="text-base font-extrabold text-rose-700">تعذر الحفظ</h4>
               </div>
               <p className="text-sm font-bold text-[var(--color-text)]">{feedback.text}</p>
               <div className="flex items-center justify-end gap-2">
                 <Button variant="outline" onClick={closeErrorOverlay}>إغلاق التنبيه</Button>
                 <Button variant="danger" onClick={clearFormAndCloseError}>
-                  <span className="material-icons-round text-sm">delete_sweep</span>
+                  <Trash2 size={14} />
                   مسح البيانات
                 </Button>
               </div>
@@ -302,7 +310,7 @@ export const GlobalCreateReportModal: React.FC = () => {
             {form.reportType === 'component_injection' ? 'إنشاء تقرير مكون حقن' : 'إنشاء تقرير إنتاج'}
           </h3>
           <button onClick={closeModal} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
 
@@ -313,13 +321,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 'bg-emerald-50 border-emerald-200'
               }`}
             >
-              <span
-                className={`material-icons-round text-lg ${
-                  'text-emerald-500'
-                }`}
-              >
-                info
-              </span>
+              <Info size={18} className="text-emerald-500" />
               <p
                 className={`text-sm font-bold flex-1 ${
                   'text-emerald-700'
@@ -340,8 +342,12 @@ export const GlobalCreateReportModal: React.FC = () => {
                   setForm((prev) => ({ ...prev, reportType: nextType, workOrderId: '' }));
                 }}
               >
-                <option value="finished_product">تقرير إنتاج عادي</option>
-                <option value="component_injection">تقرير مكون حقن</option>
+                {availableReportTypes.includes('finished_product') && (
+                  <option value="finished_product">تقرير إنتاج عادي</option>
+                )}
+                {availableReportTypes.includes('component_injection') && (
+                  <option value="component_injection">تقرير مكون حقن</option>
+                )}
               </select>
             </div>
           )}
@@ -488,7 +494,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                       ? `إجمالي الهالك: ${totalComponentScrapQty}`
                       : (form.productId ? 'تحديد هالك المكونات' : 'اختر المنتج أولاً')}
                   </span>
-                  <span className="material-icons-round text-base">open_in_new</span>
+                  <ExternalLink size={16} />
                 </button>
               </div>
             )}
@@ -629,8 +635,8 @@ export const GlobalCreateReportModal: React.FC = () => {
               || (form.reportType !== 'component_injection' && effectiveWorkersCount <= 0)
             }
           >
-            {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-            <span className="material-icons-round text-sm">add</span>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            <Plus size={14} />
             حفظ التقرير
           </Button>
         </div>

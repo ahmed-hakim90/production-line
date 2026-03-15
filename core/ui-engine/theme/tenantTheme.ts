@@ -1,7 +1,7 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
 
-export type TenantThemePreset = 'light' | 'dark' | 'factory' | 'custom';
+export type TenantThemePreset = 'indigo-pro' | 'light' | 'dark' | 'factory' | 'custom';
 
 export interface TenantTheme {
   preset: TenantThemePreset;
@@ -19,7 +19,7 @@ export interface TenantTheme {
 
 const THEME_STORAGE_KEY = 'tenant_theme_cache_v1';
 
-function toRgbChannels(color: string, fallback = '168 0 8'): string {
+function toRgbChannels(color: string, fallback = '79 70 229'): string {
   const value = color.trim();
   if (!value) return fallback;
 
@@ -49,10 +49,20 @@ function toRgbChannels(color: string, fallback = '168 0 8'): string {
 }
 
 const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
+  'indigo-pro': {
+    preset: 'indigo-pro',
+    primaryColor: '#4F46E5',
+    colorBg: '#F8FAFC',
+    colorCard: '#ffffff',
+    colorBorder: '#e2e8f0',
+    colorText: '#0f172a',
+    colorSidebarBg: '#ffffff',
+    colorSidebarText: '#334155',
+  },
   light: {
     preset: 'light',
-    primaryColor: '#a80008',
-    colorBg: '#f8fafc',
+    primaryColor: '#4F46E5',
+    colorBg: '#F8FAFC',
     colorCard: '#ffffff',
     colorBorder: '#e2e8f0',
     colorText: '#0f172a',
@@ -85,10 +95,10 @@ const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
 
 export function resolveTheme(theme?: Partial<TenantTheme> | null): TenantTheme {
   if (!theme) {
-    return PRESETS.light;
+    return PRESETS['indigo-pro'];
   }
 
-  const preset = theme.preset && theme.preset !== 'custom' ? theme.preset : 'light';
+  const preset = theme.preset && theme.preset !== 'custom' ? theme.preset : 'indigo-pro';
   return {
     ...PRESETS[preset],
     ...theme,
@@ -125,6 +135,16 @@ export function applyTenantTheme(theme: TenantTheme) {
   root.style.setProperty('--color-border', theme.colorBorder);
   root.style.setProperty('--color-text', theme.colorText);
   root.style.setProperty('--color-primary', toRgbChannels(theme.primaryColor));
+  root.style.setProperty('--color-secondary', '99 102 241');
+  root.style.setProperty('--color-success', '5 150 105');
+  root.style.setProperty('--color-warning', '217 119 6');
+  root.style.setProperty('--color-danger', '220 38 38');
+  root.style.setProperty('--color-primary-hex', theme.primaryColor);
+  root.style.setProperty('--color-secondary-hex', '#6366F1');
+  root.style.setProperty('--color-success-hex', '#059669');
+  root.style.setProperty('--color-warning-hex', '#D97706');
+  root.style.setProperty('--color-danger-hex', '#DC2626');
+  root.style.setProperty('--color-background', theme.colorBg);
   root.style.setProperty('--color-sidebar-bg', theme.colorSidebarBg);
   root.style.setProperty('--color-sidebar-text', theme.colorSidebarText);
   root.style.setProperty('--tenant-logo', theme.logo ?? '');
@@ -136,7 +156,7 @@ export function applyTenantTheme(theme: TenantTheme) {
 
 export async function loadTenantTheme(tenantId?: string | null): Promise<TenantTheme> {
   if (!tenantId || !isConfigured) {
-    return PRESETS.light;
+    return PRESETS['indigo-pro'];
   }
 
   try {
@@ -145,6 +165,6 @@ export async function loadTenantTheme(tenantId?: string | null): Promise<TenantT
     return resolveTheme(snapshot.data() as Partial<TenantTheme> | null);
   } catch (error) {
     console.error('Failed to load tenant theme:', error);
-    return PRESETS.light;
+    return PRESETS['indigo-pro'];
   }
 }

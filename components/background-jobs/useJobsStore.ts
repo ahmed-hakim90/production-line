@@ -63,7 +63,7 @@ export const useJobsStore = create<JobsStore>()(
   persist(
     (set) => ({
       jobs: [],
-      panelMinimized: false,
+      panelMinimized: true,
       panelHidden: false,
       historyOpen: false,
       selectedJobId: null,
@@ -88,7 +88,7 @@ export const useJobsStore = create<JobsStore>()(
         set((state) => ({
           jobs: [created, ...state.jobs].slice(0, 120),
           panelHidden: false,
-          panelMinimized: false,
+          panelMinimized: true,
         }));
         return id;
       },
@@ -117,7 +117,7 @@ export const useJobsStore = create<JobsStore>()(
               : job
           ),
           panelHidden: false,
-          panelMinimized: false,
+          panelMinimized: true,
         }));
       },
 
@@ -226,12 +226,12 @@ export const useJobsStore = create<JobsStore>()(
               : job
           ),
           panelHidden: false,
-          panelMinimized: false,
+          panelMinimized: true,
         }));
       },
 
       viewJobReport: (id) => {
-        set({ historyOpen: true, selectedJobId: id, panelHidden: false, panelMinimized: false });
+        set({ historyOpen: true, selectedJobId: id, panelHidden: false, panelMinimized: true });
       },
 
       removeJob: (id) => {
@@ -250,7 +250,7 @@ export const useJobsStore = create<JobsStore>()(
         set({
           historyOpen: false,
           selectedJobId: null,
-          panelMinimized: false,
+          panelMinimized: true,
           panelHidden: false,
         }),
     }),

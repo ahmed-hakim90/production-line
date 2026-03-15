@@ -1,5 +1,22 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  Factory,
+  Flag,
+  Hammer,
+  Info,
+  Layers,
+  Lightbulb,
+  Loader2,
+  Sparkles,
+  TrendingUp,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
@@ -12,7 +29,16 @@ import {
   calculateDailyCapacity,
   calculateEstimatedDays,
 } from '../../../utils/calculations';
-import { buildLineCosts, buildProductCosts, buildProductAvgCost, formatCost, ProductCostData, buildDailyProductionCostChart, getCurrentMonth } from '../../../utils/costCalculations';
+import {
+  buildLineCosts,
+  formatCost,
+  ProductCostData,
+  buildDailyProductionCostChart,
+  getCurrentMonth,
+  computeLiveProductCosts,
+  buildSupervisorHourlyRatesMap,
+} from '../../../utils/costCalculations';
+import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
 import { ProductionLineStatus, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
@@ -33,6 +59,13 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
@@ -63,6 +96,33 @@ const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
   );
 };
 
+const DASHBOARD_ICON_MAP: Record<string, LucideIcon> = {
+  inventory: Factory,
+  price_check: WalletCards,
+  clear_all: Layers,
+  close: X,
+  info: Info,
+  insights: TrendingUp,
+  refresh: Loader2,
+  bar_chart: BarChart3,
+  precision_manufacturing: Hammer,
+  flag: Flag,
+  calculate: Lightbulb,
+  add_task: Sparkles,
+  build: Hammer,
+  check_circle: CheckCircle2,
+};
+
+const DashboardIcon = ({
+  name,
+  ...iconProps
+}: {
+  name: string;
+} & React.ComponentProps<'svg'>) => {
+  const Icon = DASHBOARD_ICON_MAP[name] ?? AlertTriangle;
+  return <Icon {...iconProps} />;
+};
+
 export const Dashboard: React.FC = () => {
   const productionLines = useAppStore((s) => s.productionLines);
   const storeTodayReports = useAppStore((s) => s.todayReports);
@@ -79,6 +139,8 @@ export const Dashboard: React.FC = () => {
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
+  const assets = useAppStore((s) => s.assets);
+  const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const uid = useAppStore((s) => s.uid);
   const systemSettings = useAppStore((s) => s.systemSettings);
@@ -105,6 +167,7 @@ export const Dashboard: React.FC = () => {
   const [planQuantity, setPlanQuantity] = useState<number>(0);
 
   const [costProductIds, setCostProductIds] = useState<string[]>([]);
+  const [costProductCandidate, setCostProductCandidate] = useState('');
 
   // ── Daily Production vs Cost Chart ──
   const [chartProductId, setChartProductId] = useState('');
@@ -114,6 +177,7 @@ export const Dashboard: React.FC = () => {
   const [chartLoading, setChartLoading] = useState(false);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
+  const [monthlyCostSummary, setMonthlyCostSummary] = useState<MonthlyDashboardCostSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +202,19 @@ export const Dashboard: React.FC = () => {
       }
     };
     void loadScopedReports();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const month = getCurrentMonth();
+    monthlyProductionCostService.getDashboardMonthlySummary(month)
+      .then((summary) => {
+        if (!cancelled) setMonthlyCostSummary(summary);
+      })
+      .catch(() => {
+        if (!cancelled) setMonthlyCostSummary(null);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -179,6 +256,98 @@ export const Dashboard: React.FC = () => {
   };
 
   const kpis = buildDashboardKPIs(todayReports, monthlyReports);
+  const hourlyRate = laborSettings?.hourlyRate ?? 0;
+  const productCategoryById = useMemo(
+    () => new Map(_rawProducts.map((product) => [String(product.id || ''), String(product.model || '')])),
+    [_rawProducts]
+  );
+  const supervisorHourlyRates = useMemo(
+    () => buildSupervisorHourlyRatesMap(_rawEmployees),
+    [_rawEmployees]
+  );
+  const payrollNetByEmployee = useMemo(() => {
+    const map = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (!employee.id || employee.isActive === false) return;
+      map.set(String(employee.id), Number(employee.baseSalary || 0));
+    });
+    return map;
+  }, [_rawEmployees]);
+  const payrollNetByDepartment = useMemo(() => {
+    const map = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (employee.isActive === false) return;
+      const departmentId = String(employee.departmentId || '');
+      if (!departmentId) return;
+      map.set(departmentId, (map.get(departmentId) || 0) + Number(employee.baseSalary || 0));
+    });
+    return map;
+  }, [_rawEmployees]);
+  const liveTodayCostComputation = useMemo(
+    () => computeLiveProductCosts(
+      todayReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      }
+    ),
+    [
+      todayReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      assets,
+      assetDepreciations,
+      productCategoryById,
+      supervisorHourlyRates,
+      payrollNetByEmployee,
+      payrollNetByDepartment,
+      systemSettings.costMonthlyWorkingDays,
+    ]
+  );
+  const reportsForAnalysis = monthlyReports.length > 0 ? monthlyReports : todayReports;
+  const liveAnalysisCostComputation = useMemo(
+    () => computeLiveProductCosts(
+      reportsForAnalysis,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      }
+    ),
+    [
+      reportsForAnalysis,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      assets,
+      assetDepreciations,
+      productCategoryById,
+      supervisorHourlyRates,
+      payrollNetByEmployee,
+      payrollNetByDepartment,
+      systemSettings.costMonthlyWorkingDays,
+    ]
+  );
 
   const lineCosts = useMemo(
     () => buildLineCosts(
@@ -188,33 +357,69 @@ export const Dashboard: React.FC = () => {
     [productionLines, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]
   );
 
+  const monthlyPerProduct = monthlyCostSummary?.perProduct || {};
+
   const productCosts = useMemo(() => {
     if (!canViewCosts) return {};
     const pids = [...new Set(productionLines.map((l) => l.currentProductId).filter(Boolean))];
     if (pids.length === 0) return {};
-    return buildProductCosts(pids, todayReports, laborSettings, costCenters, costCenterValues, costAllocations);
-  }, [canViewCosts, productionLines, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+    const result: Record<string, ProductCostData> = {};
+    pids.forEach((pid) => {
+      const monthlyRow = monthlyPerProduct[pid];
+      if (monthlyRow) {
+        result[pid] = {
+          laborCost: monthlyRow.directCost,
+          indirectCost: monthlyRow.indirectCost,
+          totalCost: monthlyRow.totalCost,
+          quantityProduced: monthlyRow.producedQty,
+          costPerUnit: monthlyRow.averageUnitCost,
+        };
+        return;
+      }
+      const row = liveTodayCostComputation.byProduct[pid];
+      if (!row) {
+        result[pid] = { laborCost: 0, indirectCost: 0, totalCost: 0, quantityProduced: 0, costPerUnit: 0 };
+      } else {
+        result[pid] = row;
+      }
+    });
+    return result;
+  }, [canViewCosts, productionLines, monthlyPerProduct, liveTodayCostComputation.byProduct]);
 
   const costAnalysisMap = useMemo(() => {
     if (!canViewCosts || costProductIds.length === 0) return {};
-    const hourlyRate = laborSettings?.hourlyRate ?? 0;
-    const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
     const result: Record<string, ProductCostData> = {};
     for (const pid of costProductIds) {
-      const avg = buildProductAvgCost(pid, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+      const monthlyRow = monthlyPerProduct[pid];
+      const avg = monthlyRow
+        ? {
+            laborCost: monthlyRow.directCost,
+            indirectCost: monthlyRow.indirectCost,
+            totalCost: monthlyRow.totalCost,
+            quantityProduced: monthlyRow.producedQty,
+            costPerUnit: monthlyRow.averageUnitCost,
+          }
+        : (liveAnalysisCostComputation.byProduct[pid] || { laborCost: 0, indirectCost: 0, totalCost: 0, quantityProduced: 0, costPerUnit: 0 });
       if (avg.quantityProduced > 0) result[pid] = avg;
     }
     return result;
-  }, [canViewCosts, costProductIds, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+  }, [canViewCosts, costProductIds, monthlyPerProduct, liveAnalysisCostComputation.byProduct]);
 
   const selectedProductCost = useMemo(() => {
     if (!canViewCosts || !selectedProductId) return null;
-    const hourlyRate = laborSettings?.hourlyRate ?? 0;
-    const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
-    const avg = buildProductAvgCost(selectedProductId, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+    const monthlyRow = monthlyPerProduct[selectedProductId];
+    const avg = monthlyRow
+      ? {
+          laborCost: monthlyRow.directCost,
+          indirectCost: monthlyRow.indirectCost,
+          totalCost: monthlyRow.totalCost,
+          quantityProduced: monthlyRow.producedQty,
+          costPerUnit: monthlyRow.averageUnitCost,
+        }
+      : (liveAnalysisCostComputation.byProduct[selectedProductId] || { laborCost: 0, indirectCost: 0, totalCost: 0, quantityProduced: 0, costPerUnit: 0 });
     if (avg.costPerUnit <= 0) return null;
     return avg;
-  }, [canViewCosts, selectedProductId, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+  }, [canViewCosts, selectedProductId, monthlyPerProduct, liveAnalysisCostComputation.byProduct]);
 
   const monthOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
@@ -359,7 +564,7 @@ export const Dashboard: React.FC = () => {
         <div className="bg-[var(--color-card)] p-4 sm:p-6 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-2 md:col-span-1">
           <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
             <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-2xl sm:text-3xl">inventory</span>
+              <DashboardIcon name="inventory" className="text-2xl sm:text-3xl" />
             </div>
             <p className="text-[var(--color-text-muted)] text-sm font-bold">إجمالي الإنتاج</p>
           </div>
@@ -393,7 +598,7 @@ export const Dashboard: React.FC = () => {
           <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-                <span className="material-icons-round text-violet-600 dark:text-violet-400">price_check</span>
+                <DashboardIcon name="price_check" className="text-violet-600 dark:text-violet-400" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-[var(--color-text)]">تحليل تكلفة المنتجات</h3>
@@ -401,27 +606,33 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <select
-                className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[200px] transition-all"
-                value=""
-                onChange={(e) => {
-                  if (e.target.value && !costProductIds.includes(e.target.value)) {
-                    setCostProductIds([...costProductIds, e.target.value]);
+              <Select
+                value={costProductCandidate || 'none'}
+                onValueChange={(value) => {
+                  setCostProductCandidate(value === 'none' ? '' : value);
+                  if (value !== 'none' && !costProductIds.includes(value)) {
+                    setCostProductIds([...costProductIds, value]);
+                    setCostProductCandidate('');
                   }
                 }}
               >
-                <option value="">إضافة منتج...</option>
-                {products.filter((p) => !costProductIds.includes(p.id)).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[200px]">
+                  <SelectValue placeholder="إضافة منتج..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">إضافة منتج...</SelectItem>
+                  {products.filter((p) => !costProductIds.includes(p.id)).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {costProductIds.length > 0 && (
                 <button
                   onClick={() => setCostProductIds([])}
                   className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all"
                   title="مسح الكل"
                 >
-                  <span className="material-icons-round text-sm">clear_all</span>
+                  <DashboardIcon name="clear_all" className="text-sm" />
                 </button>
               )}
             </div>
@@ -438,7 +649,7 @@ export const Dashboard: React.FC = () => {
                       onClick={() => setCostProductIds(costProductIds.filter((id) => id !== pid))}
                       className="hover:text-rose-500 transition-colors"
                     >
-                      <span className="material-icons-round text-sm">close</span>
+                      <DashboardIcon name="close" className="text-sm" />
                     </button>
                   </span>
                 );
@@ -549,7 +760,7 @@ export const Dashboard: React.FC = () => {
             </div>
           ) : costProductIds.length > 0 ? (
             <div className="p-8 text-center text-slate-400">
-              <span className="material-icons-round text-3xl mb-2 block opacity-30">info</span>
+              <DashboardIcon name="info" className="text-3xl mb-2 block opacity-30" />
               <p className="text-sm font-bold">لا توجد بيانات تكلفة للمنتجات المختارة في الشهر الحالي</p>
             </div>
           ) : null}
@@ -562,7 +773,7 @@ export const Dashboard: React.FC = () => {
           <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-                <span className="material-icons-round text-blue-600">insights</span>
+                <DashboardIcon name="insights" className="text-blue-600" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-[var(--color-text)]">الإنتاج اليومي مقابل التكلفة</h3>
@@ -572,43 +783,46 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="px-5 sm:px-6 pt-4 flex flex-wrap gap-3">
-            <select
-              className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[160px] transition-all"
-              value={chartProductId}
-              onChange={(e) => setChartProductId(e.target.value)}
-            >
-              <option value="">كل المنتجات</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <Select value={chartProductId || 'all'} onValueChange={(value) => setChartProductId(value === 'all' ? '' : value)}>
+              <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[160px]">
+                <SelectValue placeholder="كل المنتجات" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المنتجات</SelectItem>
+                {products.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <select
-              className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[160px] transition-all"
-              value={chartLineId}
-              onChange={(e) => setChartLineId(e.target.value)}
-            >
-              <option value="">كل الخطوط</option>
-              {_rawLines.map((l) => (
-                <option key={l.id} value={l.id!}>{l.name}</option>
-              ))}
-            </select>
+            <Select value={chartLineId || 'all'} onValueChange={(value) => setChartLineId(value === 'all' ? '' : value)}>
+              <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[160px]">
+                <SelectValue placeholder="كل الخطوط" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الخطوط</SelectItem>
+                {_rawLines.map((l) => (
+                  <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <select
-              className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 py-2.5 px-4 outline-none font-bold sm:min-w-[160px] transition-all"
-              value={chartMonth}
-              onChange={(e) => setChartMonth(e.target.value)}
-            >
-              {monthOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <Select value={chartMonth} onValueChange={setChartMonth}>
+              <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[160px]">
+                <SelectValue placeholder="اختر الشهر" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="p-5 sm:p-6">
             {chartLoading ? (
               <div className="flex items-center justify-center py-12 text-slate-400">
-                <span className="material-icons-round animate-spin text-2xl">refresh</span>
+                <DashboardIcon name="refresh" className="animate-spin text-2xl" />
                 <span className="mr-2 text-sm font-bold">جاري تحميل البيانات...</span>
               </div>
             ) : dailyChartData.length > 0 ? (
@@ -669,7 +883,7 @@ export const Dashboard: React.FC = () => {
               </div>
             ) : (
               <div className="text-center py-12 text-slate-400">
-                <span className="material-icons-round text-3xl mb-2 block opacity-30">bar_chart</span>
+                <DashboardIcon name="bar_chart" className="text-3xl mb-2 block opacity-30" />
                 <p className="text-sm font-bold">لا توجد بيانات للشهر المحدد</p>
                 <p className="text-xs mt-1">اختر شهر يحتوي على تقارير إنتاج لعرض الرسم البياني</p>
               </div>
@@ -691,7 +905,7 @@ export const Dashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {productionLines.length === 0 && !loading && (
               <div className="col-span-2 text-center py-12 text-slate-400">
-                <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
+                <DashboardIcon name="precision_manufacturing" className="text-5xl mb-3 block opacity-30" />
                 <p className="font-bold">لا توجد خطوط إنتاج بعد</p>
                 <p className="text-sm mt-1">أضف خطوط الإنتاج من صفحة "خطوط الإنتاج"</p>
               </div>
@@ -760,7 +974,7 @@ export const Dashboard: React.FC = () => {
                     onClick={(e) => { e.stopPropagation(); openTargetModal(line.id, line.name); }}
                     className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-[var(--border-radius-base)] transition-all"
                   >
-                    <span className="material-icons-round text-sm">flag</span>
+                    <DashboardIcon name="flag" className="text-sm" />
                     {line.target > 0 ? 'تعديل الهدف' : 'تعيين الهدف'}
                   </button>
                 )}
@@ -774,16 +988,17 @@ export const Dashboard: React.FC = () => {
             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المنتج</label>
-                <select
-                  className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={selectedProductId}
-                  onChange={(e) => setSelectedProductId(e.target.value)}
-                >
-                  <option value="">اختر المنتج...</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+                <Select value={selectedProductId || 'none'} onValueChange={(value) => setSelectedProductId(value === 'none' ? '' : value)}>
+                  <SelectTrigger className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                    <SelectValue placeholder="اختر المنتج..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">اختر المنتج...</SelectItem>
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -832,7 +1047,7 @@ export const Dashboard: React.FC = () => {
                   </>
                 ) : (
                   <div className="text-center text-[var(--color-text-muted)] py-2">
-                    <span className="material-icons-round text-2xl mb-1 block opacity-40">calculate</span>
+                    <DashboardIcon name="calculate" className="text-2xl mb-1 block opacity-40" />
                     <p className="text-xs font-bold">اختر منتج وأدخل الكمية لعرض التقديرات</p>
                   </div>
                 )}
@@ -846,7 +1061,7 @@ export const Dashboard: React.FC = () => {
                   className="w-full"
                   onClick={() => navigate(`/production-plans?productId=${selectedProductId}&quantity=${planQuantity}`)}
                 >
-                  <span className="material-icons-round text-sm">add_task</span>
+                  <DashboardIcon name="add_task" className="text-sm" />
                   إنشاء خطة رسمية
                 </Button>
               </div>
@@ -855,7 +1070,7 @@ export const Dashboard: React.FC = () => {
             {canViewCosts && selectedProductCost && (
               <div className="mt-6 p-4 bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] border border-violet-200 dark:border-violet-800 space-y-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="material-icons-round text-violet-600 text-sm">price_check</span>
+                  <DashboardIcon name="price_check" className="text-violet-600 text-sm" />
                   <h4 className="text-xs font-bold text-violet-600">تحليل تكلفة المنتج (متوسط الشهر)</h4>
                 </div>
                 <div className="flex justify-between items-center">
@@ -881,21 +1096,21 @@ export const Dashboard: React.FC = () => {
               <h4 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.2em] mb-4">أهم تنبيهات النظام</h4>
               {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length > 0 ? (
                 <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-[var(--border-radius-base)] border border-amber-100 dark:border-amber-900/20">
-                  <span className="material-icons-round text-amber-500 text-sm mt-0.5">info</span>
+                  <DashboardIcon name="info" className="text-amber-500 text-sm mt-0.5" />
                   <p className="text-xs text-[var(--color-text-muted)] dark:text-amber-200/80 leading-relaxed font-medium">
                     يوجد {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length} خط إنتاج في وضع الاستعداد. يمكن تشغيلها لزيادة الطاقة الإنتاجية.
                   </p>
                 </div>
               ) : productionLines.filter((l) => l.status === ProductionLineStatus.MAINTENANCE).length > 0 ? (
                 <div className="flex items-start gap-3 bg-[#f8f9fa] p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-                  <span className="material-icons-round text-[var(--color-text-muted)] text-sm mt-0.5">build</span>
+                  <DashboardIcon name="build" className="text-[var(--color-text-muted)] text-sm mt-0.5" />
                   <p className="text-xs text-[var(--color-text-muted)] leading-relaxed font-medium">
                     يوجد {productionLines.filter((l) => l.status === ProductionLineStatus.MAINTENANCE).length} خط في وضع الصيانة.
                   </p>
                 </div>
               ) : (
                 <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-[var(--border-radius-base)] border border-emerald-100 dark:border-emerald-900/20">
-                  <span className="material-icons-round text-emerald-500 text-sm mt-0.5">check_circle</span>
+                  <DashboardIcon name="check_circle" className="text-emerald-500 text-sm mt-0.5" />
                   <p className="text-xs text-[var(--color-text-muted)] dark:text-emerald-200/80 leading-relaxed font-medium">
                     جميع الخطوط تعمل بشكل طبيعي.
                   </p>
@@ -917,22 +1132,26 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xs text-[var(--color-text-muted)] font-medium mt-0.5">{targetModal.lineName}</p>
               </div>
               <button onClick={() => setTargetModal(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <span className="material-icons-round">close</span>
+                <DashboardIcon name="close" />
               </button>
             </div>
             <div className="p-6 space-y-5">
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج الحالي *</label>
-                <select
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={targetForm.currentProductId}
-                  onChange={(e) => setTargetForm({ ...targetForm, currentProductId: e.target.value })}
+                <Select
+                  value={targetForm.currentProductId || 'none'}
+                  onValueChange={(value) => setTargetForm({ ...targetForm, currentProductId: value === 'none' ? '' : value })}
                 >
-                  <option value="">اختر المنتج...</option>
-                  {_rawProducts.map((p) => (
-                    <option key={p.id} value={p.id!}>{p.name}</option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                    <SelectValue placeholder="اختر المنتج..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">اختر المنتج...</SelectItem>
+                    {_rawProducts.map((p) => (
+                      <SelectItem key={p.id} value={p.id!}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهدف اليومي (كمية) *</label>
@@ -947,7 +1166,7 @@ export const Dashboard: React.FC = () => {
               </div>
               {targetForm.currentProductId && targetForm.targetTodayQty > 0 && (
                 <div className="bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-                  <span className="material-icons-round text-primary text-lg">info</span>
+                  <DashboardIcon name="info" className="text-primary text-lg" />
                   <p className="text-xs font-medium text-[var(--color-text-muted)]">
                     سيتم تعيين هدف <span className="font-bold text-primary">{formatNumber(targetForm.targetTodayQty)}</span> وحدة
                     من <span className="font-bold text-[var(--color-text)]">{_rawProducts.find(p => p.id === targetForm.currentProductId)?.name}</span> لهذا الخط
@@ -962,8 +1181,8 @@ export const Dashboard: React.FC = () => {
                 onClick={handleSaveTarget}
                 disabled={targetSaving || !targetForm.currentProductId || !targetForm.targetTodayQty}
               >
-                {targetSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                <span className="material-icons-round text-sm">flag</span>
+                {targetSaving && <DashboardIcon name="refresh" className="animate-spin text-sm" />}
+                <DashboardIcon name="flag" className="text-sm" />
                 حفظ الهدف
               </Button>
             </div>

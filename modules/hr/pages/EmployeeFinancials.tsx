@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { getDocs } from 'firebase/firestore';
@@ -7,6 +7,7 @@ import { employeeAllowanceService, employeeDeductionService } from '../employeeF
 import { loanService } from '../loanService';
 import { leaveRequestService, leaveBalanceService } from '../leaveService';
 import { allowanceTypesRef } from '../collections';
+import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import { exportHRData } from '@/utils/exportExcel';
 import { formatCurrency } from '@/utils/calculations';
 import { usePermission } from '@/utils/permissions';
@@ -139,6 +140,7 @@ export const EmployeeFinancials: React.FC = () => {
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
   const [leaves, setLeaves] = useState<FirestoreLeaveRequest[]>([]);
   const [allowanceTypes, setAllowanceTypes] = useState<FirestoreAllowanceType[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
   const [filterEmpId, setFilterEmpId] = useState('');
   const [filterMonth, setFilterMonth] = useState(getMonthKey());
 
@@ -190,8 +192,15 @@ export const EmployeeFinancials: React.FC = () => {
         employeeService.getAll(),
         getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
       ]);
+      const configuredLeaveTypes = await getLeaveTypesFromConfig();
       setEmployees(emps);
       setAllowanceTypes(allTypes.filter((a) => a.isActive));
+      setLeaveTypes(configuredLeaveTypes);
+      setBLeaveType((prev) =>
+        configuredLeaveTypes.find((row) => row.key === prev)
+          ? prev
+          : (configuredLeaveTypes[0]?.key || 'annual'),
+      );
 
       const month = filterMonth || getMonthKey();
       const [allAllowances, allDeductions, allLoans, allLeaves] = await Promise.all([
@@ -260,6 +269,8 @@ export const EmployeeFinancials: React.FC = () => {
     () => allowanceTypes.find((a) => a.id === bAlTypeId) || null,
     [allowanceTypes, bAlTypeId],
   );
+  const leaveTypeByKey = useMemo(() => leaveTypeMapByKey(leaveTypes), [leaveTypes]);
+  const selectedBulkLeaveType = leaveTypeByKey[bLeaveType];
 
   // ─── Reset form when tab or form visibility changes ─────────────────
   const openBulkForm = () => {
@@ -379,10 +390,12 @@ export const EmployeeFinancials: React.FC = () => {
             await leaveRequestService.create({
               employeeId: empId,
               leaveType: bLeaveType,
+              leaveTypeLabel: selectedBulkLeaveType?.label || LEAVE_TYPE_LABELS[bLeaveType] || bLeaveType,
+              leaveTypeIsPaid: selectedBulkLeaveType ? selectedBulkLeaveType.isPaid : bLeaveType !== 'unpaid',
               startDate: bLeaveStart,
               endDate: bLeaveEnd,
               totalDays,
-              affectsSalary: bLeaveType !== 'unpaid',
+              affectsSalary: selectedBulkLeaveType ? !selectedBulkLeaveType.isPaid : bLeaveType === 'unpaid',
               status: 'pending',
               approvalChain: [],
               finalStatus: 'pending',
@@ -471,9 +484,9 @@ export const EmployeeFinancials: React.FC = () => {
         'الأقساط': `${l.remainingInstallments}/${l.totalInstallments}`, 'الحالة': l.status,
       }));
       exportHRData(rows, 'سُلف', `سلف-${filterMonth}`);
-    } else if (activeTab === 'leaves') {
+      } else if (activeTab === 'leaves') {
       const rows = filteredLeaves.map((l) => ({
-        'الموظف': getEmpName(l.employeeId), 'النوع': LEAVE_TYPE_LABELS[l.leaveType], 'من': l.startDate,
+        'الموظف': getEmpName(l.employeeId), 'النوع': leaveTypeByKey[l.leaveType]?.label || l.leaveTypeLabel || LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType, 'من': l.startDate,
         'إلى': l.endDate, 'الأيام': l.totalDays, 'الحالة': l.finalStatus,
       }));
       exportHRData(rows, 'إجازات', `اجازات-${filterMonth}`);
@@ -648,8 +661,11 @@ export const EmployeeFinancials: React.FC = () => {
                 <div>
                   <label className={labelCls}>نوع الإجازة *</label>
                   <select className={inputCls} value={bLeaveType} onChange={(e) => setBLeaveType(e.target.value as LeaveType)}>
-                    {(Object.entries(LEAVE_TYPE_LABELS) as [LeaveType, string][]).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
+                    {(leaveTypes.length
+                      ? leaveTypes
+                      : Object.entries(LEAVE_TYPE_LABELS).map(([key, label]) => ({ key, label, isPaid: key !== 'unpaid' }))
+                    ).map((row) => (
+                      <option key={row.key} value={row.key}>{row.label}</option>
                     ))}
                   </select>
                 </div>
@@ -945,7 +961,7 @@ export const EmployeeFinancials: React.FC = () => {
                   {filteredLeaves.map((l) => (
                     <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(l.employeeId)}</td>
-                      <td className="py-3 px-3">{LEAVE_TYPE_LABELS[l.leaveType]}</td>
+                      <td className="py-3 px-3">{leaveTypeByKey[l.leaveType]?.label || l.leaveTypeLabel || LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}</td>
                       <td className="py-3 px-3 font-mono text-xs">{l.startDate}</td>
                       <td className="py-3 px-3 font-mono text-xs">{l.endDate}</td>
                       <td className="py-3 px-3 font-bold">{l.totalDays}</td>

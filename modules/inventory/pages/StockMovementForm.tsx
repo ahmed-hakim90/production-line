@@ -14,6 +14,13 @@ import { StockTransferPrint, type StockTransferPrintData } from '../components';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
@@ -600,11 +607,10 @@ export const StockMovementForm: React.FC = () => {
           {/* Item type */}
           <div>
             <label className={labelClass}>نوع الصنف</label>
-            <select
-              className={fieldClass}
+            <Select
               value={itemType}
-              onChange={(e) => {
-                const nextType = e.target.value as ItemType;
+              onValueChange={(value) => {
+                const nextType = value as ItemType;
                 setItemType(nextType);
                 setItemId('');
                 setTransferItems((prev) =>
@@ -612,9 +618,14 @@ export const StockMovementForm: React.FC = () => {
                 );
               }}
             >
-              <option value="finished_good">منتج نهائي</option>
-              <option value="raw_material">مادة خام</option>
-            </select>
+              <SelectTrigger className={fieldClass}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="finished_good">منتج نهائي</SelectItem>
+                <SelectItem value="raw_material">مادة خام</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Source warehouse */}

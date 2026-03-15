@@ -294,3 +294,93 @@ export function printPayslip(data: PayslipData): void {
   printWindow.document.close();
   printWindow.onload = () => printWindow.print();
 }
+
+export interface CombinedPayslipData {
+  records: FirestorePayrollRecord[];
+  month: string;
+  companyName?: string;
+  companyLogo?: string;
+}
+
+function extractInnerBody(html: string): string {
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return bodyMatch?.[1]?.trim() ?? '';
+}
+
+function extractStyle(html: string): string {
+  const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
+  return styleMatch?.[1]?.trim() ?? '';
+}
+
+/**
+ * Generate a single printable HTML document with all employees.
+ * Each employee payslip is rendered on a separate page.
+ */
+export function generateCombinedPayslipHTML(data: CombinedPayslipData): string {
+  const { records, month, companyName = 'الشركة', companyLogo } = data;
+  if (records.length === 0) return '';
+
+  const firstHtml = generatePayslipHTML({
+    record: records[0],
+    month,
+    companyName,
+    companyLogo,
+  });
+  const baseStyle = extractStyle(firstHtml);
+
+  const pages = records
+    .map((record) => {
+      const single = generatePayslipHTML({ record, month, companyName, companyLogo });
+      const body = extractInnerBody(single);
+      return `<section class="payslip-page">${body}</section>`;
+    })
+    .join('\n');
+
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>سركيات الموظفين - ${month}</title>
+  <style>
+    ${baseStyle}
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #f8fafc;
+      direction: rtl;
+    }
+    .payslip-page {
+      page-break-after: always;
+      break-after: page;
+      margin-bottom: 16px;
+    }
+    .payslip-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+      margin-bottom: 0;
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .payslip-page { margin-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  ${pages}
+</body>
+</html>`;
+}
+
+/**
+ * Open combined payslips in a single print dialog.
+ * User can save as one PDF file with multiple pages.
+ */
+export function printCombinedPayslips(data: CombinedPayslipData): void {
+  const html = generateCombinedPayslipHTML(data);
+  if (!html) return;
+  const printWindow = window.open('', '_blank', 'width=1000,height=800');
+  if (!printWindow) return;
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.onload = () => printWindow.print();
+}

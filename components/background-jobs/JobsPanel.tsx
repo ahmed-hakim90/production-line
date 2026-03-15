@@ -1,4 +1,5 @@
 import React from 'react';
+import { CheckCheck, X } from 'lucide-react';
 import { JobCard } from './JobCard';
 import { useJobsStore } from './useJobsStore';
 
@@ -16,12 +17,12 @@ export const TasksNavButton: React.FC = () => {
       onClick={() => {
         setHistoryOpen(true);
         setPanelHidden(false);
-        setPanelMinimized(false);
+        setPanelMinimized(true);
       }}
       className="relative p-2 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] rounded-full transition-colors"
       title="Tasks"
     >
-      <span className="material-icons-round">task_alt</span>
+      <CheckCheck size={20} />
       {activeCount > 0 && (
         <span className="absolute top-1 left-1 min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-white text-[10px] font-bold rounded-full border-2 border-[var(--color-card)] px-1">
           {activeCount > 99 ? '99+' : activeCount}
@@ -64,7 +65,7 @@ export const JobsPanel: React.FC = () => {
             className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors"
             title="إغلاق"
           >
-            <span className="material-icons-round text-[18px]">close</span>
+            <X size={18} />
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2, Save } from 'lucide-react';
 import { Button } from '../../../production/components/UI';
 
 type GeneralSettingsHeaderProps = {
@@ -21,8 +22,8 @@ export const GeneralSettingsHeader: React.FC<GeneralSettingsHeaderProps> = ({
         <p className="page-subtitle">هوية المصنع، المظهر، سلوك النظام، لوحة التحكم، والتنبيهات.</p>
       </div>
       <Button onClick={onSave} disabled={saving} className="w-full sm:w-auto">
-        {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-        <span className="material-icons-round text-sm">save</span>
+        {saving && <Loader2 size={14} className="animate-spin" />}
+        <Save size={14} />
         حفظ جميع الإعدادات
       </Button>
     </div>

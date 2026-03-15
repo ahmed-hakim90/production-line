@@ -152,6 +152,13 @@ export interface NetSalaryResult {
 
 // ─── Attendance Types ───────────────────────────────────────────────────────
 
+export type {
+  AttendanceLog,
+  AttendanceRecord,
+  AttendanceSyncPayload,
+  ZKTecoRawRecord,
+} from '@/modules/attendance/types';
+
 export type AttendanceSource = 'zk_csv' | 'manual';
 
 export interface FirestoreAttendanceRawLog {
@@ -257,9 +264,9 @@ export type { FirestoreApprovalRequest } from './approval/types';
 
 // ─── Leave Management Types ─────────────────────────────────────────────────
 
-export type LeaveType = 'annual' | 'sick' | 'unpaid' | 'emergency';
+export type LeaveType = string;
 
-export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
+export const LEAVE_TYPE_LABELS: Record<string, string> = {
   annual: 'سنوية',
   sick: 'مرضية',
   unpaid: 'بدون راتب',
@@ -270,6 +277,8 @@ export interface FirestoreLeaveRequest {
   id?: string;
   employeeId: string;
   leaveType: LeaveType;
+  leaveTypeLabel?: string;
+  leaveTypeIsPaid?: boolean;
   startDate: string;
   endDate: string;
   totalDays: number;

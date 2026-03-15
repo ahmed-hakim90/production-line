@@ -1,9 +1,24 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, Badge } from '../components/UI';
+import { getDocs } from 'firebase/firestore';
+import { Card, Button, Badge } from '../../../components/UI';
+import { PageHeader } from '../../../components/PageHeader';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../components/ui/select';
+import { DataTable, type Column } from '../../../src/components/erp/DataTable';
+import { KPICard } from '../../../src/components/erp/KPICard';
+import { StatusBadge } from '../../../src/components/erp/StatusBadge';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
-import { getCurrentMonth, getDaysInMonth, getWorkingDaysForMonth, formatCost } from '../../../utils/costCalculations';
+import { getCurrentMonth, getWorkingDaysForMonth, formatCost } from '../../../utils/costCalculations';
+import { departmentsRef } from '../../hr/collections';
+import type { FirestoreDepartment } from '../../hr/types';
+import { getPayrollMonth, getPayrollRecords } from '../../hr/payroll/payrollEngine';
 
 export const CostCenterDistribution: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,14 +32,16 @@ export const CostCenterDistribution: React.FC = () => {
   const assets = useAppStore((s) => s.assets);
   const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const _rawLines = useAppStore((s) => s._rawLines);
+  const products = useAppStore((s) => s.products);
+  const employees = useAppStore((s) => s._rawEmployees);
   const saveCostCenterValue = useAppStore((s) => s.saveCostCenterValue);
   const saveCostAllocation = useAppStore((s) => s.saveCostAllocation);
   const updateCostCenter = useAppStore((s) => s.updateCostCenter);
+  const systemSettings = useAppStore((s) => s.systemSettings);
 
   const center = costCenters.find((c) => c.id === id);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [monthlyAmount, setMonthlyAmount] = useState<number>(0);
-  const [workingDays, setWorkingDays] = useState<number>(0);
   const [allocations, setAllocations] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState('');
@@ -33,6 +50,9 @@ export const CostCenterDistribution: React.FC = () => {
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [lineSearch, setLineSearch] = useState('');
   const [showAllocatedOnly, setShowAllocatedOnly] = useState(false);
+  const [departmentNameMap, setDepartmentNameMap] = useState<Record<string, string>>({});
+  const [salariesAmount, setSalariesAmount] = useState<number>(0);
+  const [refreshingSalaries, setRefreshingSalaries] = useState(false);
 
   const parseLocaleNumber = React.useCallback((value: string): number => {
     const normalized = String(value ?? '')
@@ -66,9 +86,22 @@ export const CostCenterDistribution: React.FC = () => {
   }, [costAllocations, id, selectedMonth]);
 
   React.useEffect(() => {
-    setMonthlyAmount(existingValue?.amount ?? 0);
-    setWorkingDays(getWorkingDaysForMonth(existingValue, selectedMonth));
-  }, [existingValue, selectedMonth]);
+    if (!existingValue) {
+      setMonthlyAmount(0);
+      return;
+    }
+    const valueSource = existingValue.valueSource || center?.valueSource || 'manual';
+    if (valueSource === 'combined' && existingValue.manualAmount !== undefined) {
+      const fixed = Number(center?.manualAdjustment || 0);
+      setMonthlyAmount(Math.max(0, Number(existingValue.manualAmount || 0) - fixed));
+      return;
+    }
+    if (valueSource === 'manual' && existingValue.manualAmount !== undefined) {
+      setMonthlyAmount(Number(existingValue.manualAmount || 0));
+      return;
+    }
+    setMonthlyAmount(Number(existingValue.amount || 0));
+  }, [existingValue, center?.valueSource, center?.manualAdjustment]);
 
   React.useEffect(() => {
     const map: Record<string, number> = {};
@@ -105,6 +138,91 @@ export const CostCenterDistribution: React.FC = () => {
   }, [center]);
 
   React.useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const snap = await getDocs(departmentsRef());
+        if (!active) return;
+        const nextMap: Record<string, string> = {};
+        snap.docs.forEach((d) => {
+          const data = d.data() as FirestoreDepartment;
+          nextMap[d.id] = String(data?.name || '').trim() || d.id;
+        });
+        setDepartmentNameMap(nextMap);
+      } catch {
+        if (!active) return;
+        setDepartmentNameMap({});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const resolveSalariesAmount = React.useCallback(async () => {
+    if (!center || center.type !== 'indirect') return 0;
+    const valueSource = center.valueSource || 'manual';
+    if (valueSource === 'manual') return 0;
+    const employeeScope = center.employeeScope || 'selected';
+    const fallbackFromEmployees = () => {
+      if (employeeScope === 'department') {
+        const departmentSet = new Set(center.employeeDepartmentIds || []);
+        return employees
+          .filter((employee) => employee.isActive !== false && departmentSet.has(String(employee.departmentId || '')))
+          .reduce((sum, employee) => sum + Number(employee.baseSalary || 0), 0);
+      }
+      const employeeSet = new Set(center.employeeIds || []);
+      return employees
+        .filter((employee) => employee.isActive !== false && employeeSet.has(String(employee.id || '')))
+        .reduce((sum, employee) => sum + Number(employee.baseSalary || 0), 0);
+    };
+
+    const payrollMonth = await getPayrollMonth(selectedMonth);
+    if (!payrollMonth?.id) return fallbackFromEmployees();
+    const records = await getPayrollRecords(payrollMonth.id);
+    let total = 0;
+    if (employeeScope === 'department') {
+      const departmentSet = new Set(center.employeeDepartmentIds || []);
+      total = records
+        .filter((record) => departmentSet.has(String(record.departmentId || '')))
+        .reduce((sum, record) => sum + Number(record.netSalary || 0), 0);
+    } else {
+      const employeeSet = new Set(center.employeeIds || []);
+      total = records
+        .filter((record) => employeeSet.has(String(record.employeeId || '')))
+        .reduce((sum, record) => sum + Number(record.netSalary || 0), 0);
+    }
+    if (total <= 0) {
+      total = fallbackFromEmployees();
+    }
+    return total;
+  }, [center, selectedMonth, employees]);
+
+  React.useEffect(() => {
+    let active = true;
+    (async () => {
+      const savedValueSource = existingValue?.valueSource || center?.valueSource || 'manual';
+      const hasSavedBreakdown = existingValue?.salariesAmount !== undefined || existingValue?.manualAmount !== undefined;
+      if (existingValue && (savedValueSource === 'salaries' || savedValueSource === 'combined')) {
+        const savedSalaries = hasSavedBreakdown
+          ? Number(existingValue.salariesAmount || 0)
+          : (savedValueSource === 'salaries' ? Number(existingValue.amount || 0) : 0);
+        if (active) setSalariesAmount(savedSalaries);
+        return;
+      }
+      if (existingValue) {
+        if (active) setSalariesAmount(0);
+        return;
+      }
+      const total = await resolveSalariesAmount();
+      if (active) setSalariesAmount(total);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [resolveSalariesAmount, existingValue, center?.valueSource]);
+
+  React.useEffect(() => {
     if (availableSourceMonths.length === 0) {
       setSourceMonth('');
       return;
@@ -119,6 +237,8 @@ export const CostCenterDistribution: React.FC = () => {
   }, [selectedMonth]);
 
   const totalPercentage = _rawLines.reduce((sum, line) => sum + (allocations[line.id!] || 0), 0);
+  const isQtyAllocation = (center?.allocationBasis || 'line_percentage') === 'by_qty';
+  const allowsManualInput = ['manual', 'combined'].includes(center?.valueSource || 'manual');
   const remainingPercentage = 100 - totalPercentage;
   const visibleLines = useMemo(() => (
     _rawLines.filter((line) => {
@@ -143,35 +263,166 @@ export const CostCenterDistribution: React.FC = () => {
       return sum + Number(entry.depreciationAmount || 0);
     }, 0);
   }, [assetDepreciations, assets, id, selectedMonth]);
-  const effectiveMonthlyAmount = monthlyAmount + centerMonthlyDepreciation;
-  const monthDays = getDaysInMonth(selectedMonth);
-  const normalizedWorkingDays = Number.isFinite(workingDays) ? Math.round(workingDays) : 0;
-  const appliedWorkingDays = normalizedWorkingDays > 0 ? normalizedWorkingDays : monthDays;
+  const manualPart = Number(monthlyAmount || 0);
+  const fixedAdjustment = center?.valueSource === 'combined' ? Number(center.manualAdjustment || 0) : 0;
+  const savedValueSource = existingValue?.valueSource || center?.valueSource || 'manual';
+  const hasSavedBreakdown = existingValue?.manualAmount !== undefined || existingValue?.salariesAmount !== undefined;
+  const savedManualAmount = hasSavedBreakdown
+    ? Number(existingValue?.manualAmount || 0)
+    : Number(existingValue?.amount || 0);
+  const savedSalariesAmount = hasSavedBreakdown
+    ? Number(existingValue?.salariesAmount || 0)
+    : 0;
+  const savedSnapshotBase = savedValueSource === 'manual'
+    ? savedManualAmount
+    : savedValueSource === 'salaries'
+      ? (hasSavedBreakdown ? savedSalariesAmount : Number(existingValue?.amount || 0))
+      : (hasSavedBreakdown ? (savedManualAmount + savedSalariesAmount) : Number(existingValue?.amount || 0));
+  const draftSnapshotBase = (center?.valueSource || 'manual') === 'salaries'
+    ? salariesAmount
+    : (center?.valueSource || 'manual') === 'combined'
+      ? manualPart + fixedAdjustment + salariesAmount
+      : manualPart;
+  const baseResolvedAmount = existingValue ? savedSnapshotBase : draftSnapshotBase;
+  const effectiveMonthlyAmount = baseResolvedAmount + centerMonthlyDepreciation;
+  const appliedWorkingDays = getWorkingDaysForMonth(null, selectedMonth, systemSettings.costMonthlyWorkingDays);
+
+  const allocationColumns: Column<(typeof visibleLines)[number]>[] = [
+    {
+      key: 'line',
+      header: 'الخط',
+      cell: (line) => <span className="font-bold text-[var(--color-text)]">{line.name}</span>,
+      sortable: true,
+    },
+    {
+      key: 'percentage',
+      header: 'النسبة %',
+      cell: (line) => {
+        const lineId = line.id!;
+        const pct = Number(allocations[lineId] || 0);
+        return (
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.1}
+            className="w-20 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm text-center p-2 outline-none focus:border-primary"
+            value={pct || ''}
+            onChange={(e) => {
+              const nextValue = Math.min(100, Math.max(0, parseLocaleNumber(e.target.value)));
+              setAllocations((prev) => ({ ...prev, [lineId]: nextValue }));
+            }}
+            disabled={!canManage}
+          />
+        );
+      },
+      align: 'center',
+    },
+    {
+      key: 'allocatedMonthly',
+      header: 'المبلغ المخصص (شهري)',
+      cell: (line) => {
+        const pct = Number(allocations[line.id!] || 0);
+        const allocated = effectiveMonthlyAmount * (pct / 100);
+        return <span className="font-bold text-[var(--color-text-muted)]">{formatCost(allocated)}</span>;
+      },
+      align: 'center',
+    },
+    {
+      key: 'allocatedDaily',
+      header: 'المبلغ اليومي',
+      cell: (line) => {
+        const pct = Number(allocations[line.id!] || 0);
+        const allocated = effectiveMonthlyAmount * (pct / 100);
+        const daily = appliedWorkingDays > 0 ? allocated / appliedWorkingDays : 0;
+        return <span className="font-bold text-primary">{formatCost(daily)}</span>;
+      },
+      align: 'center',
+    },
+  ];
 
   const handleSaveValue = async () => {
     if (!id) return;
+    const valueSource = center?.valueSource || 'manual';
+    const manualSnapshot = valueSource === 'manual'
+      ? Number(monthlyAmount || 0)
+      : valueSource === 'combined'
+        ? Number(monthlyAmount || 0) + fixedAdjustment
+        : 0;
+    const salariesSnapshot = valueSource === 'salaries' || valueSource === 'combined'
+      ? Number(salariesAmount || 0)
+      : 0;
+    const resolvedSnapshotBase = valueSource === 'manual'
+      ? manualSnapshot
+      : valueSource === 'salaries'
+        ? salariesSnapshot
+        : manualSnapshot + salariesSnapshot;
     setSaving(true);
     await saveCostCenterValue(
-      { costCenterId: id, month: selectedMonth, amount: monthlyAmount, workingDays: Math.min(31, Math.max(1, appliedWorkingDays)) },
+      {
+        costCenterId: id,
+        month: selectedMonth,
+        amount: resolvedSnapshotBase,
+        manualAmount: manualSnapshot,
+        salariesAmount: salariesSnapshot,
+        valueSource,
+        employeeScopeSnapshot: center?.employeeScope || 'selected',
+        employeeIdsSnapshot: center?.employeeIds || [],
+        employeeDepartmentIdsSnapshot: center?.employeeDepartmentIds || [],
+        productScopeSnapshot: center?.productScope || 'all',
+        productIdsSnapshot: center?.productIds || [],
+        productCategoriesSnapshot: center?.productCategories || [],
+        allocationBasisSnapshot: center?.allocationBasis || 'line_percentage',
+      },
       existingValue?.id
     );
     setSaving(false);
   };
 
   const handleSaveAll = async () => {
-    if (!id || totalPercentage > 100) return;
+    if (!id || (!isQtyAllocation && totalPercentage > 100)) return;
+    const valueSource = center?.valueSource || 'manual';
+    const manualSnapshot = valueSource === 'manual'
+      ? Number(monthlyAmount || 0)
+      : valueSource === 'combined'
+        ? Number(monthlyAmount || 0) + fixedAdjustment
+        : 0;
+    const salariesSnapshot = valueSource === 'salaries' || valueSource === 'combined'
+      ? Number(salariesAmount || 0)
+      : 0;
+    const resolvedSnapshotBase = valueSource === 'manual'
+      ? manualSnapshot
+      : valueSource === 'salaries'
+        ? salariesSnapshot
+        : manualSnapshot + salariesSnapshot;
     setSaving(true);
-    const allocs = _rawLines
-      .map((line) => ({ lineId: line.id!, percentage: Number(allocations[line.id!] || 0) }))
-      .filter((entry) => entry.percentage > 0);
     await saveCostCenterValue(
-      { costCenterId: id, month: selectedMonth, amount: monthlyAmount, workingDays: Math.min(31, Math.max(1, appliedWorkingDays)) },
+      {
+        costCenterId: id,
+        month: selectedMonth,
+        amount: resolvedSnapshotBase,
+        manualAmount: manualSnapshot,
+        salariesAmount: salariesSnapshot,
+        valueSource,
+        employeeScopeSnapshot: center?.employeeScope || 'selected',
+        employeeIdsSnapshot: center?.employeeIds || [],
+        employeeDepartmentIdsSnapshot: center?.employeeDepartmentIds || [],
+        productScopeSnapshot: center?.productScope || 'all',
+        productIdsSnapshot: center?.productIds || [],
+        productCategoriesSnapshot: center?.productCategories || [],
+        allocationBasisSnapshot: center?.allocationBasis || 'line_percentage',
+      },
       existingValue?.id
     );
-    await saveCostAllocation(
-      { costCenterId: id, month: selectedMonth, allocations: allocs },
-      existingAllocation?.id
-    );
+    if (!isQtyAllocation) {
+      const allocs = _rawLines
+        .map((line) => ({ lineId: line.id!, percentage: Number(allocations[line.id!] || 0) }))
+        .filter((entry) => entry.percentage > 0);
+      await saveCostAllocation(
+        { costCenterId: id, month: selectedMonth, allocations: allocs },
+        existingAllocation?.id
+      );
+    }
     setSaving(false);
   };
 
@@ -204,8 +455,14 @@ export const CostCenterDistribution: React.FC = () => {
     }
 
     if (sourceValue) {
-      setMonthlyAmount(Number(sourceValue.amount) || 0);
-      setWorkingDays(getWorkingDaysForMonth(sourceValue, sourceMonth));
+      const sourceValueSource = sourceValue.valueSource || center?.valueSource || 'manual';
+      if (sourceValueSource === 'combined' && sourceValue.manualAmount !== undefined) {
+        setMonthlyAmount(Math.max(0, Number(sourceValue.manualAmount || 0) - fixedAdjustment));
+      } else if (sourceValueSource === 'manual' && sourceValue.manualAmount !== undefined) {
+        setMonthlyAmount(Number(sourceValue.manualAmount || 0));
+      } else {
+        setMonthlyAmount(Number(sourceValue.amount) || 0);
+      }
     }
 
     const copiedMonthLabel = new Date(`${sourceMonth}-01`).toLocaleDateString('ar-EG', {
@@ -237,6 +494,16 @@ export const CostCenterDistribution: React.FC = () => {
     setAllocations(next);
   };
 
+  const handleRefreshSalaries = async () => {
+    setRefreshingSalaries(true);
+    try {
+      const total = await resolveSalariesAmount();
+      setSalariesAmount(total);
+    } finally {
+      setRefreshingSalaries(false);
+    }
+  };
+
   const generateMonths = () => {
     const months: string[] = [];
     const now = new Date();
@@ -252,21 +519,64 @@ export const CostCenterDistribution: React.FC = () => {
       <div className="text-center py-20 text-slate-400">
         <span className="material-icons-round text-5xl mb-3 block opacity-30">error_outline</span>
         <p className="font-bold">مركز التكلفة غير موجود</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('/cost-centers')}>العودة</Button>
+        <Button variant="ghost" className="mt-4" onClick={() => navigate('/cost-centers')}>العودة</Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 erp-ds-clean">
+      <PageHeader
+        title={center.name}
+        subtitle={`إدارة القيمة الشهرية وتوزيع التكلفة على خطوط الإنتاج • ${center.type === 'indirect' ? 'غير مباشر' : 'مباشر'}`}
+        icon="account_tree"
+        backAction={{ label: 'رجوع', onClick: () => navigate('/cost-centers') }}
+        primaryAction={canManage ? {
+          label: 'حفظ الكل',
+          icon: 'save',
+          onClick: handleSaveAll,
+          disabled: saving || totalPercentage > 100,
+        } : undefined}
+        extra={(
+          <div className="flex items-center gap-2 flex-wrap">
+            <StatusBadge label={center.type === 'indirect' ? 'غير مباشر' : 'مباشر'} type={center.type === 'indirect' ? 'warning' : 'success'} />
+            {canManage && (
+              <>
+                <Select
+                  value={sourceMonth || 'none'}
+                  onValueChange={(v) => setSourceMonth(v === 'none' ? '' : v)}
+                  disabled={availableSourceMonths.length === 0}
+                >
+                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] rounded-lg border border-slate-200 bg-white text-sm">
+                    <SelectValue placeholder="اختر شهرًا سابقًا" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSourceMonths.length === 0 ? (
+                      <SelectItem value="none">لا توجد بيانات محفوظة في شهور سابقة</SelectItem>
+                    ) : (
+                      availableSourceMonths.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {new Date(`${m}-01`).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  onClick={handleCopyAllocationsFromMonth}
+                  disabled={!sourceMonth || availableSourceMonths.length === 0}
+                >
+                  <span className="material-icons-round text-sm">content_copy</span>
+                  سحب النسب والقيمة
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      />
+
       <div className="rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:p-5">
-      <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
-        <button
-          onClick={() => navigate('/cost-centers')}
-          className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all"
-        >
-          <span className="material-icons-round">arrow_forward</span>
-        </button>
         <div className="flex-1">
           {editMode ? (
             <div className="flex items-center gap-2">
@@ -277,80 +587,33 @@ export const CostCenterDistribution: React.FC = () => {
                 autoFocus
               />
               <Button variant="primary" onClick={handleSaveName}>حفظ</Button>
-              <Button variant="outline" onClick={() => setEditMode(false)}>إلغاء</Button>
+              <Button variant="ghost" onClick={() => setEditMode(false)}>إلغاء</Button>
             </div>
           ) : (
             <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-800">{center.name}</h2>
-              <Badge variant={center.type === 'indirect' ? 'warning' : 'success'}>
-                {center.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
-              </Badge>
               {canManage && (
                 <button onClick={() => setEditMode(true)} className="text-[var(--color-text-muted)] hover:text-primary transition-colors">
                   <span className="material-icons-round text-lg">edit</span>
                 </button>
               )}
-              {canManage && (
-                <div className="flex items-center gap-2 flex-wrap w-full">
-                  <select
-                    className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm p-2 outline-none focus:border-primary sm:min-w-[170px]"
-                    value={sourceMonth}
-                    onChange={(e) => setSourceMonth(e.target.value)}
-                    disabled={availableSourceMonths.length === 0}
-                  >
-                    {availableSourceMonths.length === 0 ? (
-                      <option value="">لا توجد بيانات محفوظة في شهور سابقة</option>
-                    ) : (
-                      availableSourceMonths.map((m) => (
-                        <option key={m} value={m}>
-                          {new Date(`${m}-01`).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <Button
-                    variant="outline"
-                    onClick={handleCopyAllocationsFromMonth}
-                    disabled={!sourceMonth || availableSourceMonths.length === 0}
-                  >
-                    <span className="material-icons-round text-sm">content_copy</span>
-                    سحب النسب والقيمة
-                  </Button>
-                </div>
-              )}
-               {canManage && (
-                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
-                    <Button
-                      variant="primary"
-                      onClick={handleSaveAll}
-                      disabled={saving || totalPercentage > 100}
-                    >
-                      {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                      <span className="material-icons-round text-sm">save</span>
-                      حفظ الكل
-                    </Button>
-                  </div>
-                )}
-             
             </div>
           )}
-          <p className="text-sm text-[var(--color-text-muted)] font-medium mt-1">إدارة القيمة الشهرية وتوزيع التكلفة على خطوط الإنتاج</p>
+          {center.type === 'indirect' && (
+            <p className="text-xs mt-1 text-[var(--color-text-muted)]">
+              الأساس: <span className="font-bold text-primary">{isQtyAllocation ? 'حسب كمية الإنتاج' : 'حسب نسب الخطوط'}</span>
+              {' • '}
+              نطاق المنتجات: <span className="font-bold text-primary">{center.productScope === 'selected' ? 'منتجات محددة' : center.productScope === 'category' ? 'فئة منتجات' : 'كل المنتجات'}</span>
+              {' • '}
+              مصدر القيمة: <span className="font-bold text-primary">{center.valueSource === 'combined' ? 'مرتبات + يدوي' : center.valueSource === 'salaries' ? 'مرتبات' : 'يدوي'}</span>
+            </p>
+          )}
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
-          <p className="text-xs text-[var(--color-text-muted)]">إجمالي التوزيع</p>
-          <p className={`text-2xl font-black ${totalPercentage > 100 ? 'text-rose-600' : 'text-[var(--color-text)]'}`}>{totalPercentage.toFixed(1)}%</p>
-        </div>
-        <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 p-3">
-          <p className="text-xs text-emerald-700">المتبقي</p>
-          <p className={`text-2xl font-black ${remainingPercentage < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{remainingPercentage.toFixed(1)}%</p>
-        </div>
-        <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 p-3">
-          <p className="text-xs text-blue-700">قيمة المركز الفعلية</p>
-          <p className="text-xl font-black text-blue-600">{formatCost(effectiveMonthlyAmount)}</p>
-        </div>
-      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KPICard label="قيمة المركز الفعلية" value={formatCost(effectiveMonthlyAmount)} iconType="money" color="indigo" />
+        <KPICard label="إجمالي التوزيع" value={`${totalPercentage.toFixed(1)}%`} iconType="metric" color={totalPercentage > 100 ? 'red' : 'green'} />
+        <KPICard label="المتبقي" value={`${remainingPercentage.toFixed(1)}%`} iconType="trend" color={remainingPercentage < 0 ? 'red' : 'amber'} />
       </div>
 
       {/* Month Selector */}
@@ -359,7 +622,7 @@ export const CostCenterDistribution: React.FC = () => {
           <button
             key={m}
             onClick={() => setSelectedMonth(m)}
-            className={`erp-date-seg-btn${m === selectedMonth ? ' active' : ''}`}
+            className={`erp-date-seg-btn${m === selectedMonth ? ' active bg-[#4F46E5] text-white hover:bg-[#4338CA]' : ''}`}
           >
             {new Date(m + '-01').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
           </button>
@@ -368,8 +631,8 @@ export const CostCenterDistribution: React.FC = () => {
 
       {/* Monthly Value */}
       <Card title="القيمة الشهرية">
-        <div className="flex items-end gap-4 flex-wrap">
-          <div className="flex-1 space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+          <div className="space-y-2 lg:col-span-6">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">المبلغ (ج.م)</label>
             <input
               type="number"
@@ -377,38 +640,51 @@ export const CostCenterDistribution: React.FC = () => {
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
               value={monthlyAmount || ''}
               onChange={(e) => setMonthlyAmount(Math.max(0, parseLocaleNumber(e.target.value)))}
-              disabled={!canManage}
+                disabled={!canManage || !allowsManualInput}
               placeholder="أدخل المبلغ الشهري..."
             />
+              {!allowsManualInput && (
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  هذا المركز يعتمد على المرتبات فقط، لذلك الإدخال اليدوي غير مفعل.
+                </p>
+              )}
+              {(center.valueSource === 'salaries' || center.valueSource === 'combined') && (
+                <div className="space-y-2">
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    إجمالي المرتبات {existingValue ? 'المحفوظة' : 'المحسوبة'} للشهر: <span className="font-bold text-primary">{formatCost(salariesAmount)} ج.م</span>
+                    {center.valueSource === 'combined' && (
+                      <>
+                        {' '}+ تعديل ثابت: <span className="font-bold text-primary">{formatCost(fixedAdjustment)} ج.م</span>
+                      </>
+                    )}
+                  </p>
+                  {canManage && (
+                    <Button variant="ghost" onClick={handleRefreshSalaries} disabled={refreshingSalaries}>
+                      {refreshingSalaries && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                      <span className="material-icons-round text-sm">refresh</span>
+                      إعادة تحديث قيمة المرتبات
+                    </Button>
+                  )}
+                </div>
+              )}
           </div>
-          <div className="w-full sm:w-48 space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">أيام الشغل / الشهر</label>
-            <input
-              type="number"
-              min={1}
-              max={31}
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-              value={workingDays || ''}
-              onChange={(e) => setWorkingDays(Math.min(31, Math.max(0, Math.round(parseLocaleNumber(e.target.value)))))}
-              disabled={!canManage}
-              placeholder={`${monthDays}`}
-            />
-          </div>
-          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center w-full sm:w-auto sm:min-w-[120px]">
+          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center lg:col-span-3">
             <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">يومي ({appliedWorkingDays} يوم)</p>
             <p className="text-lg font-bold text-primary">
               {effectiveMonthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(effectiveMonthlyAmount / appliedWorkingDays) : '—'}
             </p>
           </div>
           {canManage && (
-            <Button variant="primary" onClick={handleSaveValue} disabled={saving}>
-              {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              حفظ
-            </Button>
+            <div className="lg:col-span-3 lg:justify-self-end">
+              <Button variant="primary" onClick={handleSaveValue} disabled={saving}>
+                {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                حفظ
+              </Button>
+            </div>
           )}
         </div>
         <p className="mt-2 text-xs font-bold text-[var(--color-text-muted)]">
-          الإهلاك المرتبط بالأصول لنفس المركز في هذا الشهر: <span className="text-primary">{formatCost(centerMonthlyDepreciation)} ج.م</span> (يضاف تلقائيًا في الحسابات)
+          عدد أيام الشهر يتم أخذه تلقائيًا من صفحة إعدادات التكلفة ({appliedWorkingDays} يوم لهذا الشهر). الإهلاك المرتبط بالأصول لنفس المركز في هذا الشهر: <span className="text-primary">{formatCost(centerMonthlyDepreciation)} ج.م</span> (يضاف تلقائيًا في الحسابات)
         </p>
       </Card>
   {/* Summary */}
@@ -441,7 +717,88 @@ export const CostCenterDistribution: React.FC = () => {
         </p>
       )}
       {/* Allocation Table (indirect only) */}
-      {center.type === 'indirect' && (
+      {center.type === 'indirect' && isQtyAllocation && (
+        <Card title="نطاق توزيع المنتجات">
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--color-text-muted)]">
+              يتم توزيع التكلفة تلقائيًا على {center.productScope === 'selected' ? 'المنتجات المحددة' : center.productScope === 'category' ? 'منتجات الفئة المختارة' : 'كل المنتجات'} حسب كمية الإنتاج الفعلية.
+            </p>
+            {center.productScope === 'selected' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {(center.productIds || []).map((pid) => {
+                  const product = products.find((p) => p.id === pid);
+                  return (
+                    <span
+                      key={pid}
+                      className="px-2 py-1 text-xs font-bold rounded border border-[var(--color-border)] bg-[var(--color-bg)]"
+                    >
+                      {product?.name || pid}
+                    </span>
+                  );
+                })}
+                {(center.productIds || []).length === 0 && (
+                  <span className="text-xs text-[var(--color-text-muted)]">لم يتم اختيار منتجات بعد</span>
+                )}
+              </div>
+            )}
+            {center.productScope === 'category' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {(center.productCategories || []).map((category) => (
+                  <span
+                    key={category}
+                    className="px-2 py-1 text-xs font-bold rounded border border-[var(--color-border)] bg-[var(--color-bg)]"
+                  >
+                    {category}
+                  </span>
+                ))}
+                {(center.productCategories || []).length === 0 && (
+                  <span className="text-xs text-[var(--color-text-muted)]">لم يتم اختيار فئات بعد</span>
+                )}
+              </div>
+            )}
+            {(center.valueSource === 'salaries' || center.valueSource === 'combined') && (
+              <div className="space-y-2">
+                <p className="text-sm font-bold text-[var(--color-text)]">
+                  {center.employeeScope === 'department' ? 'الأقسام المرتبطة بالمركز' : 'العمالة المرتبطة بالمركز'}
+                </p>
+                {center.employeeScope === 'department' ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(center.employeeDepartmentIds || []).map((deptId) => (
+                      <span
+                        key={deptId}
+                        className="px-2 py-1 text-xs font-bold rounded border border-[var(--color-border)] bg-[var(--color-bg)]"
+                      >
+                        {departmentNameMap[deptId] || deptId}
+                      </span>
+                    ))}
+                    {(center.employeeDepartmentIds || []).length === 0 && (
+                      <span className="text-xs text-[var(--color-text-muted)]">لا توجد أقسام محددة</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(center.employeeIds || []).map((employeeId) => {
+                      const employee = employees.find((item) => item.id === employeeId);
+                      return (
+                        <span
+                          key={employeeId}
+                          className="px-2 py-1 text-xs font-bold rounded border border-[var(--color-border)] bg-[var(--color-bg)]"
+                        >
+                          {employee?.name || employeeId}
+                        </span>
+                      );
+                    })}
+                    {(center.employeeIds || []).length === 0 && (
+                      <span className="text-xs text-[var(--color-text-muted)]">لا توجد عمالة محددة</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+      {center.type === 'indirect' && !isQtyAllocation && (
         <Card title="توزيع التكلفة على الخطوط">
           {_rawLines.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد خطوط إنتاج</p>
@@ -464,11 +821,11 @@ export const CostCenterDistribution: React.FC = () => {
                 </label>
                 {canManage && (
                   <>
-                    <Button variant="outline" onClick={handleDistributeEqually}>
+                    <Button variant="ghost" onClick={handleDistributeEqually}>
                       <span className="material-icons-round text-sm">balance</span>
                       توزيع متساوي
                     </Button>
-                    <Button variant="outline" onClick={handleResetAllocations}>
+                    <Button variant="ghost" onClick={handleResetAllocations}>
                       <span className="material-icons-round text-sm">restart_alt</span>
                       تصفير
                     </Button>
@@ -476,56 +833,11 @@ export const CostCenterDistribution: React.FC = () => {
                 )}
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse text-sm">
-                  <thead className="erp-thead">
-                    <tr>
-                      <th className="erp-th">الخط</th>
-                      <th className="erp-th text-center">النسبة %</th>
-                      <th className="erp-th text-center">المبلغ المخصص (شهري)</th>
-                      <th className="erp-th text-center">المبلغ اليومي</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-border)]">
-                    {visibleLines.map((line) => {
-                      const pct = Number(allocations[line.id!] || 0);
-                      const allocated = effectiveMonthlyAmount * (pct / 100);
-                      const daily = appliedWorkingDays > 0 ? allocated / appliedWorkingDays : 0;
-                      return (
-                        <tr key={line.id} className="hover:bg-[#f8f9fa]/50">
-                          <td className="px-4 py-3 font-bold text-[var(--color-text)]">{line.name}</td>
-                          <td className="px-4 py-3 text-center">
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              step={0.1}
-                              className="w-20 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm text-center p-2 outline-none focus:border-primary"
-                              value={pct || ''}
-                              onChange={(e) => {
-                                const nextValue = Math.min(100, Math.max(0, parseLocaleNumber(e.target.value)));
-                                setAllocations((prev) => ({ ...prev, [line.id!]: nextValue }));
-                              }}
-                              disabled={!canManage}
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-center font-bold text-[var(--color-text-muted)]">
-                            {formatCost(allocated)}
-                          </td>
-                          <td className="px-4 py-3 text-center font-bold text-primary">
-                            {formatCost(daily)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {visibleLines.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-6 text-center text-[var(--color-text-muted)]">
-                          لا توجد خطوط مطابقة للفلاتر الحالية.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                <DataTable
+                  columns={allocationColumns}
+                  data={visibleLines}
+                  emptyMessage="لا توجد خطوط مطابقة للفلاتر الحالية."
+                />
               </div>
 
              

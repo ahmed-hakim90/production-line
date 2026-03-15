@@ -8,6 +8,15 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '../../../utils/printManager';
 import { StockTransferPrint, type StockTransferPrintData } from '../components/StockTransferPrint';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
+import { toast } from '../../../components/Toast';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'قيد الاعتماد',
@@ -139,7 +148,7 @@ export const TransferApprovals: React.FC = () => {
       ),
     );
     if (isSelfProductionEntryRequest) {
-      window.alert('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتماد الطلب من مستخدم آخر مخوّل.');
+      toast.warning('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتماد الطلب من مستخدم آخر مخوّل.');
       return;
     }
     const allowNegativeFromSource =
@@ -156,7 +165,7 @@ export const TransferApprovals: React.FC = () => {
       );
       await loadData();
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر اعتماد التحويلة.');
+      toast.error(error?.message || 'تعذر اعتماد التحويلة.');
     } finally {
       setProcessingId('');
     }
@@ -176,7 +185,7 @@ export const TransferApprovals: React.FC = () => {
       );
       await loadData();
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر رفض التحويلة.');
+      toast.error(error?.message || 'تعذر رفض التحويلة.');
     } finally {
       setProcessingId('');
     }
@@ -198,31 +207,32 @@ export const TransferApprovals: React.FC = () => {
       );
       await loadData();
     } catch (error: any) {
-      window.alert(error?.message || 'تعذر إلغاء الحركة.');
+      toast.error(error?.message || 'تعذر إلغاء الحركة.');
     } finally {
       setProcessingId('');
     }
   };
 
   return (
-    <div className="space-y-5">
+    <div className="erp-ds-clean space-y-5">
       <div className="erp-page-head">
         <div>
           <h2 className="page-title">اعتماد تحويلات المخازن</h2>
           <p className="page-subtitle">التحويلات ودخول تم الصنع لا تؤثر على المخزون قبل الاعتماد.</p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm font-bold"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-          >
-            <option value="all">كل الحالات</option>
-            <option value="pending">قيد الاعتماد</option>
-            <option value="approved">معتمدة</option>
-            <option value="rejected">مرفوضة</option>
-            <option value="cancelled">ملغاة</option>
-          </select>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+            <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm">
+              <SelectValue placeholder="كل الحالات" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="pending">قيد الاعتماد</SelectItem>
+              <SelectItem value="approved">معتمدة</SelectItem>
+              <SelectItem value="rejected">مرفوضة</SelectItem>
+              <SelectItem value="cancelled">ملغاة</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={() => void loadData()} disabled={loading}>
             <span className="material-icons-round text-sm">refresh</span>
             تحديث
@@ -245,7 +255,11 @@ export const TransferApprovals: React.FC = () => {
 
       <Card className="!p-0 overflow-hidden">
         {loading ? (
-          <div className="p-6 text-sm text-slate-500">جاري تحميل طلبات التحويل...</div>
+          <div className="space-y-2.5 p-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={`transfer-skeleton-${i}`} className="h-14 w-full rounded-lg" />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-400">لا توجد طلبات تحويل في هذا الفلتر.</div>
         ) : (

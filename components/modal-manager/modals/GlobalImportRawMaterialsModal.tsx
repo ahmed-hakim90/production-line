@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { Download, FileUp, Loader2, Save } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
 import { parseRawMaterialsExcel, type RawMaterialImportResult } from '../../../utils/importRawMaterials';
@@ -144,7 +145,7 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{fileName || '—'}</p>
           </div>
           <Button variant="outline" onClick={downloadRawMaterialsMasterTemplate} disabled={saving || parsing}>
-            <span className="material-icons-round text-sm">file_download</span>
+            <Download size={14} />
             تحميل القالب
           </Button>
         </div>
@@ -156,7 +157,7 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
             <div className="space-y-3">
               <p className="text-sm text-slate-500">اختر ملف Excel للبدء في استيراد المواد الخام.</p>
               <Button variant="primary" onClick={openFilePicker} disabled={saving || parsing}>
-                <span className="material-icons-round text-sm">upload_file</span>
+                <FileUp size={14} />
                 اختيار ملف الاستيراد
               </Button>
             </div>
@@ -231,7 +232,7 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
             إغلاق
           </Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving || parsing || !result}>
-            <span className="material-icons-round text-sm">{saving ? 'hourglass_top' : 'save'}</span>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             حفظ الصفوف الصالحة
           </Button>
         </div>

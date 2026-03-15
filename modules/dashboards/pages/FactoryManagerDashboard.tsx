@@ -2,7 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
-import { Card, KPIBox, Badge, LoadingSkeleton } from '../components/UI';
+import { Card, Badge } from '../components/UI';
+import { PageHeader } from '@/src/components/erp/PageHeader';
+import { KPICard } from '@/src/components/erp/KPICard';
+import { FilterBar } from '@/src/components/erp/FilterBar';
+import { DataTable, type Column } from '@/src/components/erp/DataTable';
+import { StatusBadge } from '@/src/components/erp/StatusBadge';
+import { GhostButton } from '@/src/components/erp/ActionButton';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
 import { reportService } from '@/modules/production/services/reportService';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
@@ -20,9 +26,10 @@ import {
 import { exportProductionPlanShortages } from '../../../utils/exportExcel';
 import {
   formatCost,
-  getCurrentMonth,
-  calculateDailyIndirectCost,
+  buildSupervisorHourlyRatesMap,
+  computeLiveProductCosts,
 } from '../../../utils/costCalculations';
+import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
 import {
   emptyWorkOrderCardMetricsData,
   getWorkOrderCardMetrics,
@@ -33,7 +40,6 @@ import {
   getAlertSettings,
   getKPIThreshold,
   getKPIColor,
-  KPI_COLOR_CLASSES,
   isWidgetVisible,
 } from '../../../utils/dashboardConfig';
 import type { ProductionReport, PlanPriority, SmartStatus } from '../../../types';
@@ -107,6 +113,8 @@ export const FactoryManagerDashboard: React.FC = () => {
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
+  const assets = useAppStore((s) => s.assets);
+  const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const systemSettings = useAppStore((s) => s.systemSettings);
@@ -122,9 +130,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   const [customEnd, setCustomEnd] = useState('');
   const [reports, setReports] = useState<ProductionReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [reportCompliance, setReportCompliance] = useState<ReportComplianceSnapshot | null>(null);
-  const [complianceLoading, setComplianceLoading] = useState(true);
-  const [complianceError, setComplianceError] = useState<string | null>(null);
+  const [monthlyCostSummary, setMonthlyCostSummary] = useState<MonthlyDashboardCostSummary | null>(null);
   const [yesterdayCompliance, setYesterdayCompliance] = useState<ReportComplianceSnapshot | null>(null);
   const [yesterdayComplianceLoading, setYesterdayComplianceLoading] = useState(true);
   const [yesterdayComplianceError, setYesterdayComplianceError] = useState<string | null>(null);
@@ -147,10 +153,16 @@ export const FactoryManagerDashboard: React.FC = () => {
     }
     return getPresetRange(preset);
   }, [preset, customStart, customEnd]);
-  const isAfterComplianceCutoff = useMemo(
-    () => new Date(clockNow).getHours() >= 16,
-    [clockNow],
-  );
+  const fullMonthKey = useMemo(() => {
+    const { start, end } = dateRange;
+    if (!start || !end || start.length < 10 || end.length < 10) return null;
+    const monthKey = start.slice(0, 7);
+    if (end.slice(0, 7) !== monthKey) return null;
+    if (start.slice(8, 10) !== '01') return null;
+    const [y, m] = monthKey.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    return end === `${monthKey}-${String(lastDay).padStart(2, '0')}` ? monthKey : null;
+  }, [dateRange]);
   const yesterdayOperationalDate = useMemo(() => {
     const d = new Date(clockNow);
     d.setDate(d.getDate() - 1);
@@ -173,6 +185,22 @@ export const FactoryManagerDashboard: React.FC = () => {
     });
     return () => { cancelled = true; };
   }, [dateRange.start, dateRange.end]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!fullMonthKey) {
+      setMonthlyCostSummary(null);
+      return () => { cancelled = true; };
+    }
+    monthlyProductionCostService.getDashboardMonthlySummary(fullMonthKey)
+      .then((summary) => {
+        if (!cancelled) setMonthlyCostSummary(summary);
+      })
+      .catch(() => {
+        if (!cancelled) setMonthlyCostSummary(null);
+      });
+    return () => { cancelled = true; };
+  }, [fullMonthKey]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 60 * 1000);
@@ -205,35 +233,26 @@ export const FactoryManagerDashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const loadCompliance = async () => {
-      setComplianceLoading(true);
-      setComplianceError(null);
       setYesterdayComplianceLoading(true);
       setYesterdayComplianceError(null);
       try {
-        const [todaySnapshot, yesterdaySnapshot] = await Promise.all([
-          reportComplianceService.getTodaySnapshot(_rawEmployees, _rawLines),
-          reportComplianceService.getSnapshotForDate(
-            selectedComplianceDate,
-            _rawEmployees,
-            _rawLines,
-            { scope: 'assigned_only' },
-          ),
-        ]);
+        const yesterdaySnapshot = await reportComplianceService.getSnapshotForDate(
+          selectedComplianceDate,
+          _rawEmployees,
+          _rawLines,
+          { scope: 'assigned_only' },
+        );
         if (!cancelled) {
-          setReportCompliance(todaySnapshot);
           setYesterdayCompliance(yesterdaySnapshot);
         }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : 'تعذر تحميل متابعة التزام التقارير.';
-          setComplianceError(message);
-          setReportCompliance(null);
           setYesterdayComplianceError(message);
           setYesterdayCompliance(null);
         }
       } finally {
         if (!cancelled) {
-          setComplianceLoading(false);
           setYesterdayComplianceLoading(false);
         }
       }
@@ -247,46 +266,84 @@ export const FactoryManagerDashboard: React.FC = () => {
   }, [_rawEmployees, _rawLines, selectedComplianceDate]);
 
   const hourlyRate = laborSettings?.hourlyRate ?? 0;
+  const productCategoryById = useMemo(
+    () => new Map(_rawProducts.map((product) => [String(product.id || ''), String(product.model || '')])),
+    [_rawProducts]
+  );
+  const supervisorHourlyRates = useMemo(
+    () => buildSupervisorHourlyRatesMap(_rawEmployees),
+    [_rawEmployees]
+  );
+  const payrollNetByEmployee = useMemo(() => {
+    const map = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (!employee.id || employee.isActive === false) return;
+      map.set(String(employee.id), Number(employee.baseSalary || 0));
+    });
+    return map;
+  }, [_rawEmployees]);
+  const payrollNetByDepartment = useMemo(() => {
+    const map = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (employee.isActive === false) return;
+      const departmentId = String(employee.departmentId || '');
+      if (!departmentId) return;
+      map.set(departmentId, (map.get(departmentId) || 0) + Number(employee.baseSalary || 0));
+    });
+    return map;
+  }, [_rawEmployees]);
+  const liveCostComputation = useMemo(
+    () => computeLiveProductCosts(
+      reports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      }
+    ),
+    [
+      reports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      assets,
+      assetDepreciations,
+      productCategoryById,
+      supervisorHourlyRates,
+      payrollNetByEmployee,
+      payrollNetByDepartment,
+      systemSettings.costMonthlyWorkingDays,
+    ]
+  );
+  const monthlyCostMode = Boolean(fullMonthKey && monthlyCostSummary);
 
   // ── KPI Calculations ────────────────────────────────────────────────────────
 
   const kpis = useMemo(() => {
-    const totalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+    const totalProduction = monthlyCostMode
+      ? Number(monthlyCostSummary?.totals.producedQty || 0)
+      : reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
     const totalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
       : 0;
 
-    let totalLaborCost = 0;
-    let totalIndirectCost = 0;
-    reports.forEach((r) => {
-      totalLaborCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-    });
-
-    const lineMonthIndirectCache = new Map<string, number>();
-    const lineDateTotals = new Map<string, number>();
-    reports.forEach((r) => {
-      const key = `${r.lineId}_${r.date}`;
-      lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
-    });
-
-    reports.forEach((r) => {
-      if (!r.quantityProduced || r.quantityProduced <= 0) return;
-      const month = r.date?.slice(0, 7) || getCurrentMonth();
-      const cacheKey = `${r.lineId}_${month}`;
-      if (!lineMonthIndirectCache.has(cacheKey)) {
-        lineMonthIndirectCache.set(cacheKey,
-          calculateDailyIndirectCost(r.lineId, month, costCenters, costCenterValues, costAllocations)
-        );
-      }
-      const lineIndirect = lineMonthIndirectCache.get(cacheKey) || 0;
-      const lineDateKey = `${r.lineId}_${r.date}`;
-      const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-      if (lineDateTotal > 0) {
-        totalIndirectCost += lineIndirect * (r.quantityProduced / lineDateTotal);
-      }
-    });
+    const totalLaborCost = monthlyCostMode
+      ? Number(monthlyCostSummary?.totals.directCost || 0)
+      : liveCostComputation.totalLaborCost;
+    const totalIndirectCost = monthlyCostMode
+      ? Number(monthlyCostSummary?.totals.indirectCost || 0)
+      : liveCostComputation.totalIndirectCost;
 
     const totalCost = totalLaborCost + totalIndirectCost;
     const avgCostPerUnit = totalProduction > 0 ? totalCost / totalProduction : 0;
@@ -331,7 +388,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       totalLaborCost,
       totalIndirectCost,
     };
-  }, [reports, hourlyRate, costCenters, costCenterValues, costAllocations, lineProductConfigs, productionPlans, planReports]);
+  }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
   // ── Chart 1: Production vs Cost Per Unit (daily) ────────────────────────────
 
@@ -344,28 +401,15 @@ export const FactoryManagerDashboard: React.FC = () => {
       byDate.set(r.date, prev);
     });
 
-    const lineMonthIndirectCache = new Map<string, number>();
-    const lineDateTotals = new Map<string, number>();
-    reports.forEach((r) => {
-      const key = `${r.lineId}_${r.date}`;
-      lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
-    });
-
     const dateIndirect = new Map<string, number>();
     reports.forEach((r) => {
       if (!r.quantityProduced || r.quantityProduced <= 0) return;
-      const month = r.date?.slice(0, 7) || getCurrentMonth();
-      const cacheKey = `${r.lineId}_${month}`;
-      if (!lineMonthIndirectCache.has(cacheKey)) {
-        lineMonthIndirectCache.set(cacheKey,
-          calculateDailyIndirectCost(r.lineId, month, costCenters, costCenterValues, costAllocations)
-        );
-      }
-      const lineIndirect = lineMonthIndirectCache.get(cacheKey) || 0;
-      const lineDateKey = `${r.lineId}_${r.date}`;
-      const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-      if (lineDateTotal > 0) {
-        dateIndirect.set(r.date, (dateIndirect.get(r.date) || 0) + lineIndirect * (r.quantityProduced / lineDateTotal));
+      const reportUnitCost = r.id ? Number(liveCostComputation.reportUnitCost.get(r.id) || 0) : 0;
+      if (reportUnitCost <= 0) return;
+      const laborCost = (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
+      const indirectPart = (reportUnitCost * r.quantityProduced) - laborCost;
+      if (indirectPart > 0) {
+        dateIndirect.set(r.date, (dateIndirect.get(r.date) || 0) + indirectPart);
       }
     });
 
@@ -379,7 +423,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [reports, hourlyRate, costCenters, costCenterValues, costAllocations]);
+  }, [reports, hourlyRate, liveCostComputation.reportUnitCost]);
 
   // ── Chart 3: Top 5 Lines by production ──────────────────────────────────────
 
@@ -554,6 +598,40 @@ export const FactoryManagerDashboard: React.FC = () => {
       }));
   }, [productionPlanFollowUps, _rawProducts]);
 
+  const complianceRows = useMemo(
+    () => [
+      ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
+      ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
+    ],
+    [yesterdayCompliance]
+  );
+
+  const complianceColumns: Column<(typeof complianceRows)[number]>[] = useMemo(
+    () => [
+      { key: 'name', header: 'المشرف', cell: (row) => <span className="font-medium text-[#0F172A]">{row.name}</span>, sortable: true },
+      { key: 'reports', header: 'التقارير', cell: (row) => `${row.submittedReports} / ${row.expectedReports}` },
+      { key: 'submittedLines', header: 'تم الإرسال', cell: (row) => (row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—') },
+      { key: 'missingLines', header: 'غير مرسل', cell: (row) => (row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—') },
+      {
+        key: 'status',
+        header: 'الحالة',
+        align: 'center',
+        cell: (row) => <StatusBadge label={row.submitted ? 'تم الإرسال' : 'لم يرسل'} type={row.submitted ? 'success' : 'danger'} />,
+      },
+    ],
+    []
+  );
+
+  const shortageColumns: Column<(typeof shortageRows)[number]>[] = useMemo(
+    () => [
+      { key: 'productName', header: 'المنتج', cell: (row) => <span className="font-medium text-[#0F172A]">{row.productName}</span>, sortable: true },
+      { key: 'componentName', header: 'المكون', cell: (row) => row.componentName },
+      { key: 'shortageQty', header: 'الكمية', align: 'center', cell: (row) => formatNumber(row.shortageQty), sortable: true },
+      { key: 'note', header: 'الملحوظة', cell: (row) => row.note || '—' },
+    ],
+    []
+  );
+
   // ── Custom Tooltip ──────────────────────────────────────────────────────────
 
   const ChartTooltip = ({ active, payload, label }: any) => {
@@ -575,16 +653,12 @@ export const FactoryManagerDashboard: React.FC = () => {
   if (loading && reports.length === 0) {
     return (
       <div className="erp-dashboard-theme space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-            <span className="material-icons-round text-blue-600 text-2xl">analytics</span>
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">لوحة مدير المصنع</h2>
-            <p className="text-sm text-slate-400">تحليلات متقدمة للإنتاج والتكاليف</p>
-          </div>
+        <PageHeader title="لوحة مدير المصنع" subtitle="جاري تحميل البيانات..." />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <KPICard key={`factory-loading-kpi-${idx}`} label="" value="" loading />
+          ))}
         </div>
-        <LoadingSkeleton rows={6} type="card" />
       </div>
     );
   }
@@ -592,150 +666,124 @@ export const FactoryManagerDashboard: React.FC = () => {
   return (
     <div className="erp-dashboard-theme space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        {/* <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-100 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-            <span className="material-icons-round text-blue-600 text-2xl">analytics</span>
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">لوحة مدير المصنع</h2>
-            <p className="text-sm text-slate-400">تحليلات متقدمة للإنتاج والتكاليف</p>
-          </div>
-        </div> */}
-        {loading && (
-          <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
-            <span className="material-icons-round text-sm animate-spin">sync</span>
-            جاري التحديث...
-          </span>
-        )}
-      </div>
+      <PageHeader
+        title="لوحة مدير المصنع"
+        subtitle="تحليلات متقدمة للإنتاج والتكاليف"
+        actions={
+          loading ? (
+            <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
+              <span className="material-icons-round text-sm animate-spin">sync</span>
+              جاري التحديث...
+            </span>
+          ) : undefined
+        }
+      />
 
       <CustomDashboardWidgets dashboardKey="factoryDashboard" systemSettings={systemSettings} />
 
       {/* ── Period Filter ──────────────────────────────────────────────────────── */}
-      <div className="erp-filter-bar">
-        <div className="erp-date-seg">
-          {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => (
-            <button
-              key={key}
-              onClick={() => setPreset(key)}
-              className={`erp-date-seg-btn${preset === key ? ' active' : ''}`}
-            >
-              {PRESET_LABELS[key]}
-            </button>
-          ))}
-        </div>
-        {preset === 'custom' && (
-          <>
-            <div className="erp-filter-date">
-              <span className="erp-filter-label">من</span>
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-              />
-            </div>
-            <div className="erp-filter-date">
-              <span className="erp-filter-label">إلى</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-              />
-            </div>
-          </>
+      <FilterBar
+        periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
+          value: key,
+          label: PRESET_LABELS[key],
+        }))}
+        activePeriod={preset}
+        onPeriodChange={(value) => setPreset(value as PeriodPreset)}
+        extra={(
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ms-auto">
+            {preset === 'custom' && (
+              <>
+                <div className="erp-filter-date">
+                  <span className="erp-filter-label">من</span>
+                  <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                </div>
+                <div className="erp-filter-date">
+                  <span className="erp-filter-label">إلى</span>
+                  <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                </div>
+              </>
+            )}
+            <span className="text-xs font-medium text-[var(--color-text-muted)]">{dateRange.start} ← {dateRange.end}</span>
+            <span className="text-xs font-medium text-[var(--color-text-muted)]">
+              {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
+            </span>
+          </div>
         )}
-        <div className="erp-filter-sep hidden sm:block" />
-        <span className="text-xs text-[var(--color-text-muted)] font-medium">{dateRange.start} ← {dateRange.end}</span>
-      </div>
+      />
 
       {/* ── KPI Section ────────────────────────────────────────────────────────── */}
       {isVisible('kpis') && (
       <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
-        <div className={`flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${canViewCosts ? 'xl:grid-cols-6' : 'xl:grid-cols-4'} sm:gap-4`}>
-          <div className="min-w-[220px] sm:min-w-0">
-            <KPIBox
-              label="إجمالي الإنتاج"
-              value={formatNumber(kpis.totalProduction)}
-              icon="inventory"
-              unit="وحدة"
-              colorClass="bg-primary/10 text-primary"
-            />
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+            {Array.from({ length: canViewCosts ? 6 : 4 }).map((_, idx) => (
+              <KPICard key={`factory-kpi-loading-${idx}`} label="" value="" loading />
+            ))}
           </div>
-          {canViewCosts && (
-            <div className="min-w-[220px] sm:min-w-0">
-              <KPIBox
-                label="متوسط تكلفة الوحدة"
-                value={formatCost(kpis.avgCostPerUnit)}
-                icon="payments"
-                unit="ج.م"
-                colorClass="bg-amber-100 text-amber-600"
-              />
-            </div>
-          )}
-          {canViewCosts && (() => {
-            const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
-            const directShare = totalTrackedCost > 0 ? ((kpis.totalLaborCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
-            return (
-              <div className="min-w-[220px] sm:min-w-0">
-                <KPIBox
+        ) : (
+          <div className={`flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 ${canViewCosts ? 'xl:grid-cols-6' : 'xl:grid-cols-4'} sm:gap-4`}>
+            <KPICard label="إجمالي الإنتاج" value={formatNumber(kpis.totalProduction)} unit="وحدة" iconType="metric" color="indigo" />
+            {canViewCosts && (
+              <KPICard label="متوسط تكلفة الوحدة" value={formatCost(kpis.avgCostPerUnit)} unit="ج.م" iconType="money" color="amber" />
+            )}
+            {canViewCosts && (() => {
+              const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+              const directShare = totalTrackedCost > 0 ? ((kpis.totalLaborCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
+              return (
+                <KPICard
                   label="التكاليف المباشرة"
                   value={formatCost(kpis.totalLaborCost)}
-                  icon="groups"
                   unit="ج.م"
-                  colorClass="bg-blue-100 text-blue-600"
+                  iconType="money"
+                  color="indigo"
                   trend={`${directShare}% من توزيع التكاليف`}
-                  trendUp={true}
+                  trendUp
                 />
-              </div>
-            );
-          })()}
-          {canViewCosts && (() => {
-            const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
-            const indirectShare = totalTrackedCost > 0 ? ((kpis.totalIndirectCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
-            return (
-              <div className="min-w-[220px] sm:min-w-0">
-                <KPIBox
+              );
+            })()}
+            {canViewCosts && (() => {
+              const totalTrackedCost = kpis.totalLaborCost + kpis.totalIndirectCost;
+              const indirectShare = totalTrackedCost > 0 ? ((kpis.totalIndirectCost / totalTrackedCost) * 100).toFixed(1) : '0.0';
+              return (
+                <KPICard
                   label="التكاليف غير المباشرة"
                   value={formatCost(kpis.totalIndirectCost)}
-                  icon="account_balance"
                   unit="ج.م"
-                  colorClass="bg-emerald-100 text-emerald-600"
+                  iconType="money"
+                  color="green"
                   trend={`${indirectShare}% من توزيع التكاليف`}
                   trendUp={false}
                 />
-              </div>
-            );
-          })()}
-          {(() => {
-            const effColor = getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false);
-            return (
-              <div className="min-w-[220px] sm:min-w-0">
-                <KPIBox
+              );
+            })()}
+            {(() => {
+              const effColor = getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false);
+              const mappedColor = effColor === 'good' ? 'green' : effColor === 'warning' ? 'amber' : 'red';
+              return (
+                <KPICard
                   label="الكفاءة العامة"
                   value={`${kpis.efficiency}%`}
-                  icon="speed"
-                  colorClass={KPI_COLOR_CLASSES[effColor]}
+                  iconType="trend"
+                  color={mappedColor}
                   trend={effColor === 'good' ? 'ممتاز' : effColor === 'warning' ? 'جيد' : 'يحتاج تحسين'}
                   trendUp={effColor !== 'danger'}
                 />
-              </div>
-            );
-          })()}
-          {(() => {
-            const paColor = getKPIColor(kpis.planAchievementRate, getKPIThreshold(systemSettings, 'planAchievement'), false);
-            return (
-              <div className="min-w-[220px] sm:min-w-0">
-                <KPIBox
+              );
+            })()}
+            {(() => {
+              const paColor = getKPIColor(kpis.planAchievementRate, getKPIThreshold(systemSettings, 'planAchievement'), false);
+              const mappedColor = paColor === 'good' ? 'green' : paColor === 'warning' ? 'amber' : 'red';
+              return (
+                <KPICard
                   label="تحقيق الخطط"
                   value={`${kpis.planAchievementRate}%`}
-                  icon="fact_check"
-                  colorClass={KPI_COLOR_CLASSES[paColor]}
+                  iconType="trend"
+                  color={mappedColor}
                 />
-              </div>
-            );
-          })()}
-        </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
       )}
 
@@ -760,103 +808,6 @@ export const FactoryManagerDashboard: React.FC = () => {
         </div>
       )}
 
-      <Card>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="material-icons-round text-indigo-500">task_alt</span>
-          <h3 className="text-sm font-bold text-[var(--color-text)]">متابعة التزام تقارير الإنتاج اليومية</h3>
-          {reportCompliance?.operationalDate && (
-            <Badge variant="info">{reportCompliance.operationalDate}</Badge>
-          )}
-          {complianceLoading && (
-            <span className="text-xs text-[var(--color-text-muted)] ms-auto">جاري التحديث...</span>
-          )}
-        </div>
-
-        {!isAfterComplianceCutoff ? (
-          <div className="erp-alert erp-alert-info">
-            <span className="material-icons-round text-[18px] shrink-0">schedule</span>
-            <span>تبدأ متابعة الالتزام اليومية بعد الساعة 16:00.</span>
-          </div>
-        ) : complianceError ? (
-          <div className="erp-alert erp-alert-warning">
-            <span className="material-icons-round text-[18px] shrink-0">warning</span>
-            <span>{complianceError}</span>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
-                <p className="text-xs text-emerald-700 font-bold mb-1">قدّم تقرير</p>
-                <p className="text-2xl font-black text-emerald-600">{reportCompliance?.submittedCount ?? 0}</p>
-              </div>
-              <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
-                <p className="text-xs text-rose-700 font-bold mb-1">لم يقدّم تقرير</p>
-                <p className="text-2xl font-black text-rose-600">{reportCompliance?.missingCount ?? 0}</p>
-              </div>
-              <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] dark:bg-slate-900/20 p-3">
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">غير مكلّف/غير موجود اليوم</p>
-                <p className="text-2xl font-black text-[var(--color-text)]">{reportCompliance?.unassignedCount ?? 0}</p>
-              </div>
-            </div>
-
-            {(reportCompliance?.assignedSupervisorsCount ?? 0) === 0 ? (
-              <div className="erp-alert erp-alert-info">
-                <span className="material-icons-round text-[18px] shrink-0">info</span>
-                <span>لا يوجد مشرفون مكلّفون اليوم في تعيينات الخطوط.</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-[var(--border-radius-lg)] border border-emerald-200/70 p-3">
-                  <p className="text-xs font-bold text-emerald-700 mb-2">قائمة المرسلين</p>
-                  <div className="space-y-1.5">
-                    {(reportCompliance?.submitted ?? []).slice(0, 8).map((row) => (
-                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
-                        <span className="font-bold">{row.name}</span>
-                        {row.lineNames.length > 0 && (
-                          <span className="text-[var(--color-text-muted)]"> — {row.lineNames.join('، ')}</span>
-                        )}
-                      </div>
-                    ))}
-                    {(reportCompliance?.submittedCount ?? 0) > 8 && (
-                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-[var(--border-radius-lg)] border border-rose-200/70 p-3">
-                  <p className="text-xs font-bold text-rose-700 mb-2">قائمة غير المرسلين</p>
-                  <div className="space-y-1.5">
-                    {(reportCompliance?.missing ?? []).slice(0, 8).map((row) => (
-                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
-                        <span className="font-bold">{row.name}</span>
-                        {row.lineNames.length > 0 && (
-                          <span className="text-[var(--color-text-muted)]"> — {row.lineNames.join('، ')}</span>
-                        )}
-                      </div>
-                    ))}
-                    {(reportCompliance?.missingCount ?? 0) > 8 && (
-                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-[var(--border-radius-lg)] border border-slate-200 p-3">
-                  <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2">غير مكلّف/غير موجود</p>
-                  <div className="space-y-1.5">
-                    {(reportCompliance?.unassigned ?? []).slice(0, 8).map((row) => (
-                      <div key={row.employeeId} className="text-xs text-[var(--color-text)]">
-                        <span className="font-bold">{row.name}</span>
-                      </div>
-                    ))}
-                    {(reportCompliance?.unassignedCount ?? 0) > 8 && (
-                      <p className="text-[11px] text-[var(--color-text-muted)]">+ المزيد...</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </Card>
-
       {/* ── Active Work Orders ───────────────────────────────────────────────── */}
       {(() => {
         const activeWOs = activeWorkOrders;
@@ -875,7 +826,7 @@ export const FactoryManagerDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalQty)}</span>
-                <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
+                <span className={`font-medium ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
               </div>
             </div>
             <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
@@ -1030,7 +981,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
             <span className="material-icons-round text-rose-500">fact_check</span>
-            <h3 className="text-sm font-bold text-[var(--color-text)]">التزام المشرفين بالتقرير</h3>
+            <h3 className="text-sm font-medium text-[var(--color-text)]">التزام المشرفين بالتقرير</h3>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -1038,22 +989,22 @@ export const FactoryManagerDashboard: React.FC = () => {
               value={selectedComplianceDate}
               max={getTodayDateString()}
               onChange={(e) => setSelectedComplianceDate(e.target.value)}
-              className="px-2.5 py-1.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-xs font-bold text-[var(--color-text)] outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+              className="px-2.5 py-1.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-xs font-medium text-[var(--color-text)] outline-none focus:border-[#4F46E5] focus:ring-1 focus:ring-[#4F46E5]/20"
             />
-            <button
+            <GhostButton
               type="button"
               onClick={() => setSelectedComplianceDate(yesterdayOperationalDate)}
-              className="px-2.5 py-1.5 text-xs font-bold rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 transition-all"
+              className="h-8 px-2.5 text-xs"
             >
               أمس
-            </button>
-            <Badge variant="info">{selectedComplianceDate}</Badge>
+            </GhostButton>
+            <StatusBadge label={selectedComplianceDate} type="info" />
           </div>
         </div>
         {yesterdayComplianceLoading ? (
-          <p className="text-xs text-[var(--color-text-muted)]">جاري تحميل الحالة...</p>
+          <DataTable columns={complianceColumns} data={[]} isLoading emptyMessage="جاري تحميل الحالة..." />
         ) : yesterdayComplianceError ? (
-          <p className="text-xs text-rose-600 font-bold">{yesterdayComplianceError}</p>
+          <p className="text-xs text-rose-600 font-medium">{yesterdayComplianceError}</p>
         ) : yesterdayCompliance?.isFactoryHoliday ? (
           <div className="erp-alert erp-alert-info">
             <span className="material-icons-round text-[18px] shrink-0">weekend</span>
@@ -1064,15 +1015,15 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المشرفين المطلوب منهم</p>
-                <p className="text-2xl font-black text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
+                <p className="text-2xl font-medium text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
                 <p className="text-xs text-emerald-700 font-bold mb-1">تم ارسال تقرير</p>
-                <p className="text-2xl font-black text-emerald-600">{yesterdayCompliance?.submittedCount ?? 0}</p>
+                <p className="text-2xl font-medium text-emerald-600">{yesterdayCompliance?.submittedCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
                 <p className="text-xs text-rose-700 font-bold mb-1">لم يرسل تقرير</p>
-                <p className="text-2xl font-black text-rose-600">{yesterdayCompliance?.missingCount ?? 0}</p>
+                <p className="text-2xl font-medium text-rose-600">{yesterdayCompliance?.missingCount ?? 0}</p>
               </div>
             </div>
             {(yesterdayCompliance?.assignedSupervisorsCount ?? 0) === 0 ? (
@@ -1106,36 +1057,12 @@ export const FactoryManagerDashboard: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-sm" data-no-table-enhance="true">
-                    <thead className="erp-thead">
-                      <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
-                        <th className="erp-th">المشرف</th>
-                        <th className="erp-th">التقارير</th>
-                        <th className="erp-th">تم الإرسال</th>
-                        <th className="erp-th">غير مرسل</th>
-                        <th className="erp-th">الحالة</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
-                        ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
-                      ].map((row) => (
-                        <tr key={row.employeeId} className="border-b border-[var(--color-border)]">
-                          <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.name}</td>
-                          <td className="py-2.5 px-3 text-[var(--color-text-muted)] font-bold">{row.submittedReports} / {row.expectedReports}</td>
-                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—'}</td>
-                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—'}</td>
-                          <td className="py-2.5 px-3">
-                            <Badge variant={row.submitted ? 'success' : 'danger'}>
-                              {row.submitted ? 'تم ارسال' : 'لم يرسل'}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="hidden md:block">
+                  <DataTable
+                    columns={complianceColumns}
+                    data={complianceRows}
+                    emptyMessage="لا يوجد مشرفون مكلّفون في هذا التاريخ."
+                  />
                 </div>
               </div>
             )}
@@ -1176,7 +1103,7 @@ export const FactoryManagerDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalPlanned)}</span>
-                <span className={`font-black ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
+                <span className={`font-medium ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1275,18 +1202,18 @@ export const FactoryManagerDashboard: React.FC = () => {
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
             <span className="material-icons-round text-amber-600">report_problem</span>
-            <h3 className="text-sm font-bold text-[var(--color-text)]">نواقص المكونات</h3>
-            <Badge variant="warning">{shortageRows.length}</Badge>
+            <h3 className="text-sm font-medium text-[var(--color-text)]">نواقص المكونات</h3>
+            <StatusBadge label={`${shortageRows.length}`} type="warning" />
           </div>
           {canExport && shortageRows.length > 0 && (
-            <button
+            <GhostButton
               type="button"
               onClick={() => exportProductionPlanShortages(shortageRows)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+              className="h-8 px-3 text-xs"
             >
               <span className="material-icons-round text-sm">download</span>
               <span>Excel</span>
-            </button>
+            </GhostButton>
           )}
         </div>
         {shortageRows.length === 0 ? (
@@ -1295,28 +1222,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             <span>لا توجد نواقص مكونات مسجلة حاليًا.</span>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-no-table-enhance="true">
-              <thead className="erp-thead">
-                <tr>
-                  <th className="erp-th">المنتج</th>
-                  <th className="erp-th">المكون</th>
-                  <th className="erp-th">الكمية</th>
-                  <th className="erp-th">الملحوظة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shortageRows.map((row) => (
-                  <tr key={row.id} className="border-b border-[var(--color-border)]">
-                    <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.productName}</td>
-                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.componentName}</td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</td>
-                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.note || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable columns={shortageColumns} data={shortageRows} emptyMessage="لا توجد نواقص مكونات مسجلة حاليًا." />
         )}
       </Card>
 

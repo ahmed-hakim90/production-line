@@ -14,7 +14,55 @@
  *     ]}
  *   />
  */
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
+import {
+  ArrowLeft,
+  Check,
+  Download,
+  FileDown,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Printer,
+  RefreshCw,
+  Save,
+  Search,
+  Settings,
+  Trash2,
+  Circle,
+  type LucideIcon,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  add: Plus,
+  check: Check,
+  delete: Trash2,
+  download: Download,
+  file_download: FileDown,
+  more_horiz: MoreHorizontal,
+  print: Printer,
+  refresh: RefreshCw,
+  save: Save,
+  search: Search,
+  settings: Settings,
+};
+
+function renderActionIcon(icon?: string, className?: string, size = 16) {
+  if (!icon) return null;
+  const Lucide = ICON_MAP[icon];
+  if (Lucide) return <Lucide size={size} className={className} />;
+  return <Circle size={size} className={className} />;
+}
 
 export interface PageHeaderAction {
   label: string;
@@ -27,12 +75,21 @@ export interface PageHeaderAction {
   dataModalKey?: string;
 }
 
+type BackActionConfig = {
+  label?: string;
+  to?: string;
+  disabled?: boolean;
+  onClick?: () => void;
+};
+
 export interface PageHeaderProps {
   title: string;
   subtitle?: string;
   icon?: string;
   iconBg?: string;
   iconColor?: string;
+  /** Back navigation action (defaults to enabled) */
+  backAction?: boolean | BackActionConfig;
   /** Primary (green/primary) button shown always */
   primaryAction?: {
     label: string;
@@ -61,24 +118,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   icon,
   iconBg,
   iconColor = 'text-[rgb(var(--color-primary))]',
+  backAction = true,
   primaryAction,
   secondaryAction,
   moreActions,
   extra,
   loading,
 }) => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
-
   const visibleMoreActions = moreActions?.filter((a) => !a.hidden) ?? [];
 
   // Build groups for the dropdown
@@ -90,13 +136,42 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     else groups.push({ label: groupLabel, items: [action] });
   }
 
+  const backConfig: BackActionConfig | null = (typeof backAction === 'object' && backAction !== null)
+    ? backAction
+    : null;
+
+  const handleBack = () => {
+    if (!backAction) return;
+    if (backConfig?.onClick) {
+      backConfig.onClick();
+      return;
+    }
+    if (backConfig?.to) {
+      const target = backConfig.to.startsWith('#')
+        ? backConfig.to
+        : `#${backConfig.to}`;
+      window.location.hash = target;
+      return;
+    }
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.hash = '#/';
+  };
+
+  const backDisabled = backConfig?.disabled ?? false;
+  const backLabel = backConfig?.label || 'رجوع';
+
   return (
     <div className="erp-page-head">
       {/* Left: title + optional icon */}
       <div className="erp-page-title-block">
         <h2 className="page-title">
           {icon && (
-            <span className={`material-icons-round ${iconColor}`} style={{ fontSize: 20, verticalAlign: 'middle', marginInlineEnd: 6 }}>{icon}</span>
+            <span style={{ verticalAlign: 'middle', marginInlineEnd: 6, display: 'inline-flex' }}>
+              {renderActionIcon(icon, iconColor, 20)}
+            </span>
           )}
           {title}
         </h2>
@@ -105,9 +180,23 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 
       {/* Right: actions */}
       <div className="erp-page-actions">
+        {backAction && (
+          <Button
+            type="button"
+            variant="outline"
+            className="btn btn-secondary"
+            onClick={handleBack}
+            disabled={backDisabled}
+            title={backLabel}
+          >
+            <ArrowLeft size={16} />
+            <span className="hidden sm:inline">{backLabel}</span>
+          </Button>
+        )}
+
         {loading && (
           <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
-            <span className="material-icons-round text-[14px] animate-spin">sync</span>
+            <Loader2 size={14} className="animate-spin" />
           </span>
         )}
 
@@ -115,78 +204,66 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 
         {/* Secondary visible button */}
         {secondaryAction && (
-          <button
+          <Button
+            type="button"
+            variant="outline"
             className="btn btn-secondary"
             onClick={secondaryAction.onClick}
             disabled={secondaryAction.disabled}
           >
-            {secondaryAction.icon && (
-              <span className="material-icons-round" style={{ fontSize: 16 }}>{secondaryAction.icon}</span>
-            )}
+            {renderActionIcon(secondaryAction.icon)}
             <span className="hidden sm:inline">{secondaryAction.label}</span>
-          </button>
+          </Button>
         )}
 
         {/* Primary button */}
         {primaryAction && (
-          <button
-            className="btn btn-primary"
+          <Button
+            type="button"
+            className="btn btn-primary bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)]"
             onClick={primaryAction.onClick}
             disabled={primaryAction.disabled}
             data-modal-key={primaryAction.dataModalKey}
           >
-            {primaryAction.icon && (
-              <span className="material-icons-round" style={{ fontSize: 16 }}>{primaryAction.icon}</span>
-            )}
+            {renderActionIcon(primaryAction.icon)}
             {primaryAction.label}
-          </button>
+          </Button>
         )}
 
         {/* More actions dropdown */}
         {visibleMoreActions.length > 0 && (
-          <div className="relative" ref={menuRef}>
-            <button
-              className="btn btn-secondary"
-              onClick={() => setMenuOpen((p) => !p)}
-              title="المزيد من الإجراءات"
-            >
-              <span className="material-icons-round" style={{ fontSize: 16 }}>more_horiz</span>
-            </button>
-
-            {menuOpen && (
-              <div
-                className="absolute left-0 top-10 z-30 erp-dropdown"
-                style={{ minWidth: 200 }}
-              >
-                {groups.map((group, gi) => (
-                  <div key={gi}>
-                    {group.label && (
-                      <div className={`px-3 py-1.5 text-[10.5px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide${gi > 0 ? ' border-t border-[var(--color-border)] mt-1' : ''}`}>
-                        {group.label}
-                      </div>
-                    )}
-                    {gi > 0 && !group.label && <div className="border-t border-[var(--color-border)] my-1" />}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="btn btn-secondary" title="المزيد من الإجراءات">
+                <MoreHorizontal size={16} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[220px]">
+              {groups.map((group, gi) => (
+                <React.Fragment key={`${group.label}-${gi}`}>
+                  {gi > 0 && <DropdownMenuSeparator />}
+                  {group.label && <DropdownMenuLabel>{group.label}</DropdownMenuLabel>}
+                  <DropdownMenuGroup>
                     {group.items.map((action, ai) => (
-                      <button
-                        key={ai}
-                        className={`erp-dropdown-item${action.danger ? ' text-rose-600' : ''}`}
-                        onClick={() => { action.onClick(); setMenuOpen(false); }}
+                      <DropdownMenuItem
+                        key={`${action.label}-${ai}`}
+                        className={action.danger ? 'text-rose-600 focus:text-rose-700' : undefined}
+                        onClick={action.onClick}
                         disabled={action.disabled}
                         data-modal-key={action.dataModalKey}
                       >
-                        {action.icon && (
-                          <span className={`material-icons-round text-[16px] ${action.danger ? 'text-rose-500' : 'text-[var(--color-text-muted)]'}`}>
-                            {action.icon}
-                          </span>
+                        {renderActionIcon(
+                          action.icon,
+                          action.danger ? 'text-rose-500' : 'text-[var(--color-text-muted)]',
                         )}
                         {action.label}
-                      </button>
+                      </DropdownMenuItem>
                     ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  </DropdownMenuGroup>
+                </React.Fragment>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </div>

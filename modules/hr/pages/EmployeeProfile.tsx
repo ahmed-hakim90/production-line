@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
@@ -6,8 +6,8 @@ import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { employeeService } from '../employeeService';
-import { attendanceLogService } from '../attendanceService';
-import { leaveRequestService, leaveBalanceService } from '../leaveService';
+import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
+import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
 import { loanService } from '../loanService';
 import {
   employeeAllowanceService,
@@ -23,15 +23,14 @@ import type {
   FirestoreJobPosition,
   FirestoreShift,
   FirestoreVehicle,
-  FirestoreAttendanceLog,
   FirestoreLeaveRequest,
-  FirestoreLeaveBalance,
   FirestoreEmployeeLoan,
   FirestoreEmployeeAllowance,
   FirestoreEmployeeDeduction,
   FirestoreAllowanceType,
   DeductionCategory,
 } from '../types';
+import type { AttendanceRecord } from '@/modules/attendance/types';
 import { vehicleService } from '../vehicleService';
 import { LEAVE_TYPE_LABELS } from '../types';
 import { formatNumber } from '../../../utils/calculations';
@@ -599,9 +598,9 @@ export const EmployeeProfile: React.FC = () => {
 
   const [managerChain, setManagerChain] = useState<FirestoreEmployee[]>([]);
   const [directReports, setDirectReports] = useState<FirestoreEmployee[]>([]);
-  const [attendanceLogs, setAttendanceLogs] = useState<FirestoreAttendanceLog[]>([]);
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<FirestoreLeaveRequest[]>([]);
-  const [leaveBalance, setLeaveBalance] = useState<FirestoreLeaveBalance | null>(null);
+  const [leaveUsageSummary, setLeaveUsageSummary] = useState<Awaited<ReturnType<typeof getEmployeeLeaveUsageSummary>> | null>(null);
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
 
   const [empAllowances, setEmpAllowances] = useState<FirestoreEmployeeAllowance[]>([]);
@@ -695,7 +694,7 @@ export const EmployeeProfile: React.FC = () => {
     (async () => {
       try {
         const tasks: Promise<unknown>[] = [];
-        const results: { hierarchy?: FirestoreEmployee[]; directReports?: FirestoreEmployee[]; attendance?: FirestoreAttendanceLog[]; leaveReqs?: FirestoreLeaveRequest[]; balance?: FirestoreLeaveBalance | null; loansList?: FirestoreEmployeeLoan[] } = {};
+        const results: { hierarchy?: FirestoreEmployee[]; directReports?: FirestoreEmployee[]; attendance?: AttendanceRecord[]; leaveReqs?: FirestoreLeaveRequest[]; loansList?: FirestoreEmployeeLoan[] } = {};
 
         if (activeTab === 'hierarchy') {
           tasks.push(
@@ -708,7 +707,7 @@ export const EmployeeProfile: React.FC = () => {
           );
         } else if (activeTab === 'attendance') {
           tasks.push(
-            attendanceLogService.getByEmployee(id).then((logs) => {
+            attendanceProcessingService.getRecordsByEmployee(id).then((logs) => {
               if (!cancelled) results.attendance = logs;
             })
           );
@@ -729,12 +728,18 @@ export const EmployeeProfile: React.FC = () => {
           );
         } else if (activeTab === 'leaves') {
           tasks.push(
-            leaveRequestService.getByEmployee(id).then((reqs) => {
-              if (!cancelled) results.leaveReqs = reqs;
+            Promise.all([
+              leaveRequestService.getByEmployee(id),
+              leaveBalanceService.getOrCreate(id),
+            ]).then(async ([reqs, bal]) => {
+              if (cancelled) return;
+              results.leaveReqs = reqs;
+              const usage = await getEmployeeLeaveUsageSummary(id, {
+                approvedRequests: reqs,
+                leaveBalance: bal,
+              });
+              if (!cancelled) setLeaveUsageSummary(usage);
             }),
-            leaveBalanceService.getOrCreate(id).then((bal) => {
-              if (!cancelled) results.balance = bal;
-            })
           );
         } else if (activeTab === 'loans') {
           tasks.push(
@@ -759,7 +764,6 @@ export const EmployeeProfile: React.FC = () => {
         if (results.directReports != null) setDirectReports(results.directReports);
         if (results.attendance != null) setAttendanceLogs(results.attendance);
         if (results.leaveReqs != null) setLeaveRequests(results.leaveReqs);
-        if (results.balance !== undefined) setLeaveBalance(results.balance);
         if (results.loansList != null) setLoans(results.loansList);
       } catch (e) {
         console.error('EmployeeProfile tab data error:', e);
@@ -799,10 +803,10 @@ export const EmployeeProfile: React.FC = () => {
     let late = 0;
     let totalHours = 0;
     attendanceLogs.forEach((log) => {
-      if (log.isAbsent) absent++;
+      if (log.status === 'absent') absent++;
       else present++;
       if (log.lateMinutes > 0) late++;
-      totalHours += log.totalHours ?? 0;
+      totalHours += (log.workedMinutes || 0) / 60;
     });
     return { totalDays, present, absent, late, totalHours };
   }, [attendanceLogs]);
@@ -1093,16 +1097,16 @@ export const EmployeeProfile: React.FC = () => {
                 </thead>
                 <tbody>
                   {attendanceLogs.map((log) => {
-                    const status = log.isAbsent ? 'غائب' : log.lateMinutes > 0 ? 'متأخر' : 'حاضر';
+                    const status = log.status === 'absent' ? 'غائب' : log.lateMinutes > 0 ? 'متأخر' : 'حاضر';
                     return (
                       <tr key={log.id} className="border-t border-[var(--color-border)]">
                         <td className="p-3">{formatDateAr(log.date)}</td>
                         <td className="p-3">{formatTime(log.checkIn)}</td>
                         <td className="p-3">{formatTime(log.checkOut)}</td>
-                        <td className="p-3">{(log.totalHours ?? 0).toFixed(1)}</td>
+                        <td className="p-3">{(((log.workedMinutes || 0) / 60)).toFixed(1)}</td>
                         <td className="p-3">{log.lateMinutes ?? 0}</td>
                         <td className="p-3">
-                          <Badge variant={log.isAbsent ? 'danger' : log.lateMinutes ? 'warning' : 'success'}>
+                          <Badge variant={log.status === 'absent' ? 'danger' : log.lateMinutes ? 'warning' : 'success'}>
                             {status}
                           </Badge>
                         </td>
@@ -1177,24 +1181,45 @@ export const EmployeeProfile: React.FC = () => {
 
       {activeTab === 'leaves' && (
         <div className="space-y-6">
-          <Card title="رصيد الإجازات">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <p className="text-[var(--color-text-muted)] text-sm">سنوية</p>
-                <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.annualBalance) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-[var(--color-text-muted)] text-sm">مرضية</p>
-                <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.sickBalance) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-[var(--color-text-muted)] text-sm">طارئة</p>
-                <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.emergencyBalance) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-[var(--color-text-muted)] text-sm">بدون راتب (مأخوذ)</p>
-                <p className="text-xl font-bold">{leaveBalance ? formatNumber(leaveBalance.unpaidTaken) : '—'}</p>
-              </div>
+          <Card title="ملخص رصيد الإجازات (المستخدم والمتاح)">
+            <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+              <table className="w-full text-sm text-right">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">نوع الإجازة</th>
+                    <th className="erp-th">الرصيد الأساسي</th>
+                    <th className="erp-th">المستخدم</th>
+                    <th className="erp-th">المتاح</th>
+                    <th className="erp-th">آخر استخدام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(leaveUsageSummary?.perType ?? []).map((row) => (
+                    <tr key={row.leaveType} className="border-t border-[var(--color-border)]">
+                      <td className="p-3 font-bold">{row.label}</td>
+                      <td className="p-3">{row.defaultDays == null ? 'غير محدود' : `${formatNumber(row.defaultDays)} يوم`}</td>
+                      <td className="p-3 text-amber-600 font-bold">{formatNumber(row.usedDays)} يوم</td>
+                      <td className="p-3 text-emerald-600 font-bold">
+                        {row.leaveType === 'unpaid' ? 'غير محدود' : `${formatNumber(row.availableDays)} يوم`}
+                      </td>
+                      <td className="p-3">{row.lastUsedDate ? formatDateAr(row.lastUsedDate) : '—'}</td>
+                    </tr>
+                  ))}
+                  {(leaveUsageSummary?.perType ?? []).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-6 text-center text-slate-500">
+                        لا توجد بيانات إجازات
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 text-sm text-[var(--color-text-muted)]">
+              آخر استخدام إجازة:{' '}
+              {leaveUsageSummary?.lastUsedLeave
+                ? `${LEAVE_TYPE_LABELS[leaveUsageSummary.lastUsedLeave.leaveType]} - ${formatDateAr(leaveUsageSummary.lastUsedLeave.date)} (${formatNumber(leaveUsageSummary.lastUsedLeave.totalDays)} يوم)`
+                : 'لا يوجد استخدام معتمد حتى الآن'}
             </div>
           </Card>
           <Card title="طلبات الإجازة">

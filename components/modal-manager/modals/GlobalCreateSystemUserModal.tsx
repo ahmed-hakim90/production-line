@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Loader2, UserPlus, X } from 'lucide-react';
 import { SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -75,7 +76,7 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <h3 className="text-lg font-bold">إنشاء مستخدم جديد</h3>
           <button onClick={close} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors" disabled={submitting}>
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
         <div className="p-6 space-y-4">
@@ -107,7 +108,7 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
           <button className="btn btn-secondary" onClick={close} disabled={submitting}>إلغاء</button>
           <button className="btn btn-primary" onClick={() => void handleSubmit()} disabled={submitting}>
-            <span className="material-icons-round text-[15px]">{submitting ? 'autorenew' : 'person_add'}</span>
+            {submitting ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}
             {submitting ? 'جاري الإنشاء...' : 'إنشاء مستخدم'}
           </button>
         </div>

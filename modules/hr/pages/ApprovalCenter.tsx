@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -43,7 +43,7 @@ const STATUS_CONFIG: Record<ApprovalRequestStatus, { label: string; variant: 'wa
 function formatRequestSummary(req: FirestoreApprovalRequest): string {
   const data = req.requestData || {};
   if (req.requestType === 'leave') {
-    const typeLabel = LEAVE_TYPE_LABELS[data.leaveType as keyof typeof LEAVE_TYPE_LABELS] || data.leaveType;
+    const typeLabel = data.leaveTypeLabel || LEAVE_TYPE_LABELS[data.leaveType as keyof typeof LEAVE_TYPE_LABELS] || data.leaveType;
     return `إجازة ${typeLabel}`;
   }
   if (req.requestType === 'loan') {
@@ -103,7 +103,7 @@ export const ApprovalCenter: React.FC = () => {
   const { can } = usePermission();
   const permissions = useAppStore((s) => s.userPermissions);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
-  const currentUser = useAppStore((s) => s.currentUser);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
 
   const [requests, setRequests] = useState<FirestoreApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +114,7 @@ export const ApprovalCenter: React.FC = () => {
   const [overdueMap, setOverdueMap] = useState<Record<string, boolean>>({});
 
   const approverEmployeeId = currentEmployee?.id || '';
-  const approverName = currentEmployee?.name || currentUser?.displayName || '';
+  const approverName = currentEmployee?.name || userDisplayName || '';
   const viewAll = canViewAllRequests(permissions);
   const role = resolveApprovalRole(permissions);
 

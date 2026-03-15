@@ -225,7 +225,9 @@ export const OperationsMonitorPage: React.FC = () => {
 
   const snapshots = useMemo(() => extractSnapshots(events), [events]);
   const operations = useMemo(
-    () => Array.from(new Set(snapshots.map((row) => row.operation))).sort((a, b) => a.localeCompare(b)),
+    () =>
+      Array.from(new Set(snapshots.map((row) => String(row.operation))))
+        .sort((a, b) => String(a).localeCompare(String(b))),
     [snapshots],
   );
   const filteredSnapshots = useMemo(

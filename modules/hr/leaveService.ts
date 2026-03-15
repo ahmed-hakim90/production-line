@@ -27,7 +27,58 @@ import type {
   ApprovalChainItem,
   ApprovalStatus,
 } from './types';
-import { DEFAULT_LEAVE_BALANCE } from './types';
+import { DEFAULT_LEAVE_BALANCE, LEAVE_TYPE_LABELS } from './types';
+
+type PaidLeaveType = Exclude<LeaveType, 'unpaid'>;
+
+const PAID_LEAVE_TYPES: PaidLeaveType[] = ['annual', 'sick', 'emergency'];
+
+const DEFAULT_BALANCE_BY_TYPE: Record<PaidLeaveType, number> = {
+  annual: DEFAULT_LEAVE_BALANCE.annualBalance,
+  sick: DEFAULT_LEAVE_BALANCE.sickBalance,
+  emergency: DEFAULT_LEAVE_BALANCE.emergencyBalance,
+};
+
+function getRequestTimeMs(req: FirestoreLeaveRequest): number {
+  const created = req.createdAt;
+  if (created?.toMillis) return created.toMillis();
+  if (typeof created?.seconds === 'number') return created.seconds * 1000;
+  const start = req.startDate ? Date.parse(`${req.startDate}T12:00:00`) : 0;
+  return Number.isFinite(start) ? start : 0;
+}
+
+function isWithinRange(
+  value: string,
+  startDate?: string,
+  endDate?: string,
+): boolean {
+  if (!value) return false;
+  if (startDate && value < startDate) return false;
+  if (endDate && value > endDate) return false;
+  return true;
+}
+
+export interface LeaveTypeUsageItem {
+  leaveType: LeaveType;
+  label: string;
+  approvedDaysInRange: number;
+  usedDays: number;
+  availableDays: number;
+  defaultDays: number | null;
+  approvedRequestsCount: number;
+  lastUsedDate: string | null;
+}
+
+export interface EmployeeLeaveUsageSummary {
+  employeeId: string;
+  leaveBalance: FirestoreLeaveBalance;
+  perType: LeaveTypeUsageItem[];
+  lastUsedLeave: {
+    leaveType: LeaveType;
+    date: string;
+    totalDays: number;
+  } | null;
+}
 
 // ─── Leave Balance Service ──────────────────────────────────────────────────
 
@@ -108,7 +159,8 @@ export const leaveBalanceService = {
         return { success: true };
 
       default:
-        return { success: false, error: 'نوع إجازة غير معروف' };
+        // Custom leave types may not consume a fixed balance bucket.
+        return { success: true };
     }
   },
 
@@ -219,4 +271,143 @@ export const leaveRequestService = {
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
   },
+
+  async getApprovedByRange(
+    startDate: string,
+    endDate: string,
+  ): Promise<FirestoreLeaveRequest[]> {
+    if (!isConfigured) return [];
+    const q = query(
+      leaveRequestsRef(),
+      where('finalStatus', '==', 'approved'),
+      where('startDate', '>=', startDate),
+      where('startDate', '<=', endDate),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+  },
 };
+
+export async function getEmployeeLeaveUsageSummary(
+  employeeId: string,
+  options?: {
+    startDate?: string;
+    endDate?: string;
+    approvedRequests?: FirestoreLeaveRequest[];
+    leaveBalance?: FirestoreLeaveBalance | null;
+  },
+): Promise<EmployeeLeaveUsageSummary> {
+  const [rawBalance, allRequests] = await Promise.all([
+    options?.leaveBalance ? Promise.resolve(options.leaveBalance) : leaveBalanceService.getByEmployee(employeeId),
+    options?.approvedRequests ? Promise.resolve(options.approvedRequests) : leaveRequestService.getByEmployee(employeeId),
+  ]);
+
+  const leaveBalance = rawBalance ?? (await leaveBalanceService.getOrCreate(employeeId));
+  const approvedRequests = (allRequests || [])
+    .filter((req) => req.finalStatus === 'approved')
+    .filter((req) => isWithinRange(req.startDate, options?.startDate, options?.endDate))
+    .sort((a, b) => getRequestTimeMs(b) - getRequestTimeMs(a));
+
+  const approvedDaysByType: Record<LeaveType, number> = {
+    annual: 0,
+    sick: 0,
+    emergency: 0,
+    unpaid: 0,
+  };
+  const approvedCountByType: Record<LeaveType, number> = {
+    annual: 0,
+    sick: 0,
+    emergency: 0,
+    unpaid: 0,
+  };
+  const lastUsedDateByType: Record<LeaveType, string | null> = {
+    annual: null,
+    sick: null,
+    emergency: null,
+    unpaid: null,
+  };
+
+  approvedRequests.forEach((req) => {
+    approvedDaysByType[req.leaveType] += Number(req.totalDays || 0);
+    approvedCountByType[req.leaveType] += 1;
+    if (!lastUsedDateByType[req.leaveType]) {
+      lastUsedDateByType[req.leaveType] = req.startDate;
+    }
+  });
+
+  const balanceByType: Record<PaidLeaveType, number> = {
+    annual: leaveBalance.annualBalance || 0,
+    sick: leaveBalance.sickBalance || 0,
+    emergency: leaveBalance.emergencyBalance || 0,
+  };
+
+  const perType: LeaveTypeUsageItem[] = [
+    ...PAID_LEAVE_TYPES.map((leaveType) => {
+      const fromBalance = Math.max(0, DEFAULT_BALANCE_BY_TYPE[leaveType] - balanceByType[leaveType]);
+      return {
+        leaveType,
+        label: LEAVE_TYPE_LABELS[leaveType],
+        approvedDaysInRange: approvedDaysByType[leaveType],
+        usedDays: Math.max(approvedDaysByType[leaveType], fromBalance),
+        availableDays: Math.max(0, balanceByType[leaveType]),
+        defaultDays: DEFAULT_BALANCE_BY_TYPE[leaveType],
+        approvedRequestsCount: approvedCountByType[leaveType],
+        lastUsedDate: lastUsedDateByType[leaveType],
+      };
+    }),
+    {
+      leaveType: 'unpaid',
+      label: LEAVE_TYPE_LABELS.unpaid,
+      approvedDaysInRange: approvedDaysByType.unpaid,
+      usedDays: Math.max(leaveBalance.unpaidTaken || 0, approvedDaysByType.unpaid),
+      availableDays: 0,
+      defaultDays: null,
+      approvedRequestsCount: approvedCountByType.unpaid,
+      lastUsedDate: lastUsedDateByType.unpaid,
+    },
+  ];
+
+  const latestReq = approvedRequests[0];
+  return {
+    employeeId,
+    leaveBalance,
+    perType,
+    lastUsedLeave: latestReq
+      ? {
+          leaveType: latestReq.leaveType,
+          date: latestReq.startDate,
+          totalDays: latestReq.totalDays,
+        }
+      : null,
+  };
+}
+
+export async function getEmployeeLeaveUsageSummariesByRange(
+  employeeIds: string[],
+  startDate: string,
+  endDate: string,
+): Promise<Record<string, EmployeeLeaveUsageSummary>> {
+  if (employeeIds.length === 0) return {};
+
+  const approved = await leaveRequestService.getApprovedByRange(startDate, endDate);
+  const approvedByEmployee = new Map<string, FirestoreLeaveRequest[]>();
+  approved.forEach((req) => {
+    if (!employeeIds.includes(req.employeeId)) return;
+    const arr = approvedByEmployee.get(req.employeeId) ?? [];
+    arr.push(req);
+    approvedByEmployee.set(req.employeeId, arr);
+  });
+
+  const summaries = await Promise.all(
+    employeeIds.map(async (employeeId) => {
+      const summary = await getEmployeeLeaveUsageSummary(employeeId, {
+        startDate,
+        endDate,
+        approvedRequests: approvedByEmployee.get(employeeId) ?? [],
+      });
+      return [employeeId, summary] as const;
+    }),
+  );
+
+  return Object.fromEntries(summaries);
+}

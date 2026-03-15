@@ -7,6 +7,7 @@ type ThemePresetOption = {
   name: string;
   description: string;
   colors: { primary: string; bg: string; card: string };
+  swatches?: [string, string, string];
   partialTheme: Partial<ThemeSettings>;
 };
 
@@ -48,6 +49,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               const isActive =
                 localTheme.primaryColor === preset.partialTheme.primaryColor &&
                 localTheme.darkMode === preset.partialTheme.darkMode;
+              const swatches = preset.swatches ?? [preset.colors.primary, preset.colors.bg, preset.colors.card];
               return (
                 <button
                   key={preset.id}
@@ -68,15 +70,15 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                   <div className="flex gap-1 items-center">
                     <div
                       className="w-7 h-7 rounded-[var(--border-radius-base)] shadow-inner border border-black/10"
-                      style={{ backgroundColor: preset.colors.primary }}
+                      style={{ backgroundColor: swatches[0] }}
                     />
                     <div
                       className="w-5 h-5 rounded-[var(--border-radius-sm)] shadow-inner border border-black/10"
-                      style={{ backgroundColor: preset.colors.bg }}
+                      style={{ backgroundColor: swatches[1] }}
                     />
                     <div
                       className="w-5 h-5 rounded-[var(--border-radius-sm)] shadow-inner border border-black/10"
-                      style={{ backgroundColor: preset.colors.card }}
+                      style={{ backgroundColor: swatches[2] }}
                     />
                   </div>
                   <div>

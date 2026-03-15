@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { Download, Loader2, Upload, X } from 'lucide-react';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreEmployee, FirestoreRole } from '../../../types';
@@ -152,7 +153,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
             <p className="text-xs text-[var(--color-text-muted)] mt-1">الرفع لا ينشئ الحسابات مباشرة. راجع الصفوف ثم أنشئ المطلوب.</p>
           </div>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors" disabled={creating}>
-            <span className="material-icons-round">close</span>
+            <X size={20} />
           </button>
         </div>
 
@@ -161,11 +162,11 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-2">
             <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={parsing || creating}>
-              <span className="material-icons-round text-[15px]">{parsing ? 'autorenew' : 'upload_file'}</span>
+              {parsing ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
               {parsing ? 'جاري قراءة الملف...' : 'اختيار ملف الاستيراد'}
             </button>
             <button className="btn btn-secondary" onClick={downloadUsersTemplate} disabled={parsing || creating}>
-              <span className="material-icons-round text-[15px]">download</span>
+              <Download size={15} />
               تحميل قالب الاستيراد
             </button>
             <button

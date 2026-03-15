@@ -1,4 +1,26 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import {
+  AlertTriangle,
+  BellRing,
+  Calendar,
+  CalendarClock,
+  CalendarDays,
+  CalendarRange,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  FileText,
+  Gauge,
+  History,
+  Info,
+  ListChecks,
+  Loader2,
+  NotebookText,
+  Package,
+  Trash2,
+  User,
+  type LucideIcon,
+} from 'lucide-react';
 import { Card, Badge, LoadingSkeleton } from './UI';
 import { useShallowStore } from '../store/useAppStore';
 import {
@@ -14,6 +36,34 @@ import type { ProductionReport, ProductionPlan } from '../types';
 // ─── Period Filter ───────────────────────────────────────────────────────────
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
+
+const DASHBOARD_ICON_MAP: Record<string, LucideIcon> = {
+  today: CalendarDays,
+  history: History,
+  date_range: CalendarRange,
+  calendar_month: Calendar,
+  refresh: Loader2,
+  inventory: Package,
+  task_alt: CheckCircle2,
+  pending_actions: ListChecks,
+  delete_sweep: Trash2,
+  speed: Gauge,
+  event_note: NotebookText,
+  notifications_active: BellRing,
+  warning: AlertTriangle,
+  schedule: Clock3,
+  person: User,
+  description: FileText,
+  info: Info,
+  checklist: ClipboardList,
+  calendar_today: CalendarClock,
+};
+
+const renderDashboardIcon = (icon: string, size = 16, className = '') => {
+  const Icon = DASHBOARD_ICON_MAP[icon];
+  if (!Icon) return null;
+  return <Icon size={size} className={className} />;
+};
 
 const PERIOD_OPTIONS: { value: Period; label: string; icon: string }[] = [
   { value: 'daily',     label: 'اليوم',   icon: 'today' },
@@ -34,7 +84,7 @@ const DashboardPeriodFilter: React.FC<{ value: Period; onChange: (p: Period) => 
             : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
         }`}
       >
-        <span className="material-icons-round text-sm">{opt.icon}</span>
+        {renderDashboardIcon(opt.icon, 14)}
         {opt.label}
       </button>
     ))}
@@ -235,7 +285,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
       {isLoadingData && (
         <div className="flex items-center justify-center gap-2 py-4 text-slate-400">
-          <span className="material-icons-round animate-spin text-lg">refresh</span>
+          <Loader2 size={18} className="animate-spin" />
           <span className="text-sm font-bold">جاري تحميل البيانات...</span>
         </div>
       )}
@@ -245,7 +295,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
         <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-blue-600 text-xl">inventory</span>
+              <Package size={20} className="text-blue-600" />
             </div>
             <p className="text-[11px] font-bold text-slate-400">إجمالي الإنتاج</p>
           </div>
@@ -257,7 +307,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
               <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <span className="material-icons-round text-emerald-600 text-xl">task_alt</span>
+                <CheckCircle2 size={20} className="text-emerald-600" />
               </div>
               <p className="text-[11px] font-bold text-slate-400">تحقيق الخطة</p>
             </div>
@@ -272,7 +322,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
               <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <span className="material-icons-round text-indigo-600 dark:text-indigo-400 text-xl">pending_actions</span>
+                <ListChecks size={20} className="text-indigo-600 dark:text-indigo-400" />
               </div>
               <p className="text-[11px] font-bold text-slate-400">الكمية المتبقية</p>
             </div>
@@ -284,7 +334,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
         <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="w-10 h-10 bg-rose-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <span className="material-icons-round text-rose-600 text-xl">delete_sweep</span>
+              <Trash2 size={20} className="text-rose-600" />
             </div>
             <p className="text-[11px] font-bold text-slate-400">نسبة الهالك</p>
           </div>
@@ -298,7 +348,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
               <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <span className="material-icons-round text-amber-600 text-xl">speed</span>
+                <Gauge size={20} className="text-amber-600" />
               </div>
               <p className="text-[11px] font-bold text-slate-400">متوسط يومي</p>
             </div>
@@ -315,7 +365,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             <Card className="border-primary/20 shadow-primary/5">
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                  <span className="material-icons-round text-primary">event_note</span>
+                  <NotebookText size={18} className="text-primary" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-[var(--color-text)]">الخطة النشطة</h3>
@@ -376,7 +426,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           ) : (
             <Card>
               <div className="text-center py-8 text-slate-400">
-                <span className="material-icons-round text-4xl mb-2 block opacity-30">event_note</span>
+                <NotebookText size={32} className="mb-2 block opacity-30 mx-auto" />
                 <p className="font-bold">لا توجد خطة إنتاج نشطة حالياً</p>
                 <p className="text-sm mt-1">سيتم عرض تفاصيل الخطة عند تفعيلها</p>
               </div>
@@ -388,7 +438,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             <Card>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                  <span className="material-icons-round text-amber-600">notifications_active</span>
+                  <BellRing size={18} className="text-amber-600" />
                 </div>
                 <h3 className="text-base font-bold text-[var(--color-text)]">تنبيهات</h3>
               </div>
@@ -402,9 +452,11 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                         : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-900/20'
                     }`}
                   >
-                    <span className={`material-icons-round text-lg mt-0.5 ${
-                      alert.type === 'danger' ? 'text-rose-500' : 'text-amber-500'
-                    }`}>{alert.icon}</span>
+                    {renderDashboardIcon(
+                      alert.icon,
+                      18,
+                      `mt-0.5 ${alert.type === 'danger' ? 'text-rose-500' : 'text-amber-500'}`
+                    )}
                     <p className="text-sm font-medium text-[var(--color-text)] leading-relaxed">{alert.text}</p>
                   </div>
                 ))}
@@ -418,7 +470,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           <Card className="sticky top-24 border-emerald-500/20 shadow-emerald-500/5">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <span className="material-icons-round text-emerald-600">person</span>
+                <User size={18} className="text-emerald-600" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-[var(--color-text)]">الأداء الشخصي</h3>
@@ -430,7 +482,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               {/* Reports count */}
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <span className="material-icons-round text-blue-500 text-lg">description</span>
+                  <FileText size={18} className="text-blue-500" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">عدد التقارير</span>
                 </div>
                 <span className="text-lg font-bold text-blue-600">{kpis.reportsCount}</span>
@@ -439,7 +491,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               {/* Avg production per hour */}
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <span className="material-icons-round text-emerald-500 text-lg">speed</span>
+                  <Gauge size={18} className="text-emerald-500" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">متوسط إنتاج/ساعة</span>
                 </div>
                 <span className="text-lg font-bold text-emerald-600">{kpis.avgPerHour > 0 ? formatNumber(kpis.avgPerHour) : '—'}</span>
@@ -448,7 +500,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               {/* Total work hours */}
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <span className="material-icons-round text-amber-500 text-lg">schedule</span>
+                  <Clock3 size={18} className="text-amber-500" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل</span>
                 </div>
                 <span className="text-lg font-bold text-amber-600">{kpis.totalHours > 0 ? `${kpis.totalHours} س` : '—'}</span>
@@ -457,7 +509,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               {/* Total production */}
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <span className="material-icons-round text-primary text-lg">inventory</span>
+                  <Package size={18} className="text-primary" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">إجمالي الإنتاج</span>
                 </div>
                 <span className="text-lg font-bold text-primary">{formatNumber(kpis.totalProduction)}</span>
@@ -466,7 +518,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               {/* Waste */}
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <span className="material-icons-round text-rose-500 text-lg">delete_sweep</span>
+                  <Trash2 size={18} className="text-rose-500" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">الهالك</span>
                 </div>
                 <div className="text-left">
@@ -481,7 +533,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             {/* No data state */}
             {kpis.reportsCount === 0 && !isLoadingData && (
               <div className="mt-6 text-center py-4 text-slate-400">
-                <span className="material-icons-round text-2xl mb-1 block opacity-40">info</span>
+                <Info size={22} className="mb-1 block opacity-40 mx-auto" />
                 <p className="text-xs font-bold">لا توجد تقارير {periodLabel}</p>
               </div>
             )}
@@ -490,7 +542,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             {alerts.length === 0 && kpis.reportsCount > 0 && (
               <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
                 <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-[var(--border-radius-base)] border border-emerald-100 dark:border-emerald-900/20">
-                  <span className="material-icons-round text-emerald-500 text-sm mt-0.5">check_circle</span>
+                  <CheckCircle2 size={14} className="text-emerald-500 mt-0.5" />
                   <p className="text-xs text-[var(--color-text-muted)] dark:text-emerald-200/80 leading-relaxed font-medium">
                     أداؤك جيد — لا توجد تنبيهات حالياً.
                   </p>

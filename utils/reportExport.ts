@@ -8,13 +8,24 @@ import type { PaperSize, PaperOrientation } from '../types';
 
 // ─── Capture a DOM element as a canvas ──────────────────────────────────────
 
-const capture = (el: HTMLElement) =>
-  html2canvas(el, {
+const capture = async (el: HTMLElement) => {
+  // Wait for web fonts to load so Arabic shaping is stable in exported images.
+  if (typeof document !== 'undefined' && 'fonts' in document) {
+    try {
+      await (document as Document & { fonts: FontFaceSet }).fonts.ready;
+    } catch {
+      // Ignore and continue with capture fallback.
+    }
+  }
+
+  return html2canvas(el, {
     scale: 2,
     useCORS: true,
     backgroundColor: '#ffffff',
     logging: false,
+    letterRendering: true,
   });
+};
 
 const canvasToBlob = (
   canvas: HTMLCanvasElement,

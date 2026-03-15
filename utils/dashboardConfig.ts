@@ -2,7 +2,7 @@ import type {
   SystemSettings, AlertSettings, KPIThreshold, WidgetConfig, PrintTemplateSettings,
   PlanSettings, BrandingSettings, ThemeSettings, DashboardDisplaySettings, AlertToggleSettings,
   QuickActionColor, QuickActionType, CustomWidgetType, CustomWidgetConfig,
-  ExportImportSettings, ExportImportPageControl, SidebarIconStyle,
+  ExportImportSettings, ExportImportPageControl, SidebarIconStyle, AttendanceIntegrationSettings,
 } from '../types';
 
 // ─── Widget Registry ─────────────────────────────────────────────────────────
@@ -201,12 +201,30 @@ export const DEFAULT_BRANDING: BrandingSettings = {
 };
 
 export const DEFAULT_THEME: ThemeSettings = {
-  primaryColor: '#24308f',
-  secondaryColor: '#64748b',
-  successColor: '#10b981',
-  warningColor: '#f59e0b',
-  dangerColor: '#ef4444',
-  backgroundColor: '#f6f7f8',
+  primaryColor: '#4F46E5',
+  secondaryColor: '#6366F1',
+  successColor: '#059669',
+  warningColor: '#D97706',
+  dangerColor: '#DC2626',
+  backgroundColor: '#F8FAFC',
+  cssVars: {
+    '--primary': '239 84% 60%',
+    '--primary-foreground': '0 0% 100%',
+    '--secondary': '240 5% 96%',
+    '--secondary-foreground': '240 6% 10%',
+    '--background': '210 40% 98%',
+    '--foreground': '222 84% 5%',
+    '--muted': '210 40% 96%',
+    '--muted-foreground': '215 16% 47%',
+    '--accent': '239 84% 97%',
+    '--accent-foreground': '239 84% 30%',
+    '--border': '214 32% 91%',
+    '--input': '214 32% 91%',
+    '--ring': '239 84% 60%',
+    '--card': '0 0% 100%',
+    '--card-foreground': '222 84% 5%',
+    '--radius': '0.5rem',
+  },
   darkMode: 'light',
   baseFontFamily: 'Cairo',
   baseFontSize: 14,
@@ -241,6 +259,17 @@ export const DEFAULT_EXPORT_IMPORT_SETTINGS: ExportImportSettings = {
   pages: {},
 };
 
+export const DEFAULT_ATTENDANCE_INTEGRATION: AttendanceIntegrationSettings = {
+  watchFolderPath: '',
+  watchFolderEnabled: false,
+  importFilePattern: '*.xlsx,*.xls,*.csv',
+  watchFactoryId: '',
+  shiftStartTime: '08:00',
+  workingMinutesPerDay: 480,
+  lateGraceMinutes: 15,
+  overtimeThresholdMinutes: 480,
+};
+
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   dashboardWidgets: {
     dashboard: buildDefaultWidgets('dashboard'),
@@ -252,12 +281,14 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   kpiThresholds: DEFAULT_KPI_THRESHOLDS,
   printTemplate: DEFAULT_PRINT_TEMPLATE,
   planSettings: DEFAULT_PLAN_SETTINGS,
+  costMonthlyWorkingDays: {},
   branding: DEFAULT_BRANDING,
   theme: DEFAULT_THEME,
   dashboardDisplay: DEFAULT_DASHBOARD_DISPLAY,
   alertToggles: DEFAULT_ALERT_TOGGLES,
   quickActions: [],
   exportImport: DEFAULT_EXPORT_IMPORT_SETTINGS,
+  attendanceIntegration: DEFAULT_ATTENDANCE_INTEGRATION,
 };
 
 // ─── Selectors / Helpers ─────────────────────────────────────────────────────

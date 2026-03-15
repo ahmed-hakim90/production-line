@@ -37,6 +37,7 @@ export {
   generatePayroll,
   getPayrollMonth,
   getPayrollRecords,
+  getEmployeeLockedPayslip,
 } from './payrollEngine';
 
 // Finalizer

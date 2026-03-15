@@ -48,7 +48,7 @@ export type Permission =
   | 'selfService.view'
   | 'factoryDashboard.view'
   | 'adminDashboard.view'
-  | 'attendance.view' | 'attendance.import' | 'attendance.edit'
+  | 'attendance.view' | 'attendance.import' | 'attendance.sync' | 'attendance.process' | 'attendance.edit'
   | 'leave.view' | 'leave.create' | 'leave.manage'
   | 'loan.view' | 'loan.create' | 'loan.manage' | 'loan.disburse'
   | 'approval.view' | 'approval.manage' | 'approval.delegate' | 'approval.escalate' | 'approval.override'
@@ -180,6 +180,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'employees.delete', label: 'حذف الموظفين' },
       { key: 'attendance.view', label: 'عرض الحضور' },
       { key: 'attendance.import', label: 'استيراد بيانات' },
+      { key: 'attendance.sync', label: 'مزامنة أجهزة الحضور' },
+      { key: 'attendance.process', label: 'معالجة الحضور اليومي' },
       { key: 'attendance.edit', label: 'تعديل الحضور' },
       { key: 'leave.view', label: 'عرض الإجازات' },
       { key: 'leave.create', label: 'طلب إجازة' },
@@ -352,6 +354,9 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
       { path: '/self-service', icon: 'person', label: 'الخدمة الذاتية', permission: 'selfService.view' },
       { path: '/attendance', icon: 'fingerprint', label: 'سجل الحضور', permission: 'attendance.view' },
       { path: '/attendance/import', icon: 'upload_file', label: 'استيراد الحضور', permission: 'attendance.import' },
+      { path: '/attendance/logs', icon: 'event_note', label: 'السجلات الخام', permission: 'attendance.view' },
+      { path: '/attendance/daily', icon: 'fact_check', label: 'الحضور اليومي', permission: 'attendance.view' },
+      { path: '/attendance/sync', icon: 'sync', label: 'مزامنة الحضور', permission: 'attendance.sync' },
       { path: '/leave-requests', icon: 'beach_access', label: 'الإجازات', permission: 'leave.view' },
       { path: '/loan-requests', icon: 'payments', label: 'السُلف', permission: 'loan.view' },
       { path: '/approval-center', icon: 'fact_check', label: 'مركز الموافقات', permission: 'approval.view' },
@@ -416,7 +421,7 @@ const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   production: ['/lines', '/production-plans', '/work-orders', '/supervisors', '/supervisor-line-assignments', '/production-workers', '/reports', '/quick-action'],
   inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/inventory/movements', '/inventory/counts'],
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
-  hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
+  hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/attendance/logs', '/attendance/daily', '/attendance/sync', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
   costs: ['/cost-centers', '/cost-settings', '/costs/assets', '/costs/depreciation-report'],
   system: ['/system/users', '/roles', '/activity-log', '/operations-monitor', '/settings'],
 };
@@ -501,6 +506,9 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/settings': 'settings.view',
   '/attendance': 'attendance.view',
   '/attendance/import': 'attendance.import',
+  '/attendance/logs': 'attendance.view',
+  '/attendance/daily': 'attendance.view',
+  '/attendance/sync': 'attendance.sync',
   '/leave-requests': 'leave.view',
   '/loan-requests': 'loan.view',
   '/approval-center': 'approval.view',
@@ -564,6 +572,9 @@ export function checkPermission(
   }
   if (permission === 'users.manage') {
     return permissions['roles.manage'] === true;
+  }
+  if (permission === 'attendance.sync' || permission === 'attendance.process') {
+    return permissions['attendance.import'] === true || permissions['attendance.edit'] === true;
   }
   if (permission === 'catalog.categories.view') {
     return permissions['products.view'] === true;

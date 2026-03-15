@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { BackgroundJob } from './useJobsStore';
 
 interface JobCardProps {
@@ -26,6 +27,7 @@ const STATUS_LABEL: Record<BackgroundJob['status'], string> = {
 };
 
 export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onViewReport, onRemove }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const isProcessing = job.status === 'pending' || job.status === 'uploading' || job.status === 'processing';
   const isDone = job.status === 'completed' || job.status === 'failed';
   const progressWidth = Math.max(2, Math.min(100, job.progress));
@@ -50,11 +52,11 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
         </div>
         <div className="shrink-0 mt-0.5">
           {job.status === 'completed' ? (
-            <span className="material-icons-round text-emerald-500 text-[20px]">check_circle</span>
+            <CheckCircle2 size={20} className="text-emerald-500" />
           ) : job.status === 'failed' ? (
-            <span className="material-icons-round text-rose-500 text-[20px]">error</span>
+            <AlertCircle size={20} className="text-rose-500" />
           ) : (
-            <span className="material-icons-round text-[rgb(var(--color-primary))] animate-spin text-[20px]">sync</span>
+            <Loader2 size={20} className="text-[rgb(var(--color-primary))] animate-spin" />
           )}
         </div>
       </div>
@@ -76,54 +78,69 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
         </div>
       </div>
 
-      {/* Completion summary */}
-      {job.status === 'completed' && (
-        <div className="mt-3 rounded-[var(--border-radius-sm)] bg-emerald-50 border border-emerald-200 p-2.5 space-y-0.5">
-          <p className="text-[11.5px] font-semibold text-emerald-700">✔ {job.addedRows.toLocaleString('ar-EG')} صف مضاف</p>
-          <p className="text-[11.5px] font-semibold text-amber-700">⚠ {job.failedRows.toLocaleString('ar-EG')} صف فشل</p>
-        </div>
-      )}
-
-      {/* Error message */}
-      {job.status === 'failed' && job.errorMessage && (
-        <p className="mt-2.5 text-[11.5px] text-rose-600">{job.errorMessage}</p>
-      )}
-
-      {/* Action buttons */}
-      <div className="mt-3 flex items-center gap-2 flex-wrap">
-        {isProcessing && (
-          <button
-            onClick={() => onCancel(job.id)}
-            className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
-          >
-            إلغاء
-          </button>
-        )}
-        {isDone && (
-          <button
-            onClick={() => onViewReport(job.id)}
-            className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[rgb(var(--color-primary)/0.08)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.14)] transition-colors border border-[rgb(var(--color-primary)/0.2)]"
-          >
-            عرض التقرير
-          </button>
-        )}
-        {job.status === 'failed' && (
-          <button
-            onClick={() => onRetry(job.id)}
-            className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors border border-rose-200"
-          >
-            إعادة المحاولة
-          </button>
-        )}
-        {isDone && (
-          <button
-            onClick={() => onRemove(job.id)}
-            className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
-          >
-            حذف
-          </button>
-        )}
+      <div className="mt-3 pt-2 border-t border-[var(--color-border)]">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className="w-full flex items-center justify-between text-[11.5px] font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+        >
+          <span>{isExpanded ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}</span>
+          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
       </div>
+
+      {isExpanded && (
+        <>
+          {/* Completion summary */}
+          {job.status === 'completed' && (
+            <div className="mt-3 rounded-[var(--border-radius-sm)] bg-emerald-50 border border-emerald-200 p-2.5 space-y-0.5">
+              <p className="text-[11.5px] font-semibold text-emerald-700">✔ {job.addedRows.toLocaleString('ar-EG')} صف مضاف</p>
+              <p className="text-[11.5px] font-semibold text-amber-700">⚠ {job.failedRows.toLocaleString('ar-EG')} صف فشل</p>
+            </div>
+          )}
+
+          {/* Error message */}
+          {job.status === 'failed' && job.errorMessage && (
+            <p className="mt-2.5 text-[11.5px] text-rose-600">{job.errorMessage}</p>
+          )}
+
+          {/* Action buttons */}
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            {isProcessing && (
+              <button
+                onClick={() => onCancel(job.id)}
+                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
+              >
+                إلغاء
+              </button>
+            )}
+            {isDone && (
+              <button
+                onClick={() => onViewReport(job.id)}
+                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[rgb(var(--color-primary)/0.08)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.14)] transition-colors border border-[rgb(var(--color-primary)/0.2)]"
+              >
+                عرض التقرير
+              </button>
+            )}
+            {job.status === 'failed' && (
+              <button
+                onClick={() => onRetry(job.id)}
+                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors border border-rose-200"
+              >
+                إعادة المحاولة
+              </button>
+            )}
+            {isDone && (
+              <button
+                onClick={() => onRemove(job.id)}
+                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
+              >
+                حذف
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

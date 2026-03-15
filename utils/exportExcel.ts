@@ -5,7 +5,7 @@
  */
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, WorkOrder, ProductionPlan } from '../types';
+import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, WorkOrder, WorkOrderStatus, ProductionPlan } from '../types';
 import type { ProductCostBreakdown } from './productCostBreakdown';
 import { formatOperationDateTime, getReportWaste } from './calculations';
 
@@ -264,6 +264,20 @@ export const exportProductSummary = (
   includeCosts: boolean
 ) => {
   if (data.length === 0) return;
+  const totalQty = data.reduce((s, p) => s + p.qty, 0);
+  const weightedAvgCost = includeCosts && totalQty > 0
+    ? data.reduce((s, p) => s + p.avgCost * p.qty, 0) / totalQty
+    : 0;
+
+  const getCostTrendLabel = (avgCost: number) => {
+    if (!includeCosts || weightedAvgCost <= 0) return '—';
+    const delta = avgCost - weightedAvgCost;
+    const absDelta = Math.abs(delta);
+    if (absDelta < 0.01) return 'مطابق للمتوسط';
+    if (delta > 0) return `أعلى ${absDelta.toFixed(2)} ج.م`;
+    return `أقل ${absDelta.toFixed(2)} ج.م`;
+  };
+
   const rows = data.map((p, i) => {
     const base: Record<string, any> = {
       '#': i + 1,
@@ -273,10 +287,10 @@ export const exportProductSummary = (
     };
     if (includeCosts) {
       base['متوسط تكلفة الوحدة'] = p.avgCost > 0 ? Number(p.avgCost.toFixed(2)) : 0;
+      base['الاتجاه'] = getCostTrendLabel(p.avgCost);
     }
     return base;
   });
-  const totalQty = data.reduce((s, p) => s + p.qty, 0);
   const summary: Record<string, any> = {
     '#': '',
     'المنتج': 'الإجمالي',
@@ -287,6 +301,7 @@ export const exportProductSummary = (
     summary['متوسط تكلفة الوحدة'] = totalQty > 0
       ? Number((data.reduce((s, p) => s + p.avgCost * p.qty, 0) / totalQty).toFixed(2))
       : 0;
+    summary['الاتجاه'] = '—';
   }
   rows.push(summary);
   const date = new Date().toISOString().slice(0, 10);
@@ -558,26 +573,144 @@ interface WOExportLookups {
   getSupervisorName: (id: string) => string;
 }
 
+export interface WorkOrderExportRow {
+  workOrderNumber: string;
+  productName: string;
+  lineName: string;
+  supervisorName: string;
+  status: WorkOrderStatus;
+  storedStatus?: WorkOrderStatus;
+  quantity: number;
+  producedQuantity: number;
+  remainingQuantity: number;
+  progressPct: number;
+  reportCount: number;
+  startDate: string;
+  estimatedDays: number;
+  expectedEnd: string;
+  targetDate: string;
+  dailyAverage: number;
+  deviationPct: number;
+  estimatedCost: number;
+  actualCost: number;
+  costDiff: number;
+  notes?: string;
+}
+
+interface WorkOrderExportOptions {
+  detailedRows?: WorkOrderExportRow[];
+}
+
+const getStatusLabel = (status: string): string => WO_STATUS_AR[status] || status || '—';
+
 export const exportWorkOrders = (
   workOrders: WorkOrder[],
-  lookups: WOExportLookups
+  lookups: WOExportLookups,
+  options?: WorkOrderExportOptions,
 ) => {
-  if (workOrders.length === 0) return;
-  const rows = workOrders.map((wo) => ({
-    'رقم أمر الشغل': wo.workOrderNumber,
-    'المنتج': lookups.getProductName(wo.productId),
-    'خط الإنتاج': lookups.getLineName(wo.lineId),
-    'المشرف': lookups.getSupervisorName(wo.supervisorId),
-    'الكمية المطلوبة': wo.quantity,
-    'الكمية المنتجة': wo.producedQuantity,
-    'الكمية المتبقية': Math.max(0, wo.quantity - wo.producedQuantity),
-    'عدد العمالة (أقصى)': wo.maxWorkers,
-    'التاريخ المستهدف': wo.targetDate,
-    'التكلفة المقدرة': wo.estimatedCost > 0 ? Number(wo.estimatedCost.toFixed(2)) : 0,
-    'التكلفة الفعلية': wo.actualCost > 0 ? Number(wo.actualCost.toFixed(2)) : 0,
-    'الحالة': WO_STATUS_AR[wo.status] || wo.status,
-    'ملاحظات': wo.notes || '',
+  const detailedRows = options?.detailedRows || [];
+  if (workOrders.length === 0 && detailedRows.length === 0) return;
+
+  const normalizedRows: WorkOrderExportRow[] = detailedRows.length > 0
+    ? detailedRows
+    : workOrders.map((wo) => {
+      const quantity = Number(wo.quantity || 0);
+      const producedQuantity = Number(wo.producedQuantity || 0);
+      const remainingQuantity = Math.max(0, quantity - producedQuantity);
+      const progressPct = quantity > 0 ? (producedQuantity / quantity) * 100 : 0;
+      const estimatedCost = Number(wo.estimatedCost || 0);
+      const actualCost = Number(wo.actualCost || 0);
+      return {
+        workOrderNumber: wo.workOrderNumber,
+        productName: lookups.getProductName(wo.productId),
+        lineName: lookups.getLineName(wo.lineId),
+        supervisorName: lookups.getSupervisorName(wo.supervisorId),
+        status: wo.status,
+        storedStatus: wo.status,
+        quantity,
+        producedQuantity,
+        remainingQuantity,
+        progressPct,
+        reportCount: 0,
+        startDate: String((wo as any).startedAt || ''),
+        estimatedDays: Number((wo as any).estimatedDays ?? (wo as any).estimatedDurationDays ?? 0),
+        expectedEnd: String((wo as any).expectedEnd || wo.targetDate || ''),
+        targetDate: wo.targetDate,
+        dailyAverage: Number((wo as any).dailyAverage || 0),
+        deviationPct: Number((wo as any).executionDeviationPct ?? 0),
+        estimatedCost,
+        actualCost,
+        costDiff: actualCost - estimatedCost,
+        notes: wo.notes || '',
+      };
+    });
+
+  const rows = normalizedRows.map((row) => ({
+    'رقم أمر الشغل': row.workOrderNumber || '—',
+    'المنتج': row.productName || '—',
+    'خط الإنتاج': row.lineName || '—',
+    'المشرف': row.supervisorName || '—',
+    'الحالة الفعالة': getStatusLabel(row.status),
+    'الحالة المسجلة': getStatusLabel(row.storedStatus || row.status),
+    'بداية التنفيذ (أول تقرير)': row.startDate || '—',
+    'النهاية المتوقعة': row.expectedEnd || '—',
+    'التاريخ المستهدف': row.targetDate || '—',
+    'المدة المقدرة (يوم)': Math.max(0, Number(row.estimatedDays || 0)),
+    'متوسط الإنتاج/يوم': Math.max(0, Number(row.dailyAverage || 0)),
+    'عدد التقارير': Math.max(0, Number(row.reportCount || 0)),
+    'الكمية المطلوبة': Math.max(0, Number(row.quantity || 0)),
+    'الكمية المنتجة': Math.max(0, Number(row.producedQuantity || 0)),
+    'الكمية المتبقية': Math.max(0, Number(row.remainingQuantity || 0)),
+    'نسبة الإنجاز %': Number(Math.max(0, Number(row.progressPct || 0)).toFixed(1)),
+    'الانحراف %': Number(Number(row.deviationPct || 0).toFixed(1)),
+    'التكلفة المقدرة': Number(Number(row.estimatedCost || 0).toFixed(2)),
+    'التكلفة الفعلية': Number(Number(row.actualCost || 0).toFixed(2)),
+    'فرق التكلفة': Number(Number(row.costDiff || 0).toFixed(2)),
+    'ملاحظات': String(row.notes || '').trim(),
   }));
+
+  const totalQuantity = normalizedRows.reduce((sum, row) => sum + Math.max(0, Number(row.quantity || 0)), 0);
+  const totalProduced = normalizedRows.reduce((sum, row) => sum + Math.max(0, Number(row.producedQuantity || 0)), 0);
+  const totalRemaining = normalizedRows.reduce((sum, row) => sum + Math.max(0, Number(row.remainingQuantity || 0)), 0);
+  const totalEstimatedCost = normalizedRows.reduce((sum, row) => sum + Number(row.estimatedCost || 0), 0);
+  const totalActualCost = normalizedRows.reduce((sum, row) => sum + Number(row.actualCost || 0), 0);
+  const totalDiffCost = normalizedRows.reduce((sum, row) => sum + Number(row.costDiff || 0), 0);
+  const totalReports = normalizedRows.reduce((sum, row) => sum + Math.max(0, Number(row.reportCount || 0)), 0);
+  const avgDaily = normalizedRows.length > 0
+    ? normalizedRows.reduce((sum, row) => sum + Math.max(0, Number(row.dailyAverage || 0)), 0) / normalizedRows.length
+    : 0;
+  const avgProgress = totalQuantity > 0 ? (totalProduced / totalQuantity) * 100 : 0;
+  const avgDeviation = normalizedRows.length > 0
+    ? normalizedRows.reduce((sum, row) => sum + Number(row.deviationPct || 0), 0) / normalizedRows.length
+    : 0;
+  const avgEstimatedDays = normalizedRows.length > 0
+    ? normalizedRows.reduce((sum, row) => sum + Math.max(0, Number(row.estimatedDays || 0)), 0) / normalizedRows.length
+    : 0;
+
+  rows.push({
+    'رقم أمر الشغل': '',
+    'المنتج': 'الإجمالي',
+    'خط الإنتاج': '',
+    'المشرف': `${normalizedRows.length} أمر`,
+    'الحالة الفعالة': '',
+    'الحالة المسجلة': '',
+    'بداية التنفيذ (أول تقرير)': '',
+    'النهاية المتوقعة': '',
+    'التاريخ المستهدف': '',
+    'المدة المقدرة (يوم)': Number(avgEstimatedDays.toFixed(1)),
+    'متوسط الإنتاج/يوم': Number(avgDaily.toFixed(2)),
+    'عدد التقارير': totalReports,
+    'الكمية المطلوبة': totalQuantity,
+    'الكمية المنتجة': totalProduced,
+    'الكمية المتبقية': totalRemaining,
+    'نسبة الإنجاز %': Number(avgProgress.toFixed(1)),
+    'الانحراف %': Number(avgDeviation.toFixed(1)),
+    'التكلفة المقدرة': Number(totalEstimatedCost.toFixed(2)),
+    'التكلفة الفعلية': Number(totalActualCost.toFixed(2)),
+    'فرق التكلفة': Number(totalDiffCost.toFixed(2)),
+    'ملاحظات': '',
+  });
+
   const date = new Date().toISOString().slice(0, 10);
   downloadExcel(rows, 'أوامر الشغل', `أوامر-الشغل-${date}`);
 };

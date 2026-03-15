@@ -6,7 +6,7 @@ export { LineDetails } from './pages/LineDetails';
 export { Reports } from './pages/Reports';
 export { QuickAction } from './pages/QuickAction';
 export { ProductionPlans } from './pages/ProductionPlans';
-export { WorkOrders } from './pages/WorkOrders';
+export { WorkOrders } from './pages/WorkOrders/index';
 export { WorkOrderScanner } from './pages/WorkOrderScanner';
 export { Supervisors } from './pages/Supervisors';
 export { SupervisorDetails } from './pages/SupervisorDetails';
@@ -31,6 +31,5 @@ export { supervisorLineAssignmentService } from './services/supervisorLineAssign
 export { monthlyProductionCostService } from './services/monthlyProductionCostService';
 export { productMaterialService } from './services/productMaterialService';
 export { storageService } from './services/storageService';
-export { assetService } from './services/assetService';
-export { assetDepreciationService } from './services/assetDepreciationService';
-export { assetDepreciationJobService } from './services/assetDepreciationJobService';
+export { supervisorDistributionService } from './services/supervisorDistributionService';
+export { useSupervisorStore } from './stores/useSupervisorStore';

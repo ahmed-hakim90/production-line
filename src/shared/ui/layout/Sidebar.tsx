@@ -1,10 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import {
+  ChevronDown,
+  ChevronLeft,
+  Eye,
+  Factory,
+  LogOut,
+  PanelLeftClose,
+  UserCircle2,
+  X,
+} from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission, useCurrentRole } from '@/utils/permissions';
 import { MENU_CONFIG } from '@/config/menu.config';
 import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSidebar';
 import type { SidebarIconStyle } from '@/types';
+import { resolveMenuIcon } from './menuIconMap';
 
 export interface SidebarProps {
   open: boolean;
@@ -31,6 +42,11 @@ const COLORFUL_BG: Record<string, string> = {
   quality:    'bg-cyan-50',
   system:     'bg-rose-50',
 };
+
+function renderSidebarIcon(name?: string, className?: string, size = 16) {
+  const NavIcon = resolveMenuIcon(name);
+  return <NavIcon size={size} className={className} />;
+}
 
 function getIconClasses(
   groupKey: string,
@@ -132,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               collapsed ? 'hover:opacity-90 cursor-pointer' : 'cursor-default',
             ].join(' ')}
           >
-            <span className="material-icons-round text-[16px]">factory</span>
+            <Factory size={16} />
           </button>
 
           {showExpandedHeader && (
@@ -148,7 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 title="طي القائمة"
                 className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] transition-colors shrink-0"
               >
-                <span className="material-icons-round text-[16px]">keyboard_double_arrow_left</span>
+                <PanelLeftClose size={16} />
               </button>
 
               {/* Mobile close */}
@@ -156,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 onClick={onClose}
                 className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
               >
-                <span className="material-icons-round text-[16px]">close</span>
+                <X size={16} />
               </button>
             </>
           )}
@@ -165,7 +181,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         {/* ── Read-only notice ─────────────────────────────────────── */}
         {isReadOnly && !collapsed && (
           <div className="mx-2 mt-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-sm)] flex items-center gap-1.5 shrink-0">
-            <span className="material-icons-round text-amber-500 text-[14px]">visibility</span>
+            <Eye size={14} className="text-amber-500" />
             <span className="text-[11px] font-semibold text-amber-700">وضع القراءة فقط</span>
           </div>
         )}
@@ -192,7 +208,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)]',
                     ].join(' ')}
                   >
-                    <span className="material-icons-round text-[18px]">{group.icon}</span>
+                    {renderSidebarIcon(group.icon, undefined, 18)}
                     {totalBadge > 0 && (
                       <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-rose-500 rounded-full" />
                     )}
@@ -223,11 +239,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       : 'text-[var(--color-text)] font-medium hover:bg-[#f0f2f5]',
                   ].join(' ')}
                 >
-                  <span className={[
-                    'material-icons-round text-[17px] shrink-0',
-                    active ? iconColor : 'text-[var(--color-text-muted)]',
-                  ].join(' ')}>
-                    {group.icon}
+                  <span className={['shrink-0', active ? iconColor : 'text-[var(--color-text-muted)]'].join(' ')}>
+                    {renderSidebarIcon(group.icon, undefined, 17)}
                   </span>
                   <span className="flex-1 text-[13px] truncate">{group.label}</span>
                   {totalBadge > 0 && (
@@ -235,9 +248,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       {totalBadge > 99 ? '99+' : totalBadge}
                     </span>
                   )}
-                  <span className={`material-icons-round text-[14px] text-[var(--color-text-muted)] transition-transform duration-200 shrink-0 ${isOpen ? '-rotate-90' : ''}`}>
-                    chevron_left
-                  </span>
+                  <ChevronLeft
+                    size={14}
+                    className={`text-[var(--color-text-muted)] transition-transform duration-200 shrink-0 ${isOpen ? '-rotate-90' : ''}`}
+                  />
                 </button>
 
                 {/* Sub-items */}
@@ -265,8 +279,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                             {itemActive && (
                               <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current rounded-l-full" />
                             )}
-                            <span className={`material-icons-round text-[15px] shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
-                              {item.icon}
+                            <span className={`shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
+                              {renderSidebarIcon(item.icon, undefined, 15)}
                             </span>
                             <span className="flex-1 truncate">{item.label}</span>
                             {badge > 0 && (
@@ -329,9 +343,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                     {roleName}
                   </span>
                 </div>
-                <span className={`material-icons-round text-[14px] text-[var(--color-text-muted)] transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''}`}>
-                  expand_less
-                </span>
+                <ChevronDown
+                  size={14}
+                  className={`text-[var(--color-text-muted)] transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''}`}
+                />
               </button>
 
               {profileOpen && (
@@ -347,7 +362,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         to="/self-service"
                         className="flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-medium text-[var(--color-text)] hover:bg-[#f0f2f5] transition-colors"
                       >
-                        <span className="material-icons-round text-[16px] text-[var(--color-text-muted)]">account_circle</span>
+                        <UserCircle2 size={16} className="text-[var(--color-text-muted)]" />
                         <span>ملفي الشخصي</span>
                       </NavLink>
                     )}
@@ -355,7 +370,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       onClick={logout}
                       className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-start border-t border-[var(--color-border)] mt-1 pt-2"
                     >
-                      <span className="material-icons-round text-[16px]">logout</span>
+                      <LogOut size={16} />
                       <span>تسجيل الخروج</span>
                     </button>
                   </div>
