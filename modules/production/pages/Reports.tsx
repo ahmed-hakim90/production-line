@@ -1048,6 +1048,9 @@ export const Reports: React.FC = () => {
       const workOrderProgress = linkedWo && targetQty > 0
         ? Math.max(0, Math.min(100, Math.round((Number(linkedWo.producedQuantity || 0) / targetQty) * 100)))
         : undefined;
+      const workOrderRemaining = linkedWo && targetQty > 0
+        ? Math.max(0, targetQty - Number(linkedWo.producedQuantity || 0))
+        : undefined;
       const unitCost = report.id && canViewCosts ? Number(reportCosts.get(report.id) || 0) : 0;
       return {
         productName: getProductName(report.productId, report.reportType),
@@ -1061,6 +1064,7 @@ export const Reports: React.FC = () => {
         unitCost,
         workOrderNumber: linkedWo?.workOrderNumber,
         workOrderProgress,
+        workOrderRemaining,
         hours: Number(report.workHours || 0),
         wastePercent,
         deviation,
@@ -1141,7 +1145,24 @@ export const Reports: React.FC = () => {
           useCORS: true,
           backgroundColor: '#fff',
           width: 420,
-          windowWidth: 420,
+          logging: false,
+          foreignObjectRendering: false,
+          allowTaint: true,
+          onclone: (clonedDoc) => {
+            clonedDoc.documentElement.setAttribute('dir', 'rtl');
+            clonedDoc.documentElement.style.direction = 'rtl';
+            const style = clonedDoc.createElement('style');
+            style.textContent = `
+              * { direction: rtl !important; unicode-bidi: embed !important; }
+              @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+            `;
+            clonedDoc.head.appendChild(style);
+            const el = clonedDoc.querySelector('#share-card');
+            if (el) {
+              (el as HTMLElement).style.direction = 'rtl';
+              (el as HTMLElement).style.unicodeBidi = 'embed';
+            }
+          },
         });
         const blob = await new Promise<Blob | null>((resolve) => {
           canvas.toBlob(resolve, 'image/png');
@@ -2782,7 +2803,7 @@ export const Reports: React.FC = () => {
       )}
 
       {/* ══ Hidden print components (off-screen, only rendered for print) ══ */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+      <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl' }}>
         {shareCardReport && (
           <div style={{ width: '420px', background: '#fff' }}>
             <ReportShareCard ref={shareCardRef} report={shareCardReport} companyName="مؤسسة المغربي" />
