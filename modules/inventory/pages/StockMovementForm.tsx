@@ -10,7 +10,7 @@ import type { RawMaterial, Warehouse, StockItemBalance, TransferRequestLine } fr
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
 import { exportToPDF, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
-import { StockTransferPrint, type StockTransferPrintData } from '../components';
+import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData } from '../components/StockTransferPrint';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
@@ -39,6 +39,7 @@ const createTransferLine = (): TransferLine => ({
   quantity: 0,
   unit: 'piece',
 });
+const APP_VERSION = __APP_VERSION__;
 
 export const StockMovementForm: React.FC = () => {
   const location = useLocation();
@@ -56,6 +57,7 @@ export const StockMovementForm: React.FC = () => {
   const transferDisplayUnit = useAppStore(
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
+  const companyName = useAppStore((s) => s.systemSettings.branding?.factoryName ?? 'الشركة');
   const { can } = usePermission();
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -78,6 +80,7 @@ export const StockMovementForm: React.FC = () => {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   const transferPrintRef = useRef<HTMLDivElement>(null);
+  const transferShareCardRef = useRef<HTMLDivElement>(null);
   const handleTransferPrint = useManagedPrint({
     contentRef: transferPrintRef,
     printSettings: printTemplate,
@@ -433,8 +436,8 @@ export const StockMovementForm: React.FC = () => {
         } else if (afterSaveAction === 'share') {
           setPrintData(payload);
           await new Promise((r) => setTimeout(r, 250));
-          if (transferPrintRef.current) {
-            const result = await shareToWhatsApp(transferPrintRef.current, `stock-transfer-${payload.transferNo}`);
+          if (transferShareCardRef.current) {
+            const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${payload.transferNo}`);
             showShareFeedback(result);
           }
           setTimeout(() => setPrintData(null), 1200);
@@ -918,6 +921,14 @@ export const StockMovementForm: React.FC = () => {
       {/* Hidden print component */}
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
+      </div>
+      <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -1, direction: 'rtl' }}>
+        <StockTransferShareCard
+          ref={transferShareCardRef}
+          data={printData}
+          companyName={companyName}
+          version={APP_VERSION ?? ''}
+        />
       </div>
 
       {/* Share toast */}

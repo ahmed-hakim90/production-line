@@ -7,7 +7,7 @@ import type { InventoryTransferRequest, StockTransaction, TransferRequestLine, W
 import { formatNumber } from '../../../utils/calculations';
 import { exportHRData } from '../../../utils/exportExcel';
 import { usePermission } from '../../../utils/permissions';
-import { StockTransferPrint, type StockTransferPrintData } from '../components/StockTransferPrint';
+import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData } from '../components/StockTransferPrint';
 import { useManagedPrint } from '../../../utils/printManager';
 import { useAppStore } from '../../../store/useAppStore';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
@@ -31,9 +31,11 @@ const movementLabel: Record<string, string> = {
   TRANSFER: 'تحويل',
   ADJUSTMENT: 'تسوية',
 };
+const APP_VERSION = __APP_VERSION__;
 export const StockTransactions: React.FC = () => {
   const { can } = usePermission();
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const companyName = useAppStore((s) => s.systemSettings.branding?.factoryName ?? 'الشركة');
   const transferDisplayUnit = useAppStore(
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
@@ -63,6 +65,7 @@ export const StockTransactions: React.FC = () => {
   const [editNote, setEditNote] = useState('');
   const [shareToast, setShareToast] = useState<string | null>(null);
   const transferPrintRef = useRef<HTMLDivElement>(null);
+  const transferShareCardRef = useRef<HTMLDivElement>(null);
   const handleTransferPrint = useManagedPrint({
     contentRef: transferPrintRef,
     printSettings: printTemplate,
@@ -326,8 +329,8 @@ export const StockTransactions: React.FC = () => {
       };
       setPrintData(payload);
       await new Promise((r) => setTimeout(r, 250));
-      if (transferPrintRef.current) {
-        const result = await shareToWhatsApp(transferPrintRef.current, `stock-transfer-${transferNo}`);
+      if (transferShareCardRef.current) {
+        const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${transferNo}`);
         showShareFeedback(result);
       }
       setTimeout(() => setPrintData(null), 1000);
@@ -368,8 +371,8 @@ export const StockTransactions: React.FC = () => {
     try {
       setPrintData(buildPendingPrintData(row));
       await new Promise((r) => setTimeout(r, 250));
-      if (transferPrintRef.current) {
-        const result = await shareToWhatsApp(transferPrintRef.current, `stock-transfer-${row.referenceNo}`);
+      if (transferShareCardRef.current) {
+        const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${row.referenceNo}`);
         showShareFeedback(result);
       }
       setTimeout(() => setPrintData(null), 1000);
@@ -877,6 +880,14 @@ export const StockTransactions: React.FC = () => {
       </Card>
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
+      </div>
+      <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -1, direction: 'rtl' }}>
+        <StockTransferShareCard
+          ref={transferShareCardRef}
+          data={printData}
+          companyName={companyName}
+          version={APP_VERSION ?? ''}
+        />
       </div>
       {shareToast && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3 animate-in fade-in duration-300">
