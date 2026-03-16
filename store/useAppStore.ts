@@ -125,6 +125,32 @@ function isBlockedNotification(notification: AppNotification): boolean {
   return false;
 }
 
+function notificationCreatedAtMs(notification: AppNotification): number {
+  const createdAt = notification.createdAt as any;
+  if (!createdAt) return 0;
+  if (typeof createdAt?.toDate === 'function') return createdAt.toDate().getTime();
+  if (typeof createdAt?.seconds === 'number') return createdAt.seconds * 1000;
+  const parsed = new Date(createdAt).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mergeWithRealtimeNotifications(
+  incoming: AppNotification[],
+  current: AppNotification[],
+): AppNotification[] {
+  const localRealtime = current.filter((n) => String(n.id || '').startsWith('fcm_'));
+  const merged = [...incoming];
+  const seen = new Set(merged.map((n) => String(n.id || '')));
+  localRealtime.forEach((n) => {
+    const id = String(n.id || '');
+    if (!id || seen.has(id)) return;
+    merged.push(n);
+    seen.add(id);
+  });
+  merged.sort((a, b) => notificationCreatedAtMs(b) - notificationCreatedAtMs(a));
+  return merged.slice(0, 80);
+}
+
 let _cachedProductionWarehouseId: string | null = null;
 
 async function resolveProductionWarehouseId(systemSettings: SystemSettings): Promise<string> {
@@ -416,11 +442,12 @@ async function ensureCategoryFromModel(model: string | undefined): Promise<void>
   const name = String(model || '').trim();
   if (!name) return;
   try {
-    const categories = await categoryService.getAll();
+    const categories = await categoryService.getByType('product');
     const exists = categories.some((category) => String(category.name || '').trim() === name);
     if (!exists) {
       await categoryService.create({
         name,
+        type: 'product',
         isActive: true,
       });
     }
@@ -524,6 +551,12 @@ interface AppState {
   fetchEmployees: () => Promise<void>;
   fetchAttendanceLogs: (startDate: string, endDate: string) => Promise<void>;
   fetchAttendanceRecords: (startDate: string, endDate: string) => Promise<void>;
+  importAttendanceFingerprintCsv: (input: {
+    file: File;
+    importLabel?: string;
+    officialHolidays?: string[];
+    onProgress?: (done: number, total: number) => void;
+  }) => Promise<AttendanceImportResult>;
   syncAttendanceFromDevices: (input?: {
     mode?: 'manual_upload' | 'watch_folder' | 'scheduled' | 'gateway_push';
     file?: File;
@@ -532,6 +565,23 @@ interface AppState {
   }) => Promise<AttendanceImportResult>;
   processDailyAttendance: (date: string) => Promise<AttendanceProcessResult>;
   recalculateAttendanceForDate: (date: string) => Promise<AttendanceProcessResult>;
+  updateAttendanceRecordTimes: (
+    recordId: string,
+    payload: { checkIn: string | null; checkOut: string | null }
+  ) => Promise<void>;
+  getSinglePunchRecordsByEmployee: (
+    employeeId: string,
+    startDate: string,
+    endDate: string
+  ) => Promise<AttendanceRecord[]>;
+  deleteAttendanceRecordsByIds: (
+    recordIds: string[],
+    onProgress?: (done: number, total: number) => void
+  ) => Promise<{ deleted: number }>;
+  deleteAttendanceRecordsByBatch: (
+    batchId: string,
+    options?: { startDate?: string; endDate?: string }
+  ) => Promise<{ deleted: number }>;
   fetchReports: (startDate?: string, endDate?: string) => Promise<void>;
   fetchLineStatuses: () => Promise<void>;
   fetchLineProductConfigs: () => Promise<void>;
@@ -611,6 +661,14 @@ interface AppState {
   deleteWorkOrder: (id: string) => Promise<void>;
 
   // Notifications
+  addRealtimeNotification: (input: {
+    title: string;
+    body: string;
+    type?: string;
+    referenceId?: string;
+    url?: string;
+    data?: Record<string, string>;
+  }) => void;
   fetchNotifications: () => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
@@ -1258,6 +1316,48 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  importAttendanceFingerprintCsv: async ({ file, importLabel, officialHolidays, onProgress }) => {
+    const startedBy = get().userDisplayName || get().userEmail || 'System';
+    const jobStore = useJobsStore.getState();
+    const jobId = jobStore.addJob({
+      fileName: file.name || 'Fingerprint CSV',
+      jobType: 'Attendance Fingerprint Import',
+      totalRows: 1,
+      startedBy,
+    });
+    jobStore.startJob(jobId, 'Parsing fingerprint CSV');
+    set({ error: null });
+
+    try {
+      const result = await zktecoSyncService.importFingerprintCsvFile(file, {
+        importLabel,
+        officialHolidays,
+        onProgress: (done, total) => {
+          jobStore.setJobProgress(jobId, {
+            processedRows: done,
+            totalRows: Math.max(total, 1),
+            status: 'processing',
+            statusText: `Processing fingerprint rows ${done}/${total}`,
+          });
+          onProgress?.(done, total);
+        },
+      });
+
+      jobStore.completeJob(jobId, {
+        addedRows: result.importedRows,
+        failedRows: result.failedRows,
+        statusText: `Imported ${result.importedRows}, skipped ${result.failedRows}`,
+      });
+
+      return result;
+    } catch (error) {
+      const message = (error as Error).message || 'Fingerprint attendance import failed';
+      set({ error: message });
+      jobStore.failJob(jobId, message, 'Attendance fingerprint import failed');
+      throw error;
+    }
+  },
+
   syncAttendanceFromDevices: async (input) => {
     const mode = input?.mode || 'manual_upload';
     const watchEnabled = get().systemSettings.attendanceIntegration?.watchFolderEnabled === true;
@@ -1298,7 +1398,25 @@ export const useAppStore = create<AppState>((set, get) => ({
           statusText: 'Parsing Excel/CSV file',
           totalRows: 1,
         });
-        result = await zktecoSyncService.importFile(input.file, input.source || 'zkteco_excel');
+        const lowerName = (input.file.name || '').toLowerCase();
+        const isCsvLike = lowerName.endsWith('.csv') || lowerName.endsWith('.txt');
+        const fileText = isCsvLike ? await input.file.text() : '';
+        const isFingerprintCsv = isCsvLike && /^AC-No,\s*Name,\s*Department,\s*Date,\s*Time/im.test(fileText);
+        if (isFingerprintCsv) {
+          result = await zktecoSyncService.importFingerprintCsvText(fileText, {
+            importLabel: `fingerprint-${new Date().toISOString().slice(0, 7)}`,
+            onProgress: (done, total) => {
+              jobStore.setJobProgress(jobId, {
+                processedRows: done,
+                status: 'processing',
+                statusText: `Processing fingerprint rows ${done}/${total}`,
+                totalRows: Math.max(total, 1),
+              });
+            },
+          });
+        } else {
+          result = await zktecoSyncService.importFile(input.file, input.source || 'zkteco_excel');
+        }
       } else if (input?.logs && input.logs.length > 0) {
         jobStore.setJobProgress(jobId, {
           processedRows: 0,
@@ -1326,18 +1444,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       }
 
-      const processedDates = result.processedDates && result.processedDates.length > 0
-        ? result.processedDates
-        : [getTodayDateString()];
-      for (let i = 0; i < processedDates.length; i += 1) {
-        const date = processedDates[i];
-        jobStore.setJobProgress(jobId, {
-          processedRows: i + 1,
-          totalRows: processedDates.length,
-          status: 'processing',
-          statusText: `Processing attendance date ${date}`,
-        });
-        await attendanceProcessingService.processDate(date);
+      if (!result.recordsReady) {
+        const processedDates = result.processedDates && result.processedDates.length > 0
+          ? result.processedDates
+          : [getTodayDateString()];
+        for (let i = 0; i < processedDates.length; i += 1) {
+          const date = processedDates[i];
+          jobStore.setJobProgress(jobId, {
+            processedRows: i + 1,
+            totalRows: processedDates.length,
+            status: 'processing',
+            statusText: `Processing attendance date ${date}`,
+          });
+          await attendanceProcessingService.processDate(date);
+        }
       }
 
       jobStore.completeJob(jobId, {
@@ -1404,6 +1524,52 @@ export const useAppStore = create<AppState>((set, get) => ({
       const message = (error as Error).message || 'Attendance recalculation failed';
       set({ error: message });
       jobStore.failJob(jobId, message, 'Attendance recalculation failed');
+      throw error;
+    }
+  },
+
+  updateAttendanceRecordTimes: async (recordId, payload) => {
+    set({ error: null });
+    try {
+      await attendanceProcessingService.updateRecordTimes(recordId, payload);
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  getSinglePunchRecordsByEmployee: async (employeeId, startDate, endDate) => {
+    set({ error: null });
+    try {
+      return await attendanceProcessingService.getSinglePunchRecordsByEmployee(employeeId, startDate, endDate);
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  deleteAttendanceRecordsByIds: async (recordIds, onProgress) => {
+    set({ error: null });
+    try {
+      const result = await attendanceProcessingService.deleteRecordsByIds(recordIds, onProgress);
+      if (result.deleted > 0) {
+        set((state) => ({
+          attendanceRecords: state.attendanceRecords.filter((record) => !recordIds.includes(record.id)),
+        }));
+      }
+      return result;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  deleteAttendanceRecordsByBatch: async (batchId, options) => {
+    set({ error: null });
+    try {
+      return await attendanceProcessingService.deleteRecordsByImportBatch(batchId, options);
+    } catch (error) {
+      set({ error: (error as Error).message });
       throw error;
     }
   },
@@ -1971,6 +2137,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Notifications ────────────────────────────────────────────────────────
 
+  addRealtimeNotification: (input) => {
+    const next: AppNotification = {
+      id: `fcm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      recipientId: get().currentEmployee?.id || 'system',
+      type: (input.type as AppNotification['type']) || 'manual_broadcast',
+      title: String(input.title || 'إشعار جديد'),
+      message: String(input.body || ''),
+      referenceId: String(input.referenceId || input.url || ''),
+      isRead: false,
+      createdAt: new Date(),
+    };
+    set((state) => ({ notifications: mergeWithRealtimeNotifications([next], state.notifications) }));
+  },
+
   fetchNotifications: async () => {
     try {
       const empId = get().currentEmployee?.id;
@@ -1978,7 +2158,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const isManager = get().userPermissions['roles.manage'] === true;
       if (isManager) {
         const notifications = (await notificationService.getAll()).filter((n) => !isBlockedNotification(n));
-        set({ notifications });
+        set((state) => ({ notifications: mergeWithRealtimeNotifications(notifications, state.notifications) }));
         return;
       }
       const notifications = (await notificationService.getByRecipient(empId)).filter((n) => !isBlockedNotification(n));
@@ -1988,7 +2168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (!linkedWO) return n.recipientId === empId;
         return linkedWO.supervisorId === empId;
       });
-      set({ notifications: scopedNotifications });
+      set((state) => ({ notifications: mergeWithRealtimeNotifications(scopedNotifications, state.notifications) }));
     } catch (error) {
       console.error('fetchNotifications error:', error);
     }
@@ -1996,7 +2176,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   markNotificationRead: async (id) => {
     try {
-      await notificationService.markAsRead(id);
+      if (!String(id || '').startsWith('fcm_')) {
+        await notificationService.markAsRead(id);
+      }
       set({ notifications: get().notifications.map((n) => n.id === id ? { ...n, isRead: true } : n) });
     } catch (error) {
       console.error('markNotificationRead error:', error);
@@ -2025,7 +2207,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return subscribe((notifications) => {
       const visibleNotifications = notifications.filter((n) => !isBlockedNotification(n));
       if (isManager) {
-        set({ notifications: visibleNotifications });
+        set((state) => ({ notifications: mergeWithRealtimeNotifications(visibleNotifications, state.notifications) }));
         return;
       }
       const scopedNotifications = visibleNotifications.filter((n) => {
@@ -2034,7 +2216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (!linkedWO) return n.recipientId === empId;
         return linkedWO.supervisorId === empId;
       });
-      set({ notifications: scopedNotifications });
+      set((state) => ({ notifications: mergeWithRealtimeNotifications(scopedNotifications, state.notifications) }));
     });
   },
 

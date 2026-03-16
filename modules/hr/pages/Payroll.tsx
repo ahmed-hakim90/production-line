@@ -3,6 +3,8 @@ import { Card, Button, Badge, KPIBox } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
+import { hrNotificationService } from '../approval/notifications';
+import { employeeService } from '../employeeService';
 import {
   generatePayroll,
   getPayrollMonth,
@@ -12,9 +14,8 @@ import {
   payrollAuditService,
 } from '../payroll';
 import { printPayslip, printCombinedPayslips } from '../utils/payslipGenerator';
-import { employeeService } from '../employeeService';
-import { getDocs } from 'firebase/firestore';
-import { departmentsRef } from '../collections';
+import { addDoc, getDocs, query, where } from 'firebase/firestore';
+import { departmentsRef, payrollDistributionsRef } from '../collections';
 import type { FirestoreEmployee } from '@/types';
 import type {
   FirestoreDepartment,
@@ -300,6 +301,8 @@ const AuditPanel: React.FC<{ logs: FirestorePayrollAuditLog[] }> = ({ logs }) =>
 export const Payroll: React.FC = () => {
   const { can } = usePermission();
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const uid = useAppStore((s) => s.uid);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
   // State
   const [month, setMonth] = useState(getCurrentMonth());
   const [payrollMonth, setPayrollMonth] = useState<FirestorePayrollMonth | null>(null);
@@ -321,6 +324,10 @@ export const Payroll: React.FC = () => {
     () => getExportImportPageControl(exportImportSettings, 'payroll'),
     [exportImportSettings]
   );
+  const canGeneratePayroll = can('payroll.generate');
+  const canFinalizePayroll = can('payroll.finalize');
+  const canLockPayroll = can('payroll.lock');
+  const canDistributePayroll = can('payroll.accounts.disburse');
   const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   useEffect(() => {
@@ -361,6 +368,10 @@ export const Payroll: React.FC = () => {
 
   // Generate payroll
   const handleGenerate = useCallback(async () => {
+    if (!canGeneratePayroll) {
+      setError('ليس لديك صلاحية إنشاء أو إعادة احتساب الرواتب.');
+      return;
+    }
     setActionLoading('generate');
     setError('');
     setSuccess('');
@@ -387,10 +398,14 @@ export const Payroll: React.FC = () => {
     } finally {
       setActionLoading('');
     }
-  }, [month, payrollMonth, loadPayrollData]);
+  }, [canGeneratePayroll, month, payrollMonth, loadPayrollData, payrollEmployees]);
 
   // Finalize payroll
   const handleFinalize = useCallback(async () => {
+    if (!canFinalizePayroll) {
+      setError('ليس لديك صلاحية اعتماد كشف الرواتب.');
+      return;
+    }
     if (!confirm('هل أنت متأكد من اعتماد كشف الرواتب؟ لن يمكن التعديل بعد ذلك.')) return;
     setActionLoading('finalize');
     setError('');
@@ -404,10 +419,14 @@ export const Payroll: React.FC = () => {
     } finally {
       setActionLoading('');
     }
-  }, [month, loadPayrollData]);
+  }, [canFinalizePayroll, month, loadPayrollData]);
 
   // Lock payroll
   const handleLock = useCallback(async () => {
+    if (!canLockPayroll) {
+      setError('ليس لديك صلاحية قفل كشف الرواتب.');
+      return;
+    }
     if (!confirm('هل أنت متأكد من قفل كشف الرواتب نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) return;
     setActionLoading('lock');
     setError('');
@@ -421,7 +440,7 @@ export const Payroll: React.FC = () => {
     } finally {
       setActionLoading('');
     }
-  }, [month, loadPayrollData]);
+  }, [canLockPayroll, month, loadPayrollData]);
 
   // Filtered and paginated records
   const filteredRecords = useMemo(() => {
@@ -491,6 +510,66 @@ export const Payroll: React.FC = () => {
     }
     printCombinedPayslips({ records, month });
   }, [isLocked, records, month]);
+
+  const handleDistributePayroll = useCallback(async () => {
+    if (!canDistributePayroll) {
+      setError('ليس لديك صلاحية توزيع إشعارات الرواتب.');
+      return;
+    }
+    if (!isLocked || records.length === 0 || !payrollMonth?.id) return;
+    setActionLoading('distribute');
+    setError('');
+    setSuccess('');
+    try {
+      const existingSnap = await getDocs(query(payrollDistributionsRef(), where('month', '==', month)));
+      if (!existingSnap.empty) {
+        setSuccess('تم توزيع هذا الشهر مسبقًا.');
+        setActionLoading('');
+        return;
+      }
+
+      const notificationResults = await Promise.allSettled(
+        records.map(async (record) => {
+          const userId = await employeeService.getUserIdByEmployeeId(record.employeeId);
+          if (!userId) return false;
+          await hrNotificationService.create({
+            recipientEmployeeId: record.employeeId,
+            recipientUserId: userId,
+            type: 'payroll_ready',
+            title: `كشف راتب ${month} جاهز`,
+            body: `صافي الراتب: ${formatCurrency(record.netSalary)} ج.م`,
+            actionUrl: '/self-service',
+          });
+          return true;
+        }),
+      );
+
+      const notified = notificationResults.reduce((count, result) => {
+        if (result.status === 'fulfilled' && result.value) return count + 1;
+        return count;
+      }, 0);
+
+      await addDoc(payrollDistributionsRef(), {
+        month,
+        distributedAt: new Date(),
+        distributedBy: uid || '',
+        distributedByName: userDisplayName || '',
+        employeeCount: records.length,
+        status: 'distributed',
+      });
+
+      const failed = notificationResults.filter((result) => result.status === 'rejected').length;
+      setSuccess(
+        failed > 0
+          ? `تم توزيع إشعارات الرواتب لعدد ${notified} موظف مع تعذر ${failed} حالة.`
+          : `تم توزيع إشعارات الرواتب بنجاح لعدد ${notified} موظف.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'حدث خطأ أثناء توزيع الرواتب');
+    } finally {
+      setActionLoading('');
+    }
+  }, [canDistributePayroll, isLocked, records, payrollMonth?.id, month, uid, userDisplayName]);
 
   return (
     <div className="space-y-6">
@@ -595,17 +674,19 @@ export const Payroll: React.FC = () => {
         <div className="flex flex-wrap gap-3">
           {isDraft && (
             <>
-              <Button
-                variant="primary"
-                onClick={handleGenerate}
-                disabled={!!actionLoading}
-              >
-                {actionLoading === 'generate'
-                  ? <span className="material-icons-round animate-spin text-sm">refresh</span>
-                  : <span className="material-icons-round text-sm">{payrollMonth ? 'refresh' : 'play_arrow'}</span>}
-                {payrollMonth ? 'إعادة الاحتساب' : 'إنشاء كشف الرواتب'}
-              </Button>
-              {payrollMonth && records.length > 0 && (
+              {canGeneratePayroll && (
+                <Button
+                  variant="primary"
+                  onClick={handleGenerate}
+                  disabled={!!actionLoading}
+                >
+                  {actionLoading === 'generate'
+                    ? <span className="material-icons-round animate-spin text-sm">refresh</span>
+                    : <span className="material-icons-round text-sm">{payrollMonth ? 'refresh' : 'play_arrow'}</span>}
+                  {payrollMonth ? 'إعادة الاحتساب' : 'إنشاء كشف الرواتب'}
+                </Button>
+              )}
+              {payrollMonth && records.length > 0 && canFinalizePayroll && (
                 <Button
                   variant="secondary"
                   onClick={handleFinalize}
@@ -619,7 +700,7 @@ export const Payroll: React.FC = () => {
               )}
             </>
           )}
-          {isFinalized && (
+          {isFinalized && canLockPayroll && (
             <Button
               variant="outline"
               onClick={handleLock}
@@ -639,10 +720,20 @@ export const Payroll: React.FC = () => {
                 تصدير Excel
               </Button>
               {isLocked && (
-                <Button variant="secondary" onClick={handleExportCombinedPayslips}>
-                  <span className="material-icons-round text-sm">picture_as_pdf</span>
-                  تصدير سركيات الموظفين PDF
-                </Button>
+                <>
+                  <Button variant="secondary" onClick={handleExportCombinedPayslips}>
+                    <span className="material-icons-round text-sm">picture_as_pdf</span>
+                    تصدير سركيات الموظفين PDF
+                  </Button>
+                  {canDistributePayroll && (
+                    <Button variant="secondary" onClick={handleDistributePayroll} disabled={actionLoading === 'distribute'}>
+                      {actionLoading === 'distribute'
+                        ? <span className="material-icons-round animate-spin text-sm">refresh</span>
+                        : <span className="material-icons-round text-sm">send</span>}
+                      توزيع الرواتب
+                    </Button>
+                  )}
+                </>
               )}
             </>
           )}
@@ -805,10 +896,12 @@ export const Payroll: React.FC = () => {
             <p className="text-xs text-[var(--color-text-muted)] mb-6">
               اضغط على "إنشاء كشف الرواتب" لبدء احتساب الرواتب.
             </p>
-            <Button variant="primary" onClick={handleGenerate} disabled={!!actionLoading}>
-              <span className="material-icons-round text-sm">play_arrow</span>
-              إنشاء كشف الرواتب
-            </Button>
+            {canGeneratePayroll && (
+              <Button variant="primary" onClick={handleGenerate} disabled={!!actionLoading}>
+                <span className="material-icons-round text-sm">play_arrow</span>
+                إنشاء كشف الرواتب
+              </Button>
+            )}
           </div>
         </Card>
       )}

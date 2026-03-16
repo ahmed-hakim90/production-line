@@ -3,10 +3,39 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { Card, Button } from '../../production/components/UI';
 import { usePermission } from '../../../utils/permissions';
-import { categoryService, type ProductCategory } from '../services/categoryService';
+import {
+  categoryService,
+  getEffectiveCategoryType,
+  type CategoryType,
+  type ProductCategory,
+} from '../services/categoryService';
 import { useAppStore } from '../../../store/useAppStore';
+import { rawMaterialService } from '../../inventory/services/rawMaterialService';
+import type { RawMaterial } from '../../inventory/types';
 
-const emptyForm = { name: '', code: '', isActive: true };
+type CategoryForm = {
+  name: string;
+  code: string;
+  type: CategoryType;
+  isActive: boolean;
+};
+
+const normalizeCategoryName = (value: string) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ');
+
+const buildEmptyForm = (type: CategoryType): CategoryForm => ({
+  name: '',
+  code: '',
+  type,
+  isActive: true,
+});
 
 export const Categories: React.FC = () => {
   const { can } = usePermission();
@@ -19,18 +48,24 @@ export const Categories: React.FC = () => {
   const rawProducts = useAppStore((s) => s._rawProducts);
 
   const [items, setItems] = useState<ProductCategory[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [selectedType, setSelectedType] = useState<CategoryType>('product');
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<CategoryForm>(buildEmptyForm('product'));
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
       await categoryService.seedFromProductsModel();
-      const list = await categoryService.getAll();
+      const [list, rawRows] = await Promise.all([
+        categoryService.getAll(),
+        rawMaterialService.getAll(),
+      ]);
       setItems(list);
+      setRawMaterials(rawRows);
     } catch {
       setMessage({ type: 'error', text: 'تعذر تحميل الفئات حالياً.' });
     } finally {
@@ -47,23 +82,14 @@ export const Categories: React.FC = () => {
     const params = new URLSearchParams(location.search);
     if (params.get('action') !== 'create') return;
     if (!canCreate) return;
+    const nextType = params.get('type') === 'raw_material' ? 'raw_material' : 'product';
+    setSelectedType(nextType);
     setEditId(null);
-    setForm(emptyForm);
+    setForm(buildEmptyForm(nextType));
     navigate('/catalog/categories', { replace: true });
   }, [location.search, canCreate, navigate]);
 
-  const activeCount = useMemo(() => items.filter((item) => item.isActive !== false).length, [items]);
-  const normalizeCategoryName = (value: string) =>
-    String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[\u064B-\u065F\u0670]/g, '')
-      .replace(/[أإآٱ]/g, 'ا')
-      .replace(/ة/g, 'ه')
-      .replace(/ى/g, 'ي')
-      .replace(/\s+/g, ' ');
-
-  const usageCountByCategory = useMemo(() => {
+  const usageCountByProductCategory = useMemo(() => {
     const usage = new Map<string, number>();
     rawProducts.forEach((product) => {
       const key = normalizeCategoryName(product.model || '');
@@ -73,9 +99,29 @@ export const Categories: React.FC = () => {
     return usage;
   }, [rawProducts]);
 
+  const usageCountByRawMaterialCategory = useMemo(() => {
+    const usage = new Map<string, number>();
+    rawMaterials.forEach((material) => {
+      const key = normalizeCategoryName(material.categoryName || '');
+      if (!key) return;
+      usage.set(key, (usage.get(key) || 0) + 1);
+    });
+    return usage;
+  }, [rawMaterials]);
+
+  const filteredItems = useMemo(
+    () => items.filter((item) => getEffectiveCategoryType(item) === selectedType),
+    [items, selectedType]
+  );
+
+  const activeCount = useMemo(
+    () => filteredItems.filter((item) => item.isActive !== false).length,
+    [filteredItems]
+  );
+
   const resetForm = () => {
     setEditId(null);
-    setForm(emptyForm);
+    setForm(buildEmptyForm(selectedType));
   };
 
   const handleSubmit = async () => {
@@ -87,6 +133,7 @@ export const Categories: React.FC = () => {
         await categoryService.update(editId, {
           name: form.name.trim(),
           code: form.code.trim(),
+          type: form.type,
           isActive: form.isActive,
         });
         setMessage({ type: 'success', text: 'تم تحديث الفئة بنجاح.' });
@@ -94,11 +141,13 @@ export const Categories: React.FC = () => {
         await categoryService.create({
           name: form.name.trim(),
           code: form.code.trim(),
+          type: form.type,
           isActive: form.isActive,
         });
         setMessage({ type: 'success', text: 'تمت إضافة الفئة بنجاح.' });
       }
-      resetForm();
+      setEditId(null);
+      setForm(buildEmptyForm(form.type));
       await loadData();
     } catch {
       setMessage({ type: 'error', text: 'تعذر حفظ الفئة. حاول مرة أخرى.' });
@@ -108,10 +157,13 @@ export const Categories: React.FC = () => {
   };
 
   const handleEdit = (item: ProductCategory) => {
+    const type = getEffectiveCategoryType(item);
+    setSelectedType(type);
     setEditId(item.id || null);
     setForm({
       name: item.name || '',
       code: item.code || '',
+      type,
       isActive: item.isActive !== false,
     });
   };
@@ -127,20 +179,60 @@ export const Categories: React.FC = () => {
     }
   };
 
+  const usageLabel = selectedType === 'product' ? 'عدد المنتجات المستخدمة' : 'عدد المواد الخام المستخدمة';
+  const getUsageCount = (item: ProductCategory) => {
+    const key = normalizeCategoryName(item.name);
+    if (!key) return 0;
+    return selectedType === 'product'
+      ? usageCountByProductCategory.get(key) || 0
+      : usageCountByRawMaterialCategory.get(key) || 0;
+  };
+
   if (!canView) return null;
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="فئات المنتجات"
-        subtitle="إدارة فئات الكتالوج مع توافق خلفي لحقل موديل المنتج"
+        title="الفئات"
+        subtitle="إدارة فئات المنتجات وفئات المواد الخام بشكل منفصل"
         icon="category"
       />
 
       <Card className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <button
+            className={`px-3 py-2 rounded-[var(--border-radius-lg)] text-sm font-bold border ${
+              selectedType === 'product'
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                : 'bg-white text-[var(--color-text-muted)] border-[var(--color-border)]'
+            }`}
+            onClick={() => {
+              setSelectedType('product');
+              setEditId(null);
+              setForm(buildEmptyForm('product'));
+            }}
+          >
+            فئات المنتجات
+          </button>
+          <button
+            className={`px-3 py-2 rounded-[var(--border-radius-lg)] text-sm font-bold border ${
+              selectedType === 'raw_material'
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                : 'bg-white text-[var(--color-text-muted)] border-[var(--color-border)]'
+            }`}
+            onClick={() => {
+              setSelectedType('raw_material');
+              setEditId(null);
+              setForm(buildEmptyForm('raw_material'));
+            }}
+          >
+            فئات المواد الخام
+          </button>
+        </div>
+
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="text-sm text-[var(--color-text-muted)]">
-            إجمالي الفئات: <strong>{items.length}</strong> - الفئات النشطة: <strong>{activeCount}</strong>
+            إجمالي الفئات: <strong>{filteredItems.length}</strong> - الفئات النشطة: <strong>{activeCount}</strong>
           </div>
           {(canCreate || (canEdit && editId)) && (
             <Button variant="outline" onClick={resetForm}>
@@ -161,7 +253,7 @@ export const Categories: React.FC = () => {
         )}
 
         {(canCreate || canEdit) && (
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             <input
               className="sm:col-span-2 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm"
               placeholder="اسم الفئة"
@@ -174,6 +266,14 @@ export const Categories: React.FC = () => {
               value={form.code}
               onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
             />
+            <select
+              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm bg-white"
+              value={form.type}
+              onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as CategoryType }))}
+            >
+              <option value="product">فئة منتجات</option>
+              <option value="raw_material">فئة مواد خام</option>
+            </select>
             <div className="flex items-center gap-3">
               <label className="text-sm font-bold flex items-center gap-2">
                 <input
@@ -184,7 +284,7 @@ export const Categories: React.FC = () => {
                 نشطة
               </label>
             </div>
-            <div className="sm:col-span-4">
+            <div className="sm:col-span-5">
               <Button
                 variant="primary"
                 onClick={handleSubmit}
@@ -205,26 +305,28 @@ export const Categories: React.FC = () => {
               <tr>
                 <th className="erp-th">الاسم</th>
                 <th className="erp-th">الكود</th>
-                <th className="erp-th text-center">عدد المنتجات المستخدمة</th>
+                <th className="erp-th">النوع</th>
+                <th className="erp-th text-center">{usageLabel}</th>
                 <th className="erp-th">الحالة</th>
                 <th className="erp-th text-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
-              {!loading && items.length === 0 && (
+              {!loading && filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-[var(--color-text-muted)]">
+                  <td colSpan={6} className="px-6 py-12 text-center text-[var(--color-text-muted)]">
                     لا توجد فئات حتى الآن.
                   </td>
                 </tr>
               )}
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <tr key={item.id} className="hover:bg-[#f8f9fa]/50 transition-colors">
                   <td className="px-5 py-4 font-bold">{item.name}</td>
                   <td className="px-5 py-4">{item.code || '—'}</td>
-                  <td className="px-5 py-4 text-center font-bold">
-                    {usageCountByCategory.get(normalizeCategoryName(item.name)) || 0}
+                  <td className="px-5 py-4">
+                    {getEffectiveCategoryType(item) === 'product' ? 'منتجات' : 'مواد خام'}
                   </td>
+                  <td className="px-5 py-4 text-center font-bold">{getUsageCount(item)}</td>
                   <td className="px-5 py-4">
                     <span className={`text-xs font-bold px-2 py-1 rounded ${
                       item.isActive !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'

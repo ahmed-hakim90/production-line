@@ -7,7 +7,7 @@ import { attendanceProcessingService } from '@/modules/attendance/services/atten
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
 import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import { loanService } from '../loanService';
-import { generateApprovalChain } from '../approvalEngine';
+import { createRequest, getPendingApprovals, type ApprovalEmployeeInfo, type FirestoreApprovalRequest } from '../approval';
 import { getEmployeeLockedPayslip } from '../payroll';
 import { printPayslip } from '../utils/payslipGenerator';
 import type { FirestorePayrollRecord } from '../payroll';
@@ -68,14 +68,19 @@ const STATUS_BADGE_VARIANT: Record<string, 'warning' | 'success' | 'danger' | 'n
   rejected: 'danger',
 };
 
-function toHierarchyInfo(e: FirestoreEmployee): { employeeId: string; managerId?: string; departmentId: string; jobPositionId: string; jobLevel: JobLevel } {
+function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
   const level = e.level as number;
   const jobLevel = Math.min(4, Math.max(1, level)) as JobLevel;
+  const departmentId = e.departmentId || 'unknown_department';
+  const jobPositionId = e.jobPositionId || 'unknown_position';
   return {
     employeeId: e.id!,
+    employeeName: e.name,
     managerId: e.managerId,
-    departmentId: e.departmentId,
-    jobPositionId: e.jobPositionId,
+    departmentId,
+    departmentName: departmentId,
+    jobPositionId,
+    jobTitle: jobPositionId,
     jobLevel,
   };
 }
@@ -85,16 +90,19 @@ export const EmployeeSelfService: React.FC = () => {
   const { can } = usePermission();
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const uid = useAppStore((s) => s.uid);
+  const permissions = useAppStore((s) => s.userPermissions);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
   const fetchEmployees = useAppStore((s) => s.fetchEmployees);
 
-  const [activeTab, setActiveTab] = useState<SelfServiceTab>('attendance');
+  const canViewApprovals = can('approval.view');
+  const [activeTab, setActiveTab] = useState<SelfServiceTab>(canViewApprovals ? 'approvals' : 'attendance');
   const [loading, setLoading] = useState(true);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<FirestoreLeaveRequest[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<FirestoreLeaveBalance | null>(null);
   const [leaveUsageSummary, setLeaveUsageSummary] = useState<Awaited<ReturnType<typeof getEmployeeLeaveUsageSummary>> | null>(null);
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
+  const [managerPendingApprovals, setManagerPendingApprovals] = useState<FirestoreApprovalRequest[]>([]);
   const [lockedPayslip, setLockedPayslip] = useState<{ month: string; record: FirestorePayrollRecord } | null>(null);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
 
@@ -127,13 +135,14 @@ export const EmployeeSelfService: React.FC = () => {
     (async () => {
       await fetchEmployees?.();
       try {
-        const [logs, leaveReqs, balance, loanList, payslipResult, configuredLeaveTypes] = await Promise.all([
+        const [logs, leaveReqs, balance, loanList, payslipResult, configuredLeaveTypes, pendingApprovals] = await Promise.all([
           attendanceProcessingService.getRecordsByEmployee(employeeId),
           leaveRequestService.getByEmployee(employeeId),
           leaveBalanceService.getByEmployee(employeeId).then((b) => b ?? leaveBalanceService.getOrCreate(employeeId)),
           loanService.getByEmployee(employeeId),
           getEmployeeLockedPayslip(employeeId),
           getLeaveTypesFromConfig(),
+          canViewApprovals ? getPendingApprovals({ approverEmployeeId: employeeId }) : Promise.resolve([]),
         ]);
         if (!cancelled) {
           setAttendanceLogs(logs);
@@ -145,6 +154,7 @@ export const EmployeeSelfService: React.FC = () => {
           });
           if (!cancelled) setLeaveUsageSummary(usage);
           setLoans(loanList);
+          setManagerPendingApprovals(pendingApprovals);
           setLockedPayslip(
             payslipResult
               ? { month: payslipResult.month.month, record: payslipResult.record }
@@ -164,7 +174,7 @@ export const EmployeeSelfService: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [employeeId, fetchEmployees]);
+  }, [employeeId, fetchEmployees, canViewApprovals]);
 
   const attendanceStats = useMemo(() => {
     const total = attendanceLogs.length;
@@ -237,14 +247,7 @@ export const EmployeeSelfService: React.FC = () => {
     setSubmitting(true);
     try {
       const allEmployees = rawEmployees.length ? rawEmployees : await (await import('../employeeService')).employeeService.getAll();
-      const hierarchy = toHierarchyInfo(currentEmployee);
-      const allHierarchy = allEmployees.map((e) => toHierarchyInfo(e as FirestoreEmployee));
-      const { chain, errors } = await generateApprovalChain(hierarchy, allHierarchy, 'leave');
-      if (errors.length > 0) {
-        setLeaveSubmitError(errors[0] || 'تعذر إنشاء سلسلة الموافقات');
-        return;
-      }
-      await leaveRequestService.create({
+      const leaveRequestId = await leaveRequestService.create({
         employeeId,
         leaveType,
         leaveTypeLabel: selectedLeaveType?.label || LEAVE_TYPE_LABELS[leaveType] || leaveType,
@@ -254,11 +257,46 @@ export const EmployeeSelfService: React.FC = () => {
         totalDays,
         affectsSalary: selectedLeaveType ? !selectedLeaveType.isPaid : leaveType === 'unpaid',
         status: 'pending',
-        approvalChain: chain,
+        approvalChain: [],
         finalStatus: 'pending',
         reason: reason.trim() || '—',
         createdBy: uid,
       });
+      const requester = allEmployees.find((e) => e.id === employeeId);
+      if (!requester) {
+        throw new Error('لم يتم العثور على بيانات الموظف لربط الطلب بالموافقات');
+      }
+      const approvalEmployees = allEmployees
+        .filter((e): e is FirestoreEmployee => Boolean(e.id))
+        .map((e) => toApprovalEmployeeInfo(e));
+      const createResult = await createRequest(
+        {
+          requestType: 'leave',
+          employeeId,
+          requestData: {
+            leaveType,
+            leaveTypeLabel: selectedLeaveType?.label || LEAVE_TYPE_LABELS[leaveType] || leaveType,
+            leaveTypeIsPaid: selectedLeaveType ? selectedLeaveType.isPaid : leaveType !== 'unpaid',
+            startDate,
+            endDate,
+            totalDays,
+            affectsSalary: selectedLeaveType ? !selectedLeaveType.isPaid : leaveType === 'unpaid',
+            reason: reason.trim() || '—',
+          },
+          sourceRequestId: leaveRequestId,
+          createdBy: uid,
+        },
+        {
+          employeeId: currentEmployee.id || requester.id || employeeId,
+          employeeName: currentEmployee.name || requester.name,
+          permissions,
+        },
+        approvalEmployees,
+      );
+      if (!createResult.success) {
+        await leaveRequestService.delete(leaveRequestId);
+        throw new Error(createResult.error || 'تعذر إنشاء طلب الموافقة');
+      }
       setLeaveSubmitSuccess(true);
       setStartDate('');
       setEndDate('');
@@ -295,17 +333,14 @@ export const EmployeeSelfService: React.FC = () => {
     setLoanSubmitting(true);
     try {
       const employee = currentEmployee;
-      const allEmployees = rawEmployees.length ? rawEmployees : await (await import('../employeeService')).employeeService.getAll();
-      const hierarchy = toHierarchyInfo(employee);
-      const allHierarchy = allEmployees.map((e) => toHierarchyInfo(e as FirestoreEmployee));
-      const { chain, errors } = await generateApprovalChain(hierarchy, allHierarchy, 'loan');
-      if (errors.length > 0) {
-        setLoanSubmitError(errors[0] || 'تعذر إنشاء سلسلة الموافقات');
+      if (!employee) {
+        setLoanSubmitError('لم يتم العثور على بيانات الموظف');
         return;
       }
+      const allEmployees = rawEmployees.length ? rawEmployees : await (await import('../employeeService')).employeeService.getAll();
       const finalInstallments = totalInstallments > 0 ? totalInstallments : Math.max(1, Math.round(loanAmount / installmentAmount));
       const startMonth = new Date().toISOString().slice(0, 7);
-      await loanService.create({
+      const loanId = await loanService.create({
         employeeId,
         employeeName: employee?.name || '',
         employeeCode: (employee as any)?.code || '',
@@ -317,12 +352,43 @@ export const EmployeeSelfService: React.FC = () => {
         startMonth,
         month: finalInstallments <= 1 ? startMonth : undefined,
         status: 'pending',
-        approvalChain: chain,
+        approvalChain: [],
         finalStatus: 'pending',
         reason: loanReason.trim() || '—',
         disbursed: false,
         createdBy: uid,
       });
+      const approvalEmployees = allEmployees
+        .filter((e): e is FirestoreEmployee => Boolean(e.id))
+        .map((e) => toApprovalEmployeeInfo(e));
+      const createResult = await createRequest(
+        {
+          requestType: 'loan',
+          employeeId,
+          requestData: {
+            loanType: finalInstallments > 1 ? 'installment' : 'monthly_advance',
+            loanAmount,
+            installmentAmount,
+            totalInstallments: finalInstallments,
+            remainingInstallments: finalInstallments,
+            startMonth,
+            month: finalInstallments <= 1 ? startMonth : undefined,
+            reason: loanReason.trim() || '—',
+          },
+          sourceRequestId: loanId,
+          createdBy: uid,
+        },
+        {
+          employeeId: employee.id || employeeId,
+          employeeName: employee.name || '',
+          permissions,
+        },
+        approvalEmployees,
+      );
+      if (!createResult.success) {
+        await loanService.delete(loanId);
+        throw new Error(createResult.error || 'تعذر إنشاء طلب الموافقة');
+      }
       setLoanSubmitSuccess(true);
       setLoanAmount(0);
       setInstallmentAmount(0);
@@ -339,6 +405,7 @@ export const EmployeeSelfService: React.FC = () => {
   };
 
   const tabs: { id: SelfServiceTab; label: string; icon: string }[] = [
+    ...(canViewApprovals ? [{ id: 'approvals' as SelfServiceTab, label: 'موافقاتي', icon: 'fact_check' }] : []),
     { id: 'attendance', label: 'الحضور', icon: 'fingerprint' },
     { id: 'leave', label: 'طلب إجازة', icon: 'beach_access' },
     { id: 'loan', label: 'طلب سلفة', icon: 'payments' },
@@ -443,6 +510,67 @@ export const EmployeeSelfService: React.FC = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {!loading && activeTab === 'approvals' && canViewApprovals && (
+        <Card title="طلبات بانتظار إجراءك">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8fafc] p-4">
+              <div>
+                <p className="text-sm font-bold text-[var(--color-text)]">
+                  لديك {formatNumber(managerPendingApprovals.length)} طلب بانتظار اعتمادك
+                </p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  عرض مختصر هنا — المتابعة الكاملة داخل مركز الموافقات
+                </p>
+              </div>
+              <Button onClick={() => navigate('/approval-center')}>
+                <span className="material-icons-round text-sm">open_in_new</span>
+                فتح مركز الموافقات
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">الموظف</th>
+                    <th className="erp-th">التفاصيل</th>
+                    <th className="erp-th">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {managerPendingApprovals.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-[var(--color-text-muted)]">
+                        لا توجد طلبات بانتظار إجراءك حالياً
+                      </td>
+                    </tr>
+                  )}
+                  {managerPendingApprovals.slice(0, 12).map((req) => (
+                    <tr key={req.id} className="border-b border-[var(--color-border)]">
+                      <td className="py-2 px-2">
+                        {req.requestType === 'leave' ? 'إجازة' : req.requestType === 'loan' ? 'سلفة' : 'إضافي'}
+                      </td>
+                      <td className="py-2 px-2">{req.employeeName}</td>
+                      <td className="py-2 px-2 text-[var(--color-text-muted)]">
+                        {req.requestType === 'leave'
+                          ? `${req.requestData?.startDate || '—'} → ${req.requestData?.endDate || '—'}`
+                          : req.requestType === 'loan'
+                            ? `${formatNumber(Number(req.requestData?.loanAmount || 0))} ج.م`
+                            : (req.requestData?.description || '—')}
+                      </td>
+                      <td className="py-2 px-2">
+                        <Badge variant="warning">بانتظار الإجراء</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Card>
       )}
 
       {!loading && activeTab === 'leave' && (

@@ -54,6 +54,28 @@ const emptyForm = (): ReportFormState => ({
   notes: '',
 });
 
+const normalizeArabic = (value: string) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ');
+
+const parseInjectionCategoryTokens = (value?: string) =>
+  String(value || 'حقن')
+    .split(',')
+    .map((part) => normalizeArabic(part))
+    .filter(Boolean);
+
+const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
+  const normalized = normalizeArabic(value || '');
+  if (!normalized) return false;
+  return tokens.some((token) => normalized.includes(token));
+};
+
 export const GlobalCreateReportModal: React.FC = () => {
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.REPORTS_CREATE);
   const { openModal } = useGlobalModalManager();
@@ -64,13 +86,19 @@ export const GlobalCreateReportModal: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const lines = useAppStore((s) => s._rawLines);
   const products = useAppStore((s) => s._rawProducts);
+  const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const workOrders = useAppStore((s) => s.workOrders);
   const [form, setForm] = useState<ReportFormState>(emptyForm());
-  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [showErrorOverlay, setShowErrorOverlay] = useState(false);
+  const injectionCategoryTokens = useMemo(
+    () => parseInjectionCategoryTokens(injectionCategoryKeywords),
+    [injectionCategoryKeywords],
+  );
+
   const canCreateFinishedReportsBase = can('reports.create');
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
@@ -147,13 +175,18 @@ export const GlobalCreateReportModal: React.FC = () => {
     [form.reportType, lines, injectionLineIds],
   );
 
+  const injectionRawMaterialOptions = useMemo(
+    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
+    [rawMaterialOptions, injectionCategoryTokens],
+  );
+
   const selectableProducts = useMemo(
     () => (
       form.reportType === 'component_injection'
-        ? rawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
+        ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
         : products.map((p) => ({ value: p.id!, label: p.name }))
     ),
-    [form.reportType, rawMaterialOptions, products],
+    [form.reportType, injectionRawMaterialOptions, products],
   );
 
   useEffect(() => {
@@ -177,6 +210,7 @@ export const GlobalCreateReportModal: React.FC = () => {
               id: String(row.id),
               name: String(row.name || '').trim(),
               code: String(row.code || '').trim(),
+              categoryName: String(row.categoryName || '').trim(),
             })),
         );
       })
@@ -188,6 +222,13 @@ export const GlobalCreateReportModal: React.FC = () => {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (form.reportType !== 'component_injection' || !form.productId) return;
+    const isAllowed = injectionRawMaterialOptions.some((item) => item.id === form.productId);
+    if (isAllowed) return;
+    setForm((prev) => ({ ...prev, productId: '', workOrderId: '' }));
+  }, [form.reportType, form.productId, injectionRawMaterialOptions]);
 
   useEffect(() => {
     if (form.reportType !== 'component_injection') return;

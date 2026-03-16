@@ -56,7 +56,17 @@ const MODAL_LABELS: Record<OrgTab, string> = {
 
 const emptyDept: Omit<FirestoreDepartment, 'id' | 'createdAt'> = { name: '', code: '', managerId: '', isActive: true };
 const emptyPos: Omit<FirestoreJobPosition, 'id' | 'createdAt'> = { title: '', departmentId: '', level: 1 as JobLevel, hasSystemAccessDefault: false, isActive: true };
-const emptyShift: Omit<FirestoreShift, 'id'> = { name: '', startTime: '08:00', endTime: '16:00', breakMinutes: 60, lateGraceMinutes: 15, crossesMidnight: false, isActive: true };
+const emptyShift: Omit<FirestoreShift, 'id'> = {
+  name: '',
+  startTime: '08:00',
+  endTime: '16:00',
+  latestCheckInTime: '11:59',
+  firstCheckOutTime: '12:00',
+  breakMinutes: 60,
+  lateGraceMinutes: 15,
+  crossesMidnight: false,
+  isActive: true,
+};
 const emptyPenalty: Omit<FirestorePenaltyRule, 'id'> = { name: '', type: 'disciplinary', valueType: 'fixed', value: 0, isActive: true };
 const emptyLateRule: Omit<FirestoreLateRule, 'id'> = { minutesFrom: 0, minutesTo: 15, penaltyType: 'fixed', penaltyValue: 0 };
 const emptyAllowance: Omit<FirestoreAllowanceType, 'id'> = { name: '', calculationType: 'fixed', value: 0, isActive: true };
@@ -128,7 +138,17 @@ export const GlobalOrganizationModal: React.FC = () => {
     } else if (tab === 'shifts') {
       const s = item as FirestoreShift;
       setEditId(s.id || null);
-      setShiftForm({ name: s.name, startTime: s.startTime, endTime: s.endTime, breakMinutes: s.breakMinutes, lateGraceMinutes: s.lateGraceMinutes, crossesMidnight: s.crossesMidnight, isActive: s.isActive });
+      setShiftForm({
+        name: s.name,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        latestCheckInTime: s.latestCheckInTime || '11:59',
+        firstCheckOutTime: s.firstCheckOutTime || s.endTime || '12:00',
+        breakMinutes: s.breakMinutes,
+        lateGraceMinutes: s.lateGraceMinutes,
+        crossesMidnight: s.crossesMidnight,
+        isActive: s.isActive,
+      });
     } else if (tab === 'penalties') {
       const p = item as FirestorePenaltyRule;
       setEditId(p.id || null);
@@ -254,6 +274,10 @@ export const GlobalOrganizationModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <Field label="وقت البداية"><input type="time" className={inputClass} value={shiftForm.startTime} onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })} /></Field>
                 <Field label="وقت النهاية"><input type="time" className={inputClass} value={shiftForm.endTime} onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })} /></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="آخر وقت اعتبار دخول"><input type="time" className={inputClass} value={shiftForm.latestCheckInTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, latestCheckInTime: e.target.value })} /></Field>
+                <Field label="أول وقت اعتبار خروج"><input type="time" className={inputClass} value={shiftForm.firstCheckOutTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, firstCheckOutTime: e.target.value })} /></Field>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="استراحة (دقيقة)"><input type="number" min={0} className={inputClass} value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) || 0 })} /></Field>

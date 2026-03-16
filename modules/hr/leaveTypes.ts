@@ -1,11 +1,17 @@
 import { getConfigModule } from './config';
-import type { LeaveConfig } from './config';
+import type { LeaveConfig, LeaveSalaryImpact } from './config';
 
 export interface LeaveTypeDefinition {
   key: string;
   label: string;
   isPaid: boolean;
 }
+
+type LeaveTypeSource = LeaveConfig['leaveTypes'][number] & {
+  key?: string;
+  label?: string;
+  isPaid?: boolean;
+};
 
 export const CORE_LEAVE_TYPE_KEYS = ['annual', 'sick', 'emergency', 'unpaid'] as const;
 
@@ -16,14 +22,22 @@ export const DEFAULT_LEAVE_TYPES: LeaveTypeDefinition[] = [
   { key: 'unpaid', label: 'بدون راتب', isPaid: false },
 ];
 
-function normalizeLeaveTypeEntry(entry: Partial<LeaveTypeDefinition>): LeaveTypeDefinition | null {
-  const key = String(entry.key || '').trim();
-  const label = String(entry.label || '').trim();
+function impactIsPaid(impact: LeaveSalaryImpact): boolean {
+  return impact === 'full_paid';
+}
+
+function normalizeLeaveTypeEntry(entry: Partial<LeaveTypeSource>): LeaveTypeDefinition | null {
+  const key = String(entry.type || entry.key || '').trim();
+  const label = String(entry.labelAr || entry.label || '').trim();
   if (!key || !label) return null;
+  const salaryImpact = entry.salaryImpact as LeaveSalaryImpact | undefined;
+  const isPaid = typeof entry.isPaid === 'boolean'
+    ? entry.isPaid
+    : impactIsPaid(salaryImpact || 'full_paid');
   return {
     key,
     label,
-    isPaid: Boolean(entry.isPaid),
+    isPaid,
   };
 }
 

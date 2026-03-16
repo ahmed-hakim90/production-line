@@ -23,6 +23,8 @@ Tracks migration from page-scoped modals to Global Modal Manager architecture.
 - `organization.create`
 - `system.dailyWelcome`
 - `production.supervisorAssignment.history`
+- `attendance.shiftRules`
+- `attendance.signatureFix`
 
 ## In Progress
 

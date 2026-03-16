@@ -519,7 +519,7 @@ export const Products: React.FC = () => {
     const loadCategoryOptions = async () => {
       try {
         await categoryService.seedFromProductsModel();
-        const rows = await categoryService.getAll();
+        const rows = await categoryService.getByType('product');
         if (cancelled) return;
         const names = rows
           .filter((row) => row.isActive !== false)

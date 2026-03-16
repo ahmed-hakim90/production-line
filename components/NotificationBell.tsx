@@ -17,6 +17,7 @@ import { useAppStore, useShallowStore } from '../store/useAppStore';
 import type { AppNotification } from '../types';
 
 const TYPE_ICONS: Record<string, string> = {
+  production_report: 'description',
   work_order_assigned: 'assignment',
   work_order_updated: 'edit_note',
   work_order_completed: 'check_circle',
@@ -27,6 +28,7 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
+  production_report: 'text-indigo-500',
   work_order_assigned: 'text-blue-500',
   work_order_updated: 'text-amber-500',
   work_order_completed: 'text-emerald-500',
@@ -41,6 +43,7 @@ const NOTIFICATION_ICON_MAP: Record<string, LucideIcon> = {
   campaign: Megaphone,
   check_circle: CheckCircle2,
   edit_note: PencilLine,
+  description: ClipboardCheck,
   notifications: Bell,
   notifications_none: BellOff,
   rule: ShieldAlert,
@@ -111,6 +114,11 @@ export const NotificationBell: React.FC = () => {
 
   const handleClick = useCallback((n: AppNotification) => {
     if (!n.isRead) markNotificationRead(n.id!);
+    if (n.type === 'production_report') {
+      setOpen(false);
+      navigate('/reports');
+      return;
+    }
     if (n.referenceId && n.type.startsWith('work_order')) {
       setOpen(false);
       navigate(`/work-orders?highlight=${n.referenceId}`);

@@ -27,6 +27,7 @@ export type {
   EmployeeDayGroup,
   ProcessedAttendanceRecord,
   AttendanceBatchResult,
+  FirestoreAttendanceImportHistory,
   WorkingMinutesResult,
   LateDetectionResult,
   EarlyLeaveResult,
@@ -52,9 +53,28 @@ export type {
   DeductionCategory,
   EmployeeAllowanceSummary,
   EmployeeDeductionSummary,
+  HRNotification,
+  FirestorePayrollDistribution,
+  PerformanceGrade,
+  FirestoreEmployeePerformance,
 } from './types';
 
 export { JOB_LEVEL_LABELS, LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS, DEFAULT_LEAVE_BALANCE } from './types';
+
+export {
+  attendanceRawLogService,
+  attendanceLogService,
+  attendanceImportHistoryService,
+} from './attendanceService';
+
+export { performanceService } from './services/performanceService';
+export {
+  calculateAttendanceScore,
+  calculatePunctualityScore,
+  calculateOverallScore,
+  calculateGrade,
+  GRADE_CONFIG,
+} from './utils/performanceCalculator';
 
 // Engine (pure functions)
 export {
@@ -213,6 +233,8 @@ export {
   type AttendanceConfig,
   type OvertimeConfig,
   type LeaveConfig,
+  type LeaveSalaryImpact,
+  type LeaveTypeDefinition,
   type LoanConfig,
   type PayrollSettingsConfig,
   type ApprovalConfig,
@@ -267,6 +289,10 @@ export {
   allowanceTypesRef,
   attendanceRawLogsRef,
   attendanceLogsRef,
+  attendanceImportHistoryRef,
+  hrNotificationsRef,
+  payrollDistributionsRef,
+  employeePerformanceRef,
   leaveRequestsRef,
   leaveBalancesRef,
   employeeLoansRef,
@@ -282,3 +308,5 @@ export * from './routes';
 export { Employees } from './pages/Employees';
 export { EmployeeProfile } from './pages/EmployeeProfile';
 export { EmployeeSelfService } from './pages/EmployeeSelfService';
+export { PayrollAccounts } from './pages/PayrollAccounts';
+export { EmployeeEvaluation } from './pages/EmployeeEvaluation';

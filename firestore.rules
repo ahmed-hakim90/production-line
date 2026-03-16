@@ -55,11 +55,56 @@ service cloud.firestore {
         && (resource.data.userId == request.auth.uid || hasPermission('roles.manage'));
     }
 
+    match /users/{userId}/fcmTokens/{tokenId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Payroll hardening (Phase 1): explicit least-privilege rules for sensitive writes.
+    match /payroll_months/{monthId} {
+      allow read: if isActiveUser();
+      allow create, delete: if hasPermission('payroll.generate');
+      allow update: if hasPermission('payroll.generate')
+        || hasPermission('payroll.finalize')
+        || hasPermission('payroll.lock');
+    }
+
+    match /payroll_records/{recordId} {
+      allow read: if isActiveUser();
+      allow create, delete: if hasPermission('payroll.generate');
+      allow update: if hasPermission('payroll.generate')
+        || hasPermission('payroll.finalize')
+        || hasPermission('payroll.lock')
+        || hasPermission('payroll.accounts.disburse');
+    }
+
+    match /payroll_audit_logs/{logId} {
+      allow read: if isActiveUser();
+      allow create: if hasPermission('payroll.generate')
+        || hasPermission('payroll.finalize')
+        || hasPermission('payroll.lock');
+    }
+
+    match /payroll_cost_summary/{summaryId} {
+      allow read: if isActiveUser();
+      allow create, update, delete: if hasPermission('payroll.finalize')
+        || hasPermission('payroll.lock');
+    }
+
+    match /payroll_distributions/{distributionId} {
+      allow read: if hasPermission('payroll.view') || hasPermission('payroll.accounts.view');
+      allow create, update, delete: if hasPermission('payroll.accounts.disburse');
+    }
+
     match /{document=**} {
       // Temporary baseline hardening:
       // - Active users can continue working.
       // - Bootstrap users (before user doc creation) can complete setup.
-      allow read, write: if isActiveUser() || isBootstrap();
+      allow read, write: if (isActiveUser() || isBootstrap())
+        && !document.matches('payroll_months/.*')
+        && !document.matches('payroll_records/.*')
+        && !document.matches('payroll_audit_logs/.*')
+        && !document.matches('payroll_cost_summary/.*')
+        && !document.matches('payroll_distributions/.*');
     }
   }
 }

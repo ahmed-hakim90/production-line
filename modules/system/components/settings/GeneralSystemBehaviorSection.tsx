@@ -9,6 +9,7 @@ type GeneralSystemBehaviorSectionProps = {
   setLocalPlanSettings: React.Dispatch<React.SetStateAction<PlanSettings>>;
   inventoryWarehouses: Warehouse[];
   allPermissions: string[];
+  hrUsers: Array<{ id: string; label: string }>;
 };
 
 export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSectionProps> = ({
@@ -17,6 +18,7 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
   setLocalPlanSettings,
   inventoryWarehouses,
   allPermissions,
+  hrUsers,
 }) => {
   if (!isAdmin) return null;
 
@@ -225,6 +227,23 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
 
         <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
+            <span className="material-icons-round text-primary text-lg">filter_alt</span>
+            <p className="text-sm font-bold text-[var(--color-text)]">فلاتر فئة مكونات الحقن</p>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)] mb-3">
+            اكتب كلمة أو أكثر (مفصولة بفاصلة) ليتم اعتمادها في تصفية خامات "تقرير مكون حقن". مثال: حقن, injection
+          </p>
+          <input
+            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+            value={localPlanSettings.injectionRawMaterialCategoryKeywords ?? 'حقن'}
+            onChange={(e) => setLocalPlanSettings((p) => ({ ...p, injectionRawMaterialCategoryKeywords: e.target.value }))}
+            placeholder="حقن"
+          />
+        </div>
+
+       
+        <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">verified_user</span>
             <p className="text-sm font-bold text-[var(--color-text)]">صلاحية معتمد تحويلات المخازن</p>
           </div>
@@ -257,6 +276,42 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             <option value="piece">قطعة</option>
             <option value="carton">كرتونة</option>
           </select>
+        </div>
+ <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-icons-round text-primary text-lg">badge</span>
+            <p className="text-sm font-bold text-[var(--color-text)]">مستخدمو HR المعتمدون للموافقات</p>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)] mb-3">
+            اختر المستخدمين الذين يمثلون HR في مرحلة الاعتماد النهائية.
+          </p>
+          {hrUsers.length === 0 ? (
+            <p className="text-xs text-[var(--color-text-muted)]">لا يوجد مستخدمون متاحون حالياً.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {hrUsers.map((user) => {
+                const selected = (localPlanSettings.hrApproverUserIds ?? []).includes(user.id);
+                return (
+                  <label key={user.id} className="flex items-center gap-2 text-xs font-medium text-[var(--color-text)] p-2 rounded border border-[var(--color-border)] bg-[var(--color-card)]">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={(e) => {
+                        setLocalPlanSettings((prev) => {
+                          const current = prev.hrApproverUserIds ?? [];
+                          const next = e.target.checked
+                            ? Array.from(new Set([...current, user.id]))
+                            : current.filter((id) => id !== user.id);
+                          return { ...prev, hrApproverUserIds: next };
+                        });
+                      }}
+                    />
+                    <span>{user.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </div>

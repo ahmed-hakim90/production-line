@@ -8,19 +8,26 @@ import { employeeService } from '../employeeService';
 import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
 import { leaveRequestService } from '../leaveService';
 import { loanService } from '../loanService';
+import { createRequest, type ApprovalEmployeeInfo } from '../approval';
 import { departmentsRef, allowanceTypesRef } from '../collections';
 import { employeeAllowanceService, employeeDeductionService } from '../employeeFinancialsService';
 import { getPayrollMonth } from '../payroll';
+import { getPendingApprovals } from '../approval';
+import { performanceService } from '../services/performanceService';
 import { formatNumber, formatCurrency } from '@/utils/calculations';
+import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '@/components/modal-manager/modalKeys';
 import type { FirestoreEmployee } from '@/types';
 import type {
   FirestoreLeaveRequest,
   FirestoreEmployeeLoan,
   FirestoreDepartment,
   FirestoreAllowanceType,
+  FirestoreEmployeePerformance,
 } from '../types';
 import type { AttendanceRecord } from '@/modules/attendance/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../types';
+import { HRNotificationBell } from '../components/HRNotificationBell';
 
 function getToday(): string {
   const d = new Date();
@@ -51,9 +58,32 @@ const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'danger' | 'info' |
   closed: 'neutral',
 };
 
+interface LateEmployee {
+  employeeId: string;
+  employeeName: string;
+  totalLateMinutes: number;
+  lateDays: number;
+}
+
+function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
+  const level = e.level as number;
+  return {
+    employeeId: e.id!,
+    employeeName: e.name,
+    managerId: e.managerId,
+    departmentId: e.departmentId || 'unknown_department',
+    departmentName: e.departmentId || 'unknown_department',
+    jobPositionId: e.jobPositionId || 'unknown_position',
+    jobTitle: e.jobPositionId || 'unknown_position',
+    jobLevel: Math.min(4, Math.max(1, level)) as 1 | 2 | 3 | 4,
+  };
+}
+
 export const HRDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { openModal } = useGlobalModalManager();
   const uid = useAppStore((s) => s.uid);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
@@ -62,6 +92,19 @@ export const HRDashboard: React.FC = () => {
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
   const [allowanceTypes, setAllowanceTypes] = useState<FirestoreAllowanceType[]>([]);
   const [payrollStatus, setPayrollStatus] = useState<string | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [incompleteAttendance, setIncompleteAttendance] = useState(0);
+  const [top5Late, setTop5Late] = useState<LateEmployee[]>([]);
+  const [loanPortfolio, setLoanPortfolio] = useState({
+    totalOutstanding: 0,
+    totalMonthlyDeduction: 0,
+    activeCount: 0,
+  });
+  const [evaluationAlerts, setEvaluationAlerts] = useState({
+    lowPerformanceCount: 0,
+    pendingBonusApprovals: 0,
+    topRiskEmployees: [] as FirestoreEmployeePerformance[],
+  });
 
   // Quick Action state
   const [qaOpen, setQaOpen] = useState<'' | 'loan' | 'leave' | 'allowance' | 'penalty'>('');
@@ -118,15 +161,47 @@ export const HRDashboard: React.FC = () => {
     setLoading(true);
     const today = getToday();
     const monthStart = getMonthStart();
+    const safeFetch = async <T,>(
+      label: string,
+      operation: Promise<T>,
+      fallback: T,
+    ): Promise<T> => {
+      try {
+        return await operation;
+      } catch (error) {
+        console.warn(`[HRDashboard] ${label} failed`, error);
+        return fallback;
+      }
+    };
     try {
-      const [emps, depts, att, lvs, lns, allTypes, pm] = await Promise.all([
-        employeeService.getAll(),
-        getDocs(departmentsRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreDepartment)),
-        attendanceProcessingService.getRecordsByDateRange(monthStart, today),
-        leaveRequestService.getAll(),
-        loanService.getAll(),
-        getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
-        getPayrollMonth(getMonthKey()).catch(() => null),
+      const [emps, depts, att, lvs, lns, allTypes, pm, pending, performanceScores] = await Promise.all([
+        safeFetch('employees', employeeService.getAll(), [] as FirestoreEmployee[]),
+        safeFetch(
+          'departments',
+          getDocs(departmentsRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreDepartment)),
+          [] as FirestoreDepartment[],
+        ),
+        safeFetch(
+          'attendance records',
+          attendanceProcessingService.getRecordsByDateRange(monthStart, today),
+          [] as AttendanceRecord[],
+        ),
+        safeFetch('leave requests', leaveRequestService.getAll(), [] as FirestoreLeaveRequest[]),
+        safeFetch('employee loans', loanService.getAll(), [] as FirestoreEmployeeLoan[]),
+        safeFetch(
+          'allowance types',
+          getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
+          [] as FirestoreAllowanceType[],
+        ),
+        safeFetch('payroll month', getPayrollMonth(getMonthKey()), null),
+        currentEmployee?.id
+          ? safeFetch(
+              'pending approvals',
+              getPendingApprovals({ approverEmployeeId: currentEmployee.id }),
+              [] as Awaited<ReturnType<typeof getPendingApprovals>>,
+            )
+          : Promise.resolve([] as Awaited<ReturnType<typeof getPendingApprovals>>),
+        safeFetch('performance scores', performanceService.getByMonth(getMonthKey()), [] as FirestoreEmployeePerformance[]),
       ]);
       setEmployees(emps);
       setDepartments(depts);
@@ -135,12 +210,55 @@ export const HRDashboard: React.FC = () => {
       setLoans(lns);
       setAllowanceTypes(allTypes.filter((a) => a.isActive));
       setPayrollStatus(pm?.status ?? null);
+      setPendingApprovals(pending.length);
+      setIncompleteAttendance(att.filter((log) => !log.checkIn || !log.checkOut).length);
+
+      const lateMap = new Map<string, LateEmployee>();
+      att.forEach((log) => {
+        if ((log.lateMinutes || 0) <= 0) return;
+        const entry = lateMap.get(log.employeeId) ?? {
+          employeeId: log.employeeId,
+          employeeName: emps.find((e) => e.id === log.employeeId)?.name || log.employeeId,
+          totalLateMinutes: 0,
+          lateDays: 0,
+        };
+        entry.totalLateMinutes += log.lateMinutes || 0;
+        entry.lateDays += 1;
+        lateMap.set(log.employeeId, entry);
+      });
+      setTop5Late(
+        Array.from(lateMap.values())
+          .sort((a, b) => b.totalLateMinutes - a.totalLateMinutes)
+          .slice(0, 5),
+      );
+
+      const activeLoans = lns.filter((loan) => loan.status === 'active');
+      setLoanPortfolio({
+        totalOutstanding: activeLoans.reduce(
+          (sum, loan) => sum + (loan.installmentAmount || 0) * (loan.remainingInstallments || 0),
+          0,
+        ),
+        totalMonthlyDeduction: activeLoans.reduce((sum, loan) => sum + (loan.installmentAmount || 0), 0),
+        activeCount: activeLoans.length,
+      });
+
+      const lowPerformance = performanceScores.filter((score) => score.overallScore < 60);
+      const pendingBonus = performanceScores.filter(
+        (score) => score.bonusEligible && !score.bonusApproved,
+      );
+      setEvaluationAlerts({
+        lowPerformanceCount: lowPerformance.length,
+        pendingBonusApprovals: pendingBonus.length,
+        topRiskEmployees: [...lowPerformance]
+          .sort((a, b) => a.overallScore - b.overallScore)
+          .slice(0, 3),
+      });
     } catch (err) {
       console.error('HR Dashboard fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentEmployee?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -265,7 +383,7 @@ export const HRDashboard: React.FC = () => {
       .replace(/[\u200E\u200F]/g, '')
       .trim()
       .toUpperCase(),
-  [], []);
+  []);
 
   const splitImportedCodes = useCallback((raw: string) =>
     Array.from(new Set(
@@ -510,24 +628,84 @@ export const HRDashboard: React.FC = () => {
     for (const item of qaStaged) {
       try {
         if (item.type === 'loan') {
-          await loanService.create({
+          const loanId = await loanService.create({
             employeeId: item.empId, employeeName: item.empName, employeeCode: item.empCode,
             loanType: item.loanType!, loanAmount: item.loanAmount!,
             installmentAmount: item.installmentAmount!, totalInstallments: item.totalInstallments!,
             remainingInstallments: item.totalInstallments!,
             startMonth: getMonthKey(),
             month: item.loanType === 'monthly_advance' ? getMonthKey() : undefined,
-            status: 'active', approvalChain: [], finalStatus: 'approved',
+            status: 'pending', approvalChain: [], finalStatus: 'pending',
             reason: '—', disbursed: false, createdBy: uid || '',
           });
+          const approvalEmployees = employees
+            .filter((e): e is FirestoreEmployee => Boolean(e.id))
+            .map((e) => toApprovalEmployeeInfo(e));
+          const approvalResult = await createRequest(
+            {
+              requestType: 'loan',
+              employeeId: item.empId,
+              requestData: {
+                loanType: item.loanType!,
+                loanAmount: item.loanAmount!,
+                installmentAmount: item.installmentAmount!,
+                totalInstallments: item.totalInstallments!,
+                remainingInstallments: item.totalInstallments!,
+                startMonth: getMonthKey(),
+                month: item.loanType === 'monthly_advance' ? getMonthKey() : undefined,
+                reason: '—',
+              },
+              sourceRequestId: loanId,
+              createdBy: uid || '',
+            },
+            {
+              employeeId: currentEmployee?.id || item.empId,
+              employeeName: currentEmployee?.name || userDisplayName || item.empName || '—',
+              permissions,
+            },
+            approvalEmployees,
+          );
+          if (!approvalResult.success) {
+            await loanService.delete(loanId);
+            throw new Error(approvalResult.error || 'تعذر إنشاء موافقة طلب السلفة');
+          }
         } else if (item.type === 'leave') {
-          await leaveRequestService.create({
+          const leaveId = await leaveRequestService.create({
             employeeId: item.empId, leaveType: item.leaveType as any,
             startDate: item.startDate!, endDate: item.endDate!, totalDays: item.totalDays!,
             affectsSalary: item.leaveType !== 'unpaid',
             status: 'pending', approvalChain: [], finalStatus: 'pending',
             reason: item.reason || '—', createdBy: uid || '',
           });
+          const approvalEmployees = employees
+            .filter((e): e is FirestoreEmployee => Boolean(e.id))
+            .map((e) => toApprovalEmployeeInfo(e));
+          const approvalResult = await createRequest(
+            {
+              requestType: 'leave',
+              employeeId: item.empId,
+              requestData: {
+                leaveType: item.leaveType,
+                leaveTypeLabel: LEAVE_TYPE_LABELS[item.leaveType || ''] || item.leaveType,
+                startDate: item.startDate!,
+                endDate: item.endDate!,
+                totalDays: item.totalDays!,
+                reason: item.reason || '—',
+              },
+              sourceRequestId: leaveId,
+              createdBy: uid || '',
+            },
+            {
+              employeeId: currentEmployee?.id || item.empId,
+              employeeName: currentEmployee?.name || userDisplayName || item.empName || '—',
+              permissions,
+            },
+            approvalEmployees,
+          );
+          if (!approvalResult.success) {
+            await leaveRequestService.delete(leaveId);
+            throw new Error(approvalResult.error || 'تعذر إنشاء موافقة طلب الإجازة');
+          }
         } else if (item.type === 'allowance') {
           await employeeAllowanceService.create({
             employeeId: item.empId, allowanceTypeId: item.allowanceTypeId!,
@@ -725,6 +903,25 @@ export const HRDashboard: React.FC = () => {
 
           {/* Search + Quick Actions toolbar */}
           <div className="flex flex-wrap items-center gap-2">
+            {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40 hover:text-primary"
+              onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SHIFT_RULES)}
+              data-modal-key={MODAL_KEYS.ATTENDANCE_SHIFT_RULES}
+            >
+              <span className="material-icons-round text-base">settings</span>
+              <span className="hidden sm:inline">قواعد الوردية</span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40 hover:text-primary"
+              onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX)}
+              data-modal-key={MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX}
+            >
+              <span className="material-icons-round text-base">edit_calendar</span>
+              <span className="hidden sm:inline">إشعار توقيع</span>
+            </button>
             {/* Quick Action buttons */}
             {qaActions.map((a) => (
               <button
@@ -1635,6 +1832,158 @@ export const HRDashboard: React.FC = () => {
               <span className="material-icons-round text-xs">arrow_forward</span>
             </button>
           </Card>
+        </div>
+      </section>
+
+      {/* ═══ SECTION 3 — إجراءات معلقة ═══ */}
+      <section>
+        <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
+          <span className="material-icons-round text-amber-500 text-lg">pending_actions</span>
+          إجراءات تحتاج متابعة
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            onClick={() => navigate('/approval-center')}
+            className="flex items-center gap-3 bg-[var(--color-card)] border border-amber-200 rounded-[var(--border-radius-lg)] p-4 hover:border-amber-400 transition-colors text-right w-full"
+          >
+            <div className="w-10 h-10 bg-amber-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-amber-600">fact_check</span>
+            </div>
+            <div>
+              <p className="text-xl font-bold text-amber-600">{pendingApprovals}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-medium">طلبات موافقة معلقة</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigate('/attendance')}
+            className="flex items-center gap-3 bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-lg)] p-4 hover:border-rose-400 transition-colors text-right w-full"
+          >
+            <div className="w-10 h-10 bg-rose-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-rose-600">fingerprint</span>
+            </div>
+            <div>
+              <p className="text-xl font-bold text-rose-600">{incompleteAttendance}</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-medium">بصمات ناقصة هذا الشهر</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigate('/payroll')}
+            className="flex items-center gap-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 hover:border-primary/40 transition-colors text-right w-full"
+          >
+            <div className="w-10 h-10 bg-indigo-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-primary">receipt_long</span>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[var(--color-text)]">
+                {payrollStatus === 'locked' ? 'مُقفل ✓' :
+                 payrollStatus === 'finalized' ? 'معتمد' :
+                 payrollStatus === 'draft' ? 'مسودة' : 'لم يُحتسب'}
+              </p>
+              <p className="text-xs text-[var(--color-text-muted)] font-medium">كشف {getMonthKey()}</p>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      {/* ═══ SECTION 4 — Top 5 متأخرين ═══ */}
+      <section>
+        <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
+          <span className="material-icons-round text-rose-500 text-lg">schedule</span>
+          أعلى 5 موظفين تأخيراً — {getMonthKey()}
+        </h3>
+        <Card>
+          {top5Late.length === 0 ? (
+            <div className="py-8 text-center text-[var(--color-text-muted)]">
+              <span className="material-icons-round text-3xl mb-2 block opacity-30">check_circle</span>
+              <p className="text-sm">لا يوجد تأخير هذا الشهر</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)]">
+                    <th className="text-right pb-2 text-xs text-[var(--color-text-muted)] font-bold px-2">#</th>
+                    <th className="text-right pb-2 text-xs text-[var(--color-text-muted)] font-bold px-2">الموظف</th>
+                    <th className="text-right pb-2 text-xs text-[var(--color-text-muted)] font-bold px-2">دقائق التأخير</th>
+                    <th className="text-right pb-2 text-xs text-[var(--color-text-muted)] font-bold px-2">أيام التأخير</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {top5Late.map((item, i) => (
+                    <tr key={item.employeeId} className="border-b border-[var(--color-border)]/50">
+                      <td className="py-2.5 px-2">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          i === 0 ? 'bg-rose-100 text-rose-700' :
+                          i === 1 ? 'bg-amber-100 text-amber-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>{i + 1}</span>
+                      </td>
+                      <td className="py-2.5 px-2 font-medium text-[var(--color-text)]">{item.employeeName}</td>
+                      <td className="py-2.5 px-2 font-bold text-rose-600">{item.totalLateMinutes} د</td>
+                      <td className="py-2.5 px-2 text-[var(--color-text-muted)]">{item.lateDays} يوم</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </section>
+
+      {/* ═══ SECTION 5 — محفظة السُلف ═══ */}
+      <section>
+        <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
+          <span className="material-icons-round text-violet-500 text-lg">account_balance_wallet</span>
+          محفظة السُلف
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي السُلف النشطة</p>
+            <p className="text-xl font-bold text-violet-600">{formatNumber(loanPortfolio.totalOutstanding)} ج.م</p>
+          </div>
+          <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي الخصومات الشهرية</p>
+            <p className="text-xl font-bold text-amber-600">{formatNumber(loanPortfolio.totalMonthlyDeduction)} ج.م</p>
+          </div>
+          <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">عدد السُلف النشطة</p>
+            <p className="text-xl font-bold text-[var(--color-text)]">{loanPortfolio.activeCount} سلفة</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ SECTION 6 — تنبيهات التقييم ═══ */}
+      <section>
+        <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
+          <span className="material-icons-round text-cyan-500 text-lg">stars</span>
+          تنبيهات التقييم — {getMonthKey()}
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            onClick={() => navigate('/hr/evaluations')}
+            className="bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-lg)] p-4 text-right hover:border-rose-400 transition-colors"
+          >
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفون منخفضو الأداء</p>
+            <p className="text-xl font-bold text-rose-600">{evaluationAlerts.lowPerformanceCount}</p>
+          </button>
+          <button
+            onClick={() => navigate('/hr/evaluations')}
+            className="bg-[var(--color-card)] border border-amber-200 rounded-[var(--border-radius-lg)] p-4 text-right hover:border-amber-400 transition-colors"
+          >
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مكافآت بانتظار الاعتماد</p>
+            <p className="text-xl font-bold text-amber-600">{evaluationAlerts.pendingBonusApprovals}</p>
+          </button>
+          <button
+            onClick={() => navigate('/hr/evaluations')}
+            className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-right hover:border-primary/40 transition-colors"
+          >
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أعلى حالات تستلزم متابعة</p>
+            <p className="text-sm font-bold text-[var(--color-text)]">
+              {evaluationAlerts.topRiskEmployees[0]?.employeeName ?? 'لا توجد بيانات'}
+            </p>
+          </button>
         </div>
       </section>
 

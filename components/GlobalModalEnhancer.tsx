@@ -160,10 +160,40 @@ const makeIconButton = (icon: string, title: string): HTMLButtonElement => {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.title = title;
-  btn.className =
-    'text-slate-500 hover:text-[var(--color-text)] dark:text-[var(--color-text-muted)] dark:hover:text-white transition-colors';
+
+  // Inline styles بدل className لأن Tailwind مش مضمون في DOM-injected elements
+  Object.assign(btn.style, {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '26px',
+    height: '26px',
+    borderRadius: '6px',
+    border: '1px solid transparent',
+    background: 'transparent',
+    cursor: 'pointer',
+    transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+    color: 'var(--color-text-muted, #94a3b8)',
+    padding: '0',
+    flexShrink: '0',
+  });
+
+  // Hover effect via mouseenter/mouseleave
+  btn.addEventListener('mouseenter', () => {
+    btn.style.background = 'rgba(0,0,0,0.06)';
+    btn.style.borderColor = 'rgba(0,0,0,0.08)';
+    btn.style.color = 'var(--color-text, #1e293b)';
+  });
+  btn.addEventListener('mouseleave', () => {
+    btn.style.background = 'transparent';
+    btn.style.borderColor = 'transparent';
+    btn.style.color = 'var(--color-text-muted, #94a3b8)';
+  });
+
   const span = document.createElement('span');
-  span.className = 'material-icons-round text-base';
+  span.className = 'material-icons-round';
+  span.style.fontSize = '15px';
+  span.style.lineHeight = '1';
   span.textContent = icon;
   btn.appendChild(span);
   return btn;
@@ -219,7 +249,7 @@ export const GlobalModalEnhancer: React.FC = () => {
     baseY: number;
   } | null>(null);
   const offsetsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const zOrderRef = useRef(80);
+  const zOrderRef = useRef(9990);
   const lastInteractionRef = useRef<{
     route: string;
     openerText: string;
@@ -678,13 +708,20 @@ export const GlobalModalEnhancer: React.FC = () => {
       if (!panel.style.position) panel.style.position = 'relative';
 
       const controls = document.createElement('div');
-      controls.style.position = 'absolute';
-      controls.style.top = '8px';
-      controls.style.left = '10px';
-      controls.style.zIndex = '2';
-      controls.style.display = 'flex';
-      controls.style.gap = '8px';
-      controls.style.alignItems = 'center';
+      Object.assign(controls.style, {
+        position: 'absolute',
+        top: '10px',
+        left: '12px',
+        zIndex: '2',
+        display: 'flex',
+        gap: '2px',
+        alignItems: 'center',
+        background: 'var(--color-card, #ffffff)',
+        border: '1px solid var(--color-border, #e2e8f0)',
+        borderRadius: '8px',
+        padding: '2px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      });
 
       const minimizeBtn = makeIconButton('minimize', 'تصغير');
       const favoriteBtn = makeIconButton(
@@ -692,6 +729,19 @@ export const GlobalModalEnhancer: React.FC = () => {
         'إضافة للمفضلة',
       );
       const closeBtn = makeIconButton('close', 'إغلاق');
+
+      // Override close button hover to red
+      closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.background = 'rgba(239, 68, 68, 0.1)';
+        closeBtn.style.borderColor = 'rgba(239, 68, 68, 0.15)';
+        closeBtn.style.color = '#ef4444';
+      });
+      closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.borderColor = 'transparent';
+        closeBtn.style.color = 'var(--color-text-muted, #94a3b8)';
+      });
+
       controls.appendChild(minimizeBtn);
       controls.appendChild(favoriteBtn);
       controls.appendChild(closeBtn);
@@ -752,8 +802,15 @@ export const GlobalModalEnhancer: React.FC = () => {
       if (header) {
         // Keep drag behavior on the whole header, but don't inject
         // an extra visual handle that can duplicate page-level icons.
-        header.style.cursor = 'move';
+        header.style.cursor = 'grab';
         header.style.userSelect = 'none';
+        // أضف hint بسيط للـ drag
+        header.addEventListener('mousedown', () => {
+          header.style.cursor = 'grabbing';
+        });
+        header.addEventListener('mouseup', () => {
+          header.style.cursor = 'grab';
+        });
         const startFromHeaderMouse = (evt: MouseEvent) => {
           const target = evt.target as HTMLElement;
           if (target.closest('button,input,select,textarea,a,label,[role="button"]')) return;

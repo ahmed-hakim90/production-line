@@ -40,6 +40,11 @@ import {
 } from './approvalValidation';
 import { approvalDelegationService } from './approvalDelegation';
 import { approvalAuditService } from './approvalAudit';
+import { hrNotificationService } from './notifications';
+import { employeeService } from '../employeeService';
+import { userService } from '@/services/userService';
+import { roleService } from '@/modules/system/services/roleService';
+import { systemSettingsService } from '@/modules/system/services/systemSettingsService';
 import type {
   FirestoreApprovalRequest,
   FirestoreApprovalSettings,
@@ -55,6 +60,23 @@ import type {
   ApprovalRequestType,
 } from './types';
 import { DEFAULT_APPROVAL_SETTINGS } from './types';
+
+const REQUEST_TYPE_LABELS: Record<ApprovalRequestType, string> = {
+  leave: 'إجازة',
+  loan: 'سلفة',
+  overtime: 'عمل إضافي',
+};
+
+function getRequestSummary(request: FirestoreApprovalRequest): string {
+  const data = request.requestData || {};
+  if (request.requestType === 'leave') {
+    return `${data.startDate || '—'} → ${data.endDate || '—'}`;
+  }
+  if (request.requestType === 'loan') {
+    return `${Number(data.loanAmount || 0).toLocaleString('en-US')} ج.م`;
+  }
+  return data.description || 'طلب عمل إضافي';
+}
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
@@ -106,6 +128,73 @@ function deriveStatusFromChain(request: FirestoreApprovalRequest): ApprovalReque
   return 'pending';
 }
 
+async function resolveHrApproverEmployeeId(
+  allEmployees: ApprovalEmployeeInfo[],
+  explicitHrEmployeeId?: string,
+): Promise<string | undefined> {
+  if (explicitHrEmployeeId) return explicitHrEmployeeId;
+
+  try {
+    const [users, roles, rawEmployees, systemSettings] = await Promise.all([
+      userService.getAll(),
+      roleService.getAll(),
+      employeeService.getAll(),
+      systemSettingsService.get(),
+    ]);
+
+    const rolePermissions = new Map<string, Record<string, boolean>>();
+    roles.forEach((role) => {
+      if (role.id) rolePermissions.set(role.id, role.permissions || {});
+    });
+
+    const configuredHrUserIds = new Set(
+      (systemSettings?.planSettings?.hrApproverUserIds ?? [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean),
+    );
+
+    const hrUserIdsByPermission = new Set(
+      users
+        .filter((user) => user.isActive !== false)
+        .filter((user) => {
+          const perms = rolePermissions.get(String(user.roleId || '').trim());
+          if (!perms) return false;
+          return perms['approval.manage'] === true || perms['approval.override'] === true;
+        })
+        .map((user) => String(user.id || '').trim())
+        .filter(Boolean),
+    );
+
+    const infoIds = new Set(allEmployees.map((e) => e.employeeId));
+    const configuredCandidates = rawEmployees.filter(
+      (employee) =>
+        employee.isActive !== false &&
+        Boolean(employee.id) &&
+        Boolean(employee.userId) &&
+        configuredHrUserIds.has(String(employee.userId || '').trim()),
+    );
+    if (configuredCandidates.length > 0) {
+      const inCurrentGraph = configuredCandidates.find((employee) => infoIds.has(String(employee.id)));
+      return String((inCurrentGraph || configuredCandidates[0])?.id || '') || undefined;
+    }
+
+    if (hrUserIdsByPermission.size === 0) return undefined;
+
+    const permissionCandidates = rawEmployees.filter(
+      (employee) =>
+        employee.isActive !== false &&
+        Boolean(employee.id) &&
+        Boolean(employee.userId) &&
+        hrUserIdsByPermission.has(String(employee.userId || '').trim()),
+    );
+
+    const inCurrentGraph = permissionCandidates.find((employee) => infoIds.has(String(employee.id)));
+    return String((inCurrentGraph || permissionCandidates[0])?.id || '') || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // ─── Create Request ─────────────────────────────────────────────────────────
 
 export async function createRequest(
@@ -115,6 +204,20 @@ export async function createRequest(
   hrEmployeeId?: string,
 ): Promise<OperationResult> {
   if (!isConfigured) return { success: false, error: 'Firebase not configured' };
+
+  // Idempotency guard: if a source request is already linked, reuse it.
+  if (options.sourceRequestId) {
+    const existingSnap = await getDocs(
+      query(
+        approvalRequestsRef(),
+        where('requestType', '==', options.requestType),
+        where('sourceRequestId', '==', options.sourceRequestId),
+      ),
+    );
+    if (!existingSnap.empty) {
+      return { success: true, requestId: existingSnap.docs[0].id };
+    }
+  }
 
   const createValidation = validateCreate(caller, options.employeeId);
   if (!createValidation.allowed) {
@@ -127,13 +230,14 @@ export async function createRequest(
   }
 
   const settings = await getApprovalSettings();
+  const resolvedHrEmployeeId = await resolveHrApproverEmployeeId(allEmployees, hrEmployeeId);
 
   const autoResult = tryAutoApprove(options.requestData, {
     employee,
     allEmployees,
     requestType: options.requestType,
     settings,
-    hrEmployeeId,
+    hrEmployeeId: resolvedHrEmployeeId,
   });
 
   if (autoResult) {
@@ -174,7 +278,7 @@ export async function createRequest(
     allEmployees,
     requestType: options.requestType,
     settings,
-    hrEmployeeId,
+    hrEmployeeId: resolvedHrEmployeeId,
   });
 
   if (chainResult.chain.length === 0) {
@@ -327,6 +431,38 @@ export async function approveRequest(
     { notes: options.notes, delegateOf, isAdminOverride: validation.isAdminOverride },
   );
 
+  const resultStatus = updatedRequest.status;
+  if (resultStatus === 'in_progress') {
+    const nextApprover = updatedChain[nextStep];
+    if (nextApprover?.approverEmployeeId) {
+      const nextApproverUserId = await employeeService.getUserIdByEmployeeId(nextApprover.approverEmployeeId);
+      if (nextApproverUserId) {
+        await hrNotificationService.create({
+          recipientEmployeeId: nextApprover.approverEmployeeId,
+          recipientUserId: nextApproverUserId,
+          type: 'new_approval_request',
+          title: `طلب ${REQUEST_TYPE_LABELS[request.requestType]} يحتاج موافقتك`,
+          body: `${request.employeeName} — ${getRequestSummary(request)}`,
+          requestId: request.id,
+          actionUrl: '/approval-center',
+        });
+      }
+    }
+  } else if (resultStatus === 'approved') {
+    const employeeUserId = await employeeService.getUserIdByEmployeeId(request.employeeId);
+    if (employeeUserId) {
+      await hrNotificationService.create({
+        recipientEmployeeId: request.employeeId,
+        recipientUserId: employeeUserId,
+        type: 'request_approved',
+        title: '✓ تمت الموافقة على طلبك',
+        body: `طلب ${REQUEST_TYPE_LABELS[request.requestType]} — تمت الموافقة`,
+        requestId: request.id,
+        actionUrl: '/self-service',
+      });
+    }
+  }
+
   return { success: true, requestId: options.requestId };
 }
 
@@ -391,6 +527,19 @@ export async function rejectRequest(
     caller.employeeId, options.approverName, request.currentStep,
     { notes: options.notes, delegateOf },
   );
+
+  const employeeUserId = await employeeService.getUserIdByEmployeeId(request.employeeId);
+  if (employeeUserId) {
+    await hrNotificationService.create({
+      recipientEmployeeId: request.employeeId,
+      recipientUserId: employeeUserId,
+      type: 'request_rejected',
+      title: '✗ تم رفض طلبك',
+      body: `طلب ${REQUEST_TYPE_LABELS[request.requestType]} — تم الرفض`,
+      requestId: request.id,
+      actionUrl: '/self-service',
+    });
+  }
 
   return { success: true, requestId: options.requestId };
 }
@@ -530,12 +679,10 @@ export async function getPendingApprovals(
           approvalRequestsRef(),
           where('status', '==', status),
           where('requestType', '==', params.requestType),
-          orderBy('createdAt', 'desc'),
         )
       : query(
           approvalRequestsRef(),
           where('status', '==', status),
-          orderBy('createdAt', 'desc'),
         );
 
     const snap = await getDocs(q);
@@ -544,14 +691,20 @@ export async function getPendingApprovals(
     );
   }
 
-  return allPending.filter((req) => {
-    if (req.currentStep >= req.approvalChain.length) return false;
-    const step = req.approvalChain[req.currentStep];
-    return (
-      step.approverEmployeeId === params.approverEmployeeId ||
-      step.delegatedTo === params.approverEmployeeId
-    );
-  });
+  return allPending
+    .filter((req) => {
+      if (req.currentStep >= req.approvalChain.length) return false;
+      const step = req.approvalChain[req.currentStep];
+      return (
+        step.approverEmployeeId === params.approverEmployeeId ||
+        step.delegatedTo === params.approverEmployeeId
+      );
+    })
+    .sort((a, b) => {
+      const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+      const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+      return tb - ta;
+    });
 }
 
 /**

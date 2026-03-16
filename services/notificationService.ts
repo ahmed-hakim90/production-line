@@ -13,6 +13,11 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from './firebase';
 import type { AppNotification } from '../types';
+export {
+  registerFCMToken,
+  initFCMListener,
+  type ForegroundPushPayload,
+} from './pushService';
 
 const COLLECTION = 'notifications';
 

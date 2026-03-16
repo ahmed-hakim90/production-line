@@ -37,6 +37,11 @@ export const HR_COLLECTIONS = {
   VEHICLES: 'vehicles',
   EMPLOYEE_ALLOWANCES: 'employee_allowances',
   EMPLOYEE_DEDUCTIONS: 'employee_deductions',
+  ATTENDANCE_IMPORT_HISTORY: 'attendance_import_history',
+  HR_NOTIFICATIONS: 'hr_notifications',
+  PAYROLL_DISTRIBUTIONS: 'payroll_distributions',
+  EMPLOYEE_PERFORMANCE: 'employee_performance',
+  EMPLOYEE_BONUSES: 'employee_bonuses',
 } as const;
 
 // ─── Single-Document Collection ─────────────────────────────────────────────
@@ -123,4 +128,20 @@ export function employeeAllowancesRef(): CollectionReference {
 
 export function employeeDeductionsRef(): CollectionReference {
   return collection(db, HR_COLLECTIONS.EMPLOYEE_DEDUCTIONS);
+}
+
+export function attendanceImportHistoryRef(): CollectionReference {
+  return collection(db, HR_COLLECTIONS.ATTENDANCE_IMPORT_HISTORY);
+}
+
+export function hrNotificationsRef(): CollectionReference {
+  return collection(db, HR_COLLECTIONS.HR_NOTIFICATIONS);
+}
+
+export function payrollDistributionsRef(): CollectionReference {
+  return collection(db, HR_COLLECTIONS.PAYROLL_DISTRIBUTIONS);
+}
+
+export function employeePerformanceRef(): CollectionReference {
+  return collection(db, HR_COLLECTIONS.EMPLOYEE_PERFORMANCE);
 }

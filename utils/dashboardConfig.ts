@@ -185,12 +185,14 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   finalProductWarehouseId: '',
   transferApprovalPermission: 'inventory.transfers.approve',
   transferDisplayUnit: 'piece',
+  hrApproverUserIds: [],
   allowNegativeDecomposedStock: false,
   allowNegativeFinishedTransferStock: false,
   requireFinishedStockApprovalForReports: true,
   maxWasteThreshold: 5,
   efficiencyCalculationMode: 'standard',
   averageProductionMode: 'daily',
+  injectionRawMaterialCategoryKeywords: 'حقن',
 };
 
 export const DEFAULT_BRANDING: BrandingSettings = {

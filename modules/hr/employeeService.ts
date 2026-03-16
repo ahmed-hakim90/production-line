@@ -102,4 +102,14 @@ export const employeeService = {
     const d = snap.docs[0];
     return { id: d.id, ...d.data() } as FirestoreEmployee;
   },
+
+  /**
+   * Get linked userId for an employee.
+   * Returns null if no user account is linked.
+   */
+  async getUserIdByEmployeeId(employeeId: string): Promise<string | null> {
+    if (!isConfigured) return null;
+    const employee = await this.getById(employeeId);
+    return employee?.userId ?? null;
+  },
 };

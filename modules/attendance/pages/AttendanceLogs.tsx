@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
-import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { SelectableTable, type TableColumn } from '@/components/SelectableTable';
 import { useAppStore } from '@/store/useAppStore';
 import type { FirestoreEmployee } from '@/types';
+import type { AttendanceLog } from '../types';
 
 function toDateString(date: Date): string {
   const y = date.getFullYear();
@@ -21,6 +22,13 @@ function getWeekStart(): string {
   return toDateString(d);
 }
 
+function getMonthStart(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+}
+
 export const AttendanceLogs: React.FC = () => {
   const logs = useAppStore((s) => s.attendanceLogs);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -28,7 +36,7 @@ export const AttendanceLogs: React.FC = () => {
   const fetchAttendanceLogs = useAppStore((s) => s.fetchAttendanceLogs);
   const [startDate, setStartDate] = useState(getWeekStart);
   const [endDate, setEndDate] = useState(getToday);
-  const [search, setSearch] = useState('');
+  const [activeRange, setActiveRange] = useState<'today' | 'week' | 'month' | 'custom'>('week');
   const [loading, setLoading] = useState(false);
   const employeeNames = useMemo(() => (
     rawEmployees.reduce<Record<string, string>>((acc, employee: FirestoreEmployee) => {
@@ -53,18 +61,62 @@ export const AttendanceLogs: React.FC = () => {
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return logs;
-    return logs.filter((log) => {
-      const name = (employeeNames[log.employeeId] || '').toLowerCase();
-      return (
-        log.employeeId.toLowerCase().includes(term) ||
-        log.deviceUserId.toLowerCase().includes(term) ||
-        name.includes(term)
-      );
-    });
-  }, [logs, search, employeeNames]);
+  const stats = useMemo(() => {
+    const total = logs.length;
+    const checkIn = logs.filter((log) => log.eventType === 'check_in').length;
+    const checkOut = logs.filter((log) => log.eventType === 'check_out').length;
+    const unknown = total - checkIn - checkOut;
+    return { total, checkIn, checkOut, unknown };
+  }, [logs]);
+
+  const tableColumns = useMemo<TableColumn<AttendanceLog>[]>(() => [
+    {
+      id: 'employee',
+      header: 'الموظف',
+      render: (log) => employeeNames[log.employeeId] || log.employeeId,
+      sortKey: (log) => employeeNames[log.employeeId] || log.employeeId,
+    },
+    {
+      id: 'deviceUser',
+      header: 'معرف الجهاز',
+      render: (log) => log.deviceUserId || '—',
+      sortKey: (log) => log.deviceUserId || '',
+    },
+    {
+      id: 'device',
+      header: 'الجهاز',
+      render: (log) => log.deviceId || '—',
+      sortKey: (log) => log.deviceId || '',
+    },
+    {
+      id: 'timestamp',
+      header: 'التوقيت',
+      render: (log) => {
+        const ts = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
+        return Number.isNaN(ts.getTime()) ? '—' : ts.toLocaleString('ar-EG');
+      },
+      sortKey: (log) => {
+        const ts = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
+        return Number.isNaN(ts.getTime()) ? 0 : ts.getTime();
+      },
+    },
+    {
+      id: 'event',
+      header: 'الحدث',
+      render: (log) => {
+        if (log.eventType === 'check_in') return 'دخول';
+        if (log.eventType === 'check_out') return 'خروج';
+        return 'غير معروف';
+      },
+      sortKey: (log) => log.eventType || '',
+    },
+    {
+      id: 'source',
+      header: 'المصدر',
+      render: (log) => log.source || '—',
+      sortKey: (log) => log.source || '',
+    },
+  ], [employeeNames]);
 
   return (
     <div className="space-y-6">
@@ -72,64 +124,99 @@ export const AttendanceLogs: React.FC = () => {
         title="سجل بصمة الحضور الخام"
         subtitle="عرض السجلات الخام الواردة من أجهزة ZKTeco"
         icon="fingerprint"
+        loading={loading}
       />
 
-      <SmartFilterBar
-        searchPlaceholder="بحث بالموظف أو كود الجهاز"
-        searchValue={search}
-        onSearchChange={setSearch}
-        advancedFilters={[
-          { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
-          { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
-        ]}
-        advancedFilterValues={{
-          dateFrom: startDate,
-          dateTo: endDate,
-        }}
-        onAdvancedFilterChange={(key, value) => {
-          if (key === 'dateFrom') setStartDate(value);
-          if (key === 'dateTo') setEndDate(value);
-        }}
-        onApply={() => void load()}
-        applyLabel={loading ? 'جار التحميل...' : 'تحديث'}
-      />
-
-      <div className="card overflow-x-auto">
-        <table className="w-full text-right">
-          <thead className="erp-thead">
-            <tr>
-              <th className="erp-th">الموظف</th>
-              <th className="erp-th">معرف الجهاز</th>
-              <th className="erp-th">الجهاز</th>
-              <th className="erp-th">التوقيت</th>
-              <th className="erp-th">الحدث</th>
-              <th className="erp-th">المصدر</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!loading && filtered.length === 0 && (
-              <tr>
-                <td className="py-8 text-center text-[var(--color-text-muted)]" colSpan={6}>
-                  لا توجد سجلات
-                </td>
-              </tr>
-            )}
-            {filtered.map((log) => {
-              const ts = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
-              return (
-                <tr key={log.id} className="border-b border-[var(--color-border)]">
-                  <td className="py-2 px-2">{employeeNames[log.employeeId] || log.employeeId}</td>
-                  <td className="py-2 px-2">{log.deviceUserId}</td>
-                  <td className="py-2 px-2">{log.deviceId}</td>
-                  <td className="py-2 px-2">{ts.toLocaleString('ar-EG')}</td>
-                  <td className="py-2 px-2">{log.eventType}</td>
-                  <td className="py-2 px-2">{log.source}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="erp-kpi-card"><div className="erp-kpi-label">الإجمالي</div><div className="erp-kpi-value">{stats.total}</div></div>
+        <div className="erp-kpi-card"><div className="erp-kpi-label">دخول</div><div className="erp-kpi-value">{stats.checkIn}</div></div>
+        <div className="erp-kpi-card"><div className="erp-kpi-label">خروج</div><div className="erp-kpi-value">{stats.checkOut}</div></div>
+        <div className="erp-kpi-card"><div className="erp-kpi-label">غير معروف</div><div className="erp-kpi-value">{stats.unknown}</div></div>
       </div>
+
+      <div className="erp-filter-bar">
+        <div className="erp-date-seg">
+          <button
+            type="button"
+            className={`erp-date-seg-btn ${activeRange === 'today' ? 'active' : ''}`}
+            onClick={() => {
+              const today = getToday();
+              setActiveRange('today');
+              setStartDate(today);
+              setEndDate(today);
+            }}
+          >
+            اليوم
+          </button>
+          <button
+            type="button"
+            className={`erp-date-seg-btn ${activeRange === 'week' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveRange('week');
+              setStartDate(getWeekStart());
+              setEndDate(getToday());
+            }}
+          >
+            آخر 7 أيام
+          </button>
+          <button
+            type="button"
+            className={`erp-date-seg-btn ${activeRange === 'month' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveRange('month');
+              setStartDate(getMonthStart());
+              setEndDate(getToday());
+            }}
+          >
+            هذا الشهر
+          </button>
+        </div>
+
+        <label className="erp-filter-date">
+          <span className="erp-filter-label">من</span>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => {
+              setActiveRange('custom');
+              setStartDate(e.target.value);
+            }}
+          />
+        </label>
+        <label className="erp-filter-date">
+          <span className="erp-filter-label">إلى</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => {
+              setActiveRange('custom');
+              setEndDate(e.target.value);
+            }}
+          />
+        </label>
+
+        <button className="erp-filter-apply" onClick={() => void load()} disabled={loading}>
+          <span className="material-icons-round text-sm">sync</span>
+          {loading ? 'جار التحميل...' : 'تحديث'}
+        </button>
+      </div>
+
+      <SelectableTable<AttendanceLog>
+        data={logs}
+        columns={tableColumns}
+        getId={(log) => log.id}
+        actionsHeader="إجراءات"
+        emptyIcon="fingerprint"
+        emptyTitle="لا توجد سجلات بصمة ضمن النطاق المحدد"
+        emptySubtitle="غيّر التاريخ أو راجع مصدر الاستيراد"
+        tableId="attendance-raw-logs"
+        pageSize={25}
+        enableSearch={true}
+        searchPlaceholder="بحث بالموظف أو كود الجهاز أو المصدر"
+        enableColumnVisibility={true}
+        checkboxSelection={false}
+        loading={loading}
+      />
     </div>
   );
 };

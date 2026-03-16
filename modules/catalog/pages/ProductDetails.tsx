@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -7,10 +7,12 @@ import {
   CalendarDays,
   FileText,
   LineChart,
+  Loader2,
   Pencil,
   Plus,
   Table2,
   Upload,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -28,6 +30,12 @@ import * as XLSX from "xlsx";
 import { useProductDetail } from "./hooks/useProductDetail";
 import { IndirectCostCards } from "@/src/components/erp/IndirectCostCards";
 import { INDIRECT_COST_ITEMS } from "@/src/data/indirectCostItems";
+import { productMaterialService } from "../../production/services/productMaterialService";
+import { rawMaterialService } from "../../inventory/services/rawMaterialService";
+import type { RawMaterial } from "../../inventory/types";
+import type { ProductMaterial } from "../../../types";
+import { useGlobalModalManager } from "../../../components/modal-manager/GlobalModalManager";
+import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +63,12 @@ const ELEMENT_STYLE: React.CSSProperties = { borderRadius: 8, border: TOKENS.bor
 const arNumber = (value: number) => value.toLocaleString("ar-EG");
 const arDecimal = (value: number, fractionDigits = 2) =>
   value.toLocaleString("ar-EG", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+const parseMoneyValue = (value?: string) => {
+  if (!value) return 0;
+  const normalized = value.replace(/[^\d.,-]/g, "").replace(/,/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 const SKELETON_CARD = "animate-pulse bg-[#ECECEC]";
 
@@ -131,6 +145,7 @@ const formatDateInput = (date: Date) => {
 const ProductDetailsContent: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { openModal } = useGlobalModalManager();
   const { data, isLoading, isError } = useProductDetail(id);
   const [sectionReady, setSectionReady] = useState<Record<SectionKey, boolean>>({
     header: false,
@@ -152,6 +167,50 @@ const ProductDetailsContent: React.FC = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
+  const [rawMaterialOptions, setRawMaterialOptions] = useState<RawMaterial[]>([]);
+  const [productMaterials, setProductMaterials] = useState<ProductMaterial[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [savingMaterial, setSavingMaterial] = useState(false);
+  const [materialError, setMaterialError] = useState<string | null>(null);
+  const [materialForm, setMaterialForm] = useState({
+    materialId: "",
+    quantityUsed: 0,
+    unitCost: 0,
+  });
+
+  const loadRawMaterials = useCallback(async () => {
+    try {
+      const rows = await rawMaterialService.getAll();
+      setRawMaterialOptions(rows.filter((row) => row.isActive !== false));
+    } catch {
+      setRawMaterialOptions([]);
+    }
+  }, []);
+
+  const loadProductMaterials = useCallback(async () => {
+    if (!id) {
+      setProductMaterials([]);
+      return;
+    }
+    setMaterialsLoading(true);
+    try {
+      const rows = await productMaterialService.getByProduct(id);
+      setProductMaterials(rows);
+    } catch {
+      setProductMaterials([]);
+    } finally {
+      setMaterialsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void loadRawMaterials();
+  }, [loadRawMaterials]);
+
+  useEffect(() => {
+    void loadProductMaterials();
+  }, [loadProductMaterials]);
 
   useEffect(() => {
     if (!data) return;
@@ -221,6 +280,30 @@ const ProductDetailsContent: React.FC = () => {
   const pageSize = 10;
   const filteredUniqueDays = useMemo(() => new Set(filteredReports.map((row) => row.date)).size, [filteredReports]);
   const totalPages = Math.max(1, Math.ceil(filteredReports.length / pageSize));
+  const rawMaterialCost = useMemo(
+    () => productMaterials.reduce((sum, row) => sum + Number(row.quantityUsed || 0) * Number(row.unitCost || 0), 0),
+    [productMaterials],
+  );
+  const originalRawMaterialCost = useMemo(() => {
+    const originalRow = data?.costBreakdownRows.find((row) => row.id === "r3");
+    return parseMoneyValue(originalRow?.value);
+  }, [data?.costBreakdownRows]);
+  const adjustedGrandTotal = useMemo(() => {
+    const baseGrandTotal = parseMoneyValue(data?.grandTotal);
+    const nextTotal = baseGrandTotal - originalRawMaterialCost + rawMaterialCost;
+    return arDecimal(nextTotal > 0 ? nextTotal : 0);
+  }, [data?.grandTotal, originalRawMaterialCost, rawMaterialCost]);
+  const displayCostBreakdownRows = useMemo(() => {
+    if (!data) return [];
+    return data.costBreakdownRows.map((row) => {
+      if (row.id !== "r3") return row;
+      return {
+        ...row,
+        label: `تكلفة المواد الخام (${productMaterials.length} مادة)`,
+        value: `${arDecimal(rawMaterialCost)} ج.م`,
+      };
+    });
+  }, [data, productMaterials.length, rawMaterialCost]);
   const paginatedReports = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filteredReports.slice(start, start + pageSize);
@@ -233,6 +316,64 @@ const ProductDetailsContent: React.FC = () => {
   useEffect(() => {
     setPage(1);
   }, [lineFilter, supervisorFilter, fromDate, toDate, activePeriod]);
+
+  const openAddMaterialModal = useCallback(() => {
+    setMaterialError(null);
+    if (rawMaterialOptions.length === 0) {
+      const opened = openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE, {
+        mode: "create",
+        onSaved: async () => {
+          await loadRawMaterials();
+          setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
+          setShowMaterialModal(true);
+        },
+      });
+      if (opened) return;
+    }
+    setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
+    setShowMaterialModal(true);
+  }, [rawMaterialOptions.length, openModal, loadRawMaterials]);
+
+  const closeMaterialModal = useCallback(() => {
+    if (savingMaterial) return;
+    setShowMaterialModal(false);
+    setMaterialError(null);
+  }, [savingMaterial]);
+
+  const handleSaveMaterial = useCallback(async () => {
+    if (!id || savingMaterial) return;
+    const selected = rawMaterialOptions.find((row) => row.id === materialForm.materialId);
+    if (!selected) {
+      setMaterialError("اختر مادة خام صحيحة من القائمة.");
+      return;
+    }
+    if (materialForm.quantityUsed <= 0) {
+      setMaterialError("أدخل كمية أكبر من صفر.");
+      return;
+    }
+    if (materialForm.unitCost < 0) {
+      setMaterialError("سعر الوحدة لا يمكن أن يكون أقل من صفر.");
+      return;
+    }
+    setSavingMaterial(true);
+    setMaterialError(null);
+    try {
+      await productMaterialService.create({
+        productId: id,
+        materialId: selected.id,
+        materialName: selected.name,
+        quantityUsed: Number(materialForm.quantityUsed || 0),
+        unitCost: Number(materialForm.unitCost || 0),
+      });
+      await loadProductMaterials();
+      setShowMaterialModal(false);
+      setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
+    } catch {
+      setMaterialError("تعذر حفظ المادة الخام. حاول مرة أخرى.");
+    } finally {
+      setSavingMaterial(false);
+    }
+  }, [id, savingMaterial, rawMaterialOptions, materialForm, loadProductMaterials]);
 
   const headerBadge = data?.header.status === "out_of_stock"
     ? { label: "نفد المخزون", bg: TOKENS.red.bg, text: TOKENS.red.text }
@@ -616,7 +757,7 @@ const ProductDetailsContent: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.costBreakdownRows.map((row) => {
+                  {displayCostBreakdownRows.map((row) => {
                     if (row.type === "section") {
                       return (
                         <tr key={row.id}>
@@ -658,7 +799,7 @@ const ProductDetailsContent: React.FC = () => {
 
             <div className="mt-3 p-3" style={{ borderRadius: 8, background: TOKENS.teal.bg }}>
               <p className="text-sm font-medium" style={{ color: TOKENS.teal.text }}>إجمالي التكلفة المحسوبة (/قطعة)</p>
-              <p className="text-xl font-medium" style={{ color: TOKENS.teal.text }}>{data.grandTotal}</p>
+              <p className="text-xl font-medium" style={{ color: TOKENS.teal.text }}>{adjustedGrandTotal} ج.م</p>
             </div>
           </div>
         )}
@@ -673,6 +814,7 @@ const ProductDetailsContent: React.FC = () => {
               <h2 className="text-sm font-medium text-[#252521]">المواد الخام المستخدمة</h2>
               <button
                 type="button"
+                onClick={openAddMaterialModal}
                 className="inline-flex items-center gap-1 px-3 py-2 text-sm font-normal"
                 style={{ ...ELEMENT_STYLE, color: TOKENS.teal.text, background: TOKENS.teal.bg }}
               >
@@ -680,13 +822,144 @@ const ProductDetailsContent: React.FC = () => {
                 إضافة مادة
               </button>
             </div>
-            <div className="py-8 text-center">
-              <Boxes size={32} className="mx-auto text-[#B4B2A9]" />
-              <p className="mt-2 text-sm font-normal text-[#7A7A74]">{data.rawMaterialsEmptyMessage}</p>
-            </div>
+            {materialsLoading ? (
+              <SectionSkeleton rows={3} height={32} />
+            ) : productMaterials.length === 0 ? (
+              <div className="py-8 text-center">
+                <Boxes size={32} className="mx-auto text-[#B4B2A9]" />
+                <p className="mt-2 text-sm font-normal text-[#7A7A74]">{data.rawMaterialsEmptyMessage}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[660px] text-right">
+                  <thead>
+                    <tr>
+                      <th className="border-b px-3 py-2 text-xs font-medium text-[#444441]" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
+                        المادة الخام
+                      </th>
+                      <th className="border-b px-3 py-2 text-xs font-medium text-[#444441]" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
+                        الكمية
+                      </th>
+                      <th className="border-b px-3 py-2 text-xs font-medium text-[#444441]" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
+                        سعر الوحدة
+                      </th>
+                      <th className="border-b px-3 py-2 text-xs font-medium text-[#444441]" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
+                        الإجمالي
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productMaterials.map((row) => (
+                      <tr key={row.id || `${row.materialId}-${row.materialName}`}>
+                        <td className="border-b px-3 py-2 text-sm font-normal text-[#252521]" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+                          {row.materialName}
+                        </td>
+                        <td className="border-b px-3 py-2 text-sm font-normal text-[#252521]" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+                          {arDecimal(Number(row.quantityUsed || 0), 2)}
+                        </td>
+                        <td className="border-b px-3 py-2 text-sm font-normal text-[#252521]" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+                          {arDecimal(Number(row.unitCost || 0), 2)} ج.م
+                        </td>
+                        <td className="border-b px-3 py-2 text-sm font-medium text-[#252521]" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+                          {arDecimal(Number(row.quantityUsed || 0) * Number(row.unitCost || 0), 2)} ج.م
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </section>
+
+      {showMaterialModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={closeMaterialModal}>
+          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl" style={ELEMENT_STYLE} onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
+              <h3 className="text-sm font-medium text-[#252521]">إضافة مادة خام</h3>
+              <button
+                type="button"
+                onClick={closeMaterialModal}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#7A7A74] hover:bg-[#F1EFE8]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 px-4 py-4">
+              {materialError && (
+                <div className="rounded-md bg-[#FCEBEB] px-3 py-2 text-xs font-medium text-[#791F1F]">{materialError}</div>
+              )}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-[#444441]">المادة الخام</label>
+                <select
+                  value={materialForm.materialId}
+                  onChange={(event) => setMaterialForm((prev) => ({ ...prev, materialId: event.target.value }))}
+                  className="h-10 w-full rounded-md px-3 text-sm font-normal text-[#252521]"
+                  style={ELEMENT_STYLE}
+                >
+                  <option value="">اختر مادة خام</option>
+                  {rawMaterialOptions.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name} {row.code ? `(${row.code})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-[#444441]">الكمية المستخدمة</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={materialForm.quantityUsed || ""}
+                    onChange={(event) =>
+                      setMaterialForm((prev) => ({ ...prev, quantityUsed: Number(event.target.value || 0) }))
+                    }
+                    className="h-10 w-full rounded-md px-3 text-sm font-normal text-[#252521]"
+                    style={ELEMENT_STYLE}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-[#444441]">سعر الوحدة (ج.م)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={materialForm.unitCost || ""}
+                    onChange={(event) =>
+                      setMaterialForm((prev) => ({ ...prev, unitCost: Number(event.target.value || 0) }))
+                    }
+                    className="h-10 w-full rounded-md px-3 text-sm font-normal text-[#252521]"
+                    style={ELEMENT_STYLE}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t px-4 py-3" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
+              <button
+                type="button"
+                onClick={closeMaterialModal}
+                className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-normal text-[#444441]"
+                style={ELEMENT_STYLE}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveMaterial()}
+                disabled={savingMaterial}
+                className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-70"
+                style={{ border: "none", borderRadius: 8, background: TOKENS.teal.base }}
+              >
+                {savingMaterial ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                حفظ المادة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section style={CARD_STYLE}>
         {isLoading || !sectionReady.summary || !data ? (

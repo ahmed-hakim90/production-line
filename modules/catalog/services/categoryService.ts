@@ -11,10 +11,13 @@ import {
 import { db, isConfigured } from '../../auth/services/firebase';
 import { productService } from '../../production/services/productService';
 
+export type CategoryType = 'product' | 'raw_material';
+
 export interface ProductCategory {
   id?: string;
   name: string;
   code?: string;
+  type?: CategoryType;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -32,6 +35,9 @@ const normalizeCategoryName = (value: string) =>
     .replace(/ى/g, 'ي')
     .replace(/\s+/g, ' ');
 
+export const getEffectiveCategoryType = (category?: Partial<ProductCategory>): CategoryType =>
+  category?.type === 'raw_material' ? 'raw_material' : 'product';
+
 export const categoryService = {
   async getAll(): Promise<ProductCategory[]> {
     if (!isConfigured) return [];
@@ -44,6 +50,7 @@ export const categoryService = {
     if (!isConfigured) return null;
     const ref = await addDoc(collection(db, COLLECTION), {
       ...payload,
+      type: payload.type === 'raw_material' ? 'raw_material' : 'product',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -59,6 +66,11 @@ export const categoryService = {
     } as any);
   },
 
+  async getByType(type: CategoryType): Promise<ProductCategory[]> {
+    const rows = await this.getAll();
+    return rows.filter((row) => getEffectiveCategoryType(row) === type);
+  },
+
   async delete(id: string): Promise<void> {
     if (!isConfigured || !id) return;
     await deleteDoc(doc(db, COLLECTION, id));
@@ -67,7 +79,7 @@ export const categoryService = {
   async seedFromProductsModel(): Promise<{ created: number; skipped: number }> {
     if (!isConfigured) return { created: 0, skipped: 0 };
     const [categories, products] = await Promise.all([
-      this.getAll(),
+      this.getByType('product'),
       productService.getAll(),
     ]);
     const byNormalized = new Map<string, ProductCategory>();
@@ -88,7 +100,7 @@ export const categoryService = {
         skipped += 1;
         continue;
       }
-      const id = await this.create({ name, isActive: true });
+      const id = await this.create({ name, type: 'product', isActive: true });
       if (id) {
         created += 1;
       } else {

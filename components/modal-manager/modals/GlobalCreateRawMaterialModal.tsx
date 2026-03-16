@@ -6,6 +6,7 @@ import type { RawMaterial } from '../../../modules/inventory/types';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { categoryService } from '../../../modules/catalog/services/categoryService';
 
 type Message = { type: 'success' | 'error'; text: string } | null;
 
@@ -14,6 +15,8 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
   const { can } = usePermission();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [unit, setUnit] = useState('kg');
   const [minStock, setMinStock] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -32,16 +35,41 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
     if (isEditMode && editingRawMaterial) {
       setName(editingRawMaterial.name || '');
       setCode(editingRawMaterial.code || '');
+      setCategoryName(editingRawMaterial.categoryName || '');
       setUnit(editingRawMaterial.unit || 'unit');
       setMinStock(Number(editingRawMaterial.minStock || 0));
     } else {
       setName('');
       setCode('');
+      setCategoryName('');
       setUnit('kg');
       setMinStock(0);
     }
     setMessage(null);
   }, [isOpen, isEditMode, editingRawMaterial]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadCategoryOptions = async () => {
+      try {
+        const rows = await categoryService.getByType('raw_material');
+        if (cancelled) return;
+        const names = rows
+          .filter((row) => row.isActive !== false)
+          .map((row) => String(row.name || '').trim())
+          .filter(Boolean);
+        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
+      } catch {
+        if (cancelled) return;
+        setCategoryOptions([]);
+      }
+    };
+    void loadCategoryOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
   if (!can('inventory.items.manage')) return null;
@@ -55,6 +83,7 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
   const handleSave = async () => {
     const cleanName = name.trim();
     const cleanCode = code.trim().toUpperCase();
+    const cleanCategoryName = categoryName.trim();
     const cleanUnit = unit.trim() || 'unit';
     if (!cleanName || !cleanCode) {
       setMessage({ type: 'error', text: 'اسم المادة الخام والكود مطلوبان.' });
@@ -67,6 +96,7 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
         await rawMaterialService.update(editingRawMaterial.id, {
           name: cleanName,
           code: cleanCode,
+          categoryName: cleanCategoryName || undefined,
           unit: cleanUnit,
           minStock: Number(minStock || 0),
         });
@@ -74,6 +104,7 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
         const id = await rawMaterialService.create({
           name: cleanName,
           code: cleanCode,
+          categoryName: cleanCategoryName || undefined,
           unit: cleanUnit,
           minStock: Number(minStock || 0),
           isActive: true,
@@ -125,6 +156,18 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
               onChange={(e) => setUnit(e.target.value)}
             />
           </div>
+          <select
+            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"
+            value={categoryName}
+            onChange={(e) => setCategoryName(e.target.value)}
+          >
+            <option value="">فئة المادة الخام (اختياري)</option>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
           <input
             type="number"
             className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"

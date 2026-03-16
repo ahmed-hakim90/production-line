@@ -66,16 +66,30 @@ export interface LeaveConfig extends ConfigMetadata {
   defaultAnnualBalance: number;
   defaultSickBalance: number;
   defaultEmergencyBalance: number;
-  leaveTypes: {
-    key: string;
-    label: string;
-    isPaid: boolean;
-  }[];
+  leaveTypes: LeaveTypeDefinition[];
   allowNegativeBalance: boolean;
   carryOverLimit: number;
   maxConsecutiveDays: number;
   requireDocumentForSick: boolean;
   sickDocumentThresholdDays: number;
+}
+
+export type LeaveSalaryImpact =
+  | 'full_paid'
+  | 'deduct_daily'
+  | 'deduct_percent'
+  | 'unpaid';
+
+export interface LeaveTypeDefinition {
+  type: 'annual' | 'sick' | 'unpaid' | 'emergency';
+  labelAr: string;
+  defaultBalance: number;
+  salaryImpact: LeaveSalaryImpact;
+  deductPercent: number;
+  requiresApproval: boolean;
+  maxConsecutiveDays: number;
+  carryOverAllowed: boolean;
+  maxCarryOverDays: number;
 }
 
 // ─── Module: Loan ───────────────────────────────────────────────────────────

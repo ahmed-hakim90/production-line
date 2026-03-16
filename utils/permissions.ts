@@ -53,6 +53,8 @@ export type Permission =
   | 'loan.view' | 'loan.create' | 'loan.manage' | 'loan.disburse'
   | 'approval.view' | 'approval.manage' | 'approval.delegate' | 'approval.escalate' | 'approval.override'
   | 'payroll.view' | 'payroll.generate' | 'payroll.finalize' | 'payroll.lock'
+  | 'payroll.accounts.view' | 'payroll.accounts.disburse'
+  | 'hr.evaluation.view' | 'hr.evaluation.create' | 'hr.evaluation.approve'
   | 'hrDashboard.view'
   | 'vehicles.view' | 'vehicles.manage'
   | 'hrSettings.view' | 'hrSettings.edit'
@@ -199,6 +201,11 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'payroll.generate', label: 'إنشاء / احتساب الرواتب' },
       { key: 'payroll.finalize', label: 'اعتماد كشف الرواتب' },
       { key: 'payroll.lock', label: 'قفل الشهر نهائياً' },
+      { key: 'payroll.accounts.view', label: 'عرض صرف الرواتب (الحسابات)' },
+      { key: 'payroll.accounts.disburse', label: 'تأكيد صرف الرواتب' },
+      { key: 'hr.evaluation.view', label: 'عرض تقييم الموظفين' },
+      { key: 'hr.evaluation.create', label: 'إنشاء تقييم موظف' },
+      { key: 'hr.evaluation.approve', label: 'اعتماد مكافآت التقييم' },
       { key: 'hrDashboard.view', label: 'عرض لوحة الموارد البشرية' },
       { key: 'vehicles.view', label: 'عرض المركبات' },
       { key: 'vehicles.manage', label: 'إدارة المركبات' },
@@ -356,6 +363,7 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
       { path: '/attendance/import', icon: 'upload_file', label: 'استيراد الحضور', permission: 'attendance.import' },
       { path: '/attendance/logs', icon: 'event_note', label: 'السجلات الخام', permission: 'attendance.view' },
       { path: '/attendance/daily', icon: 'fact_check', label: 'الحضور اليومي', permission: 'attendance.view' },
+      { path: '/attendance/monthly', icon: 'analytics', label: 'التقرير الشهري', permission: 'attendance.view' },
       { path: '/attendance/sync', icon: 'sync', label: 'مزامنة الحضور', permission: 'attendance.sync' },
       { path: '/leave-requests', icon: 'beach_access', label: 'الإجازات', permission: 'leave.view' },
       { path: '/loan-requests', icon: 'payments', label: 'السُلف', permission: 'loan.view' },
@@ -365,6 +373,8 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
       { path: '/hr-transactions', icon: 'swap_vert', label: 'سجل الحركات', permission: 'hrDashboard.view' },
       { path: '/vehicles', icon: 'directions_bus', label: 'المركبات', permission: 'vehicles.view' },
       { path: '/payroll', icon: 'receipt_long', label: 'كشف الرواتب', permission: 'payroll.view' },
+      { path: '/payroll/accounts', icon: 'payments', label: 'صرف الرواتب', permission: 'payroll.accounts.view' },
+      { path: '/hr/evaluations', icon: 'stars', label: 'تقييم الموظفين', permission: 'hr.evaluation.view' },
       { path: '/hr-settings', icon: 'tune', label: 'إعدادات HR', permission: 'hrSettings.view' },
     ],
   },
@@ -421,7 +431,7 @@ const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   production: ['/lines', '/production-plans', '/work-orders', '/supervisors', '/supervisor-line-assignments', '/production-workers', '/reports', '/quick-action'],
   inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/inventory/movements', '/inventory/counts'],
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
-  hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/attendance/logs', '/attendance/daily', '/attendance/sync', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/hr-settings'],
+  hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/attendance/logs', '/attendance/daily', '/attendance/monthly', '/attendance/sync', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/payroll/accounts', '/hr/evaluations', '/hr-settings'],
   costs: ['/cost-centers', '/cost-settings', '/costs/assets', '/costs/depreciation-report'],
   system: ['/system/users', '/roles', '/activity-log', '/operations-monitor', '/settings'],
 };
@@ -508,12 +518,15 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/attendance/import': 'attendance.import',
   '/attendance/logs': 'attendance.view',
   '/attendance/daily': 'attendance.view',
+  '/attendance/monthly': 'attendance.view',
   '/attendance/sync': 'attendance.sync',
   '/leave-requests': 'leave.view',
   '/loan-requests': 'loan.view',
   '/approval-center': 'approval.view',
   '/delegations': 'approval.delegate',
   '/payroll': 'payroll.view',
+  '/payroll/accounts': 'payroll.accounts.view',
+  '/hr/evaluations': 'hr.evaluation.view',
   '/hr-dashboard': 'hrDashboard.view',
   '/hr-transactions': 'hrDashboard.view',
   '/employee-financials': 'hrSettings.view',

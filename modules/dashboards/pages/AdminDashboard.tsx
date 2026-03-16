@@ -960,7 +960,7 @@ export const AdminDashboard: React.FC = () => {
       .filter((w) => w.status === 'pending' || w.status === 'in_progress')
       .map((w) => {
         const producedFromLive = liveProduction[w.id ?? '']?.completedUnits;
-        const producedNow = producedFromLive ?? w.actualProducedFromScans ?? w.producedQuantity ?? 0;
+        const producedNow = producedFromLive ?? w.actualProducedFromScans ?? w.scanSummary?.completedUnits ?? w.producedQuantity ?? 0;
         return {
           produced: producedNow,
           line: _rawLines.find((l) => l.id === w.lineId)?.name ?? '—',
@@ -990,7 +990,7 @@ export const AdminDashboard: React.FC = () => {
     }
 
     const rows = activeWOs.map((wo) => {
-      const producedNow = liveProduction[wo.id ?? '']?.completedUnits ?? wo.actualProducedFromScans ?? wo.producedQuantity ?? 0;
+      const producedNow = liveProduction[wo.id ?? '']?.completedUnits ?? wo.actualProducedFromScans ?? wo.scanSummary?.completedUnits ?? wo.producedQuantity ?? 0;
       const productAvgDaily = Math.max(0, Number(_rawProducts.find((p) => p.id === wo.productId)?.avgDailyProduction || 0));
       const execution = calculateWorkOrderExecutionMetrics({
         quantity: wo.quantity,
@@ -1911,7 +1911,7 @@ export const AdminDashboard: React.FC = () => {
         const totalQty = activeWOs.reduce((s, w) => s + w.quantity, 0);
         const totalProduced = activeWOs.reduce((s, w) => {
           const producedFromLive = liveProduction[w.id ?? '']?.completedUnits;
-          const producedNow = producedFromLive ?? w.actualProducedFromScans ?? w.producedQuantity ?? 0;
+          const producedNow = producedFromLive ?? w.actualProducedFromScans ?? w.scanSummary?.completedUnits ?? w.producedQuantity ?? 0;
           return s + producedNow;
         }, 0);
         const overallProgress = totalQty > 0 ? Math.round((totalProduced / totalQty) * 100) : 0;
@@ -1937,7 +1937,9 @@ export const AdminDashboard: React.FC = () => {
                 const lineName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
                 const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
                 const producedFromLive = liveProduction[wo.id ?? '']?.completedUnits;
-                const producedNow = producedFromLive ?? wo.actualProducedFromScans ?? wo.producedQuantity ?? 0;
+                const producedNow = producedFromLive ?? wo.actualProducedFromScans ?? wo.scanSummary?.completedUnits ?? wo.producedQuantity ?? 0;
+                const reportCount = (wo.id ? workOrderCardMetricsData.reportsByWorkOrderId[wo.id]?.length : 0) || 0;
+                const effectiveStatus = wo.status === 'in_progress' && reportCount === 0 ? 'pending' : wo.status;
                 const progress = wo.quantity > 0 ? Math.round((producedNow / wo.quantity) * 100) : 0;
                 const remaining = wo.quantity - producedNow;
                 const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {
@@ -1959,7 +1961,7 @@ export const AdminDashboard: React.FC = () => {
                     key={wo.id}
                     onClick={() => navigate('/work-orders')}
                     className={`min-w-[280px] max-w-[85vw] sm:min-w-0 sm:max-w-none rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${
-                      wo.status === 'in_progress'
+                      effectiveStatus === 'in_progress'
                         ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40'
                         : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'
                     }`}
@@ -1969,8 +1971,8 @@ export const AdminDashboard: React.FC = () => {
                         {renderDashboardIcon('assignment', 'text-amber-500 text-lg')}
                         <span className="text-sm font-bold text-amber-700">أمر شغل #{wo.workOrderNumber}</span>
                       </div>
-                      <Badge variant={wo.status === 'in_progress' ? 'warning' : 'neutral'}>
-                        {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
+                      <Badge variant={effectiveStatus === 'in_progress' ? 'warning' : 'neutral'}>
+                        {effectiveStatus === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
                       </Badge>
                     </div>
 

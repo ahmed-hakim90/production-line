@@ -2,10 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
-import { employeeService } from '../employeeService';
-import { leaveBalanceService } from '../leaveService';
-import { leaveRequestService } from '../leaveService';
+import { leaveBalanceService, leaveRequestService } from '../leaveService';
 import { loanService } from '../loanService';
+import { employeeService } from '../employeeService';
 import {
   getAllRequests,
   getPendingApprovals,
@@ -23,7 +22,9 @@ import type {
   ApprovalRequestStatus,
   ApprovalChainSnapshot,
 } from '../approval/types';
-import { LEAVE_TYPE_LABELS } from '../types';
+import { LEAVE_TYPE_LABELS, type ApprovalChainItem, type ApprovalStatus } from '../types';
+import { ApprovalEmployeeContext } from '../components/ApprovalEmployeeContext';
+import { HRNotificationBell } from '../components/HRNotificationBell';
 
 const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; color: string; bg: string }> = {
   overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/30' },
@@ -61,6 +62,22 @@ function formatRequestDetail(req: FirestoreApprovalRequest): string {
     return `${data.totalInstallments || 0} قسط × ${(data.installmentAmount || 0).toLocaleString('en-US')} — بدء: ${data.startMonth || '—'}`;
   }
   return data.description || '';
+}
+
+function mapApprovalStatusToLegacy(status: ApprovalRequestStatus): ApprovalStatus {
+  if (status === 'approved') return 'approved';
+  if (status === 'rejected' || status === 'cancelled') return 'rejected';
+  return 'pending';
+}
+
+function mapSnapshotChainToLegacy(chain: ApprovalChainSnapshot[]): ApprovalChainItem[] {
+  return chain.map((step) => ({
+    approverEmployeeId: step.approverEmployeeId,
+    level: step.level,
+    status: step.status === 'approved' || step.status === 'skipped' ? 'approved' : step.status === 'rejected' ? 'rejected' : 'pending',
+    actionDate: step.actionDate,
+    notes: step.notes || '',
+  }));
 }
 
 const StepIndicator: React.FC<{ chain: ApprovalChainSnapshot[]; currentStep: number }> = ({ chain, currentStep }) => {
@@ -101,9 +118,14 @@ const StepIndicator: React.FC<{ chain: ApprovalChainSnapshot[]; currentStep: num
 
 export const ApprovalCenter: React.FC = () => {
   const { can } = usePermission();
+  const uid = useAppStore((s) => s.uid);
   const permissions = useAppStore((s) => s.userPermissions);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const [resolvedApprover, setResolvedApprover] = useState<{ id: string; name: string }>({
+    id: currentEmployee?.id || '',
+    name: currentEmployee?.name || userDisplayName || '',
+  });
 
   const [requests, setRequests] = useState<FirestoreApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,9 +134,42 @@ export const ApprovalCenter: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionNotes, setActionNotes] = useState<Record<string, string>>({});
   const [overdueMap, setOverdueMap] = useState<Record<string, boolean>>({});
+  const [expandedContext, setExpandedContext] = useState<Set<string>>(new Set());
 
-  const approverEmployeeId = currentEmployee?.id || '';
-  const approverName = currentEmployee?.name || userDisplayName || '';
+  useEffect(() => {
+    let active = true;
+    const resolveApprover = async () => {
+      if (currentEmployee?.id) {
+        if (active) {
+          setResolvedApprover({
+            id: currentEmployee.id,
+            name: currentEmployee.name || userDisplayName || '',
+          });
+        }
+        return;
+      }
+      if (!uid) {
+        if (active) setResolvedApprover({ id: '', name: userDisplayName || '' });
+        return;
+      }
+      try {
+        const linkedEmployee = await employeeService.getByUserId(uid);
+        if (active) {
+          setResolvedApprover({
+            id: linkedEmployee?.id || '',
+            name: linkedEmployee?.name || userDisplayName || '',
+          });
+        }
+      } catch {
+        if (active) setResolvedApprover({ id: '', name: userDisplayName || '' });
+      }
+    };
+    void resolveApprover();
+    return () => { active = false; };
+  }, [currentEmployee?.id, currentEmployee?.name, uid, userDisplayName]);
+
+  const approverEmployeeId = resolvedApprover.id;
+  const approverName = resolvedApprover.name || currentEmployee?.name || userDisplayName || '';
   const viewAll = canViewAllRequests(permissions);
   const role = resolveApprovalRole(permissions);
 
@@ -177,13 +232,29 @@ export const ApprovalCenter: React.FC = () => {
       );
       if (!result.success) { alert(result.error || 'حدث خطأ'); return; }
 
-      if (req.requestType === 'leave' && req.sourceRequestId) {
-        const leaveReq = await leaveRequestService.getById(req.sourceRequestId);
-        if (leaveReq) {
-          const updatedRequest = await getAllRequests().then((all) => all.find((r) => r.id === req.id));
-          if (updatedRequest?.status === 'approved') {
-            await leaveBalanceService.deductBalance(leaveReq.employeeId, leaveReq.leaveType, leaveReq.totalDays);
+      const updatedRequest = await getAllRequests().then((all) => all.find((r) => r.id === req.id));
+      if (updatedRequest?.sourceRequestId) {
+        const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
+        const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
+        if (updatedRequest.requestType === 'leave') {
+          await leaveRequestService.updateApproval(
+            updatedRequest.sourceRequestId,
+            mappedChain,
+            mappedStatus,
+            mappedStatus,
+          );
+          if (updatedRequest.status === 'approved') {
+            const leaveReq = await leaveRequestService.getById(updatedRequest.sourceRequestId);
+            if (leaveReq) {
+              await leaveBalanceService.deductBalance(leaveReq.employeeId, leaveReq.leaveType, leaveReq.totalDays);
+            }
           }
+        } else if (updatedRequest.requestType === 'loan') {
+          await loanService.updateApproval(
+            updatedRequest.sourceRequestId,
+            mappedChain,
+            mappedStatus,
+          );
         }
       }
 
@@ -205,6 +276,25 @@ export const ApprovalCenter: React.FC = () => {
         caller,
       );
       if (!result.success) { alert(result.error || 'حدث خطأ'); return; }
+      const updatedRequest = await getAllRequests().then((all) => all.find((r) => r.id === req.id));
+      if (updatedRequest?.sourceRequestId) {
+        const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
+        const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
+        if (updatedRequest.requestType === 'leave') {
+          await leaveRequestService.updateApproval(
+            updatedRequest.sourceRequestId,
+            mappedChain,
+            mappedStatus,
+            mappedStatus,
+          );
+        } else if (updatedRequest.requestType === 'loan') {
+          await loanService.updateApproval(
+            updatedRequest.sourceRequestId,
+            mappedChain,
+            mappedStatus,
+          );
+        }
+      }
       setActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
       await fetchData();
     } catch (err) {
@@ -223,6 +313,25 @@ export const ApprovalCenter: React.FC = () => {
         caller,
       );
       if (!result.success) { alert(result.error || 'حدث خطأ'); return; }
+      const updatedRequest = await getAllRequests().then((all) => all.find((r) => r.id === req.id));
+      if (updatedRequest?.sourceRequestId) {
+        const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
+        const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
+        if (updatedRequest.requestType === 'leave') {
+          await leaveRequestService.updateApproval(
+            updatedRequest.sourceRequestId,
+            mappedChain,
+            mappedStatus,
+            mappedStatus,
+          );
+        } else if (updatedRequest.requestType === 'loan') {
+          await loanService.updateApproval(
+            updatedRequest.sourceRequestId,
+            mappedChain,
+            mappedStatus,
+          );
+        }
+      }
       await fetchData();
     } catch (err) {
       console.error('Cancel error:', err);
@@ -238,6 +347,15 @@ export const ApprovalCenter: React.FC = () => {
     const step = req.approvalChain[req.currentStep];
     return step.approverEmployeeId === approverEmployeeId || step.delegatedTo === approverEmployeeId;
   }, [approverEmployeeId, role]);
+
+  const toggleContext = useCallback((requestId: string) => {
+    setExpandedContext((prev) => {
+      const next = new Set(prev);
+      if (next.has(requestId)) next.delete(requestId);
+      else next.add(requestId);
+      return next;
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     let result = requests;
@@ -280,21 +398,20 @@ export const ApprovalCenter: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">
-            مركز الموافقات
-          </h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">مركز الموافقات</h2>
           <p className="text-sm text-[var(--color-text-muted)] font-medium">
             مراجعة واعتماد الطلبات — {role === 'admin' ? 'مدير النظام' : role === 'hr' ? 'الموارد البشرية' : role === 'manager' ? 'مدير' : 'موظف'}
           </p>
         </div>
-        {actionableCount > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-2 flex items-center gap-2">
-            <span className="material-icons-round text-amber-500 text-lg">notifications_active</span>
-            <span className="text-sm font-bold text-amber-700">
-              {actionableCount} طلب بانتظار إجراءك
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {actionableCount > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-2 flex items-center gap-2">
+              <span className="material-icons-round text-amber-500 text-lg">notifications_active</span>
+              <span className="text-sm font-bold text-amber-700">{actionableCount} طلب بانتظار إجراءك</span>
+            </div>
+          )}
+          {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -403,10 +520,24 @@ export const ApprovalCenter: React.FC = () => {
                         <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                           <span className="font-bold">{req.employeeName}</span> — {formatRequestDetail(req)}
                         </p>
+                        {canAct && (
+                          <button onClick={() => toggleContext(req.id!)} className="text-xs text-primary font-medium flex items-center gap-1 mt-2">
+                            <span className="material-icons-round text-sm">{expandedContext.has(req.id!) ? 'expand_less' : 'info'}</span>
+                            {expandedContext.has(req.id!) ? 'إخفاء التفاصيل' : 'عرض بيانات الموظف'}
+                          </button>
+                        )}
                       </div>
                     </div>
                     <StepIndicator chain={req.approvalChain} currentStep={req.currentStep} />
                   </div>
+
+                  {canAct && expandedContext.has(req.id!) && (
+                    <ApprovalEmployeeContext
+                      employeeId={req.employeeId}
+                      requestType={req.requestType}
+                      requestData={req.requestData || {}}
+                    />
+                  )}
 
                   {canAct && (
                     <div className="mt-4 pt-4 border-t border-[var(--color-border)]">

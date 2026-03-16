@@ -75,6 +75,15 @@ const renderAuthIcon = (name: string, className?: string, size = 20) => {
 };
 
 const playNotificationTone = () => {
+  try {
+    const audio = new Audio('/sounds/notification.mp3');
+    audio.volume = 0.5;
+    void audio.play().catch(() => {});
+    return;
+  } catch {
+    // Fall through to oscillator fallback when Audio is unavailable.
+  }
+
   const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtx) return;
 
@@ -233,6 +242,7 @@ const App: React.FC = () => {
   const syncAttendanceFromDevices = useAppStore((s) => s.syncAttendanceFromDevices);
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const uid = useAppStore((s) => s.uid);
+  const addRealtimeNotification = useAppStore((s) => s.addRealtimeNotification);
   const userEmail = useAppStore((s) => s.userEmail);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userRoleId = useAppStore((s) => s.userRoleId);
@@ -393,9 +403,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let unsub = () => {};
-    void pushService.subscribeForeground((title, body) => {
+    void pushService.subscribeForeground(({ title, body, data }) => {
+      addRealtimeNotification({
+        title,
+        body,
+        type: data.type || 'manual_broadcast',
+        referenceId: data.reportId || data.referenceId,
+        url: data.url || data.link,
+        data,
+      });
       if (Notification.permission === 'granted') {
-        new Notification(title, { body });
+        new Notification(title, { body, tag: data.notificationId || data.reportId || 'erp-notification' });
       }
       playNotificationTone();
     }).then((fn) => {
@@ -414,7 +432,7 @@ const App: React.FC = () => {
       unsub();
       navigator.serviceWorker?.removeEventListener('message', onWorkerMessage);
     };
-  }, []);
+  }, [addRealtimeNotification]);
 
   useEffect(() => {
     const nativeAlert = window.alert.bind(window);

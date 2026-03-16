@@ -65,9 +65,9 @@ import type {
 } from '../types';
 import { captureConfigVersionSnapshot } from '../config/configService';
 import { getConfigModule } from '../config';
-import { normalizeLeaveTypes } from '../leaveTypes';
 import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
 import type { AttendanceRecord } from '@/modules/attendance/types';
+import type { LeaveConfig, LeaveTypeDefinition } from '../config/types';
 
 const DEFAULT_BATCH_SIZE = 50;
 
@@ -224,7 +224,7 @@ async function calculateEmployeePayroll(
   attendance: EmployeeAttendanceSummary,
   month: string,
   hrSettings: FirestoreHRSettings,
-  leaveTypeIsPaidMap: Record<string, boolean>,
+  leaveTypeConfig: LeaveTypeDefinition[],
   penaltyRules: FirestorePenaltyRule[],
   lateRules: FirestoreLateRule[],
   allowanceTypes: FirestoreAllowanceType[],
@@ -252,23 +252,38 @@ async function calculateEmployeePayroll(
     hrSettings.overtimeMultiplier,
   );
 
-  // 4. Leave impact (unpaid leave deduction)
+  // 4. Leave impact — reads leave type config salary impact
   const approvedLeaves = await getApprovedLeaves(employee.employeeId, month);
+  const leaveConfig = leaveTypeConfig ?? [];
+  const dailyRate = employee.baseSalary / (attendance.workingDays || 30);
+  let leaveDeduction = 0;
   let unpaidLeaveDays = 0;
   for (const leave of approvedLeaves) {
-    const typeFoundInMap = Object.prototype.hasOwnProperty.call(leaveTypeIsPaidMap, leave.leaveType);
-    const shouldDeduct = typeFoundInMap
-      ? !leaveTypeIsPaidMap[leave.leaveType]
-      : (typeof leave.leaveTypeIsPaid === 'boolean'
-          ? !leave.leaveTypeIsPaid
-          : (leave.leaveType === 'unpaid' || leave.affectsSalary === true));
+    const leaveDef = leaveConfig.find((lt) => lt.type === leave.leaveType);
+    const impact = leaveDef?.salaryImpact
+      ?? (leave.leaveType === 'unpaid' || leave.affectsSalary ? 'unpaid' : 'full_paid');
 
-    if (shouldDeduct) {
-      unpaidLeaveDays += leave.totalDays;
+    switch (impact) {
+      case 'full_paid':
+        break;
+      case 'deduct_daily':
+        leaveDeduction += Math.round(dailyRate * leave.totalDays * 100) / 100;
+        unpaidLeaveDays += leave.totalDays;
+        break;
+      case 'deduct_percent':
+        leaveDeduction += Math.round(
+          (employee.baseSalary * (leaveDef?.deductPercent ?? 0) / 100)
+          * (leave.totalDays / (attendance.workingDays || 30)) * 100,
+        ) / 100;
+        unpaidLeaveDays += leave.totalDays;
+        break;
+      case 'unpaid':
+        leaveDeduction += Math.round(dailyRate * leave.totalDays * 100) / 100;
+        unpaidLeaveDays += leave.totalDays;
+        break;
     }
   }
-  const dailyRate = employee.baseSalary / (attendance.workingDays || 30);
-  const unpaidLeaveDeduction = Math.round(dailyRate * unpaidLeaveDays * 100) / 100;
+  const unpaidLeaveDeduction = Math.round(leaveDeduction * 100) / 100;
 
   // 5. Loan installments
   const installments = await getActiveLoanInstallments(employee.employeeId, month);
@@ -462,7 +477,7 @@ export async function generatePayroll(
 ): Promise<{ payrollMonthId: string; totalProcessed: number; totalGross: number; totalNet: number; totalDeductions: number }> {
   if (!isConfigured) throw new Error('Firebase not configured');
 
-  const { month, generatedBy, employees, batchSize = DEFAULT_BATCH_SIZE } = options;
+  const { month, generatedBy, employees, leaveTypeConfig, batchSize = DEFAULT_BATCH_SIZE } = options;
 
   // Check existing month status
   const existing = await getPayrollMonth(month);
@@ -475,10 +490,13 @@ export async function generatePayroll(
   }
 
   // Fetch all required data in parallel (including config version snapshot)
+  const leaveConfigPromise = leaveTypeConfig
+    ? Promise.resolve(leaveTypeConfig)
+    : getConfigModule('leave').then((config) => (config as LeaveConfig | null)?.leaveTypes ?? []);
   const [hrSettings, leaveConfig, penaltyRules, lateRules, allowanceTypes, attendanceLogs, attendanceRecords, configVersionSnapshot] =
     await Promise.all([
       fetchHRSettings(),
-      getConfigModule('leave'),
+      leaveConfigPromise,
       fetchPenaltyRules(),
       fetchLateRules(),
       fetchAllowanceTypes(),
@@ -488,10 +506,6 @@ export async function generatePayroll(
     ]);
 
   if (!hrSettings) throw new Error('إعدادات الموارد البشرية غير متوفرة. يرجى ضبط الإعدادات أولاً.');
-
-  const leaveTypeIsPaidMap = Object.fromEntries(
-    normalizeLeaveTypes(leaveConfig.leaveTypes).map((type) => [type.key, type.isPaid]),
-  ) as Record<string, boolean>;
 
   // Build attendance summaries
   const attendanceMap = attendanceRecords.length > 0
@@ -556,7 +570,7 @@ export async function generatePayroll(
           attendance,
           month,
           hrSettings,
-          leaveTypeIsPaidMap,
+          leaveConfig,
           penaltyRules,
           lateRules,
           allowanceTypes,

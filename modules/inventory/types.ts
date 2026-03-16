@@ -14,6 +14,7 @@ export interface RawMaterial {
   id?: string;
   name: string;
   code: string;
+  categoryName?: string;
   unit: string;
   minStock: number;
   isActive: boolean;

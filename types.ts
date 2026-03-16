@@ -64,6 +64,9 @@ export interface Employee {
   hasSystemAccess: boolean;
   isActive: boolean;
   code?: string;
+  acNo?: string;
+  shiftType?: 'shift1' | 'shift2' | 'shift3' | 'flexible';
+  workDays?: number[];
 }
 
 // ─── Firestore Document Types (match collection schemas) ────────────────────
@@ -122,6 +125,9 @@ export interface FirestoreEmployee {
   userId?: string;
   email?: string;
   code?: string;
+  acNo?: string;
+  shiftType?: 'shift1' | 'shift2' | 'shift3' | 'flexible';
+  workDays?: number[];
   createdAt?: any;
 }
 
@@ -538,6 +544,7 @@ export interface WorkOrderQualitySummary {
 // ─── Notifications ───────────────────────────────────────────────────────────
 
 export type NotificationType =
+  | 'production_report'
   | 'work_order_assigned'
   | 'work_order_updated'
   | 'work_order_completed'
@@ -789,12 +796,14 @@ export interface PlanSettings {
   finalProductWarehouseId?: string;
   transferApprovalPermission?: string;
   transferDisplayUnit?: 'piece' | 'carton';
+  hrApproverUserIds?: string[];
   allowNegativeDecomposedStock?: boolean;
   allowNegativeFinishedTransferStock?: boolean;
   requireFinishedStockApprovalForReports?: boolean;
   maxWasteThreshold: number;
   efficiencyCalculationMode: 'standard' | 'weighted';
   averageProductionMode: 'daily' | 'weekly' | 'monthly';
+  injectionRawMaterialCategoryKeywords: string;
 }
 
 // ─── General Settings (Branding, Theme, Dashboard Display, Alert Toggles) ────
@@ -874,6 +883,7 @@ export interface AttendanceIntegrationSettings {
   importFilePattern: string;
   watchFactoryId?: string;
   shiftStartTime: string;
+  singlePunchDefaultSplitTime?: string;
   workingMinutesPerDay: number;
   lateGraceMinutes: number;
   overtimeThresholdMinutes: number;
@@ -914,8 +924,14 @@ export interface FirestoreUser {
   displayName: string;
   code?: string;
   roleId: string;
+  role?: string;
   tenantId?: string;
   isActive: boolean;
+  notifications?: {
+    productionReports?: boolean;
+    workOrderAlerts?: boolean;
+    stockAlerts?: boolean;
+  };
   uiPreferences?: {
     modalWorkspace?: {
       items: Array<{

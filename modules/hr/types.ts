@@ -44,6 +44,8 @@ export interface FirestoreShift {
   name: string;
   startTime: string;
   endTime: string;
+  latestCheckInTime?: string;
+  firstCheckOutTime?: string;
   breakMinutes: number;
   lateGraceMinutes: number;
   crossesMidnight: boolean;
@@ -187,6 +189,20 @@ export interface FirestoreAttendanceLog {
   createdFrom: AttendanceSource;
   processedBatchId: string;
   createdAt?: any;
+}
+
+export interface FirestoreAttendanceImportHistory {
+  id?: string;
+  batchId: string;
+  fileName: string;
+  importedBy: string;
+  importedByName: string;
+  importedAt: any;
+  totalPunches: number;
+  processedRecords: number;
+  unmatchedCodes: string[];
+  format: 'zk_standard' | 'zk_export';
+  status: 'completed' | 'partial';
 }
 
 /** A single row parsed from the ZKTeco CSV file */
@@ -387,6 +403,29 @@ export interface FirestoreEmployeeDeduction {
   updatedAt?: any;
 }
 
+export interface HRNotification {
+  id?: string;
+  recipientEmployeeId: string;
+  recipientUserId: string;
+  type: 'new_approval_request' | 'request_approved' | 'request_rejected' | 'payroll_ready';
+  title: string;
+  body: string;
+  requestId?: string;
+  read: boolean;
+  actionUrl: string;
+  createdAt: any;
+}
+
+export interface FirestorePayrollDistribution {
+  id?: string;
+  month: string;
+  distributedAt: any;
+  distributedBy: string;
+  distributedByName: string;
+  employeeCount: number;
+  status: 'distributed' | 'pending_disbursement' | 'disbursed';
+}
+
 export interface EmployeeAllowanceSummary {
   items: { name: string; amount: number; isRecurring: boolean }[];
   total: number;
@@ -395,4 +434,33 @@ export interface EmployeeAllowanceSummary {
 export interface EmployeeDeductionSummary {
   items: { name: string; amount: number; isRecurring: boolean; reason: string }[];
   total: number;
+}
+
+export type PerformanceGrade = 'A' | 'B' | 'C' | 'D';
+
+export interface FirestoreEmployeePerformance {
+  id?: string;
+  employeeId: string;
+  employeeName: string;
+  month: string;
+  attendanceScore: number;
+  punctualityScore: number;
+  presentDays: number;
+  absentDays: number;
+  lateDays: number;
+  totalLateMinutes: number;
+  workingDays: number;
+  productivityScore: number;
+  behaviorScore: number;
+  overallScore: number;
+  grade: PerformanceGrade;
+  bonusEligible: boolean;
+  bonusAmount: number;
+  bonusApproved: boolean;
+  bonusApprovedBy?: string;
+  bonusApprovedAt?: any;
+  notes: string;
+  evaluatedBy: string;
+  evaluatedAt: any;
+  createdAt?: any;
 }

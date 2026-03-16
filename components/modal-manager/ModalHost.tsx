@@ -21,6 +21,8 @@ import { GlobalCreateVehicleModal } from './modals/GlobalCreateVehicleModal';
 import { GlobalOrganizationModal } from './modals/GlobalOrganizationModal';
 import { GlobalDailyWelcomeModal } from './modals/GlobalDailyWelcomeModal';
 import { GlobalSupervisorAssignmentHistoryModal } from './modals/GlobalSupervisorAssignmentHistoryModal';
+import { GlobalAttendanceShiftRulesModal } from './modals/GlobalAttendanceShiftRulesModal';
+import { GlobalAttendanceSignatureFixModal } from './modals/GlobalAttendanceSignatureFixModal';
 
 /**
  * Central host for modal UX layer.
@@ -52,6 +54,8 @@ export const ModalHost: React.FC = () => {
       <GlobalOrganizationModal />
       <GlobalDailyWelcomeModal />
       <GlobalSupervisorAssignmentHistoryModal />
+      <GlobalAttendanceShiftRulesModal />
+      <GlobalAttendanceSignatureFixModal />
     </>
   );
 };

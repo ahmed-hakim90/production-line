@@ -50,7 +50,10 @@ export function WorkOrderDrawer({
 
   const detailOrder = useMemo(() => {
     const targetQty = Number(order.quantity || 0);
-    const producedQty = Number(order.producedQuantity || 0);
+    const producedFromRow = Number(rowView?.order?.producedQuantity || 0);
+    const producedFromOrder = Number(order.producedQuantity || 0);
+    const producedFromScans = Number(order.actualProducedFromScans || order.scanSummary?.completedUnits || 0);
+    const producedQty = Math.max(producedFromRow, producedFromOrder, producedFromScans);
     const plannedUnitCost = targetQty > 0 ? Number(order.estimatedCost || 0) / targetQty : 0;
     const actualUnitCost = producedQty > 0 ? Number(order.actualCost || 0) / producedQty : 0;
     const expectedDate = rowView?.expectedEndLabel && rowView.expectedEndLabel !== '—'

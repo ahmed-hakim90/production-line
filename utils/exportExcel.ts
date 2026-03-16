@@ -8,6 +8,8 @@ import { saveAs } from 'file-saver';
 import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, WorkOrder, WorkOrderStatus, ProductionPlan } from '../types';
 import type { ProductCostBreakdown } from './productCostBreakdown';
 import { formatOperationDateTime, getReportWaste } from './calculations';
+import type { FirestoreAttendanceLog, FirestoreLeaveRequest, FirestoreEmployeeLoan } from '../modules/hr/types';
+import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../modules/hr/types';
 
 interface ReportRow {
   'كود التقرير': string;
@@ -759,3 +761,104 @@ export const exportProductionPlans = (
   const date = new Date().toISOString().slice(0, 10);
   downloadExcel(rows, 'خطط الإنتاج', `خطط-الإنتاج-${date}`);
 };
+
+export function exportAttendanceLogs(
+  logs: FirestoreAttendanceLog[],
+  employeeMap: Map<string, { name: string; code?: string }>,
+  dateRange: string,
+) {
+  const rows = logs.map((log) => {
+    const emp = employeeMap.get(log.employeeId);
+    const checkIn = log.checkIn?.toDate?.() ?? (log.checkIn ? new Date(log.checkIn) : null);
+    const checkOut = log.checkOut?.toDate?.() ?? (log.checkOut ? new Date(log.checkOut) : null);
+    return {
+      'اسم الموظف': emp?.name ?? log.employeeId,
+      'كود الموظف': emp?.code ?? '',
+      'التاريخ': log.date,
+      'وقت الدخول': checkIn ? checkIn.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—',
+      'وقت الخروج': checkOut ? checkOut.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—',
+      'ساعات العمل': log.totalHours ?? 0,
+      'التأخير (دقيقة)': log.lateMinutes ?? 0,
+      'المغادرة المبكرة (دقيقة)': log.earlyLeaveMinutes ?? 0,
+      'الحالة': log.isAbsent ? 'غائب' : log.isWeeklyOff ? 'إجازة أسبوعية' : log.isIncomplete ? 'ناقص' : 'حاضر',
+    };
+  });
+  downloadExcel(rows, 'سجل الحضور', `حضور-${dateRange}`);
+}
+
+export function exportLeaveRequests(
+  requests: FirestoreLeaveRequest[],
+  employeeMap: Map<string, { name: string }>,
+) {
+  const rows = requests.map((r) => ({
+    'اسم الموظف': employeeMap.get(r.employeeId)?.name ?? r.employeeId,
+    'نوع الإجازة': LEAVE_TYPE_LABELS[r.leaveType] ?? r.leaveType,
+    'من تاريخ': r.startDate,
+    'إلى تاريخ': r.endDate,
+    'عدد الأيام': r.totalDays,
+    'الحالة': r.status,
+    'تاريخ الطلب': r.createdAt?.toDate?.()?.toLocaleDateString('ar-EG') ?? '',
+    'ملاحظات': r.reason ?? '',
+  }));
+  downloadExcel(rows, 'طلبات الإجازة', `إجازات-${new Date().toISOString().slice(0, 7)}`);
+}
+
+export function exportLoanRequestsMultiSheet(
+  monthlyAdvance: FirestoreEmployeeLoan[],
+  installment: FirestoreEmployeeLoan[],
+  employeeMap: Map<string, { name?: string; code?: string }>,
+  fileName = `السلف-${new Date().toISOString().slice(0, 10)}`,
+) {
+  const wb = XLSX.utils.book_new();
+  const buildRows = (items: FirestoreEmployeeLoan[]) => items.map((l) => {
+    const emp = employeeMap.get(l.employeeId);
+    return {
+      'كود الموظف': l.employeeCode || emp?.code || '—',
+      'اسم الموظف': l.employeeName || emp?.name || l.employeeId,
+      'النوع': LOAN_TYPE_LABELS[l.loanType],
+      'المبلغ': l.loanAmount,
+      'القسط الشهري': l.installmentAmount,
+      'إجمالي الأقساط': l.totalInstallments,
+      'المتبقي': l.remainingInstallments,
+      'الحالة': l.status,
+      'تم الصرف': l.disbursed ? 'نعم' : 'لا',
+      'السبب': l.reason || '',
+    };
+  });
+
+  const monthlyRows = buildRows(monthlyAdvance);
+  monthlyRows.push({
+    'كود الموظف': '',
+    'اسم الموظف': 'الإجمالي',
+    'النوع': LOAN_TYPE_LABELS.monthly_advance,
+    'المبلغ': monthlyAdvance.reduce((sum, l) => sum + Number(l.loanAmount || 0), 0),
+    'القسط الشهري': monthlyAdvance.reduce((sum, l) => sum + Number(l.installmentAmount || 0), 0),
+    'إجمالي الأقساط': monthlyAdvance.reduce((sum, l) => sum + Number(l.totalInstallments || 0), 0),
+    'المتبقي': monthlyAdvance.reduce((sum, l) => sum + Number(l.remainingInstallments || 0), 0),
+    'الحالة': '',
+    'تم الصرف': '',
+    'السبب': '',
+  });
+
+  const installmentRows = buildRows(installment);
+  installmentRows.push({
+    'كود الموظف': '',
+    'اسم الموظف': 'الإجمالي',
+    'النوع': LOAN_TYPE_LABELS.installment,
+    'المبلغ': installment.reduce((sum, l) => sum + Number(l.loanAmount || 0), 0),
+    'القسط الشهري': installment.reduce((sum, l) => sum + Number(l.installmentAmount || 0), 0),
+    'إجمالي الأقساط': installment.reduce((sum, l) => sum + Number(l.totalInstallments || 0), 0),
+    'المتبقي': installment.reduce((sum, l) => sum + Number(l.remainingInstallments || 0), 0),
+    'الحالة': '',
+    'تم الصرف': '',
+    'السبب': '',
+  });
+
+  const monthlySheet = XLSX.utils.json_to_sheet(monthlyRows);
+  const installmentSheet = XLSX.utils.json_to_sheet(installmentRows);
+  XLSX.utils.book_append_sheet(wb, monthlySheet, 'سلف شهرية');
+  XLSX.utils.book_append_sheet(wb, installmentSheet, 'سلف مقسطة');
+  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `${fileName}.xlsx`);
+}

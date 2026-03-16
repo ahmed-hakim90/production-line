@@ -10,6 +10,8 @@ import { LoanRequests } from '../pages/LoanRequests';
 import { ApprovalCenter } from '../pages/ApprovalCenter';
 import { DelegationManagement } from '../pages/DelegationManagement';
 import { Payroll } from '../pages/Payroll';
+import { PayrollAccounts } from '../pages/PayrollAccounts';
+import { EmployeeEvaluation } from '../pages/EmployeeEvaluation';
 import { EmployeeFinancials } from '../pages/EmployeeFinancials';
 import { EmployeeFinancialOverview } from '../pages/EmployeeFinancialOverview';
 import { HRTransactions } from '../pages/HRTransactions';
@@ -30,6 +32,8 @@ export const HR_ROUTES: AppRouteDef[] = [
   { path: '/approval-center', permission: 'approval.view', component: ApprovalCenter },
   { path: '/delegations', permission: 'approval.delegate', component: DelegationManagement },
   { path: '/payroll', permission: 'payroll.view', component: Payroll },
+  { path: '/payroll/accounts', permission: 'payroll.accounts.view', component: PayrollAccounts },
+  { path: '/hr/evaluations', permission: 'hr.evaluation.view', component: EmployeeEvaluation },
   { path: '/employee-financials', permission: 'hrSettings.view', component: EmployeeFinancials },
   { path: '/employee-financial-overview', permission: 'payroll.view', component: EmployeeFinancialOverview },
   { path: '/hr-transactions', permission: 'hrDashboard.view', component: HRTransactions },

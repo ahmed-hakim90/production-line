@@ -93,8 +93,17 @@ export function validateAction(
   delegateOfEmployeeId?: string,
 ): ActionValidationResult {
   const role = resolveApprovalRole(caller.permissions);
+  const chain = request.approvalChain;
+  const currentStep = request.currentStep;
+  const hasOpenCurrentStep =
+    currentStep >= 0 &&
+    currentStep < chain.length &&
+    chain[currentStep]?.status === 'pending';
 
-  if (request.status === 'approved' || request.status === 'rejected' || request.status === 'cancelled') {
+  if (
+    (request.status === 'approved' || request.status === 'rejected' || request.status === 'cancelled') &&
+    !hasOpenCurrentStep
+  ) {
     return {
       allowed: false,
       isAdminOverride: false,
@@ -105,9 +114,6 @@ export function validateAction(
   if (role === 'admin') {
     return { allowed: true, isAdminOverride: true };
   }
-
-  const chain = request.approvalChain;
-  const currentStep = request.currentStep;
 
   if (currentStep >= chain.length) {
     return {

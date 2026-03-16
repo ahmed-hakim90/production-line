@@ -96,6 +96,18 @@ const PRESET_LABELS: Record<PeriodPreset, string> = {
   custom: 'مخصص',
 };
 
+const resolveWorkOrderProducedNow = (
+  wo: {
+    producedQuantity?: number;
+    actualProducedFromScans?: number;
+    scanSummary?: { completedUnits?: number };
+  },
+): number => {
+  const producedFromOrder = Number(wo.producedQuantity || 0);
+  const producedFromScans = Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0);
+  return Math.max(producedFromOrder, producedFromScans);
+};
+
 export const FactoryManagerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { can } = usePermission();
@@ -540,7 +552,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       const productAvgDaily = Math.max(0, Number(_rawProducts.find((p) => p.id === wo.productId)?.avgDailyProduction || 0));
       const execution = calculateWorkOrderExecutionMetrics({
         quantity: wo.quantity,
-        producedQuantity: wo.actualProducedFromScans ?? wo.producedQuantity ?? 0,
+        producedQuantity: resolveWorkOrderProducedNow(wo),
         targetDate: wo.targetDate,
         createdAt: wo.createdAt,
         today,
@@ -818,7 +830,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
         const totalQty = activeWOs.reduce((s, w) => s + w.quantity, 0);
-        const totalProduced = activeWOs.reduce((s, w) => s + (w.producedQuantity ?? 0), 0);
+        const totalProduced = activeWOs.reduce((s, w) => s + resolveWorkOrderProducedNow(w), 0);
         const overallProgress = totalQty > 0 ? Math.round((totalProduced / totalQty) * 100) : 0;
 
         return (
@@ -840,9 +852,11 @@ export const FactoryManagerDashboard: React.FC = () => {
                 const product = _rawProducts.find((p) => p.id === wo.productId);
                 const lineName = productionLines.find((l) => l.id === wo.lineId)?.name ?? _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
                 const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
-                const progress = wo.quantity > 0 ? Math.round(((wo.producedQuantity ?? 0) / wo.quantity) * 100) : 0;
-                const remaining = wo.quantity - (wo.producedQuantity ?? 0);
-                const producedNow = wo.producedQuantity ?? 0;
+                const producedNow = resolveWorkOrderProducedNow(wo);
+                const reportCount = (wo.id ? workOrderCardMetricsData.reportsByWorkOrderId[wo.id]?.length : 0) || 0;
+                const effectiveStatus = wo.status === 'in_progress' && reportCount === 0 ? 'pending' : wo.status;
+                const progress = wo.quantity > 0 ? Math.round((producedNow / wo.quantity) * 100) : 0;
+                const remaining = Math.max(wo.quantity - producedNow, 0);
                 const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {
                   producedNowRaw: producedNow,
                   lineDailyWorkingHours: Number(_rawLines.find((l) => l.id === wo.lineId)?.dailyWorkingHours || 0),
@@ -858,14 +872,14 @@ export const FactoryManagerDashboard: React.FC = () => {
                   : '—';
 
                 return (
-                  <div key={wo.id} onClick={() => navigate('/work-orders')} className={`min-w-[280px] max-w-[85vw] sm:min-w-0 sm:max-w-none rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${wo.status === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40' : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'}`}>
+                  <div key={wo.id} onClick={() => navigate('/work-orders')} className={`min-w-[280px] max-w-[85vw] sm:min-w-0 sm:max-w-none rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${effectiveStatus === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40' : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'}`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="material-icons-round text-amber-500 text-lg">assignment</span>
                         <span className="text-sm font-bold text-amber-700">أمر شغل #{wo.workOrderNumber}</span>
                       </div>
-                      <Badge variant={wo.status === 'in_progress' ? 'warning' : 'neutral'}>
-                        {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
+                      <Badge variant={effectiveStatus === 'in_progress' ? 'warning' : 'neutral'}>
+                        {effectiveStatus === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
                       </Badge>
                     </div>
 
@@ -908,7 +922,7 @@ export const FactoryManagerDashboard: React.FC = () => {
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
                         <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">تم إنتاجه</p>
-                        <p className="text-lg font-bold text-emerald-600">{formatNumber(wo.producedQuantity ?? 0)}</p>
+                        <p className="text-lg font-bold text-emerald-600">{formatNumber(producedNow)}</p>
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
                         <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>

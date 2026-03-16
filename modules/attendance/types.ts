@@ -1,5 +1,7 @@
+import type { AttendanceShiftType, AttendanceStatus } from '@/src/types/attendance';
+
 export type AttendanceEventType = 'check_in' | 'check_out' | 'unknown';
-export type AttendanceRecordStatus = 'present' | 'late' | 'absent' | 'partial';
+export type AttendanceRecordStatus = AttendanceStatus;
 export type AttendanceSource = 'zkteco_excel' | 'zkteco_watch_folder' | 'zkteco_gateway' | 'manual';
 
 export interface AttendanceLog {
@@ -21,16 +23,51 @@ export interface AttendanceRecord {
   id: string;
   employeeId: string;
   date: string;
+  dayOfWeek?: number;
+  acNo?: string;
   checkIn: any | null;
   checkOut: any | null;
   workedMinutes: number;
+  workHours?: number | null;
+  workMinutes?: number | null;
   lateMinutes: number;
+  earlyLeaveMinutes?: number;
   overtimeMinutes: number;
+  isHoliday?: boolean;
+  isWorkDay?: boolean;
+  shiftType?: AttendanceShiftType;
+  expectedCheckIn?: string;
+  expectedCheckOut?: string;
+  singlePunchSplitTime?: string;
+  punchCount?: number;
+  rawPunches?: string[];
+  statusDetails?: string;
+  hasAnomaly?: boolean;
+  anomalyNote?: string;
+  importedFrom?: string;
+  processedAt?: any;
   status: AttendanceRecordStatus;
   sourceLogs: string[];
   sourceBatchIds?: string[];
   updatedAt?: any;
   createdAt?: any;
+}
+
+export interface AttendanceMonthlySummary {
+  id: string;
+  employeeId: string;
+  month: string;
+  workDaysInMonth: number;
+  presentDays: number;
+  absentDays: number;
+  lateDays: number;
+  earlyLeaveDays: number;
+  totalWorkHours: number;
+  totalLateMinutes: number;
+  totalEarlyLeaveMinutes: number;
+  totalOvertimeMinutes: number;
+  attendanceRate: number;
+  updatedAt?: any;
 }
 
 export interface AttendanceImportRow {
@@ -75,6 +112,8 @@ export interface AttendanceImportResult {
   failedRows: number;
   errors: string[];
   processedDates?: string[];
+  recordsReady?: boolean;
+  detectedFormat?: 'zk_standard' | 'zk_export';
 }
 
 export interface AttendanceProcessResult {

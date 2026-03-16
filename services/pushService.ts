@@ -19,6 +19,8 @@ import {
 import { db, isConfigured } from './firebase';
 
 const DEVICE_COLLECTION = 'user_devices';
+const USER_COLLECTION = 'users';
+const TOKEN_SUBCOLLECTION = 'fcmTokens';
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
 
 let messagingRef: Messaging | null = null;
@@ -59,6 +61,32 @@ async function ensureMessaging(): Promise<Messaging | null> {
   return messagingRef;
 }
 
+function buildTokenDocId(token: string): string {
+  return token.slice(-24).replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+async function persistTokenOnUser(userId: string, token: string): Promise<void> {
+  const tokenDocId = buildTokenDocId(token) || token.slice(-10);
+  await setDoc(
+    doc(db, `${USER_COLLECTION}/${userId}/${TOKEN_SUBCOLLECTION}/${tokenDocId}`),
+    {
+      token,
+      userId,
+      device: String(navigator.userAgent || '').slice(0, 120),
+      createdAt: serverTimestamp(),
+      lastSeen: serverTimestamp(),
+      enabled: true,
+    },
+    { merge: true },
+  );
+}
+
+export interface ForegroundPushPayload {
+  title: string;
+  body: string;
+  data: Record<string, string>;
+}
+
 export const pushService = {
   async registerDevice(userId: string, employeeId?: string): Promise<string | null> {
     if (!userId) return null;
@@ -87,6 +115,7 @@ export const pushService = {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
+      await persistTokenOnUser(userId, token);
       return token;
     } catch (error) {
       const name = String((error as { name?: string })?.name || '');
@@ -111,18 +140,31 @@ export const pushService = {
         enabled: false,
         updatedAt: serverTimestamp(),
       }, { merge: true }).catch(() => {});
+      const tokenDocId = buildTokenDocId(token) || token.slice(-10);
+      await setDoc(
+        doc(db, `${USER_COLLECTION}/${userId}/${TOKEN_SUBCOLLECTION}/${tokenDocId}`),
+        {
+          enabled: false,
+          lastSeen: serverTimestamp(),
+        },
+        { merge: true },
+      ).catch(() => {});
     } catch {
       // No-op: device token cleanup should never block app flow.
     }
   },
 
-  async subscribeForeground(onReceive: (title: string, body: string) => void): Promise<() => void> {
+  async subscribeForeground(onReceive: (payload: ForegroundPushPayload) => void): Promise<() => void> {
     const messaging = await ensureMessaging();
     if (!messaging) return () => {};
     return onMessage(messaging, (payload) => {
       const title = payload.notification?.title || 'إشعار جديد';
       const body = payload.notification?.body || '';
-      onReceive(title, body);
+      onReceive({
+        title,
+        body,
+        data: (payload.data || {}) as Record<string, string>,
+      });
     });
   },
 
@@ -137,3 +179,6 @@ export const pushService = {
     return snap.docs.map((d) => String((d.data() as any).token || '')).filter(Boolean);
   },
 };
+
+export const registerFCMToken = pushService.registerDevice.bind(pushService);
+export const initFCMListener = pushService.subscribeForeground.bind(pushService);

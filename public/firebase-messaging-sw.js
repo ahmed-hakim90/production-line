@@ -20,23 +20,28 @@ initMessaging().then((messaging) => {
   messaging.onBackgroundMessage((payload) => {
     const title = payload.notification?.title || 'إشعار جديد';
     const body = payload.notification?.body || '';
-    const link = payload.data?.link || '/';
+    const link = payload.data?.url || payload.data?.link || '/';
     self.registration.showNotification(title, {
       body,
       icon: '/icons/pwa-icon-192.png',
       badge: '/icons/pwa-icon-192.png',
       data: { link },
+      actions: [
+        { action: 'open', title: 'فتح' },
+        { action: 'dismiss', title: 'تجاهل' },
+      ],
       renotify: true,
       requireInteraction: false,
       silent: false,
       vibrate: [150, 50, 150],
-      tag: payload.data?.notificationId || 'erp-notification',
+      tag: payload.data?.notificationId || payload.data?.reportId || 'erp-notification',
     });
   });
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  if (event.action === 'dismiss') return;
   const targetUrl = event.notification?.data?.link || '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

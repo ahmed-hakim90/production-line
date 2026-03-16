@@ -109,6 +109,13 @@ export function buildApprovalChain(options: BuildChainOptions): BuildChainResult
     toChainSnapshot(m.employee),
   );
 
+  if (settings.hrAlwaysFinalLevel && !hrEmployeeId) {
+    return {
+      chain: [],
+      errors: ['لم يتم تعيين موظف HR بصلاحية الموافقات (approval.manage) ومربوط بحساب مستخدم'],
+    };
+  }
+
   if (settings.hrAlwaysFinalLevel && hrEmployeeId) {
     const hrAlreadyInChain = chain.some(
       (item) => item.approverEmployeeId === hrEmployeeId,

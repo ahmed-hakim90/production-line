@@ -24,6 +24,8 @@ export const MODAL_KEYS = {
   SYSTEM_USERS_CREATE: 'system.users.create',
   SYSTEM_USERS_IMPORT: 'system.users.import',
   PRODUCTION_SUPERVISOR_ASSIGNMENT_HISTORY: 'production.supervisorAssignment.history',
+  ATTENDANCE_SHIFT_RULES: 'attendance.shiftRules',
+  ATTENDANCE_SIGNATURE_FIX: 'attendance.signatureFix',
 } as const;
 
 export type ModalKey = (typeof MODAL_KEYS)[keyof typeof MODAL_KEYS];

@@ -5,7 +5,8 @@ import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
 import { loanService } from '../loanService';
 import { employeeService } from '../employeeService';
-import { exportHRData } from '@/utils/exportExcel';
+import { createRequest, type ApprovalEmployeeInfo } from '../approval';
+import { exportLoanRequestsMultiSheet } from '@/utils/exportExcel';
 import type { FirestoreEmployee } from '@/types';
 import type {
   FirestoreEmployeeLoan,
@@ -36,11 +37,26 @@ function getCurrentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
+  const level = e.level as number;
+  return {
+    employeeId: e.id!,
+    employeeName: e.name,
+    managerId: e.managerId,
+    departmentId: e.departmentId || 'unknown_department',
+    departmentName: e.departmentId || 'unknown_department',
+    jobPositionId: e.jobPositionId || 'unknown_position',
+    jobTitle: e.jobPositionId || 'unknown_position',
+    jobLevel: Math.min(4, Math.max(1, level)) as 1 | 2 | 3 | 4,
+  };
+}
+
 export const LoanRequests: React.FC = () => {
   const { can } = usePermission();
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const uid = useAppStore((s) => s.uid);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const permissions = useAppStore((s) => s.userPermissions);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
 
   const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
@@ -131,8 +147,7 @@ export const LoanRequests: React.FC = () => {
     try {
       const isMonthly = activeTab === 'monthly_advance';
       const installments = isMonthly ? 1 : (parseInt(formInstallments) || 1);
-
-      await loanService.create({
+      const loanId = await loanService.create({
         employeeId: targetEmpId,
         employeeName: emp.name,
         employeeCode: emp.code || '',
@@ -143,13 +158,48 @@ export const LoanRequests: React.FC = () => {
         remainingInstallments: installments,
         startMonth: formStartMonth,
         month: isMonthly ? formStartMonth : undefined,
-        status: 'active',
+        status: 'pending',
         approvalChain: [],
-        finalStatus: 'approved',
+        finalStatus: 'pending',
         reason: formReason,
         disbursed: false,
         createdBy: uid || '',
       });
+
+      const allEmployeesForApproval = await employeeService.getAll();
+      const approvalEmployees = allEmployeesForApproval
+        .filter((e): e is FirestoreEmployee => Boolean(e.id))
+        .map((e) => toApprovalEmployeeInfo(e));
+      const callerEmployeeId = currentEmployee?.id || targetEmpId;
+      const callerName = currentEmployee?.name || userDisplayName || emp.name;
+      const approvalResult = await createRequest(
+        {
+          requestType: 'loan',
+          employeeId: targetEmpId,
+          requestData: {
+            loanType: activeTab,
+            loanAmount: amount,
+            installmentAmount: isMonthly ? amount : installmentAmount,
+            totalInstallments: installments,
+            remainingInstallments: installments,
+            startMonth: formStartMonth,
+            month: isMonthly ? formStartMonth : undefined,
+            reason: formReason || '—',
+          },
+          sourceRequestId: loanId,
+          createdBy: uid || '',
+        },
+        {
+          employeeId: callerEmployeeId,
+          employeeName: callerName,
+          permissions,
+        },
+        approvalEmployees,
+      );
+      if (!approvalResult.success) {
+        await loanService.delete(loanId);
+        throw new Error(approvalResult.error || 'تعذر إنشاء طلب الموافقة');
+      }
 
       setShowForm(false);
       setFormAmount('');
@@ -157,7 +207,7 @@ export const LoanRequests: React.FC = () => {
       setFormStartMonth(getCurrentMonth());
       setFormReason('');
       setFormEmployeeId('');
-      setToast({ message: 'تم إنشاء السلفة بنجاح', type: 'success' });
+      setToast({ message: 'تم إرسال طلب السلفة بنجاح', type: 'success' });
       await fetchData();
     } catch (err) {
       console.error('Error creating loan:', err);
@@ -165,7 +215,7 @@ export const LoanRequests: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [employeeId, uid, formAmount, formInstallments, formStartMonth, formReason, formEmployeeId, installmentAmount, activeTab, isHR, employeeMap, fetchData]);
+  }, [employeeId, uid, formAmount, formInstallments, formStartMonth, formReason, formEmployeeId, installmentAmount, activeTab, isHR, employeeMap, currentEmployee, userDisplayName, permissions, fetchData]);
 
   const handleDisburse = useCallback(async (loan: FirestoreEmployeeLoan) => {
     if (!loan.id) return;
@@ -231,32 +281,10 @@ export const LoanRequests: React.FC = () => {
   }, [loans, activeTab, filterMonth]);
 
   const handleExport = useCallback(() => {
-    const rows = filtered.map((l) => {
-      const emp = employeeMap.get(l.employeeId);
-      const base: Record<string, any> = {
-        'كود الموظف': l.employeeCode || emp?.code || '—',
-        'اسم الموظف': l.employeeName || emp?.name || l.employeeId,
-        'المبلغ': l.loanAmount,
-        'الحالة': LOAN_STATUS_LABELS[l.status],
-      };
-      if (activeTab === 'monthly_advance') {
-        base['الشهر'] = l.month || l.startMonth;
-        base['تم الصرف'] = l.disbursed ? 'نعم' : 'لا';
-        base['بواسطة'] = l.disbursedByName || '';
-      } else {
-        base['القسط الشهري'] = l.installmentAmount;
-        base['عدد الأقساط'] = l.totalInstallments;
-        base['المتبقي'] = l.remainingInstallments;
-        base['شهر البداية'] = l.startMonth;
-        base['تم الصرف'] = l.disbursed ? 'نعم' : 'لا';
-      }
-      base['السبب'] = l.reason || '';
-      return base;
-    });
-
-    const label = activeTab === 'monthly_advance' ? `سلف-شهرية-${filterMonth}` : 'سلف-مقسطة';
-    exportHRData(rows, LOAN_TYPE_LABELS[activeTab], label);
-  }, [filtered, activeTab, filterMonth, employeeMap]);
+    const monthlyAdvance = loans.filter((l) => (l.loanType || 'installment') === 'monthly_advance');
+    const installment = loans.filter((l) => (l.loanType || 'installment') === 'installment');
+    exportLoanRequestsMultiSheet(monthlyAdvance, installment, employeeMap, `السلف-${filterMonth}`);
+  }, [loans, employeeMap, filterMonth]);
 
   if (loading) {
     return (

@@ -9,7 +9,7 @@ import type {
   AllowanceResult,
   DayOfWeek,
 } from '../types';
-import type { HRConfigVersionSnapshot } from '../config/types';
+import type { HRConfigVersionSnapshot, LeaveTypeDefinition } from '../config/types';
 
 // ─── Enums & Literal Unions ─────────────────────────────────────────────────
 
@@ -191,6 +191,7 @@ export interface GeneratePayrollOptions {
   month: string;
   generatedBy: string;
   employees: PayrollEmployeeData[];
+  leaveTypeConfig?: LeaveTypeDefinition[];
   batchSize?: number;
 }
 

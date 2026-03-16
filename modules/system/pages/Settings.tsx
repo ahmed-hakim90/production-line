@@ -25,9 +25,10 @@ import {
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { applyTheme, setupAutoThemeListener } from '../../../utils/themeEngine';
 import { warehouseService } from '../../inventory/services/warehouseService';
+import { userService } from '../../../services/userService';
 import type {
   SystemSettings, AlertSettings, ThemeSettings,
-  QuickActionItem, QuickActionColor, CustomWidgetConfig,
+  QuickActionItem, QuickActionColor, CustomWidgetConfig, FirestoreUser,
 } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
 import type { ReportPrintRow } from '../../production/components/ProductionReportPrint';
@@ -321,6 +322,7 @@ export const Settings: React.FC = () => {
     selectedWidgetDefs,
   } = useSettingsDraft(systemSettings);
   const [inventoryWarehouses, setInventoryWarehouses] = useState<Warehouse[]>([]);
+  const [systemUsers, setSystemUsers] = useState<FirestoreUser[]>([]);
   const [editingQuickActionId, setEditingQuickActionId] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -343,6 +345,18 @@ export const Settings: React.FC = () => {
         setInventoryWarehouses(whs.filter((w) => w.isActive !== false));
       } catch {
         setInventoryWarehouses([]);
+      }
+    })();
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void (async () => {
+      try {
+        const users = await userService.getAll();
+        setSystemUsers(users.filter((user) => user.isActive !== false));
+      } catch {
+        setSystemUsers([]);
       }
     })();
   }, [isAdmin]);
@@ -877,6 +891,10 @@ export const Settings: React.FC = () => {
             setLocalPlanSettings={setLocalPlanSettings}
             inventoryWarehouses={inventoryWarehouses}
             allPermissions={ALL_PERMISSIONS}
+            hrUsers={systemUsers.map((user) => ({
+              id: user.id || '',
+              label: `${user.displayName || 'مستخدم'}${user.email ? ` (${user.email})` : ''}`,
+            })).filter((item) => item.id)}
           />
 
           <GeneralDashboardDisplaySection

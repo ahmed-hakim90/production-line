@@ -5,7 +5,8 @@ import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
 import { leaveRequestService, leaveBalanceService } from '../leaveService';
 import { employeeService } from '../employeeService';
-import { exportHRData } from '@/utils/exportExcel';
+import { createRequest, getRequestsByType, type ApprovalEmployeeInfo } from '../approval';
+import { exportLeaveRequests } from '@/utils/exportExcel';
 import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import type { FirestoreEmployee } from '@/types';
 import type {
@@ -32,6 +33,20 @@ function calculateDays(start: string, end: string): number {
   return Math.max(1, diff);
 }
 
+function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
+  const level = e.level as number;
+  return {
+    employeeId: e.id!,
+    employeeName: e.name,
+    managerId: e.managerId,
+    departmentId: e.departmentId || 'unknown_department',
+    departmentName: e.departmentId || 'unknown_department',
+    jobPositionId: e.jobPositionId || 'unknown_position',
+    jobTitle: e.jobPositionId || 'unknown_position',
+    jobLevel: Math.min(4, Math.max(1, level)) as 1 | 2 | 3 | 4,
+  };
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export const LeaveRequests: React.FC = () => {
@@ -39,6 +54,8 @@ export const LeaveRequests: React.FC = () => {
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const uid = useAppStore((s) => s.uid);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const permissions = useAppStore((s) => s.userPermissions);
 
   const [requests, setRequests] = useState<FirestoreLeaveRequest[]>([]);
   const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>([]);
@@ -66,6 +83,7 @@ export const LeaveRequests: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
   const employeeId = currentEmployee?.id || uid || '';
+  const viewerEmployeeId = currentEmployee?.id || '';
 
   const empNameMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -77,6 +95,52 @@ export const LeaveRequests: React.FC = () => {
   }, [allEmployees]);
 
   const getEmpName = useCallback((id: string) => empNameMap.get(id) || id, [empNameMap]);
+  const getPendingChainSummary = useCallback((req: FirestoreLeaveRequest) => {
+    const pendingSteps = req.approvalChain.filter((step) => step.status === 'pending');
+    if (pendingSteps.length === 0) {
+      return {
+        currentApprover: '—',
+        untilMe: 'اكتملت الموافقات',
+      };
+    }
+
+    const currentStep = pendingSteps[0];
+    const currentApprover = getEmpName(currentStep.approverEmployeeId);
+    const myIndex = viewerEmployeeId
+      ? pendingSteps.findIndex((step) => step.approverEmployeeId === viewerEmployeeId)
+      : -1;
+
+    if (!viewerEmployeeId) {
+      return {
+        currentApprover,
+        untilMe: pendingSteps.map((step) => getEmpName(step.approverEmployeeId)).join(' ← '),
+      };
+    }
+
+    if (myIndex === -1) {
+      return {
+        currentApprover,
+        untilMe: 'ليس ضمن سلسلة الموافقة',
+      };
+    }
+
+    if (myIndex === 0) {
+      return {
+        currentApprover,
+        untilMe: 'الدور عليك الآن',
+      };
+    }
+
+    const routeToMe = pendingSteps
+      .slice(0, myIndex + 1)
+      .map((step) => getEmpName(step.approverEmployeeId))
+      .join(' ← ');
+
+    return {
+      currentApprover,
+      untilMe: `قبلك ${myIndex} مرحلة: ${routeToMe}`,
+    };
+  }, [getEmpName, viewerEmployeeId]);
   const leaveTypeByKey = useMemo(() => leaveTypeMapByKey(leaveTypes), [leaveTypes]);
   const selectedLeaveType = leaveTypeByKey[formLeaveType];
 
@@ -89,6 +153,54 @@ export const LeaveRequests: React.FC = () => {
         isHR ? employeeService.getAll() : Promise.resolve([]),
         getLeaveTypesFromConfig(),
       ]);
+
+      // One-time silent backfill for old pending leave requests that were created
+      // before approval-center linking was enforced.
+      const pendingWithoutChain = allRequests.filter((req) => req.id && req.finalStatus === 'pending');
+      if (pendingWithoutChain.length > 0) {
+        const [existingApprovalRequests, employeesForApprovalRaw] = await Promise.all([
+          getRequestsByType('leave').catch(() => []),
+          employeeService.getAll(),
+        ]);
+        const linkedSourceIds = new Set(
+          existingApprovalRequests
+            .map((req) => String(req.sourceRequestId || '').trim())
+            .filter(Boolean),
+        );
+        const missing = pendingWithoutChain.filter((req) => !linkedSourceIds.has(String(req.id)));
+        if (missing.length > 0) {
+          const approvalEmployees = employeesForApprovalRaw
+            .filter((e): e is FirestoreEmployee => Boolean(e.id))
+            .map((e) => toApprovalEmployeeInfo(e));
+          const callerEmployeeId = currentEmployee?.id || employeeId;
+          const callerName = currentEmployee?.name || userDisplayName || employeeId || '—';
+          for (const req of missing) {
+            await createRequest(
+              {
+                requestType: 'leave',
+                employeeId: req.employeeId,
+                requestData: {
+                  leaveType: req.leaveType,
+                  leaveTypeLabel: req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType,
+                  startDate: req.startDate,
+                  endDate: req.endDate,
+                  totalDays: req.totalDays,
+                  reason: req.reason || '—',
+                },
+                sourceRequestId: req.id,
+                createdBy: req.createdBy || uid || '',
+              },
+              {
+                employeeId: callerEmployeeId,
+                employeeName: callerName,
+                permissions,
+              },
+              approvalEmployees,
+            );
+          }
+        }
+      }
+
       setRequests(allRequests);
       setBalance(bal);
       setAllEmployees(emps);
@@ -103,7 +215,7 @@ export const LeaveRequests: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [employeeId, isHR]);
+  }, [employeeId, isHR, currentEmployee, userDisplayName, permissions, uid]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -116,7 +228,7 @@ export const LeaveRequests: React.FC = () => {
     if (!formStartDate || !formEndDate || formDays <= 0) return;
     setSubmitting(true);
     try {
-      await leaveRequestService.create({
+      const leavePayload = {
         employeeId,
         leaveType: formLeaveType,
         leaveTypeLabel: selectedLeaveType?.label || LEAVE_TYPE_LABELS[formLeaveType] || formLeaveType,
@@ -130,7 +242,40 @@ export const LeaveRequests: React.FC = () => {
         finalStatus: 'pending',
         reason: formReason,
         createdBy: uid || '',
-      });
+      };
+      const leaveId = await leaveRequestService.create(leavePayload);
+      const allEmployeesForApproval = await employeeService.getAll();
+      const approvalEmployees = allEmployeesForApproval
+        .filter((e): e is FirestoreEmployee => Boolean(e.id))
+        .map((e) => toApprovalEmployeeInfo(e));
+      const callerEmployeeId = currentEmployee?.id || employeeId;
+      const callerName = currentEmployee?.name || userDisplayName || leavePayload.employeeId;
+      const approvalResult = await createRequest(
+        {
+          requestType: 'leave',
+          employeeId,
+          requestData: {
+            leaveType: formLeaveType,
+            leaveTypeLabel: leavePayload.leaveTypeLabel,
+            startDate: formStartDate,
+            endDate: formEndDate,
+            totalDays: formDays,
+            reason: formReason || '—',
+          },
+          sourceRequestId: leaveId,
+          createdBy: uid || '',
+        },
+        {
+          employeeId: callerEmployeeId,
+          employeeName: callerName,
+          permissions,
+        },
+        approvalEmployees,
+      );
+      if (!approvalResult.success) {
+        await leaveRequestService.delete(leaveId);
+        throw new Error(approvalResult.error || 'تعذر إنشاء طلب الموافقة');
+      }
       setShowForm(false);
       setFormStartDate('');
       setFormEndDate('');
@@ -138,10 +283,11 @@ export const LeaveRequests: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Error creating leave request:', err);
+      alert((err as Error).message || 'تعذر إرسال طلب الإجازة للموافقات');
     } finally {
       setSubmitting(false);
     }
-  }, [employeeId, uid, formLeaveType, formStartDate, formEndDate, formDays, formReason, fetchData, selectedLeaveType]);
+  }, [employeeId, uid, formLeaveType, formStartDate, formEndDate, formDays, formReason, fetchData, selectedLeaveType, currentEmployee, userDisplayName, permissions]);
 
   const handleDelete = useCallback(async (id: string) => {
     setDeleting(true);
@@ -204,19 +350,11 @@ export const LeaveRequests: React.FC = () => {
             label: 'تصدير Excel',
             icon: 'download',
             group: 'تصدير',
-            hidden: !canExportFromPage || requests.length === 0,
+            hidden: !canExportFromPage || filtered.length === 0,
             onClick: () => {
-              const rows = requests.map((r) => ({
-                'الموظف': getEmpName(r.employeeId),
-                'النوع': leaveTypeByKey[r.leaveType]?.label || r.leaveTypeLabel || LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType,
-                'من': r.startDate,
-                'إلى': r.endDate,
-                'الأيام': r.totalDays,
-                'تؤثر على الراتب': (typeof r.leaveTypeIsPaid === 'boolean' ? !r.leaveTypeIsPaid : r.affectsSalary) ? 'نعم' : 'لا',
-                'الحالة': STATUS_CONFIG[r.finalStatus]?.label ?? r.finalStatus,
-                'السبب': r.reason || '',
-              }));
-              exportHRData(rows, 'الإجازات', 'إجازات');
+              const employeeMap = new Map<string, { name: string }>();
+              empNameMap.forEach((name, id) => employeeMap.set(id, { name }));
+              exportLeaveRequests(filtered, employeeMap);
             },
           },
         ]}
@@ -391,12 +529,14 @@ export const LeaveRequests: React.FC = () => {
                   <th className="erp-th">تؤثر على الراتب</th>
                   <th className="erp-th">الحالة</th>
                   <th className="erp-th">مراحل الموافقة</th>
+                  <th className="erp-th">المعتمد الحالي / حتى يصل لي</th>
                   {canDelete && <th className="erp-th text-center">حذف</th>}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((req) => {
                   const statusCfg = STATUS_CONFIG[req.finalStatus];
+                  const pendingSummary = getPendingChainSummary(req);
                   return (
                     <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
                       {isHR && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
@@ -435,6 +575,16 @@ export const LeaveRequests: React.FC = () => {
                               );
                             })
                           )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold text-[var(--color-text)]">
+                            الآن: {pendingSummary.currentApprover}
+                          </div>
+                          <div className="text-[11px] text-[var(--color-text-muted)]">
+                            {pendingSummary.untilMe}
+                          </div>
                         </div>
                       </td>
                       {canDelete && (

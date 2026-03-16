@@ -119,6 +119,28 @@ const workOrderStatusLabel = (status?: WorkOrder['status']): string => {
   return 'قيد التنفيذ';
 };
 
+const normalizeArabic = (value: string) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ');
+
+const parseInjectionCategoryTokens = (value?: string) =>
+  String(value || 'حقن')
+    .split(',')
+    .map((part) => normalizeArabic(part))
+    .filter(Boolean);
+
+const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
+  const normalized = normalizeArabic(value || '');
+  if (!normalized) return false;
+  return tokens.some((token) => normalized.includes(token));
+};
+
 type FactoryGeneralRow = {
   key: string;
   lineId: string;
@@ -371,7 +393,17 @@ export const Reports: React.FC = () => {
   const [stockBalances, setStockBalances] = useState<StockItemBalance[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
-  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
+  const injectionCategoryTokens = useMemo(
+    () => parseInjectionCategoryTokens(planSettings.injectionRawMaterialCategoryKeywords),
+    [planSettings.injectionRawMaterialCategoryKeywords],
+  );
+
+  const injectionRawMaterialOptions = useMemo(
+    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
+    [rawMaterialOptions, injectionCategoryTokens],
+  );
+
 
   // Line & supervisor filters
   const [filterLineId, setFilterLineId] = useState('');
@@ -502,6 +534,7 @@ export const Reports: React.FC = () => {
               id: String(row.id),
               name: String(row.name || '').trim(),
               code: String(row.code || '').trim(),
+              categoryName: String(row.categoryName || '').trim(),
             })),
         );
       })
@@ -517,7 +550,7 @@ export const Reports: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     categoryService.seedFromProductsModel()
-      .then(() => categoryService.getAll())
+      .then(() => categoryService.getByType('product'))
       .then((rows) => {
         if (!mounted) return;
         const names = rows
@@ -1451,10 +1484,10 @@ export const Reports: React.FC = () => {
   const selectableProducts = useMemo(
     () => (
       form.reportType === 'component_injection'
-        ? rawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
+        ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
         : _rawProducts.map((p) => ({ value: p.id!, label: p.name }))
     ),
-    [form.reportType, rawMaterialOptions, _rawProducts],
+    [form.reportType, injectionRawMaterialOptions, _rawProducts],
   );
 
   useEffect(() => {
@@ -1463,6 +1496,13 @@ export const Reports: React.FC = () => {
       setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
     }
   }, [form.reportType, form.lineId, injectionLineIds]);
+
+  useEffect(() => {
+    if (form.reportType !== 'component_injection' || !form.productId) return;
+    const isAllowed = injectionRawMaterialOptions.some((item) => item.id === form.productId);
+    if (isAllowed) return;
+    setForm((prev) => ({ ...prev, productId: '', workOrderId: '' }));
+  }, [form.reportType, form.productId, injectionRawMaterialOptions]);
 
   useEffect(() => {
     if (!showModal || !shouldRestrictSupervisorLines || !form.lineId) return;

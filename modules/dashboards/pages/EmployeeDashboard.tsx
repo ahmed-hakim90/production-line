@@ -133,18 +133,24 @@ export const EmployeeDashboard: React.FC = () => {
   const handleWoPrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
 
   const STATUS_LABELS: Record<string, string> = { pending: 'قيد الانتظار', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
+  const resolveWorkOrderProducedNow = useCallback((wo: WorkOrder): number => {
+    const producedFromOrder = Number(wo.producedQuantity || 0);
+    const producedFromScans = Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0);
+    return Math.max(producedFromOrder, producedFromScans);
+  }, []);
 
   const triggerWOPrint = useCallback(async (wo: WorkOrder) => {
     const product = _rawProducts.find((p) => p.id === wo.productId);
     const line = _rawLines.find((l) => l.id === wo.lineId);
     const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
+    const producedNow = resolveWorkOrderProducedNow(wo);
     setWoPrintData({
       workOrderNumber: wo.workOrderNumber,
       productName: product?.name ?? '—',
       lineName: line?.name ?? '—',
       supervisorName: supervisor?.name ?? '—',
       quantity: wo.quantity,
-      producedQuantity: wo.producedQuantity,
+      producedQuantity: producedNow,
       maxWorkers: wo.maxWorkers,
       targetDate: wo.targetDate,
       status: wo.status,
@@ -157,7 +163,7 @@ export const EmployeeDashboard: React.FC = () => {
     await new Promise((r) => setTimeout(r, 300));
     handleWoPrint();
     setTimeout(() => setWoPrintData(null), 1000);
-  }, [_rawProducts, _rawLines, _rawEmployees, can, handleWoPrint]);
+  }, [_rawProducts, _rawLines, _rawEmployees, can, handleWoPrint, resolveWorkOrderProducedNow]);
 
   const employee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
@@ -675,9 +681,12 @@ export const EmployeeDashboard: React.FC = () => {
                       {myWOs.map((wo) => {
                         const product = _rawProducts.find((p) => p.id === wo.productId);
                         const line = _rawLines.find((l) => l.id === wo.lineId);
-                        const prog = wo.quantity > 0 ? Math.min((wo.producedQuantity / wo.quantity) * 100, 100) : 0;
                         const isSupervisor = wo.supervisorId === employee.id;
-                        const producedNow = Number(wo.producedQuantity || 0);
+                        const producedNow = resolveWorkOrderProducedNow(wo);
+                        const reportCount = (wo.id ? workOrderCardMetricsData.reportsByWorkOrderId[wo.id]?.length : 0) || 0;
+                        const effectiveStatus = wo.status === 'in_progress' && reportCount === 0 ? 'pending' : wo.status;
+                        const prog = wo.quantity > 0 ? Math.min((producedNow / wo.quantity) * 100, 100) : 0;
+                        const remaining = Math.max(wo.quantity - producedNow, 0);
                         const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {
                           producedNowRaw: producedNow,
                           lineDailyWorkingHours: Number(line?.dailyWorkingHours || 0),
@@ -696,7 +705,7 @@ export const EmployeeDashboard: React.FC = () => {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="font-mono text-xs font-bold text-amber-600">#{wo.workOrderNumber}</span>
-                                <StatusBadge label={wo.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'} />
+                                <StatusBadge label={STATUS_LABELS[effectiveStatus] || STATUS_LABELS.pending} />
                                 {isSupervisor && (
                                   <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-full">مشرف</span>
                                 )}
@@ -747,11 +756,11 @@ export const EmployeeDashboard: React.FC = () => {
                               </div>
                               <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
                                 <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">تم إنتاجه</p>
-                                <p className="text-sm font-bold text-emerald-600">{formatNumber(wo.producedQuantity)}</p>
+                                <p className="text-sm font-bold text-emerald-600">{formatNumber(producedNow)}</p>
                               </div>
                               <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
                                 <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">المتبقي</p>
-                                <p className="text-sm font-bold text-rose-500">{formatNumber(wo.quantity - wo.producedQuantity)}</p>
+                                <p className="text-sm font-bold text-rose-500">{formatNumber(remaining)}</p>
                               </div>
                             </div>
 

@@ -89,6 +89,7 @@ import {
 } from 'recharts';
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import {
   Select,
   SelectContent,
@@ -183,6 +184,7 @@ export const ProductDetails: React.FC = () => {
   const systemSettings = useAppStore((s) => s.systemSettings);
 
   const { can } = usePermission();
+  const { openModal } = useGlobalModalManager();
   const canViewCosts = can('costs.view');
 
   const [reports, setReports] = useState<ProductionReport[]>([]);
@@ -247,16 +249,18 @@ export const ProductDetails: React.FC = () => {
 
   useEffect(() => { loadMaterials(); }, [loadMaterials]);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const rows = await rawMaterialService.getAll();
-        setRawMaterials(rows.filter((row) => row.isActive !== false));
-      } catch {
-        setRawMaterials([]);
-      }
-    })();
+  const loadRawMaterials = useCallback(async () => {
+    try {
+      const rows = await rawMaterialService.getAll();
+      setRawMaterials(rows.filter((row) => row.isActive !== false));
+    } catch {
+      setRawMaterials([]);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadRawMaterials();
+  }, [loadRawMaterials]);
 
   useEffect(() => {
     void (async () => {
@@ -348,12 +352,25 @@ export const ProductDetails: React.FC = () => {
     setShowMaterialModal(true);
   };
 
-  const openAddMaterial = () => {
+  const openAddMaterial = useCallback(() => {
+    if (rawMaterials.length === 0) {
+      const opened = openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE, {
+        mode: 'create',
+        onSaved: async () => {
+          await loadRawMaterials();
+          setEditingMaterial(null);
+          setMaterialForm({ materialId: '', materialName: '', quantityUsed: 0, unitCost: 0 });
+          setMaterialSaveMsg(null);
+          setShowMaterialModal(true);
+        },
+      });
+      if (opened) return;
+    }
     setEditingMaterial(null);
     setMaterialForm({ materialId: '', materialName: '', quantityUsed: 0, unitCost: 0 });
     setMaterialSaveMsg(null);
     setShowMaterialModal(true);
-  };
+  }, [rawMaterials.length, openModal, loadRawMaterials]);
   useRegisterModalOpener(MODAL_KEYS.PRODUCT_MATERIALS_CREATE, () => openAddMaterial());
 
   const currentMonth = useMemo(() => getCurrentMonth(), []);

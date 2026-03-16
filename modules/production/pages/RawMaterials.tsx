@@ -9,6 +9,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { productMaterialService } from '../services/productMaterialService';
 import { productService } from '../services/productService';
 import type { FirestoreProduct } from '../../../types';
+import { categoryService } from '../../catalog/services/categoryService';
 import { SelectableTable } from '../../../components/SelectableTable';
 import type { TableColumn } from '../../../components/SelectableTable';
 import { PageHeader } from '../../../components/PageHeader';
@@ -103,16 +104,24 @@ export const RawMaterials: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [search, setSearch] = useState('');
   const [usageFilter, setUsageFilter] = useState<'all' | 'used' | 'unused'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all');
+  const [rawCategoryOptions, setRawCategoryOptions] = useState<string[]>([]);
 
   const loadRawMaterials = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, materials, products] = await Promise.all([
+      const [data, materials, products, categories] = await Promise.all([
         rawMaterialService.getAll(),
         productMaterialService.getAll(),
         productService.getAll(),
+        categoryService.getByType('raw_material'),
       ]);
       setRows(data);
+      const categoryNames = categories
+        .filter((category) => category.isActive !== false)
+        .map((category) => String(category.name || '').trim())
+        .filter(Boolean);
+      setRawCategoryOptions(Array.from(new Set(categoryNames)).sort((a, b) => a.localeCompare(b, 'ar')));
 
       const productNameById = new Map<string, string>();
       (products || []).forEach((product: FirestoreProduct) => {
@@ -165,17 +174,39 @@ export const RawMaterials: React.FC = () => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
       const count = row.id ? (usageByMaterialId[row.id]?.count || 0) : 0;
+      const rowCategory = String(row.categoryName || '').trim();
       const usageMatch =
         usageFilter === 'all' ||
         (usageFilter === 'used' && count > 0) ||
         (usageFilter === 'unused' && count === 0);
+      const categoryMatch = categoryFilter === 'all' || rowCategory === categoryFilter;
       const searchMatch =
         !q ||
         row.name.toLowerCase().includes(q) ||
-        row.code.toLowerCase().includes(q);
-      return usageMatch && searchMatch;
+        row.code.toLowerCase().includes(q) ||
+        rowCategory.toLowerCase().includes(q);
+      return usageMatch && categoryMatch && searchMatch;
     });
-  }, [rows, search, usageByMaterialId, usageFilter]);
+  }, [categoryFilter, rows, search, usageByMaterialId, usageFilter]);
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    rawCategoryOptions.forEach((category) => {
+      if (category) set.add(category);
+    });
+    rows.forEach((row) => {
+      const category = String(row.categoryName || '').trim();
+      if (category) set.add(category);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ar'));
+  }, [rawCategoryOptions, rows]);
+
+  useEffect(() => {
+    if (categoryFilter === 'all') return;
+    if (!categoryOptions.includes(categoryFilter)) {
+      setCategoryFilter('all');
+    }
+  }, [categoryFilter, categoryOptions]);
 
   const activeCount = useMemo(
     () => rows.filter((row) => row.isActive !== false).length,
@@ -195,6 +226,7 @@ export const RawMaterials: React.FC = () => {
     const exportRows = filteredRows.map((row) => ({
       'اسم المادة': row.name,
       'الكود': row.code,
+      'الفئة': row.categoryName || '—',
       'الوحدة': row.unit || 'unit',
       'الحد الأدنى': Number(row.minStock || 0),
       'الحالة': row.isActive === false ? 'غير نشط' : 'نشط',
@@ -274,6 +306,7 @@ export const RawMaterials: React.FC = () => {
       render: (r) => (
         <div>
           <p className="font-bold text-sm text-[var(--color-text)]">{r.name}</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">الفئة: {r.categoryName || '—'}</p>
         </div>
       ),
     },
@@ -329,6 +362,19 @@ export const RawMaterials: React.FC = () => {
           <SelectItem value="all">كل المواد</SelectItem>
           <SelectItem value="used">مستخدمة في منتجات</SelectItem>
           <SelectItem value="unused">غير مستخدمة</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+        <SelectTrigger className="erp-filter-select">
+          <SelectValue placeholder="كل الفئات" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">كل الفئات</SelectItem>
+          {categoryOptions.map((category) => (
+            <SelectItem key={category} value={category}>
+              {category}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>

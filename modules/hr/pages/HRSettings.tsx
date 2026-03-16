@@ -12,6 +12,8 @@ import {
   type HRConfigMap,
   type HRConfigModuleName,
   type FirestoreHRConfigAuditLog,
+  type LeaveSalaryImpact,
+  type LeaveTypeDefinition,
   type TransportZone,
 } from '../config';
 import type { DayOfWeek } from '../types';
@@ -80,18 +82,25 @@ function validateLeave(data: HRConfigMap['leave']): ValidationError[] {
   if (!Array.isArray(data.leaveTypes) || data.leaveTypes.length === 0) {
     errors.push({ field: 'leaveTypes', message: 'يجب إضافة نوع إجازة واحد على الأقل' });
   } else {
-    const keys = new Set<string>();
+    const leaveTypes = data.leaveTypes as LeaveTypeDefinition[];
+    const types = new Set<string>();
     for (let i = 0; i < data.leaveTypes.length; i++) {
-      const row = data.leaveTypes[i];
-      const key = String(row.key || '').trim();
-      const label = String(row.label || '').trim();
-      if (!key) errors.push({ field: `leaveTypes.${i}.key`, message: `كود النوع في الصف ${i + 1} مطلوب` });
-      if (!label) errors.push({ field: `leaveTypes.${i}.label`, message: `اسم النوع في الصف ${i + 1} مطلوب` });
-      if (key) {
-        if (keys.has(key)) {
-          errors.push({ field: `leaveTypes.${i}.key`, message: `كود النوع "${key}" مكرر` });
+      const row = leaveTypes[i];
+      const type = String(row.type || '').trim();
+      const label = String(row.labelAr || '').trim();
+      if (!type) errors.push({ field: `leaveTypes.${i}.type`, message: `نوع الإجازة في الصف ${i + 1} مطلوب` });
+      if (!label) errors.push({ field: `leaveTypes.${i}.labelAr`, message: `اسم النوع في الصف ${i + 1} مطلوب` });
+      if (row.defaultBalance < 0) errors.push({ field: `leaveTypes.${i}.defaultBalance`, message: `الرصيد السنوي في الصف ${i + 1} لا يمكن أن يكون سالباً` });
+      if (row.maxConsecutiveDays < 0) errors.push({ field: `leaveTypes.${i}.maxConsecutiveDays`, message: `الحد الأقصى للأيام المتتالية في الصف ${i + 1} لا يمكن أن يكون سالباً` });
+      if (row.maxCarryOverDays < 0) errors.push({ field: `leaveTypes.${i}.maxCarryOverDays`, message: `حد الترحيل في الصف ${i + 1} لا يمكن أن يكون سالباً` });
+      if (row.deductPercent < 0 || row.deductPercent > 100) {
+        errors.push({ field: `leaveTypes.${i}.deductPercent`, message: `نسبة الخصم في الصف ${i + 1} يجب أن تكون بين 0 و 100` });
+      }
+      if (type) {
+        if (types.has(type)) {
+          errors.push({ field: `leaveTypes.${i}.type`, message: `نوع الإجازة "${type}" مكرر` });
         } else {
-          keys.add(key);
+          types.add(type);
         }
       }
     }
@@ -418,24 +427,18 @@ const OvertimeForm: React.FC<TabFormProps<'overtime'>> = ({ config, onChange, er
   </div>
 );
 
-const CORE_LEAVE_KEYS = new Set(['annual', 'sick', 'emergency', 'unpaid']);
-
 const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, readOnly }) => {
-  const updateLeaveType = (index: number, field: 'key' | 'label' | 'isPaid', value: string | boolean) => {
+  const IMPACT_OPTIONS: { value: LeaveSalaryImpact; label: string }[] = [
+    { value: 'full_paid', label: 'مدفوعة بالكامل' },
+    { value: 'deduct_daily', label: 'خصم يومي من الراتب' },
+    { value: 'deduct_percent', label: 'خصم نسبة مئوية' },
+    { value: 'unpaid', label: 'بدون راتب (خصم كامل)' },
+  ];
+
+  const updateLeaveType = (index: number, patch: Partial<LeaveTypeDefinition>) => {
     const leaveTypes = [...config.leaveTypes];
-    leaveTypes[index] = { ...leaveTypes[index], [field]: value } as any;
+    leaveTypes[index] = { ...leaveTypes[index], ...patch };
     onChange({ ...config, leaveTypes });
-  };
-
-  const addLeaveType = () => {
-    const leaveTypes = [...config.leaveTypes, { key: '', label: '', isPaid: true }];
-    onChange({ ...config, leaveTypes });
-  };
-
-  const removeLeaveType = (index: number) => {
-    const row = config.leaveTypes[index];
-    if (CORE_LEAVE_KEYS.has(row.key)) return;
-    onChange({ ...config, leaveTypes: config.leaveTypes.filter((_, i) => i !== index) });
   };
 
   return (
@@ -454,7 +457,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
           <NumberInput value={config.carryOverLimit} onChange={(v) => onChange({ ...config, carryOverLimit: v })} min={0} disabled={readOnly} />
         </FormField>
         <FormField label="الحد الأقصى للإجازات المتتالية (أيام)" error={getError(errors, 'maxConsecutiveDays')}>
-          <NumberInput value={config.maxConsecutiveDays} onChange={(v) => onChange({ ...config, maxConsecutiveDays: v })} min={1} disabled={readOnly} />
+          <NumberInput value={config.maxConsecutiveDays} onChange={(v) => onChange({ ...config, maxConsecutiveDays: v })} min={0} disabled={readOnly} />
         </FormField>
         <FormField label="التقرير الطبي مطلوب بعد (أيام)" error={getError(errors, 'sickDocumentThresholdDays')}>
           <NumberInput value={config.sickDocumentThresholdDays} onChange={(v) => onChange({ ...config, sickDocumentThresholdDays: v })} min={1} disabled={readOnly} />
@@ -469,76 +472,141 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
         </div>
       </div>
 
-      <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="text-sm font-bold text-[var(--color-text)]">ماستر أنواع الإجازات</h4>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">هذه الأنواع ستظهر في طلبات الإجازة وتحدد أثرها على المرتب.</p>
-          </div>
-          {!readOnly && (
-            <Button variant="outline" onClick={addLeaveType}>
-              <span className="material-icons-round text-sm">add</span>
-              إضافة نوع
-            </Button>
-          )}
-        </div>
+      <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-3">
+        <p className="text-xs text-amber-700 font-medium">
+          تغيير تأثير الإجازة على الراتب سيؤثر على احتساب الرواتب القادمة فقط — لن يُعاد احتساب الأشهر المنتهية.
+        </p>
+      </div>
 
-        {(config.leaveTypes || []).map((row, i) => {
-          const isCore = CORE_LEAVE_KEYS.has(row.key);
-          return (
-            <div key={`${row.key}-${i}`} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-3">
-              <div className="md:col-span-3">
-                <FormField label="الكود" error={getError(errors, `leaveTypes.${i}.key`)}>
-                  <input
-                    type="text"
-                    value={row.key}
-                    onChange={(e) => updateLeaveType(i, 'key', e.target.value.trim())}
-                    disabled={readOnly || isCore}
-                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="marriage"
-                  />
-                </FormField>
-              </div>
-              <div className="md:col-span-4">
-                <FormField label="الاسم" error={getError(errors, `leaveTypes.${i}.label`)}>
-                  <input
-                    type="text"
-                    value={row.label}
-                    onChange={(e) => updateLeaveType(i, 'label', e.target.value)}
-                    disabled={readOnly}
-                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="مثال: زواج"
-                  />
-                </FormField>
-              </div>
-              <div className="md:col-span-3">
-                <FormField label="مدفوعة؟">
-                  <div className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] px-3 py-2.5">
-                    <span className="text-sm text-[var(--color-text-muted)]">{row.isPaid ? 'مدفوعة' : 'غير مدفوعة'}</span>
-                    <Toggle checked={row.isPaid} onChange={(v) => updateLeaveType(i, 'isPaid', v)} disabled={readOnly} />
-                  </div>
-                </FormField>
-              </div>
-              <div className="md:col-span-2 flex justify-end">
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => removeLeaveType(i)}
-                    disabled={isCore}
-                    className="text-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed p-1"
-                    title={isCore ? 'الأنواع الأساسية لا يمكن حذفها' : 'حذف النوع'}
-                  >
-                    <span className="material-icons-round text-lg">delete</span>
-                  </button>
+      {(config.leaveTypes || []).map((lt, idx) => (
+        <Card key={lt.type}>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="material-icons-round text-primary">beach_access</span>
+            <h4 className="font-bold text-[var(--color-text)]">{lt.labelAr}</h4>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                الرصيد السنوي (أيام)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={365}
+                value={lt.defaultBalance}
+                disabled={readOnly}
+                onChange={e => updateLeaveType(idx, { defaultBalance: Number(e.target.value) })}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
+              />
+              {getError(errors, `leaveTypes.${idx}.defaultBalance`) && (
+                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.defaultBalance`)}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                تأثير على الراتب
+              </label>
+              <select
+                value={lt.salaryImpact}
+                disabled={readOnly}
+                onChange={e => updateLeaveType(idx, { salaryImpact: e.target.value as LeaveSalaryImpact })}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary outline-none disabled:opacity-60"
+              >
+                {IMPACT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {lt.salaryImpact === 'deduct_percent' && (
+              <div>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                  نسبة الخصم %
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={lt.deductPercent}
+                  disabled={readOnly}
+                  onChange={e => updateLeaveType(idx, { deductPercent: Number(e.target.value) })}
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary outline-none disabled:opacity-60"
+                />
+                {getError(errors, `leaveTypes.${idx}.deductPercent`) && (
+                  <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.deductPercent`)}</p>
                 )}
               </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                أقصى أيام متتالية (0 = بلا حد)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={lt.maxConsecutiveDays}
+                disabled={readOnly}
+                onChange={e => updateLeaveType(idx, { maxConsecutiveDays: Number(e.target.value) })}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary outline-none disabled:opacity-60"
+              />
+              {getError(errors, `leaveTypes.${idx}.maxConsecutiveDays`) && (
+                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.maxConsecutiveDays`)}</p>
+              )}
             </div>
-          );
-        })}
-        {getError(errors, 'leaveTypes') && (
-          <p className="text-xs text-rose-500 font-medium">{getError(errors, 'leaveTypes')}</p>
-        )}
-      </div>
+
+            <div className="flex items-center gap-3 pt-5">
+              <input
+                type="checkbox"
+                id={`approval-${lt.type}`}
+                checked={lt.requiresApproval}
+                disabled={readOnly}
+                onChange={e => updateLeaveType(idx, { requiresApproval: e.target.checked })}
+                className="w-4 h-4 accent-primary disabled:opacity-50"
+              />
+              <label htmlFor={`approval-${lt.type}`} className="text-sm font-medium text-[var(--color-text)]">
+                يتطلب موافقة
+              </label>
+            </div>
+
+            <div className="flex items-center gap-3 pt-5">
+              <input
+                type="checkbox"
+                id={`carryover-${lt.type}`}
+                checked={lt.carryOverAllowed}
+                disabled={readOnly}
+                onChange={e => updateLeaveType(idx, { carryOverAllowed: e.target.checked })}
+                className="w-4 h-4 accent-primary disabled:opacity-50"
+              />
+              <label htmlFor={`carryover-${lt.type}`} className="text-sm font-medium text-[var(--color-text)]">
+                ترحيل الرصيد
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                حد ترحيل الرصيد (أيام)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={lt.maxCarryOverDays}
+                disabled={readOnly || !lt.carryOverAllowed}
+                onChange={e => updateLeaveType(idx, { maxCarryOverDays: Number(e.target.value) })}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary outline-none disabled:opacity-60"
+              />
+              {getError(errors, `leaveTypes.${idx}.maxCarryOverDays`) && (
+                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.maxCarryOverDays`)}</p>
+              )}
+            </div>
+          </div>
+        </Card>
+      ))}
+
+      {getError(errors, 'leaveTypes') && (
+        <p className="text-xs text-rose-500 font-medium">{getError(errors, 'leaveTypes')}</p>
+      )}
     </div>
   );
 };

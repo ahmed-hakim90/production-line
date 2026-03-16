@@ -8,6 +8,8 @@ export type {
   AttendanceConfig,
   OvertimeConfig,
   LeaveConfig,
+  LeaveSalaryImpact,
+  LeaveTypeDefinition,
   LoanConfig,
   PayrollSettingsConfig,
   ApprovalConfig,

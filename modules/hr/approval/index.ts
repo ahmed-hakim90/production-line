@@ -87,3 +87,6 @@ export { approvalDelegationService } from './approvalDelegation';
 
 // Audit
 export { approvalAuditService } from './approvalAudit';
+
+// Notifications
+export { hrNotificationService } from './notifications';
