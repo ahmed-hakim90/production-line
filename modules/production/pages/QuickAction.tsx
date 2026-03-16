@@ -466,13 +466,39 @@ export const QuickAction: React.FC = () => {
     [workOrders, isSupervisorReporter, currentEmployee?.id, currentEmployee?.name],
   );
 
+  const scopedActiveWOs = useMemo(() => {
+    const selectedSupervisorId = isSupervisorReporter ? currentEmployee?.id : employeeId;
+    if (!selectedSupervisorId) return activeWOs;
+    const normalizedSelected = String(selectedSupervisorId).trim().toLowerCase();
+    return activeWOs.filter((wo) => String(wo.supervisorId || '').trim().toLowerCase() === normalizedSelected);
+  }, [activeWOs, isSupervisorReporter, currentEmployee?.id, employeeId]);
+
   const handleSelectWO = useCallback((woId: string) => {
-    const wo = activeWOs.find((w) => w.id === woId);
+    const wo = scopedActiveWOs.find((w) => w.id === woId);
     if (!wo) return;
+    const nextType = wo.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
+    if (
+      (nextType === 'component_injection' && canManageComponentInjectionReports)
+      || (nextType === 'finished_product' && canCreateFinishedReports)
+    ) {
+      setReportType(nextType);
+    }
     setLineId(wo.lineId);
     setProductId(wo.productId);
     setEmployeeId(isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
-  }, [activeWOs, isSupervisorReporter, currentEmployee?.id]);
+  }, [
+    scopedActiveWOs,
+    isSupervisorReporter,
+    currentEmployee?.id,
+    canManageComponentInjectionReports,
+    canCreateFinishedReports,
+  ]);
+
+  useEffect(() => {
+    if (!selectedWorkOrderId) return;
+    if (scopedActiveWOs.some((wo) => wo.id === selectedWorkOrderId)) return;
+    setSelectedWorkOrderId('');
+  }, [selectedWorkOrderId, scopedActiveWOs]);
 
   const totalComponentScrapQty = useMemo(
     () => componentScrapItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -541,7 +567,7 @@ export const QuickAction: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">اختر أمر شغل لتعبئة البيانات تلقائياً</SelectItem>
-                  {activeWOs.map((wo) => {
+                  {scopedActiveWOs.map((wo) => {
                     const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
                     const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
                     const remaining = wo.quantity - (wo.producedQuantity || 0);
@@ -553,6 +579,11 @@ export const QuickAction: React.FC = () => {
                   })}
                 </SelectContent>
               </Select>
+              {scopedActiveWOs.length === 0 && (
+                <p className="mt-1.5 text-[11px] text-slate-400">
+                  لا توجد أوامر شغل نشطة مرتبطة بالمشرف المختار.
+                </p>
+              )}
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

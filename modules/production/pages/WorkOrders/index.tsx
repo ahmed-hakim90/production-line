@@ -62,6 +62,9 @@ const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
 export const WorkOrders: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
+  const uid = useAppStore((s) => s.uid);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const userRoleName = useAppStore((s) => s.userRoleName);
   const { _rawProducts, _rawLines, _rawEmployees, laborSettings, costCenters, costCenterValues, costAllocations } = useShallowStore((s) => ({
     _rawProducts: s._rawProducts,
     _rawLines: s._rawLines,
@@ -73,10 +76,24 @@ export const WorkOrders: React.FC = () => {
   }));
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
 
+  const loggedInSupervisor = useMemo(() => {
+    if (currentEmployee?.id) return currentEmployee;
+    if (!uid) return null;
+    return _rawEmployees.find((employee) => employee.userId === uid) ?? null;
+  }, [currentEmployee, _rawEmployees, uid]);
+
+  const scopedSupervisorId = useMemo(() => {
+    const roleName = String(userRoleName || '').trim();
+    const isSupervisorRole = roleName.includes('مشرف') || loggedInSupervisor?.level === 2;
+    if (!isSupervisorRole || !loggedInSupervisor?.id) return null;
+    return loggedInSupervisor.id;
+  }, [userRoleName, loggedInSupervisor]);
+
   const { filters, setFilter, clearFilters } = useWorkOrderFilters();
   const { orders: liveOrders, loading, loadingMore, hasMore, error, loadMore } = useWorkOrdersRealtime({
     status: filters.status,
     lineId: filters.lineId,
+    supervisorId: scopedSupervisorId,
     dateRange: normalizeDateRange(filters.dateRange),
   });
 

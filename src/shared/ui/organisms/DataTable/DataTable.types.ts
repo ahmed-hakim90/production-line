@@ -47,6 +47,7 @@ export interface DataTableProps<T> {
   renderActions?: (item: T) => React.ReactNode;
   actionsHeader?: string;
   onRowClick?: (item: T) => void;
+  getRowClassName?: (item: T) => string;
 
   pageSize?: number;
 

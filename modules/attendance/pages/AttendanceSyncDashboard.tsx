@@ -37,13 +37,34 @@ type AttendanceImportDraft = {
   savedAt: string;
 };
 
+type PreviewParseMeta = {
+  totalRows: number;
+  validRows: number;
+  skippedRows: number;
+  parseErrors: string[];
+};
+
+function normalizeEmployeeIdentity(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const latinDigits = raw
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/\s+/g, '');
+  const withoutExcelDecimal = latinDigits.replace(/\.0+$/, '');
+  if (/^\d+$/.test(withoutExcelDecimal)) {
+    return String(Number(withoutExcelDecimal));
+  }
+  return withoutExcelDecimal.toLowerCase();
+}
+
 function buildRowsCsv(rows: RawPunchRecord[]): string {
   const header = 'AC-No,"Name","Department","Date","Time"';
   const body = rows.map((row) => `${row.acNo},"${row.acNo}","OUR COMPANY","${row.date}","${row.punches.join(' ')}"`);
   return [header, ...body].join('\n');
 }
 
-async function parsePreviewFromFile(file: File): Promise<{ rows: RawPunchRecord[]; format: AttendanceCSVFormat }> {
+async function parsePreviewFromFile(file: File): Promise<{ rows: RawPunchRecord[]; format: AttendanceCSVFormat; meta: PreviewParseMeta }> {
   const lowerName = (file.name || '').toLowerCase();
   const isCsvLike = lowerName.endsWith('.csv') || lowerName.endsWith('.txt');
   const isExcelLike = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
@@ -67,12 +88,22 @@ async function parsePreviewFromFile(file: File): Promise<{ rows: RawPunchRecord[
     throw new Error('لم يتم العثور على سجلات صالحة للمعاينة');
   }
 
-  return { rows: parsed.records, format: parsed.detectedFormat };
+  return {
+    rows: parsed.records,
+    format: parsed.detectedFormat,
+    meta: {
+      totalRows: parsed.totalRows,
+      validRows: parsed.validRows,
+      skippedRows: parsed.skippedRows,
+      parseErrors: parsed.errors,
+    },
+  };
 }
 
 export const AttendanceSyncDashboard: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const importAttendanceFingerprintCsv = useAppStore((s) => s.importAttendanceFingerprintCsv);
+  const employees = useAppStore((s) => s._rawEmployees);
   const processDailyAttendance = useAppStore((s) => s.processDailyAttendance);
   const recalculateAttendanceForDate = useAppStore((s) => s.recalculateAttendanceForDate);
   const deleteAttendanceRecordsByBatch = useAppStore((s) => s.deleteAttendanceRecordsByBatch);
@@ -105,6 +136,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
   const [deletedKeys, setDeletedKeys] = useState<Set<string>>(new Set());
   const [fileName, setFileName] = useState('');
   const [draftRestored, setDraftRestored] = useState(false);
+  const [previewMeta, setPreviewMeta] = useState<PreviewParseMeta | null>(null);
 
   const watchStatus = useMemo(() => (
     attendanceIntegration?.watchFolderEnabled ? 'مفعل' : 'متوقف'
@@ -120,6 +152,69 @@ export const AttendanceSyncDashboard: React.FC = () => {
     }
     return base;
   }, [previewRows, deletedKeys, previewFilter]);
+
+  const previewDiagnostics = useMemo(() => {
+    const activeRows = previewRows.filter((row) => !deletedKeys.has(`${row.acNo}|${row.date}`));
+    const employeeAcNoSet = new Set(
+      employees
+        .flatMap((employee) => [normalizeEmployeeIdentity(employee.acNo), normalizeEmployeeIdentity(employee.code)])
+        .filter(Boolean),
+    );
+    const rowKeyCount = new Map<string, number>();
+    const duplicateKeys = new Set<string>();
+
+    for (const row of activeRows) {
+      const key = `${row.acNo}|${row.date}`;
+      const count = (rowKeyCount.get(key) || 0) + 1;
+      rowKeyCount.set(key, count);
+      if (count > 1) duplicateKeys.add(key);
+    }
+
+    const missingEmployeeRows = activeRows.filter((row) => !employeeAcNoSet.has(normalizeEmployeeIdentity(row.acNo)));
+    const incompleteRows = activeRows.filter((row) => row.punches.length === 1);
+    const emptyPunchRows = activeRows.filter((row) => row.punches.length === 0);
+
+    return {
+      activeCount: activeRows.length,
+      duplicateCount: duplicateKeys.size,
+      duplicateExamples: Array.from(duplicateKeys).slice(0, 10),
+      missingEmployeeCount: missingEmployeeRows.length,
+      missingEmployeeExamples: Array.from(new Set(missingEmployeeRows.map((row) => row.acNo))).slice(0, 10),
+      incompleteCount: incompleteRows.length,
+      emptyPunchCount: emptyPunchRows.length,
+    };
+  }, [deletedKeys, employees, previewRows]);
+
+  const previewIssueByRowKey = useMemo(() => {
+    const activeRows = previewRows.filter((row) => !deletedKeys.has(`${row.acNo}|${row.date}`));
+    const employeeIdentitySet = new Set(
+      employees
+        .flatMap((employee) => [normalizeEmployeeIdentity(employee.acNo), normalizeEmployeeIdentity(employee.code)])
+        .filter(Boolean),
+    );
+    const keyCount = new Map<string, number>();
+    activeRows.forEach((row) => {
+      const key = `${normalizeEmployeeIdentity(row.acNo)}|${row.date}`;
+      keyCount.set(key, (keyCount.get(key) || 0) + 1);
+    });
+
+    const issueMap = new Map<string, 'error' | 'duplicate' | 'warning'>();
+    activeRows.forEach((row) => {
+      const rowKey = `${row.acNo}|${row.date}`;
+      const normalizedKey = `${normalizeEmployeeIdentity(row.acNo)}|${row.date}`;
+      const hasMissingEmployee = !employeeIdentitySet.has(normalizeEmployeeIdentity(row.acNo));
+      const isDuplicate = (keyCount.get(normalizedKey) || 0) > 1;
+      const hasWarning = row.punches.length <= 1;
+      if (hasMissingEmployee) {
+        issueMap.set(rowKey, 'error');
+      } else if (isDuplicate) {
+        issueMap.set(rowKey, 'duplicate');
+      } else if (hasWarning) {
+        issueMap.set(rowKey, 'warning');
+      }
+    });
+    return issueMap;
+  }, [deletedKeys, employees, previewRows]);
 
   const historyTableColumns = useMemo<TableColumn<FirestoreAttendanceImportHistory>[]>(() => [
     {
@@ -241,6 +336,12 @@ export const AttendanceSyncDashboard: React.FC = () => {
       if (!parsed.records.length) return;
       setPreviewRows(parsed.records);
       setDetectedFormat(draft.detectedFormat || parsed.detectedFormat);
+      setPreviewMeta({
+        totalRows: parsed.totalRows,
+        validRows: parsed.validRows,
+        skippedRows: parsed.skippedRows,
+        parseErrors: parsed.errors,
+      });
       setFileName(draft.fileName || 'attendance-draft.csv');
       setDeletedKeys(new Set(draft.deletedKeys || []));
       setRecordEdits(new Map(draft.recordEdits || []));
@@ -306,6 +407,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
     setDetectedFormat(null);
     setFileName('');
     setDraftRestored(false);
+    setPreviewMeta(null);
     localStorage.removeItem(ATTENDANCE_IMPORT_DRAFT_KEY);
   };
 
@@ -333,6 +435,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
       const parsed = await parsePreviewFromFile(file);
       setPreviewRows(parsed.rows);
       setDetectedFormat(parsed.format);
+      setPreviewMeta(parsed.meta);
       setFileName(file.name || 'attendance.csv');
       setDeletedKeys(new Set());
       setRecordEdits(new Map());
@@ -760,6 +863,67 @@ export const AttendanceSyncDashboard: React.FC = () => {
 
       {previewRows.length > 0 && (
         <div className="card p-4 space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2">
+              <div className="text-[11px] text-[var(--color-text-muted)]">إجمالي الملف</div>
+              <div className="text-sm font-bold">{previewMeta?.totalRows ?? previewRows.length}</div>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+              <div className="text-[11px] text-emerald-700">سجلات المعاينة</div>
+              <div className="text-sm font-bold text-emerald-700">{previewDiagnostics.activeCount}</div>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/60 px-3 py-2">
+              <div className="text-[11px] text-rose-700">أخطاء القراءة</div>
+              <div className="text-sm font-bold text-rose-700">{(previewMeta?.skippedRows || 0) + (previewMeta?.parseErrors.length || 0)}</div>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/60 px-3 py-2">
+              <div className="text-[11px] text-rose-700">فشل مطابقة موظف</div>
+              <div className="text-sm font-bold text-rose-700">{previewDiagnostics.missingEmployeeCount}</div>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-orange-200 bg-orange-50/60 px-3 py-2">
+              <div className="text-[11px] text-orange-700">مكرر (AC-No + تاريخ)</div>
+              <div className="text-sm font-bold text-orange-700">{previewDiagnostics.duplicateCount}</div>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50/60 px-3 py-2">
+              <div className="text-[11px] text-amber-700">تنبيهات</div>
+              <div className="text-sm font-bold text-amber-700">{previewDiagnostics.incompleteCount + previewDiagnostics.emptyPunchCount}</div>
+            </div>
+          </div>
+
+          {previewMeta && (previewMeta.skippedRows > 0 || previewMeta.parseErrors.length > 0) && (
+            <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/60 px-3 py-2 text-xs text-rose-700 space-y-1">
+              <div className="font-bold">أخطاء الملف/القراءة:</div>
+              {previewMeta.skippedRows > 0 && (
+                <div>تم تخطي {previewMeta.skippedRows} صف أثناء قراءة الملف.</div>
+              )}
+              {previewMeta.parseErrors.slice(0, 5).map((err) => (
+                <div key={err}>- {err}</div>
+              ))}
+            </div>
+          )}
+
+          {previewDiagnostics.missingEmployeeCount > 0 && (
+            <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/60 px-3 py-2 text-xs text-rose-700 space-y-1">
+              <div className="font-bold">أكواد غير مربوطة بموظف (ستفشل عند الرفع):</div>
+              <div>{previewDiagnostics.missingEmployeeExamples.join(' ، ')}</div>
+            </div>
+          )}
+
+          {previewDiagnostics.duplicateCount > 0 && (
+            <div className="rounded-[var(--border-radius-base)] border border-orange-200 bg-orange-50/60 px-3 py-2 text-xs text-orange-700 space-y-1">
+              <div className="font-bold">سجلات مكررة داخل المعاينة:</div>
+              <div>{previewDiagnostics.duplicateExamples.join(' ، ')}</div>
+            </div>
+          )}
+
+          {(previewDiagnostics.incompleteCount > 0 || previewDiagnostics.emptyPunchCount > 0) && (
+            <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-700 space-y-1">
+              <div className="font-bold">تنبيهات:</div>
+              {previewDiagnostics.incompleteCount > 0 && <div>- {previewDiagnostics.incompleteCount} سجل يحتوي على بصمة واحدة فقط.</div>}
+              {previewDiagnostics.emptyPunchCount > 0 && <div>- {previewDiagnostics.emptyPunchCount} سجل بدون بصمات.</div>}
+            </div>
+          )}
+
           <div className="erp-filter-bar">
             <select
               value={previewFilter}
@@ -775,6 +939,13 @@ export const AttendanceSyncDashboard: React.FC = () => {
             data={visibleRecords}
             columns={previewTableColumns}
             getId={(row) => `${row.acNo}|${row.date}`}
+            getRowClassName={(row) => {
+              const issue = previewIssueByRowKey.get(`${row.acNo}|${row.date}`);
+              if (issue === 'error') return 'bg-rose-50/70 dark:bg-rose-900/15';
+              if (issue === 'duplicate') return 'bg-orange-50/70 dark:bg-orange-900/15';
+              if (issue === 'warning') return 'bg-amber-50/60 dark:bg-amber-900/10';
+              return '';
+            }}
             renderActions={(row) => {
               const key = `${row.acNo}|${row.date}`;
               return (

@@ -22,6 +22,7 @@ const DEFAULT_PAGE_SIZE = 25;
 export interface WorkOrderRealtimeFilters {
   status?: WorkOrderStatus | 'all' | null;
   lineId?: string | 'all' | null;
+  supervisorId?: string | null;
   dateRange?: {
     from?: string | null;
     to?: string | null;
@@ -65,6 +66,10 @@ const makeBaseConstraints = (filters: WorkOrderRealtimeFilters): QueryConstraint
     constraints.push(where('lineId', '==', filters.lineId));
   }
 
+  if (filters.supervisorId) {
+    constraints.push(where('supervisorId', '==', filters.supervisorId));
+  }
+
   if (filters.dateRange?.from) {
     constraints.push(where('targetDate', '>=', filters.dateRange.from));
     hasTargetDateRange = true;
@@ -103,12 +108,18 @@ export function useWorkOrdersRealtime(
   const safePageSize = Math.max(1, pageSize);
   const status = filters.status ?? 'all';
   const lineId = filters.lineId ?? 'all';
+  const supervisorId = filters.supervisorId ?? null;
   const dateFrom = filters.dateRange?.from ?? null;
   const dateTo = filters.dateRange?.to ?? null;
 
   const baseConstraints = useMemo(
-    () => makeBaseConstraints({ status, lineId, dateRange: { from: dateFrom, to: dateTo } }),
-    [status, lineId, dateFrom, dateTo],
+    () => makeBaseConstraints({
+      status,
+      lineId,
+      supervisorId,
+      dateRange: { from: dateFrom, to: dateTo },
+    }),
+    [status, lineId, supervisorId, dateFrom, dateTo],
   );
 
   useEffect(() => {

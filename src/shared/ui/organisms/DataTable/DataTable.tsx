@@ -70,6 +70,7 @@ export function DataTable<T>({
   renderActions,
   actionsHeader = 'إجراءات',
   onRowClick,
+  getRowClassName,
   pageSize = 15,
   enableColumnVisibility = true,
   enableSearch = true,
@@ -446,6 +447,7 @@ export function DataTable<T>({
                       'transition-colors group',
                       onRowClick ? 'cursor-pointer' : '',
                       isSelected ? 'row-selected' : '',
+                      getRowClassName?.(row) ?? '',
                     ].join(' ')}
                     style={{
                       borderBottom: '1px solid #f0f2f5',

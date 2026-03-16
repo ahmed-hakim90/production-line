@@ -49,6 +49,8 @@ interface SelectableTableProps<T> {
   highlightRowId?: string | null;
   /** Optional row click callback */
   onRowClick?: (item: T) => void;
+  /** Optional per-row class name */
+  getRowClassName?: (item: T) => string;
   /** Optional search input toggle */
   enableSearch?: boolean;
   /** Optional search placeholder */
@@ -100,6 +102,7 @@ export function SelectableTable<T>({
   enableColumnVisibility = false,
   highlightRowId = null,
   onRowClick,
+  getRowClassName,
   enableSearch = false,
   searchPlaceholder,
   toolbarContent,
@@ -163,6 +166,7 @@ export function SelectableTable<T>({
       renderActions={renderActions}
       actionsHeader={actionsHeader}
       onRowClick={onRowClick}
+      getRowClassName={getRowClassName}
       pageSize={pageSize > 0 ? pageSize : 15}
       enableColumnVisibility={enableColumnVisibility}
       enableSearch={enableSearch}

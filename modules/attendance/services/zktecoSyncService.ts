@@ -38,6 +38,20 @@ function normalizeKey(raw: string): string {
   return raw.toLowerCase().replace(/[\s_-]/g, '');
 }
 
+function normalizeEmployeeIdentity(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const latinDigits = raw
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/\s+/g, '');
+  const withoutExcelDecimal = latinDigits.replace(/\.0+$/, '');
+  if (/^\d+$/.test(withoutExcelDecimal)) {
+    return String(Number(withoutExcelDecimal));
+  }
+  return withoutExcelDecimal.toLowerCase();
+}
+
 function inferEventType(raw: unknown): AttendanceEventType {
   const value = String(raw || '').trim().toLowerCase();
   if (!value) return 'unknown';
@@ -161,9 +175,11 @@ async function buildEmployeeMapByAcNo(): Promise<Map<string, FirestoreEmployee>>
   const employees = await employeeService.getAll();
   const map = new Map<string, FirestoreEmployee>();
   employees.forEach((employee) => {
-    const acNo = String(employee.acNo || '').trim();
-    if (!employee.id || !acNo) return;
-    map.set(acNo, employee);
+    if (!employee.id) return;
+    const acNo = normalizeEmployeeIdentity(employee.acNo);
+    const code = normalizeEmployeeIdentity(employee.code);
+    if (acNo) map.set(acNo, employee);
+    if (code && !map.has(code)) map.set(code, employee);
   });
   return map;
 }
@@ -310,8 +326,10 @@ export const zktecoSyncService = {
 
     const groupedByAcNo = new Map<string, Map<string, string[]>>();
     parsed.forEach((row) => {
-      if (!groupedByAcNo.has(row.acNo)) groupedByAcNo.set(row.acNo, new Map<string, string[]>());
-      groupedByAcNo.get(row.acNo)!.set(row.date, row.punches);
+      const acNoKey = normalizeEmployeeIdentity(row.acNo);
+      if (!acNoKey) return;
+      if (!groupedByAcNo.has(acNoKey)) groupedByAcNo.set(acNoKey, new Map<string, string[]>());
+      groupedByAcNo.get(acNoKey)!.set(row.date, row.punches);
     });
 
     const errors: string[] = [];

@@ -875,7 +875,7 @@ export const StockTransactions: React.FC = () => {
           </table>
         </div>
       </Card>
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+      <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
       {shareToast && (

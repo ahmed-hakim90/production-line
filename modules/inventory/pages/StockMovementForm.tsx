@@ -916,7 +916,7 @@ export const StockMovementForm: React.FC = () => {
       </div>
 
       {/* Hidden print component */}
-      <div style={{ position: 'fixed', right: 0, top: 0, zIndex: -1, pointerEvents: 'none' }}>
+      <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
 
