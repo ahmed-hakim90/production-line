@@ -1186,14 +1186,16 @@ export const Reports: React.FC = () => {
             clonedDoc.documentElement.style.direction = 'rtl';
             const style = clonedDoc.createElement('style');
             style.textContent = `
-              * { direction: rtl !important; unicode-bidi: embed !important; }
+              * { direction: rtl !important; unicode-bidi: embed !important; text-align: right !important; }
               @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
             `;
             clonedDoc.head.appendChild(style);
             const el = clonedDoc.querySelector('#share-card');
             if (el) {
+              (el as HTMLElement).setAttribute('dir', 'rtl');
               (el as HTMLElement).style.direction = 'rtl';
               (el as HTMLElement).style.unicodeBidi = 'embed';
+              (el as HTMLElement).style.textAlign = 'right';
             }
           },
         });
