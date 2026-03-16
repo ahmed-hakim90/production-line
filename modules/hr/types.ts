@@ -303,6 +303,8 @@ export interface FirestoreLeaveRequest {
   approvalChain: ApprovalChainItem[];
   finalStatus: ApprovalStatus;
   reason: string;
+  balanceImpactApplied?: boolean;
+  outsideBalanceDaysApplied?: number;
   createdAt?: any;
   createdBy: string;
 }
@@ -314,6 +316,8 @@ export interface FirestoreLeaveBalance {
   sickBalance: number;
   unpaidTaken: number;
   emergencyBalance: number;
+  outsideBalanceTaken?: number;
+  outsideBalanceByType?: Record<string, number>;
   lastUpdated?: any;
 }
 

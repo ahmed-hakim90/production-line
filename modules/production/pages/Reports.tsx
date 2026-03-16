@@ -1425,6 +1425,12 @@ export const Reports: React.FC = () => {
   );
 
   const openEdit = (report: ProductionReport) => {
+    if (!can('reports.edit')) {
+      setSaveToastType('error');
+      setSaveToast('غير مصرح لك بتعديل التقارير');
+      setTimeout(() => setSaveToast(null), 3000);
+      return;
+    }
     setEditId(report.id!);
     setSaveToast(null);
     setForm({
@@ -3017,9 +3023,16 @@ export const Reports: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    if (!can('reports.edit')) {
+                      setSaveToastType('error');
+                      setSaveToast('غير مصرح لك بتعديل التقارير');
+                      setTimeout(() => setSaveToast(null), 3000);
+                      return;
+                    }
                     openEdit(row);
                     setSelectedReportDrawer(null);
                   }}
+                  disabled={!can('reports.edit')}
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
                 >
                   تعديل
@@ -3139,7 +3152,7 @@ export const Reports: React.FC = () => {
                           const remaining = wo.quantity - (wo.producedQuantity || 0);
                           return (
                             <SelectItem key={wo.id} value={wo.id!}>
-                              {wo.workOrderNumber} — {pName} — {lName} — متبقي: {remaining} وحدة
+                              {pName} — {lName} — متبقي: {remaining} وحدة
                             </SelectItem>
                           );
                         })}

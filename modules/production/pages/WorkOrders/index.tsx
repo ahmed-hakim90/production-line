@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { Download } from 'lucide-react';
 
 import { PageHeader } from '../../../../components/PageHeader';
 import { toast } from '../../../../components/Toast';
@@ -13,6 +12,7 @@ import { addDaysToDate, formatNumber } from '../../../../utils/calculations';
 import { estimateReportCost } from '../../../../utils/costCalculations';
 import { exportWorkOrders, type WorkOrderExportRow } from '../../../../utils/exportExcel';
 import { useManagedPrint } from '../../../../utils/printManager';
+import { usePermission } from '../../../../utils/permissions';
 import { reportService } from '../../services/reportService';
 import { WorkOrderPrint } from '../../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../components/ProductionReportPrint';
@@ -61,6 +61,7 @@ const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
 
 export const WorkOrders: React.FC = () => {
   const { openModal } = useGlobalModalManager();
+  const { can } = usePermission();
   const { _rawProducts, _rawLines, _rawEmployees, laborSettings, costCenters, costCenterValues, costAllocations } = useShallowStore((s) => ({
     _rawProducts: s._rawProducts,
     _rawLines: s._rawLines,
@@ -90,6 +91,7 @@ export const WorkOrders: React.FC = () => {
   const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
+  const canCreateWorkOrder = can('workOrders.create') || can('workOrders.componentInjection.manage');
 
   useEffect(() => {
     setOrders(liveOrders);
@@ -444,12 +446,42 @@ export const WorkOrders: React.FC = () => {
     );
   };
 
+  const handleOpenCreate = () => {
+    openModal(MODAL_KEYS.WORK_ORDERS_CREATE, { source: 'workOrders.page.header' });
+  };
+
+  const handleImport = () => {
+    toast.info('ميزة استيراد أوامر الشغل ستتوفر قريباً.');
+  };
+
   return (
     <div className={`erp-ds-clean ${styles.page}`}>
       <PageHeader
         title="أوامر الشغل"
         subtitle="نسخة مضغوطة مع تفاصيل في درج جانبي وتحديث لحظي"
         icon="assignment"
+        primaryAction={canCreateWorkOrder ? {
+          label: 'أمر شغل جديد',
+          icon: 'add',
+          onClick: handleOpenCreate,
+          dataModalKey: MODAL_KEYS.WORK_ORDERS_CREATE,
+        } : undefined}
+        moreActions={[
+          {
+            label: 'تصدير أوامر الشغل Excel',
+            icon: 'download',
+            group: 'تصدير',
+            hidden: rowViews.length === 0,
+            onClick: handleExport,
+          },
+          {
+            label: 'استيراد أوامر الشغل',
+            icon: 'file_download',
+            group: 'استيراد',
+            hidden: !canCreateWorkOrder,
+            onClick: handleImport,
+          },
+        ]}
       />
 
       <div className={styles.kpiRow}>
@@ -475,14 +507,12 @@ export const WorkOrders: React.FC = () => {
         onClear={clearFilters}
       />
 
-      <div className={styles.toolbar}>
-        <button type="button" className={styles.exportBtn} onClick={handleExport}>
-          <Download size={16} />
-          تصدير
-        </button>
-        {syncingStatus && <span className={styles.syncHint}>جاري مزامنة الحالة...</span>}
-        {error && <span className={styles.errorHint}>{error}</span>}
-      </div>
+      {(syncingStatus || error) && (
+        <div className={styles.toolbar}>
+          {syncingStatus && <span className={styles.syncHint}>جاري مزامنة الحالة...</span>}
+          {error && <span className={styles.errorHint}>{error}</span>}
+        </div>
+      )}
 
       <WorkOrdersTable
         rows={rowViews}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
@@ -25,7 +25,7 @@ import { formatNumber } from '../../../utils/calculations';
 import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 
-type SelfServiceTab = 'attendance' | 'leave' | 'loan' | 'payroll' | 'requests';
+type SelfServiceTab = 'approvals' | 'attendance' | 'leave' | 'loan' | 'payroll' | 'requests';
 
 function formatTime(ts: any): string {
   if (!ts) return '—';
@@ -128,6 +128,19 @@ export const EmployeeSelfService: React.FC = () => {
 
   const employeeId = currentEmployee?.id ?? '';
 
+  const refreshLeaveData = useCallback(async () => {
+    if (!employeeId) return;
+    const updated = await leaveRequestService.getByEmployee(employeeId);
+    setLeaveRequests(updated);
+    const balance = await leaveBalanceService.getByEmployee(employeeId) ?? await leaveBalanceService.getOrCreate(employeeId);
+    setLeaveBalance(balance);
+    const usage = await getEmployeeLeaveUsageSummary(employeeId, {
+      approvedRequests: updated,
+      leaveBalance: balance,
+    });
+    setLeaveUsageSummary(usage);
+  }, [employeeId]);
+
   useEffect(() => {
     if (!employeeId) return;
     let cancelled = false;
@@ -176,6 +189,12 @@ export const EmployeeSelfService: React.FC = () => {
     return () => { cancelled = true; };
   }, [employeeId, fetchEmployees, canViewApprovals]);
 
+  useEffect(() => {
+    if (!employeeId) return;
+    if (activeTab !== 'leave' && activeTab !== 'requests') return;
+    void refreshLeaveData();
+  }, [activeTab, employeeId, refreshLeaveData]);
+
   const attendanceStats = useMemo(() => {
     const total = attendanceLogs.length;
     const present = attendanceLogs.filter((l) => l.status !== 'absent').length;
@@ -192,8 +211,8 @@ export const EmployeeSelfService: React.FC = () => {
       id: r.id!,
       date: r.createdAt,
       details: `${leaveTypeByKey[r.leaveType]?.label || r.leaveTypeLabel || LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType} — ${r.totalDays} يوم`,
-      status: r.finalStatus,
-      approvalChain: r.approvalChain,
+      status: r.finalStatus || r.status || 'pending',
+      approvalChain: r.approvalChain || [],
     }));
     const loanItems = loans.map((l) => ({
       type: 'loan' as const,
@@ -246,7 +265,19 @@ export const EmployeeSelfService: React.FC = () => {
     setLeaveSubmitSuccess(false);
     setSubmitting(true);
     try {
-      const allEmployees = rawEmployees.length ? rawEmployees : await (await import('../employeeService')).employeeService.getAll();
+      const employeeApi = await import('../employeeService');
+      const allEmployees = rawEmployees.length ? rawEmployees : await employeeApi.employeeService.getAll();
+      let requester = allEmployees.find((e) => e.id === employeeId) || null;
+      if (!requester) {
+        requester = await employeeApi.employeeService.getById(employeeId);
+      }
+      if (!requester) {
+        throw new Error('لم يتم العثور على بيانات الموظف لربط الطلب بالموافقات');
+      }
+      const employeesForApproval = allEmployees.some((e) => e.id === requester.id)
+        ? allEmployees
+        : [...allEmployees, requester];
+
       const leaveRequestId = await leaveRequestService.create({
         employeeId,
         leaveType,
@@ -262,11 +293,7 @@ export const EmployeeSelfService: React.FC = () => {
         reason: reason.trim() || '—',
         createdBy: uid,
       });
-      const requester = allEmployees.find((e) => e.id === employeeId);
-      if (!requester) {
-        throw new Error('لم يتم العثور على بيانات الموظف لربط الطلب بالموافقات');
-      }
-      const approvalEmployees = allEmployees
+      const approvalEmployees = employeesForApproval
         .filter((e): e is FirestoreEmployee => Boolean(e.id))
         .map((e) => toApprovalEmployeeInfo(e));
       const createResult = await createRequest(
@@ -301,15 +328,7 @@ export const EmployeeSelfService: React.FC = () => {
       setStartDate('');
       setEndDate('');
       setReason('');
-      const updated = await leaveRequestService.getByEmployee(employeeId);
-      setLeaveRequests(updated);
-      const balance = await leaveBalanceService.getByEmployee(employeeId) ?? await leaveBalanceService.getOrCreate(employeeId);
-      setLeaveBalance(balance);
-      const usage = await getEmployeeLeaveUsageSummary(employeeId, {
-        approvedRequests: updated,
-        leaveBalance: balance,
-      });
-      setLeaveUsageSummary(usage);
+      await refreshLeaveData();
     } catch (err: any) {
       console.error('Leave request create error:', err);
       const msg = err?.message || 'حدث خطأ غير متوقع';
@@ -337,7 +356,18 @@ export const EmployeeSelfService: React.FC = () => {
         setLoanSubmitError('لم يتم العثور على بيانات الموظف');
         return;
       }
-      const allEmployees = rawEmployees.length ? rawEmployees : await (await import('../employeeService')).employeeService.getAll();
+      const employeeApi = await import('../employeeService');
+      const allEmployees = rawEmployees.length ? rawEmployees : await employeeApi.employeeService.getAll();
+      let requester = allEmployees.find((e) => e.id === employeeId) || null;
+      if (!requester) {
+        requester = await employeeApi.employeeService.getById(employeeId);
+      }
+      if (!requester) {
+        throw new Error('لم يتم العثور على بيانات الموظف لربط طلب السلفة بالموافقات');
+      }
+      const employeesForApproval = allEmployees.some((e) => e.id === requester.id)
+        ? allEmployees
+        : [...allEmployees, requester];
       const finalInstallments = totalInstallments > 0 ? totalInstallments : Math.max(1, Math.round(loanAmount / installmentAmount));
       const startMonth = new Date().toISOString().slice(0, 7);
       const loanId = await loanService.create({
@@ -358,7 +388,7 @@ export const EmployeeSelfService: React.FC = () => {
         disbursed: false,
         createdBy: uid,
       });
-      const approvalEmployees = allEmployees
+      const approvalEmployees = employeesForApproval
         .filter((e): e is FirestoreEmployee => Boolean(e.id))
         .map((e) => toApprovalEmployeeInfo(e));
       const createResult = await createRequest(
@@ -396,9 +426,10 @@ export const EmployeeSelfService: React.FC = () => {
       setLoanReason('');
       const updated = await loanService.getByEmployee(employeeId);
       setLoans(updated);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Loan create error:', err);
-      setLoanSubmitError('حدث خطأ أثناء إرسال طلب السلفة');
+      const msg = err?.message || 'حدث خطأ أثناء إرسال طلب السلفة';
+      setLoanSubmitError(`فشل إرسال طلب السلفة: ${msg}`);
     } finally {
       setLoanSubmitting(false);
     }

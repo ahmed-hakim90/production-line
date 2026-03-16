@@ -80,6 +80,16 @@ export interface EmployeeLeaveUsageSummary {
   } | null;
 }
 
+export interface LeaveBalanceDeductionResult {
+  success: boolean;
+  error?: string;
+  outsideBalanceDays?: number;
+}
+
+export interface LeaveBalanceDeductionOptions {
+  allowOutsideBalance?: boolean;
+}
+
 // ─── Leave Balance Service ──────────────────────────────────────────────────
 
 export const leaveBalanceService = {
@@ -128,13 +138,31 @@ export const leaveBalanceService = {
     employeeId: string,
     leaveType: LeaveType,
     days: number,
-  ): Promise<{ success: boolean; error?: string }> {
+    options?: LeaveBalanceDeductionOptions,
+  ): Promise<LeaveBalanceDeductionResult> {
     const balance = await this.getOrCreate(employeeId);
     if (!balance.id) return { success: false, error: 'خطأ في تحميل رصيد الإجازات' };
+    const allowOutsideBalance = options?.allowOutsideBalance === true;
+
+    const trackOutsideBalance = async (trackedDays: number): Promise<LeaveBalanceDeductionResult> => {
+      const currentOutside = Number((balance as any).outsideBalanceTaken || 0);
+      const outsideByType = {
+        ...((balance as any).outsideBalanceByType || {}),
+        [leaveType]: Number(((balance as any).outsideBalanceByType || {})[leaveType] || 0) + trackedDays,
+      };
+      await this.update(balance.id!, {
+        outsideBalanceTaken: currentOutside + trackedDays,
+        outsideBalanceByType: outsideByType,
+      } as any);
+      return { success: true, outsideBalanceDays: trackedDays };
+    };
 
     switch (leaveType) {
       case 'annual':
         if (balance.annualBalance < days) {
+          if (allowOutsideBalance) {
+            return trackOutsideBalance(days);
+          }
           return { success: false, error: `رصيد الإجازات السنوية غير كافٍ (${balance.annualBalance} يوم متبقي)` };
         }
         await this.update(balance.id, { annualBalance: balance.annualBalance - days });
@@ -142,6 +170,9 @@ export const leaveBalanceService = {
 
       case 'sick':
         if (balance.sickBalance < days) {
+          if (allowOutsideBalance) {
+            return trackOutsideBalance(days);
+          }
           return { success: false, error: `رصيد الإجازات المرضية غير كافٍ (${balance.sickBalance} يوم متبقي)` };
         }
         await this.update(balance.id, { sickBalance: balance.sickBalance - days });
@@ -149,6 +180,9 @@ export const leaveBalanceService = {
 
       case 'emergency':
         if (balance.emergencyBalance < days) {
+          if (allowOutsideBalance) {
+            return trackOutsideBalance(days);
+          }
           return { success: false, error: `رصيد الإجازات الطارئة غير كافٍ (${balance.emergencyBalance} يوم متبقي)` };
         }
         await this.update(balance.id, { emergencyBalance: balance.emergencyBalance - days });
@@ -170,6 +204,59 @@ export const leaveBalanceService = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveBalance));
   },
 };
+
+export async function syncLeaveApprovalDecision(params: {
+  leaveRequestId: string;
+  approvalChain: ApprovalChainItem[];
+  decisionStatus: ApprovalStatus;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  outsideBalanceDays?: number;
+}> {
+  const { leaveRequestId, approvalChain, decisionStatus } = params;
+
+  await leaveRequestService.updateApproval(
+    leaveRequestId,
+    approvalChain,
+    decisionStatus,
+    decisionStatus,
+  );
+
+  if (decisionStatus !== 'approved') {
+    return { success: true };
+  }
+
+  const leaveReq = await leaveRequestService.getById(leaveRequestId);
+  if (!leaveReq) {
+    return { success: false, error: 'طلب الإجازة المرتبط غير موجود' };
+  }
+
+  if ((leaveReq as any).balanceImpactApplied) {
+    return { success: true };
+  }
+
+  const deductionResult = await leaveBalanceService.deductBalance(
+    leaveReq.employeeId,
+    leaveReq.leaveType,
+    leaveReq.totalDays,
+    { allowOutsideBalance: true },
+  );
+
+  if (!deductionResult.success) {
+    return { success: false, error: deductionResult.error };
+  }
+
+  await leaveRequestService.update(leaveRequestId, {
+    balanceImpactApplied: true,
+    outsideBalanceDaysApplied: Number(deductionResult.outsideBalanceDays || 0),
+  } as any);
+
+  return {
+    success: true,
+    outsideBalanceDays: deductionResult.outsideBalanceDays,
+  };
+}
 
 // ─── Leave Request Service ──────────────────────────────────────────────────
 

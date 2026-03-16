@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
-import { leaveBalanceService, leaveRequestService } from '../leaveService';
+import { syncLeaveApprovalDecision } from '../leaveService';
 import { loanService } from '../loanService';
 import { employeeService } from '../employeeService';
 import {
@@ -237,17 +237,13 @@ export const ApprovalCenter: React.FC = () => {
         const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
         const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
         if (updatedRequest.requestType === 'leave') {
-          await leaveRequestService.updateApproval(
-            updatedRequest.sourceRequestId,
-            mappedChain,
-            mappedStatus,
-            mappedStatus,
-          );
-          if (updatedRequest.status === 'approved') {
-            const leaveReq = await leaveRequestService.getById(updatedRequest.sourceRequestId);
-            if (leaveReq) {
-              await leaveBalanceService.deductBalance(leaveReq.employeeId, leaveReq.leaveType, leaveReq.totalDays);
-            }
+          const syncResult = await syncLeaveApprovalDecision({
+            leaveRequestId: updatedRequest.sourceRequestId,
+            approvalChain: mappedChain,
+            decisionStatus: mappedStatus,
+          });
+          if (!syncResult.success) {
+            console.warn('Leave sync warning (approve):', syncResult.error);
           }
         } else if (updatedRequest.requestType === 'loan') {
           await loanService.updateApproval(
@@ -281,12 +277,14 @@ export const ApprovalCenter: React.FC = () => {
         const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
         const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
         if (updatedRequest.requestType === 'leave') {
-          await leaveRequestService.updateApproval(
-            updatedRequest.sourceRequestId,
-            mappedChain,
-            mappedStatus,
-            mappedStatus,
-          );
+          const syncResult = await syncLeaveApprovalDecision({
+            leaveRequestId: updatedRequest.sourceRequestId,
+            approvalChain: mappedChain,
+            decisionStatus: mappedStatus,
+          });
+          if (!syncResult.success) {
+            console.warn('Leave sync warning (reject):', syncResult.error);
+          }
         } else if (updatedRequest.requestType === 'loan') {
           await loanService.updateApproval(
             updatedRequest.sourceRequestId,
@@ -318,12 +316,14 @@ export const ApprovalCenter: React.FC = () => {
         const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
         const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
         if (updatedRequest.requestType === 'leave') {
-          await leaveRequestService.updateApproval(
-            updatedRequest.sourceRequestId,
-            mappedChain,
-            mappedStatus,
-            mappedStatus,
-          );
+          const syncResult = await syncLeaveApprovalDecision({
+            leaveRequestId: updatedRequest.sourceRequestId,
+            approvalChain: mappedChain,
+            decisionStatus: mappedStatus,
+          });
+          if (!syncResult.success) {
+            console.warn('Leave sync warning (cancel):', syncResult.error);
+          }
         } else if (updatedRequest.requestType === 'loan') {
           await loanService.updateApproval(
             updatedRequest.sourceRequestId,

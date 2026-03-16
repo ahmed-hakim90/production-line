@@ -42,6 +42,7 @@ import { approvalDelegationService } from './approvalDelegation';
 import { approvalAuditService } from './approvalAudit';
 import { hrNotificationService } from './notifications';
 import { employeeService } from '../employeeService';
+import { syncLeaveApprovalDecision } from '../leaveService';
 import { userService } from '@/services/userService';
 import { roleService } from '@/modules/system/services/roleService';
 import { systemSettingsService } from '@/modules/system/services/systemSettingsService';
@@ -269,6 +270,26 @@ export async function createRequest(
       'auto_approved', 'system', 'النظام', null,
       { reason: 'ضمن حد الموافقة التلقائية', requestData: options.requestData },
     );
+
+    if (options.requestType === 'leave' && options.sourceRequestId) {
+      const syncResult = await syncLeaveApprovalDecision({
+        leaveRequestId: options.sourceRequestId,
+        approvalChain: [],
+        decisionStatus: 'approved',
+      });
+      if (!syncResult.success) {
+        await approvalAuditService.log(
+          ref.id,
+          options.requestType,
+          options.employeeId,
+          'auto_approved',
+          'system',
+          'النظام',
+          null,
+          { warning: `leave-sync-failed:${syncResult.error || 'unknown'}` },
+        );
+      }
+    }
 
     return { success: true, requestId: ref.id };
   }

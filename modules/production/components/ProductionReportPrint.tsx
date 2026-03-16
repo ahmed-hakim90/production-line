@@ -10,6 +10,7 @@ import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
 import { getReportWaste } from '../../../utils/calculations';
 import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
+import { ReportShareCard, type ReportShareCardProps } from '@/src/components/erp/ReportShareCard';
 
 export interface ReportPrintRow {
   reportId?: string;
@@ -143,6 +144,38 @@ function formatReportNumber(reportId?: string): string {
   if (!reportId) return 'RPT-NA'
   const shortId = reportId.slice(-6).toUpperCase()
   return `RPT-${shortId}`
+}
+
+function buildShareCardFromPrintRow(report: ReportPrintRow): ReportShareCardProps['report'] {
+  const producedQty = Number(report.quantityProduced || 0);
+  const wasteQty = Number(report.wasteQuantity || 0);
+  const totalQty = producedQty + wasteQty;
+  const wastePercent = totalQty > 0 ? Number(((wasteQty / totalQty) * 100).toFixed(1)) : 0;
+
+  return {
+    productName: report.productName || '—',
+    lineName: report.lineName || '—',
+    supervisorName: report.employeeName || '—',
+    reportDate: report.date || '—',
+    status: 'قيد التنفيذ',
+    producedQty,
+    wasteQty,
+    workers: Number(report.workersCount || 0),
+    unitCost: Number(report.costPerUnit || 0),
+    workOrderNumber: report.workOrderNumber,
+    workOrderProgress: undefined,
+    workOrderRemaining: undefined,
+    hours: Number(report.workHours || 0),
+    wastePercent,
+    deviation: 0,
+    workerBreakdown: {
+      production: Number(report.workersProductionCount || 0),
+      packaging: Number(report.workersPackagingCount || 0),
+      quality: Number(report.workersQualityCount || 0),
+      maintenance: Number(report.workersMaintenanceCount || 0),
+      external: Number(report.workersExternalCount || 0),
+    },
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -365,66 +398,30 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     if (!report) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-    const dp = ps.decimalPlaces ?? 0;
-    const now = new Date().toLocaleString('ar-EG');
-    const total = Number(report.quantityProduced || 0) + Number(report.wasteQuantity || 0);
-    const wasteRatio = total > 0 ? ((Number(report.wasteQuantity || 0) / total) * 100).toFixed(dp) : '0';
+    const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
+    const shareCardData = buildShareCardFromPrintRow(report);
 
     return (
-      <PrintReportLayout
+      <div
         ref={ref}
-        companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
-        reportType="تقرير إنتاج"
-        printDate={now}
-        logoUrl={ps.logoUrl}
-        accentColor={ps.primaryColor}
-        footerText={ps.footerText}
-        paperSize={ps.paperSize}
-        orientation={ps.orientation}
-        meta={{
-          reportNumber: report.reportCode?.trim() || formatReportNumber(report.reportId),
-          reportDate: report.date || '—',
-          lineName: report.lineName || '—',
-          supervisorName: report.employeeName || '—',
+        className="print-root print-report"
+        dir="rtl"
+        style={{
+          width: paper.width,
+          minHeight: paper.minHeight,
+          background: '#fff',
+          boxSizing: 'border-box',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+          padding: ps.paperSize === 'thermal' ? '2mm' : '8mm',
         }}
-        kpis={[
-          { label: 'الكمية المنتجة', value: Number(report.quantityProduced || 0), unit: 'وحدة', color: 'indigo' },
-          { label: 'الهالك', value: Number(report.wasteQuantity || 0), unit: 'وحدة', color: report.wasteQuantity > 0 ? 'red' : 'default' },
-          { label: 'العمال', value: report.workersCount || 0, color: 'default' },
-          {
-            label: 'تكلفة الوحدة',
-            value: report.costPerUnit != null && report.costPerUnit > 0 ? report.costPerUnit.toFixed(2) : '—',
-            unit: 'ج.م',
-            color: 'green',
-          },
-        ]}
-        sections={[
-          {
-            title: 'المنتج وأمر الشغل',
-            rows: [
-              { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true },
-              { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
-            ],
-            progress: undefined,
-          },
-          {
-            title: 'تفاصيل الإنتاج',
-            rows: [
-              { label: 'ساعات العمل', value: `${fmtNum(report.workHours, dp)} ساعات` },
-              { label: 'نسبة الهالك', value: `${wasteRatio}%` },
-              {
-                label: 'توزيع العمالة',
-                value: `إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`,
-              },
-            ],
-          },
-        ]}
-        signatures={[
-          { title: 'مدير المصنع' },
-          { title: 'مدير الخط' },
-          { title: 'مراقب الجودة' },
-        ]}
-      />
+      >
+        <ReportShareCard
+          report={shareCardData}
+          companyName={ps.headerText || 'مؤسسة المغربي'}
+        />
+      </div>
     );
   },
 );

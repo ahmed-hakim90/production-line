@@ -271,7 +271,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     setOpen(false);
   };
 
-  const handleClear = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClear = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
     onChange('');
   };
@@ -296,20 +296,24 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           <span className="flex items-center gap-1">
             {value && (
               <span
-                onClick={(e) => {
+                role="button"
+                tabIndex={0}
+                aria-label="مسح الاختيار"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-sm hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+                onClick={handleClear}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onChange('');
+                  }
+                }}
+                onMouseDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                 }}
               >
-                <UiButton
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5"
-                  onClick={handleClear}
-                >
-                  <X className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
-                </UiButton>
+                <X className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
               </span>
             )}
             <ChevronDown className="h-4 w-4 text-[var(--color-text-muted)]" />

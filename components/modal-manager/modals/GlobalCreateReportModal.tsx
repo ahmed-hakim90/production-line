@@ -188,6 +188,14 @@ export const GlobalCreateReportModal: React.FC = () => {
     ),
     [form.reportType, injectionRawMaterialOptions, products],
   );
+  const productNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach((product) => {
+      if (!product.id) return;
+      map.set(product.id, product.name || 'منتج غير معروف');
+    });
+    return map;
+  }, [products]);
 
   useEffect(() => {
     if (!isOpen || !isSupervisorReporter || !currentEmployee?.id) return;
@@ -417,7 +425,7 @@ export const GlobalCreateReportModal: React.FC = () => {
               <option value="">اختر أمر شغل لتعبئة البيانات تلقائياً</option>
               {activeWorkOrders.map((wo) => (
                 <option key={wo.id} value={wo.id!}>
-                  {wo.workOrderNumber}
+                  {`${productNameById.get(wo.productId) ?? 'منتج غير معروف'} — المتبقي: ${Math.max(0, Number(wo.quantity || 0) - Number(wo.producedQuantity || 0))} وحدة`}
                 </option>
               ))}
             </select>
