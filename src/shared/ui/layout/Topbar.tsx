@@ -9,7 +9,7 @@ import {
   Search,
   Sidebar,
 } from 'lucide-react';
-import { useCurrentRole } from '@/utils/permissions';
+import { useCurrentRole, usePermission } from '@/utils/permissions';
 import { NotificationBell } from '@/components/NotificationBell';
 import { TasksNavButton } from '@/components/background-jobs/JobsPanel';
 import { useSidebar, useSidebarActiveRoute } from './useSidebar';
@@ -45,6 +45,7 @@ function useScrolled(threshold = 4): boolean {
 
 export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseToggle }) => {
   const { isReadOnly } = useCurrentRole();
+  const { canViewActivityLog } = usePermission();
   const { collapsed }  = useSidebar();
   const navigate       = useNavigate();
   const location       = useLocation();
@@ -226,7 +227,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           </button>
 
           {/* Background tasks */}
-          <TasksNavButton />
+          {canViewActivityLog && <TasksNavButton />}
 
           {/* Notifications */}
           <NotificationBell />

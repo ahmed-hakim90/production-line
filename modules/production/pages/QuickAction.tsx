@@ -26,6 +26,30 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+const normalizeArabic = (value: string) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ');
+
+const parseInjectionCategoryTokens = (value?: string) =>
+  String(value || 'حقن')
+    .split(',')
+    .map((part) => normalizeArabic(part))
+    .filter(Boolean);
+
+const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
+  const normalized = normalizeArabic(value || '');
+  if (!normalized) return false;
+  const strictTokens = tokens.filter((token) => token.includes('حقن'));
+  const effectiveTokens = strictTokens.length > 0 ? strictTokens : ['حقن'];
+  return effectiveTokens.some((token) => normalized.includes(token));
+};
+
 export const QuickAction: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
@@ -38,6 +62,7 @@ export const QuickAction: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const saveErrorFromStore = useAppStore((s) => s.error);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
 
   const [employeeId, setEmployeeId] = useState('');
   const [lineId, setLineId] = useState('');
@@ -66,7 +91,7 @@ export const QuickAction: React.FC = () => {
   const [workerPickerId, setWorkerPickerId] = useState('');
   const [workerActionBusy, setWorkerActionBusy] = useState(false);
   const [workerActionError, setWorkerActionError] = useState<string | null>(null);
-  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -76,6 +101,10 @@ export const QuickAction: React.FC = () => {
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || can('reports.componentInjection.only');
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
+  const injectionCategoryTokens = useMemo(
+    () => parseInjectionCategoryTokens(injectionCategoryKeywords),
+    [injectionCategoryKeywords],
+  );
 
   const availableReportTypes = useMemo<Array<'finished_product' | 'component_injection'>>(() => {
     const list: Array<'finished_product' | 'component_injection'> = [];
@@ -92,13 +121,25 @@ export const QuickAction: React.FC = () => {
   }, [availableReportTypes, reportType]);
 
   useEffect(() => {
+    if (!forceInjectionOnly) return;
+    if (reportType === 'component_injection') return;
+    setReportType('component_injection');
+    setSelectedWorkOrderId('');
+  }, [forceInjectionOnly, reportType]);
+
+  useEffect(() => {
     let mounted = true;
     rawMaterialService.getAll().then((list) => {
       if (!mounted) return;
       setRawMaterialOptions(
         list
           .filter((m) => m.id && m.isActive !== false)
-          .map((m) => ({ id: m.id!, name: m.name, code: m.code || '' }))
+          .map((m) => ({
+            id: m.id!,
+            name: m.name,
+            code: m.code || '',
+            categoryName: String(m.categoryName || '').trim(),
+          }))
       );
     }).catch(() => {
       if (mounted) setRawMaterialOptions([]);
@@ -117,16 +158,29 @@ export const QuickAction: React.FC = () => {
     return ids;
   }, [_rawLines, lineStatuses]);
 
+  const injectionRawMaterialOptions = useMemo(() => {
+    const categoryMatched = rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens));
+    const injCodeOnly = categoryMatched.filter((row) => /^INJ[-_]?/i.test(String(row.code || '').trim()));
+    return injCodeOnly.length > 0 ? injCodeOnly : categoryMatched;
+  }, [rawMaterialOptions, injectionCategoryTokens]);
+
   const selectableProducts = useMemo(() => (
     reportType === 'component_injection'
-      ? rawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
+      ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
       : _rawProducts.map((p) => ({ value: p.id!, label: p.name }))
-  ), [reportType, rawMaterialOptions, _rawProducts]);
+  ), [reportType, injectionRawMaterialOptions, _rawProducts]);
 
   useEffect(() => {
     if (reportType !== 'component_injection') return;
     if (lineId && !injectionLineIds.has(lineId)) setLineId('');
   }, [reportType, lineId, injectionLineIds]);
+
+  useEffect(() => {
+    if (reportType !== 'component_injection' || !productId) return;
+    const isAllowed = injectionRawMaterialOptions.some((item) => item.id === productId);
+    if (isAllowed) return;
+    setProductId('');
+  }, [reportType, productId, injectionRawMaterialOptions]);
 
   useEffect(() => {
     const syncOperationalDate = () => {
@@ -201,6 +255,7 @@ export const QuickAction: React.FC = () => {
     [_rawEmployees, uid],
   );
   const isSupervisorReporter = currentEmployee?.level === 2;
+  const shouldLockEmployeeToCurrent = Boolean(currentEmployee?.id) && (isSupervisorReporter || forceInjectionOnly);
 
   useEffect(() => {
     let mounted = true;
@@ -242,9 +297,9 @@ export const QuickAction: React.FC = () => {
   ), [reportType, allowedLinesForUser, injectionLineIds]);
 
   useEffect(() => {
-    if (!isSupervisorReporter || !currentEmployee?.id) return;
+    if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return;
     setEmployeeId((prev) => (prev === currentEmployee.id ? prev : currentEmployee.id));
-  }, [isSupervisorReporter, currentEmployee?.id]);
+  }, [shouldLockEmployeeToCurrent, currentEmployee?.id]);
 
   useEffect(() => {
     if (!lineId) return;
@@ -366,7 +421,7 @@ export const QuickAction: React.FC = () => {
   };
 
   const handleReset = () => {
-    setEmployeeId(isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : '');
+    setEmployeeId(shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : '');
     setLineId('');
     setProductId('');
     setReportType(
@@ -455,7 +510,7 @@ export const QuickAction: React.FC = () => {
   const activeWOs = useMemo(
     () => {
       const activeOnly = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
-      if (!isSupervisorReporter || !currentEmployee?.id) return activeOnly;
+      if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return activeOnly;
 
       const currentName = (currentEmployee.name || '').trim().toLowerCase();
       return activeOnly.filter((w) => {
@@ -463,15 +518,15 @@ export const QuickAction: React.FC = () => {
         return (w.supervisorId || '').trim().toLowerCase() === currentName;
       });
     },
-    [workOrders, isSupervisorReporter, currentEmployee?.id, currentEmployee?.name],
+    [workOrders, shouldLockEmployeeToCurrent, currentEmployee?.id, currentEmployee?.name],
   );
 
   const scopedActiveWOs = useMemo(() => {
-    const selectedSupervisorId = isSupervisorReporter ? currentEmployee?.id : employeeId;
+    const selectedSupervisorId = shouldLockEmployeeToCurrent ? currentEmployee?.id : employeeId;
     if (!selectedSupervisorId) return activeWOs;
     const normalizedSelected = String(selectedSupervisorId).trim().toLowerCase();
     return activeWOs.filter((wo) => String(wo.supervisorId || '').trim().toLowerCase() === normalizedSelected);
-  }, [activeWOs, isSupervisorReporter, currentEmployee?.id, employeeId]);
+  }, [activeWOs, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId]);
 
   const handleSelectWO = useCallback((woId: string) => {
     const wo = scopedActiveWOs.find((w) => w.id === woId);
@@ -485,10 +540,10 @@ export const QuickAction: React.FC = () => {
     }
     setLineId(wo.lineId);
     setProductId(wo.productId);
-    setEmployeeId(isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
+    setEmployeeId(shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
   }, [
     scopedActiveWOs,
-    isSupervisorReporter,
+    shouldLockEmployeeToCurrent,
     currentEmployee?.id,
     canManageComponentInjectionReports,
     canCreateFinishedReports,
@@ -614,7 +669,7 @@ export const QuickAction: React.FC = () => {
             )}
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">المشرف *</label>
-              {isSupervisorReporter && currentEmployee ? (
+              {shouldLockEmployeeToCurrent && currentEmployee ? (
                 <input
                   type="text"
                   readOnly

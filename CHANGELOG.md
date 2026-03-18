@@ -366,3 +366,7 @@
 ## [4.0.67] - 2026-03-16
 
 - Photo Shere & Transfer
+
+## [4.0.68] - 2026-03-16
+
+- Photo Shere & Transfer

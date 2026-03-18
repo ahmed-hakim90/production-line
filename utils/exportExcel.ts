@@ -441,6 +441,9 @@ export interface SingleProductExportData {
   avgDailyProduction: number;
   costBreakdown: ProductCostBreakdown | null;
   monthlyAvgCost: number | null;
+  totalCalculatedCost?: number | null;
+  totalMonthlyProductionCost?: number | null;
+  totalHistoricalCost?: number | null;
   previousMonthAvgCost: number | null;
   materials: { name: string; qty: number; unitCost: number; total: number }[];
   historicalAvgCost: number | null;
@@ -471,7 +474,14 @@ export const exportSingleProduct = (data: SingleProductExportData, includeCosts:
     const sp = data.raw.sellingPrice ?? 0;
     const profit = sp > 0 ? sp - cb.totalCalculatedCost : 0;
     const margin = sp > 0 ? (profit / sp) * 100 : 0;
+    const totalCalculatedCost = data.totalCalculatedCost ?? cb.totalCalculatedCost;
+    const totalMonthlyProductionCost = data.totalMonthlyProductionCost ?? null;
+    const totalHistoricalCost = data.totalHistoricalCost ?? null;
     const costRows: Record<string, any>[] = [
+      { 'عنصر التكلفة': 'متوسط تكلفة الوحدة', 'النوع': 'ملخص', 'القيمة (ج.م)': fmtCost(data.monthlyAvgCost || 0) },
+      { 'عنصر التكلفة': 'إجمالي التكلفة التاريخية', 'النوع': 'ملخص', 'القيمة (ج.م)': fmtCost(totalHistoricalCost || 0) },
+      { 'عنصر التكلفة': 'إجمالي التكلفة المحسوبة (/قطعة)', 'النوع': 'ملخص', 'القيمة (ج.م)': fmtCost(totalCalculatedCost || 0) },
+      { 'عنصر التكلفة': 'إجمالي تكلفة الإنتاج الشهري', 'النوع': 'ملخص', 'القيمة (ج.م)': fmtCost(totalMonthlyProductionCost || 0) },
       { 'عنصر التكلفة': 'تكلفة الوحدة الصينية', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.chineseUnitCost) },
       { 'عنصر التكلفة': 'تكلفة المواد الخام', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.rawMaterialCost) },
       { 'عنصر التكلفة': 'تكلفة العلبة الداخلية', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.innerBoxCost) },
@@ -479,7 +489,7 @@ export const exportSingleProduct = (data: SingleProductExportData, includeCosts:
       { 'عنصر التكلفة': 'وحدات في الكرتونة', 'النوع': '—', 'القيمة (ج.م)': cb.unitsPerCarton },
       { 'عنصر التكلفة': 'نصيب الكرتونة', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.cartonShare) },
       { 'عنصر التكلفة': 'نصيب المصاريف الصناعية (م. وغ.م)', 'النوع': 'تكاليف صناعية', 'القيمة (ج.م)': fmtCost(cb.productionOverheadShare) },
-      { 'عنصر التكلفة': '═ إجمالي التكلفة المحسوبة', 'النوع': '', 'القيمة (ج.م)': fmtCost(cb.totalCalculatedCost) },
+      { 'عنصر التكلفة': '═ إجمالي التكلفة المحسوبة', 'النوع': '', 'القيمة (ج.م)': fmtCost(totalCalculatedCost || 0) },
     ];
     if (sp > 0) {
       costRows.push(

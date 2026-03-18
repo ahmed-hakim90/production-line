@@ -73,7 +73,9 @@ const parseInjectionCategoryTokens = (value?: string) =>
 const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
   const normalized = normalizeArabic(value || '');
   if (!normalized) return false;
-  return tokens.some((token) => normalized.includes(token));
+  const strictTokens = tokens.filter((token) => token.includes('حقن'));
+  const effectiveTokens = strictTokens.length > 0 ? strictTokens : ['حقن'];
+  return effectiveTokens.some((token) => normalized.includes(token));
 };
 
 export const GlobalCreateReportModal: React.FC = () => {
@@ -175,10 +177,11 @@ export const GlobalCreateReportModal: React.FC = () => {
     [form.reportType, lines, injectionLineIds],
   );
 
-  const injectionRawMaterialOptions = useMemo(
-    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
-    [rawMaterialOptions, injectionCategoryTokens],
-  );
+  const injectionRawMaterialOptions = useMemo(() => {
+    const categoryMatched = rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens));
+    const injCodeOnly = categoryMatched.filter((row) => /^INJ[-_]?/i.test(String(row.code || '').trim()));
+    return injCodeOnly.length > 0 ? injCodeOnly : categoryMatched;
+  }, [rawMaterialOptions, injectionCategoryTokens]);
 
   const selectableProducts = useMemo(
     () => (

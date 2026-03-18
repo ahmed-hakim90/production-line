@@ -1,3 +1,3 @@
-﻿export * from './useBulkSelection';
+export * from './useBulkSelection';
 export * from './useNavigation';
 

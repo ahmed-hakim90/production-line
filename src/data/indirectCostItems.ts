@@ -19,7 +19,7 @@ export const INDIRECT_COST_ITEMS: IndirectCostItem[] = [
   },
   {
     id: "salaries",
-    name: "مرتيبات (مدير+مساعد)",
+    name: "مرتيات (مدير+مساعد)",
     subLabel: "أجور إدارية",
     costPerUnit: 2.17,
     monthlyTotal: 9397.64,

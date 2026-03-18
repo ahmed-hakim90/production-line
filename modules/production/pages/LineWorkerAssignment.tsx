@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Badge, Button } from '../components/UI';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import { getTodayDateString } from '../../../utils/calculations';
@@ -36,6 +37,7 @@ export const LineWorkerAssignment: React.FC = () => {
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
 
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -53,13 +55,65 @@ export const LineWorkerAssignment: React.FC = () => {
     })();
   }, []);
 
+  const currentEmployee = useMemo(
+    () => _rawEmployees.find((e) => e.userId === uid) ?? null,
+    [_rawEmployees, uid],
+  );
+  const isSupervisorReporter = currentEmployee?.level === 2;
+
+  useEffect(() => {
+    let mounted = true;
+    if (!isSupervisorReporter || !currentEmployee?.id) {
+      setAssignedLineIds(new Set());
+      return () => {
+        mounted = false;
+      };
+    }
+    supervisorLineAssignmentService
+      .getActiveByDate(selectedDate)
+      .then((rows) => {
+        if (!mounted) return;
+        const ids = new Set(
+          rows
+            .filter((row) => String(row.supervisorId || '').trim() === currentEmployee.id)
+            .map((row) => String(row.lineId || '').trim())
+            .filter(Boolean),
+        );
+        setAssignedLineIds(ids);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAssignedLineIds(new Set());
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [isSupervisorReporter, currentEmployee?.id, selectedDate]);
+
+  const visibleLines = useMemo(
+    () => (
+      isSupervisorReporter
+        ? _rawLines.filter((line) => Boolean(line.id) && assignedLineIds.has(String(line.id)))
+        : _rawLines
+    ),
+    [_rawLines, isSupervisorReporter, assignedLineIds],
+  );
+
+  const visibleLineIds = useMemo(
+    () => new Set(visibleLines.map((line) => String(line.id || '')).filter(Boolean)),
+    [visibleLines],
+  );
+
   const loadAssignments = useCallback(async () => {
     setLoading(true);
     try {
       const all = await lineAssignmentService.getByDate(selectedDate);
-      setAllDayAssignments(all);
+      const scopedAssignments = isSupervisorReporter
+        ? all.filter((a) => visibleLineIds.has(String(a.lineId || '').trim()))
+        : all;
+      setAllDayAssignments(scopedAssignments);
       if (selectedLineId) {
-        setAssignments(all.filter((a) => a.lineId === selectedLineId));
+        setAssignments(scopedAssignments.filter((a) => a.lineId === selectedLineId));
       } else {
         setAssignments([]);
       }
@@ -68,11 +122,17 @@ export const LineWorkerAssignment: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, selectedLineId]);
+  }, [selectedDate, selectedLineId, isSupervisorReporter, visibleLineIds]);
 
   useEffect(() => {
     loadAssignments();
   }, [loadAssignments]);
+
+  useEffect(() => {
+    if (!selectedLineId) return;
+    if (visibleLineIds.has(selectedLineId)) return;
+    setSelectedLineId('');
+  }, [selectedLineId, visibleLineIds]);
 
   useEffect(() => {
     if (selectedLineId && inputRef.current) {
@@ -348,7 +408,7 @@ export const LineWorkerAssignment: React.FC = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">— كل الخطوط —</SelectItem>
-                {_rawLines.map((l) => (
+                {visibleLines.map((l) => (
                   <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
                 ))}
               </SelectContent>

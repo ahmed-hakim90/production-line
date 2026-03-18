@@ -36,10 +36,13 @@ export function calculateProductCostBreakdown(
   const unitsPerCarton = product.unitsPerCarton ?? 0;
   const productionOverheadShare = monthlyAvgUnitCost;
 
-  const rawMaterialCost = materials.reduce(
-    (sum, m) => sum + (m.quantityUsed || 0) * (m.unitCost || 0),
-    0
-  );
+  const rawMaterialCost = materials.reduce((sum, m) => {
+    const quantityUsed = Number(m.quantityUsed ?? 0);
+    const unitCost = Number(m.unitCost ?? 0);
+    const safeQuantity = Number.isFinite(quantityUsed) ? quantityUsed : 0;
+    const safeUnitCost = Number.isFinite(unitCost) ? unitCost : 0;
+    return sum + (safeQuantity * safeUnitCost);
+  }, 0);
 
   const cartonShare = unitsPerCarton > 0 ? outerCartonCost / unitsPerCarton : 0;
 

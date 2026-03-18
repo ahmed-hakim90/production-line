@@ -3,6 +3,7 @@ import { SidebarProvider, useSidebar } from './useSidebar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { GlobalBackgroundJobs } from '@/components/background-jobs/GlobalBackgroundJobs';
+import { usePermission } from '@/utils/permissions';
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -14,6 +15,7 @@ export interface AppLayoutProps {
 const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { collapsed, toggleCollapse } = useSidebar();
+  const { canViewActivityLog } = usePermission();
 
   // Margin matches sidebar width: collapsed=52px icon bar, expanded=260px
   const contentMargin = collapsed ? 'lg:mr-[52px]' : 'lg:mr-[260px]';
@@ -60,7 +62,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
         </footer>
 
         {/* Global jobs panel/history mounted once for the full app layout */}
-        <GlobalBackgroundJobs />
+        {canViewActivityLog && <GlobalBackgroundJobs />}
 
       </div>
     </div>

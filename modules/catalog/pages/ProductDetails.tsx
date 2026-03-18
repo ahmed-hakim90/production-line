@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   Table2,
+  Trash2,
   Upload,
   X,
   type LucideIcon,
@@ -29,13 +30,14 @@ import {
 import * as XLSX from "xlsx";
 import { useProductDetail } from "./hooks/useProductDetail";
 import { IndirectCostCards } from "@/src/components/erp/IndirectCostCards";
-import { INDIRECT_COST_ITEMS } from "@/src/data/indirectCostItems";
 import { productMaterialService } from "../../production/services/productMaterialService";
 import { rawMaterialService } from "../../inventory/services/rawMaterialService";
 import type { RawMaterial } from "../../inventory/types";
 import type { ProductMaterial } from "../../../types";
 import { useGlobalModalManager } from "../../../components/modal-manager/GlobalModalManager";
 import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
+import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
+import { usePermission } from "../../../utils/permissions";
 
 const queryClient = new QueryClient();
 
@@ -65,8 +67,14 @@ const arDecimal = (value: number, fractionDigits = 2) =>
   value.toLocaleString("ar-EG", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
 const parseMoneyValue = (value?: string) => {
   if (!value) return 0;
-  const normalized = value.replace(/[^\d.,-]/g, "").replace(/,/g, "");
-  const parsed = Number(normalized);
+  const westernizedDigits = value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+  const normalizedSeparators = westernizedDigits
+    .replace(/٬/g, "") // Arabic thousands separator
+    .replace(/٫/g, ".") // Arabic decimal separator
+    .replace(/،/g, ",");
+  const cleaned = normalizedSeparators.replace(/,/g, "");
+  const match = cleaned.match(/-?\d+(?:\.\d+)?/);
+  const parsed = Number(match?.[0] ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
@@ -142,10 +150,25 @@ const formatDateInput = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const resolveIndirectIconType = (label: string): IndirectCostItem["iconType"] => {
+  const name = label.toLowerCase();
+  if (name.includes("تغليف") || name.includes("جودة")) return "packaging";
+  if (name.includes("تخزين") || name.includes("مخزن")) return "storage";
+  if (name.includes("مرتب") || name.includes("اجور") || name.includes("أجور") || name.includes("رواتب")) return "salaries";
+  if (name.includes("عدد") || name.includes("مهمات") || name.includes("ادوات") || name.includes("أدوات")) return "tools";
+  if (name.includes("ايجار") || name.includes("إيجار")) return "rent";
+  if (name.includes("اهلاك") || name.includes("إهلاك")) return "depreciation";
+  if (name.includes("كهرباء") || name.includes("طاقة")) return "electricity";
+  if (name.includes("هواء") || name.includes("كمبروسر")) return "compressed-air";
+  return "custom";
+};
+
 const ProductDetailsContent: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { openModal } = useGlobalModalManager();
+  const { can } = usePermission();
+  const canManageMaterials = can("costs.manage") || can("products.edit");
   const { data, isLoading, isError } = useProductDetail(id);
   const [sectionReady, setSectionReady] = useState<Record<SectionKey, boolean>>({
     header: false,
@@ -173,6 +196,7 @@ const ProductDetailsContent: React.FC = () => {
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [savingMaterial, setSavingMaterial] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
+  const [editingMaterial, setEditingMaterial] = useState<ProductMaterial | null>(null);
   const [materialForm, setMaterialForm] = useState({
     materialId: "",
     quantityUsed: 0,
@@ -284,15 +308,6 @@ const ProductDetailsContent: React.FC = () => {
     () => productMaterials.reduce((sum, row) => sum + Number(row.quantityUsed || 0) * Number(row.unitCost || 0), 0),
     [productMaterials],
   );
-  const originalRawMaterialCost = useMemo(() => {
-    const originalRow = data?.costBreakdownRows.find((row) => row.id === "r3");
-    return parseMoneyValue(originalRow?.value);
-  }, [data?.costBreakdownRows]);
-  const adjustedGrandTotal = useMemo(() => {
-    const baseGrandTotal = parseMoneyValue(data?.grandTotal);
-    const nextTotal = baseGrandTotal - originalRawMaterialCost + rawMaterialCost;
-    return arDecimal(nextTotal > 0 ? nextTotal : 0);
-  }, [data?.grandTotal, originalRawMaterialCost, rawMaterialCost]);
   const displayCostBreakdownRows = useMemo(() => {
     if (!data) return [];
     return data.costBreakdownRows.map((row) => {
@@ -304,10 +319,36 @@ const ProductDetailsContent: React.FC = () => {
       };
     });
   }, [data, productMaterials.length, rawMaterialCost]);
+  const displayGrandTotal = useMemo(() => {
+    if (!data) return "0.00";
+    const rowValueById = new Map(
+      displayCostBreakdownRows.map((row) => [row.id, parseMoneyValue(row.value)]),
+    );
+    const nextTotal =
+      Number(rowValueById.get("r1") || 0)
+      + Number(rowValueById.get("r3") || 0)
+      + Number(rowValueById.get("r4") || 0)
+      + Number(rowValueById.get("r5") || 0)
+      + Number(rowValueById.get("r6") || 0)
+      + Number(rowValueById.get("r7") || 0);
+    return arDecimal(Number.isFinite(nextTotal) ? Math.max(0, nextTotal) : 0);
+  }, [data, displayCostBreakdownRows]);
   const paginatedReports = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filteredReports.slice(start, start + pageSize);
   }, [page, filteredReports]);
+  const indirectCostItems = useMemo<IndirectCostItem[]>(
+    () =>
+      (data?.indirectCostRows || []).map((row) => ({
+        id: row.id,
+        name: row.label,
+        subLabel: row.subLabel,
+        costPerUnit: Number(row.perUnit || 0),
+        monthlyTotal: Number(row.monthlyTotal || 0),
+        iconType: resolveIndirectIconType(row.label),
+      })),
+    [data?.indirectCostRows],
+  );
 
   useEffect(() => {
     if (page > totalPages) setPage(1);
@@ -318,13 +359,16 @@ const ProductDetailsContent: React.FC = () => {
   }, [lineFilter, supervisorFilter, fromDate, toDate, activePeriod]);
 
   const openAddMaterialModal = useCallback(() => {
+    if (!canManageMaterials) return;
     setMaterialError(null);
+    setEditingMaterial(null);
     if (rawMaterialOptions.length === 0) {
       const opened = openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE, {
         mode: "create",
         onSaved: async () => {
           await loadRawMaterials();
           setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
+          setEditingMaterial(null);
           setShowMaterialModal(true);
         },
       });
@@ -332,7 +376,19 @@ const ProductDetailsContent: React.FC = () => {
     }
     setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
     setShowMaterialModal(true);
-  }, [rawMaterialOptions.length, openModal, loadRawMaterials]);
+  }, [rawMaterialOptions.length, openModal, loadRawMaterials, canManageMaterials]);
+
+  const openEditMaterialModal = useCallback((row: ProductMaterial) => {
+    if (!canManageMaterials) return;
+    setMaterialError(null);
+    setEditingMaterial(row);
+    setMaterialForm({
+      materialId: row.materialId || "",
+      quantityUsed: Number(row.quantityUsed || 0),
+      unitCost: Number(row.unitCost || 0),
+    });
+    setShowMaterialModal(true);
+  }, [canManageMaterials]);
 
   const closeMaterialModal = useCallback(() => {
     if (savingMaterial) return;
@@ -358,22 +414,42 @@ const ProductDetailsContent: React.FC = () => {
     setSavingMaterial(true);
     setMaterialError(null);
     try {
-      await productMaterialService.create({
-        productId: id,
+      const payload = {
         materialId: selected.id,
         materialName: selected.name,
         quantityUsed: Number(materialForm.quantityUsed || 0),
         unitCost: Number(materialForm.unitCost || 0),
-      });
+      };
+      if (editingMaterial?.id) {
+        await productMaterialService.update(editingMaterial.id, payload);
+      } else {
+        await productMaterialService.create({
+          productId: id,
+          ...payload,
+        });
+      }
       await loadProductMaterials();
       setShowMaterialModal(false);
+      setEditingMaterial(null);
       setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
     } catch {
       setMaterialError("تعذر حفظ المادة الخام. حاول مرة أخرى.");
     } finally {
       setSavingMaterial(false);
     }
-  }, [id, savingMaterial, rawMaterialOptions, materialForm, loadProductMaterials]);
+  }, [id, savingMaterial, rawMaterialOptions, materialForm, loadProductMaterials, editingMaterial]);
+
+  const handleDeleteMaterial = useCallback(async (row: ProductMaterial) => {
+    if (!canManageMaterials || !row.id) return;
+    const ok = window.confirm(`هل تريد حذف المادة الخام "${row.materialName}"؟`);
+    if (!ok) return;
+    try {
+      await productMaterialService.delete(row.id);
+      await loadProductMaterials();
+    } catch {
+      setMaterialError("تعذر حذف المادة الخام. حاول مرة أخرى.");
+    }
+  }, [canManageMaterials, loadProductMaterials]);
 
   const headerBadge = data?.header.status === "out_of_stock"
     ? { label: "نفد المخزون", bg: TOKENS.red.bg, text: TOKENS.red.text }
@@ -795,11 +871,14 @@ const ProductDetailsContent: React.FC = () => {
               </table>
             </div>
 
-            <IndirectCostCards items={INDIRECT_COST_ITEMS} className="mt-3" />
+            <IndirectCostCards items={indirectCostItems} className="mt-3" />
 
             <div className="mt-3 p-3" style={{ borderRadius: 8, background: TOKENS.teal.bg }}>
               <p className="text-sm font-medium" style={{ color: TOKENS.teal.text }}>إجمالي التكلفة المحسوبة (/قطعة)</p>
-              <p className="text-xl font-medium" style={{ color: TOKENS.teal.text }}>{adjustedGrandTotal} ج.م</p>
+              <p className="text-xl font-medium" style={{ color: TOKENS.teal.text }}>{displayGrandTotal} ج.م</p>
+              <p className="mt-1 text-xs font-normal" style={{ color: TOKENS.teal.text }}>
+                المعادلة: تكلفة الوحدة الصينية + المواد الخام + العلبة الداخلية + نصيب الكرتونة + التكاليف الصناعية المباشرة + التكاليف الصناعية غير المباشرة (بدون سطر اليوان).
+              </p>
             </div>
           </div>
         )}
@@ -812,15 +891,17 @@ const ProductDetailsContent: React.FC = () => {
           <div className="px-[18px] py-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-medium text-[#252521]">المواد الخام المستخدمة</h2>
-              <button
-                type="button"
-                onClick={openAddMaterialModal}
-                className="inline-flex items-center gap-1 px-3 py-2 text-sm font-normal"
-                style={{ ...ELEMENT_STYLE, color: TOKENS.teal.text, background: TOKENS.teal.bg }}
-              >
-                <Plus size={16} />
-                إضافة مادة
-              </button>
+              {canManageMaterials && (
+                <button
+                  type="button"
+                  onClick={openAddMaterialModal}
+                  className="inline-flex items-center gap-1 px-3 py-2 text-sm font-normal"
+                  style={{ ...ELEMENT_STYLE, color: TOKENS.teal.text, background: TOKENS.teal.bg }}
+                >
+                  <Plus size={16} />
+                  إضافة مادة
+                </button>
+              )}
             </div>
             {materialsLoading ? (
               <SectionSkeleton rows={3} height={32} />
@@ -846,6 +927,11 @@ const ProductDetailsContent: React.FC = () => {
                       <th className="border-b px-3 py-2 text-xs font-medium text-[#444441]" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
                         الإجمالي
                       </th>
+                      {canManageMaterials && (
+                        <th className="border-b px-3 py-2 text-xs font-medium text-[#444441]" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
+                          إجراء
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -863,6 +949,28 @@ const ProductDetailsContent: React.FC = () => {
                         <td className="border-b px-3 py-2 text-sm font-medium text-[#252521]" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
                           {arDecimal(Number(row.quantityUsed || 0) * Number(row.unitCost || 0), 2)} ج.م
                         </td>
+                        {canManageMaterials && (
+                          <td className="border-b px-3 py-2" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditMaterialModal(row)}
+                                className="inline-flex items-center justify-center rounded-md p-1 text-[#666] hover:bg-[#F1EFE8] hover:text-[#0C447C]"
+                                title="تعديل"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteMaterial(row)}
+                                className="inline-flex items-center justify-center rounded-md p-1 text-[#666] hover:bg-[#FCEBEB] hover:text-[#A32D2D]"
+                                title="حذف"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -873,11 +981,11 @@ const ProductDetailsContent: React.FC = () => {
         )}
       </section>
 
-      {showMaterialModal && (
+      {showMaterialModal && canManageMaterials && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={closeMaterialModal}>
           <div className="w-full max-w-md rounded-xl bg-white shadow-2xl" style={ELEMENT_STYLE} onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "rgba(0,0,0,0.12)" }}>
-              <h3 className="text-sm font-medium text-[#252521]">إضافة مادة خام</h3>
+              <h3 className="text-sm font-medium text-[#252521]">{editingMaterial ? "تعديل مادة خام" : "إضافة مادة خام"}</h3>
               <button
                 type="button"
                 onClick={closeMaterialModal}
@@ -953,8 +1061,8 @@ const ProductDetailsContent: React.FC = () => {
                 className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-70"
                 style={{ border: "none", borderRadius: 8, background: TOKENS.teal.base }}
               >
-                {savingMaterial ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-                حفظ المادة
+                {savingMaterial ? <Loader2 size={15} className="animate-spin" /> : editingMaterial ? <Pencil size={15} /> : <Plus size={15} />}
+                {editingMaterial ? "حفظ التعديل" : "حفظ المادة"}
               </button>
             </div>
           </div>

@@ -186,6 +186,7 @@ export const ProductDetails: React.FC = () => {
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
   const canViewCosts = can('costs.view');
+  const canManageProductMaterials = can('costs.manage') || can('products.edit');
 
   const [reports, setReports] = useState<ProductionReport[]>([]);
   const [currentMonthReports, setCurrentMonthReports] = useState<ProductionReport[]>([]);
@@ -273,17 +274,7 @@ export const ProductDetails: React.FC = () => {
     })();
   }, []);
 
-  const costBreakdown = useMemo(() => {
-    if (!rawProduct) return null;
-    const avgCost = currentMonthCost?.averageUnitCost ?? 0;
-    return calculateProductCostBreakdown(rawProduct, materials, avgCost);
-  }, [rawProduct, materials, currentMonthCost]);
-
   const chineseRate = laborSettings?.cnyToEgpRate ?? 0;
-  const chineseUnitCostInCny = useMemo(() => {
-    if (!costBreakdown || chineseRate <= 0) return null;
-    return costBreakdown.chineseUnitCost / chineseRate;
-  }, [costBreakdown, chineseRate]);
 
   const handleSaveMaterial = useCallback(async () => {
     if (!id || savingMaterial) return;
@@ -683,6 +674,58 @@ export const ProductDetails: React.FC = () => {
     return { perUnit: 0, monthlyTotal: 0 };
   }, [currentMonthCost, currentMonthLiveCost, monthlyUnitDirectCost, monthlyUnitIndirectCost]);
 
+  const effectiveMonthlyAvgCost = useMemo(() => {
+    if (currentMonthCost && Number(currentMonthCost.totalProducedQty || 0) > 0) {
+      return Number(currentMonthCost.averageUnitCost || 0);
+    }
+    if (currentMonthLiveCost?.productCost?.quantityProduced) {
+      return Number(currentMonthLiveCost.productCost.costPerUnit || 0);
+    }
+    return 0;
+  }, [currentMonthCost, currentMonthLiveCost]);
+
+  const costBreakdown = useMemo(() => {
+    if (!rawProduct) return null;
+    return calculateProductCostBreakdown(rawProduct, materials, effectiveMonthlyAvgCost);
+  }, [rawProduct, materials, effectiveMonthlyAvgCost]);
+
+  const chineseUnitCostInCny = useMemo(() => {
+    if (!costBreakdown || chineseRate <= 0) return null;
+    return costBreakdown.chineseUnitCost / chineseRate;
+  }, [costBreakdown, chineseRate]);
+
+  const summaryAverageUnitCost = useMemo(() => {
+    if (historicalAvgCost && historicalAvgCost.costPerUnit > 0) {
+      return Number(historicalAvgCost.costPerUnit || 0);
+    }
+    return Number(effectiveMonthlyAvgCost || 0);
+  }, [historicalAvgCost, effectiveMonthlyAvgCost]);
+
+  const summaryHistoricalTotalCost = useMemo(() => {
+    if (historicalAvgCost && historicalAvgCost.totalCost > 0) {
+      return Number(historicalAvgCost.totalCost || 0);
+    }
+    if (currentMonthCost && Number(currentMonthCost.totalProductionCost || 0) > 0) {
+      return Number(currentMonthCost.totalProductionCost || 0);
+    }
+    if (currentMonthLiveCost?.productCost?.totalCost) {
+      return Number(currentMonthLiveCost.productCost.totalCost || 0);
+    }
+    return 0;
+  }, [historicalAvgCost, currentMonthCost, currentMonthLiveCost]);
+
+  const summaryCalculatedUnitCost = useMemo(
+    () => Number(costBreakdown?.totalCalculatedCost || 0),
+    [costBreakdown],
+  );
+
+  const summaryMonthlyProductionTotal = useMemo(() => {
+    if (currentMonthCost && Number(currentMonthCost.totalProductionCost || 0) > 0) {
+      return Number(currentMonthCost.totalProductionCost || 0);
+    }
+    return Number(monthlyIndustrialTotal.monthlyTotal || 0);
+  }, [currentMonthCost, monthlyIndustrialTotal]);
+
   const monthlyProductCenterShares = useMemo(() => {
     if (!id || !canViewCosts || currentMonthReports.length === 0) return {} as Record<string, number>;
     const monthProductQtyTotals = new Map<string, number>();
@@ -944,7 +987,7 @@ export const ProductDetails: React.FC = () => {
 
   const handleExportProduct = () => {
     if (!rawProduct) return;
-    const exportData: SingleProductExportData = {
+    const exportData = {
       raw: rawProduct,
       stockLevel: finalBalance,
       totalProduction: finishedBalance,
@@ -952,7 +995,10 @@ export const ProductDetails: React.FC = () => {
       wasteRatio: `${wasteRatio}%`,
       avgDailyProduction,
       costBreakdown: costBreakdown ?? null,
-      monthlyAvgCost: currentMonthCost?.averageUnitCost ?? null,
+      monthlyAvgCost: summaryAverageUnitCost > 0 ? summaryAverageUnitCost : null,
+      totalCalculatedCost: summaryCalculatedUnitCost > 0 ? summaryCalculatedUnitCost : null,
+      totalMonthlyProductionCost: summaryMonthlyProductionTotal > 0 ? summaryMonthlyProductionTotal : null,
+      totalHistoricalCost: summaryHistoricalTotalCost > 0 ? summaryHistoricalTotalCost : null,
       previousMonthAvgCost: previousMonthCost?.averageUnitCost ?? null,
       materials: materials.map((m) => ({
         name: m.materialName,
@@ -967,7 +1013,7 @@ export const ProductDetails: React.FC = () => {
         totalCost: l.totalCost,
         qty: l.totalProduced,
       })),
-    };
+    } as SingleProductExportData;
     exportSingleProduct(exportData, canViewCosts);
   };
 
@@ -1143,6 +1189,19 @@ export const ProductDetails: React.FC = () => {
               <h2 style={{ margin: '0 0 6mm', fontSize: '16pt', fontWeight: 800, color: '#0f172a', borderBottom: '3px solid #0d9488', paddingBottom: '4mm' }}>
                 تفصيل تكلفة المنتج: {productDisplayName}
               </h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '3mm', marginBottom: '6mm' }}>
+                {[
+                  { label: 'متوسط تكلفة الوحدة', value: `${formatCost(summaryAverageUnitCost)} ج.م/قطعة`, color: '#0f766e' },
+                  { label: 'إجمالي التكلفة التاريخية', value: `${formatCost(summaryHistoricalTotalCost)} ج.م`, color: '#334155' },
+                  { label: 'إجمالي التكلفة المحسوبة', value: `${formatCost(summaryCalculatedUnitCost)} ج.م/قطعة`, color: '#4338ca' },
+                  { label: 'إجمالي تكلفة الإنتاج الشهري', value: `${formatCost(summaryMonthlyProductionTotal)} ج.م`, color: '#be123c' },
+                ].map((metric) => (
+                  <div key={metric.label} style={{ border: '1px solid #e2e8f0', borderRadius: '3mm', padding: '3mm', background: '#f8fafc' }}>
+                    <p style={{ margin: 0, fontSize: '8.5pt', color: '#64748b', fontWeight: 700 }}>{metric.label}</p>
+                    <p style={{ margin: '1mm 0 0', fontSize: '11pt', color: metric.color, fontWeight: 900 }}>{metric.value}</p>
+                  </div>
+                ))}
+              </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5pt', marginBottom: '8mm' }}>
                 <thead className="erp-thead">
                   <tr style={{ background: '#f1f5f9' }}>
@@ -1453,7 +1512,7 @@ export const ProductDetails: React.FC = () => {
       {/* ── Structured Cost Breakdown ── */}
       {canViewCosts && rawProduct && (
         <Card>
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-teal-50 dark:bg-teal-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
                 <ProductDetailsIcon name="receipt_long" className="text-teal-600 text-xl" />
@@ -1462,6 +1521,19 @@ export const ProductDetails: React.FC = () => {
                 <h3 className="text-sm font-bold text-[var(--color-text)]">تفصيل تكلفة المنتج</h3>
                 <p className="text-[10px] text-[var(--color-text-muted)] font-medium">يتم الحساب تلقائياً عند تغيير أي عنصر</p>
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 w-full lg:w-auto lg:min-w-[520px]">
+              {[
+                { label: 'متوسط تكلفة الوحدة', value: `${formatCost(summaryAverageUnitCost)} ج.م/قطعة`, tone: 'text-primary' },
+                { label: 'إجمالي التكلفة التاريخية', value: `${formatCost(summaryHistoricalTotalCost)} ج.م`, tone: 'text-slate-700' },
+                { label: 'إجمالي التكلفة المحسوبة', value: `${formatCost(summaryCalculatedUnitCost)} ج.م/قطعة`, tone: 'text-indigo-700' },
+                { label: 'إجمالي تكلفة الإنتاج الشهري', value: `${formatCost(summaryMonthlyProductionTotal)} ج.م`, tone: 'text-rose-700' },
+              ].map((metric) => (
+                <div key={metric.label} className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]/70 px-3 py-2 text-right">
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)]">{metric.label}</p>
+                  <p className={`text-sm font-black ${metric.tone}`}>{metric.value}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -1678,7 +1750,7 @@ export const ProductDetails: React.FC = () => {
           <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
             <div className="px-5 py-3 bg-[#f8f9fa]/50 border-b border-[var(--color-border)] flex items-center justify-between">
               <h4 className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-[0.15em]">المواد الخام المستخدمة</h4>
-              {can('costs.manage') && (
+              {canManageProductMaterials && (
                 <button
                   onClick={openAddMaterial}
                   data-modal-key={MODAL_KEYS.PRODUCT_MATERIALS_CREATE}
@@ -1702,7 +1774,7 @@ export const ProductDetails: React.FC = () => {
                     <th className="erp-th text-center">الكمية</th>
                     <th className="erp-th text-center">سعر الوحدة</th>
                     <th className="erp-th text-center">الإجمالي</th>
-                    {can('costs.manage') && (
+                    {canManageProductMaterials && (
                       <th className="erp-th text-center">إجراء</th>
                     )}
                   </tr>
@@ -1714,9 +1786,9 @@ export const ProductDetails: React.FC = () => {
                       <td className="px-5 py-2.5 text-center text-sm font-bold">{m.quantityUsed}</td>
                       <td className="px-5 py-2.5 text-center text-sm font-bold">{formatCost(m.unitCost)} ج.م</td>
                       <td className="px-5 py-2.5 text-center text-sm font-bold text-primary">{formatCost(m.quantityUsed * m.unitCost)} ج.م</td>
-                      {can('costs.manage') && (
+                      {canManageProductMaterials && (
                         <td className="px-5 py-2.5 text-center">
-                          <div className="flex items-center justify-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center justify-center gap-1">
                             <button onClick={() => openEditMaterial(m)} className="p-1 text-[var(--color-text-muted)] hover:text-primary rounded transition-colors">
                               <ProductDetailsIcon name="edit" className="text-sm" />
                             </button>
@@ -1736,19 +1808,19 @@ export const ProductDetails: React.FC = () => {
       )}
 
       {/* Cost Analysis Section */}
-      {canViewCosts && historicalAvgCost && historicalAvgCost.costPerUnit > 0 && (
+      {canViewCosts && (
         <>
           {/* Forecast Summary */}
           <Card title="ملخص التكلفة والتوقعات">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-primary/5 rounded-[var(--border-radius-lg)] p-4 border border-primary/10 text-center">
                 <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">متوسط تكلفة الوحدة</p>
-                <p className="text-xl font-bold text-primary">{formatCost(historicalAvgCost.costPerUnit)}</p>
+                <p className="text-xl font-bold text-primary">{formatCost(summaryAverageUnitCost)}</p>
                 <span className="text-[10px] font-medium text-slate-400">ج.م / وحدة</span>
               </div>
               <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 border border-[var(--color-border)] text-center">
                 <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إجمالي التكلفة التاريخية</p>
-                <p className="text-xl font-bold text-[var(--color-text)]">{formatCost(historicalAvgCost.totalCost)}</p>
+                <p className="text-xl font-bold text-[var(--color-text)]">{formatCost(summaryHistoricalTotalCost)}</p>
                 <span className="text-[10px] font-medium text-slate-400">ج.م</span>
               </div>
               {costTrend && (
@@ -1963,7 +2035,7 @@ export const ProductDetails: React.FC = () => {
       </Card>
 
       {/* ── Material Add/Edit Modal ── */}
-      {showMaterialModal && can('costs.manage') && (
+      {showMaterialModal && canManageProductMaterials && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
