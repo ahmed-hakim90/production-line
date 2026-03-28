@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 import { PageHeader } from '../../../../components/PageHeader';
@@ -132,6 +132,14 @@ export const WorkOrders: React.FC = () => {
     return new Map(_rawEmployees.map((employee) => [employee.id || '', employee.name]));
   }, [_rawEmployees]);
 
+  const lineDailyHoursMap = useMemo(() => {
+    return new Map(_rawLines.map((line) => [line.id || '', Number((line as any).dailyWorkingHours || 0)]));
+  }, [_rawLines]);
+
+  const employeeHourlyRateMap = useMemo(() => {
+    return new Map(_rawEmployees.map((employee) => [employee.id || '', Number((employee as any).hourlyRate || 0)]));
+  }, [_rawEmployees]);
+
   const allOrders = useMemo(() => {
     return Object.values(orderMap).sort((a, b) => {
       const aAt = (a.createdAt as any)?.seconds || 0;
@@ -242,13 +250,9 @@ export const WorkOrders: React.FC = () => {
               : `${diff} يوم`;
       const remainingQuantity = Math.max(0, quantity - produced);
       const progressPct = quantity > 0 ? Math.min(100, (produced / quantity) * 100) : 0;
-      const lineDailyHours = Number(_rawLines.find((line) => line.id === order.lineId)?.dailyWorkingHours || 0);
+      const lineDailyHours = lineDailyHoursMap.get(order.lineId || '') || 0;
       const baseHourlyRate = Number(laborSettings?.hourlyRate || 0);
-      const supervisorHourlyRate = Number(
-        _rawEmployees.find((employee) => employee.id === order.supervisorId)?.hourlyRate
-        || baseHourlyRate
-        || 0,
-      );
+      const supervisorHourlyRate = employeeHourlyRateMap.get(order.supervisorId || '') || baseHourlyRate || 0;
       const dailyTargetQty = estimatedDays > 0
         ? quantity / Math.max(estimatedDays, 1)
         : dailyAverage;
@@ -320,8 +324,8 @@ export const WorkOrders: React.FC = () => {
     lineNameMap,
     productAvgDailyMap,
     supervisorNameMap,
-    _rawLines,
-    _rawEmployees,
+    lineDailyHoursMap,
+    employeeHourlyRateMap,
     laborSettings,
     costCenters,
     costCenterValues,
@@ -365,7 +369,7 @@ export const WorkOrders: React.FC = () => {
     return { inProgress, completed, overdue };
   }, [counts, rowViews]);
 
-  const handleStatusChange = async (id: string, status: WorkOrderStatus) => {
+  const handleStatusChange = useCallback(async (id: string, status: WorkOrderStatus) => {
     if (!id || !isConfigured || !db) return;
     const previous = orderMap[id]?.status;
     if (!previous || previous === status) return;
@@ -387,14 +391,14 @@ export const WorkOrders: React.FC = () => {
     } finally {
       setSyncingStatus(null);
     }
-  };
+  }, [orderMap, updateOrder]);
 
-  const handleCloseOrder = async (order: WorkOrder) => {
+  const handleCloseOrder = useCallback(async (order: WorkOrder) => {
     if (!order.id) return;
     await handleStatusChange(order.id, 'completed');
-  };
+  }, [handleStatusChange]);
 
-  const handleEditOrder = (order: WorkOrder) => {
+  const handleEditOrder = useCallback((order: WorkOrder) => {
     if (!order.id) return;
     openModal(MODAL_KEYS.WORK_ORDERS_CREATE, {
       source: 'workOrders.drawer',
@@ -402,9 +406,9 @@ export const WorkOrders: React.FC = () => {
       workOrderId: order.id,
     });
     toast.info('تم فتح نموذج أمر الشغل. دعم التحميل التلقائي لبيانات التعديل سيتم إضافته في خطوة لاحقة.');
-  };
+  }, [openModal]);
 
-  const handlePrintOrder = (order: WorkOrder) => {
+  const handlePrintOrder = useCallback((order: WorkOrder) => {
     setPrintData({
       workOrderNumber: order.workOrderNumber,
       productName: productNameMap.get(order.productId || '') || '—',
@@ -425,7 +429,7 @@ export const WorkOrders: React.FC = () => {
       handlePrint();
       setTimeout(() => setPrintData(null), 600);
     }, 220);
-  };
+  }, [productNameMap, lineNameMap, supervisorNameMap, handlePrint]);
 
   const handleExport = () => {
     const detailedRows: WorkOrderExportRow[] = rowViews.map((row) => ({

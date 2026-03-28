@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import type { WorkOrderGroupBy } from './hooks/useWorkOrderFilters';
@@ -74,7 +74,7 @@ export function WorkOrdersTable({
   onCloseOrder,
   onLoadMore,
 }: WorkOrdersTableProps) {
-  const grouped = groupRows(rows, groupBy);
+  const grouped = useMemo(() => groupRows(rows, groupBy), [rows, groupBy]);
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
