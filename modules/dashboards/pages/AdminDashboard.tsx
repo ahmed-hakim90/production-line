@@ -808,54 +808,43 @@ export const AdminDashboard: React.FC = () => {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [reports, hourlyRate, liveCostComputation.reportUnitCost]);
 
-  const topLines = useMemo(() => {
-    const lineMap = new Map<string, number>();
-    reports.forEach((r) => {
-      lineMap.set(r.lineId, (lineMap.get(r.lineId) || 0) + (r.quantityProduced || 0));
-    });
-    return Array.from(lineMap.entries())
-      .map(([lineId, qty]) => ({
-        name: _rawLines.find((l) => l.id === lineId)?.name || lineId,
-        production: qty,
-      }))
-      .sort((a, b) => b.production - a.production)
-      .slice(0, 5);
-  }, [reports, _rawLines]);
+  // Single pass over reports to build all three top-N aggregations at once.
+  const { topLines, topProducts, topSupervisors } = useMemo(() => {
+    const lineNameMap = new Map(_rawLines.map((l) => [l.id || '', l.name]));
+    const productNameMap = new Map(_rawProducts.map((p) => [p.id || '', p.name]));
+    const employeeNameMap = new Map(_rawEmployees.map((e) => [e.id || '', e.name]));
 
-  const topProducts = useMemo(() => {
-    const prodMap = new Map<string, number>();
-    reports.forEach((r) => {
-      prodMap.set(r.productId, (prodMap.get(r.productId) || 0) + (r.quantityProduced || 0));
-    });
-    return Array.from(prodMap.entries())
-      .map(([productId, qty]) => ({
-        id: productId,
-        name: _rawProducts.find((p) => p.id === productId)?.name || productId,
-        production: qty,
-      }))
-      .sort((a, b) => b.production - a.production)
-      .slice(0, 5);
-  }, [reports, _rawProducts]);
+    const lineQty = new Map<string, number>();
+    const productQty = new Map<string, number>();
+    const supervisorAgg = new Map<string, { production: number; reports: number }>();
 
-  const topSupervisors = useMemo(() => {
-    const map = new Map<string, { production: number; reports: number }>();
-    reports.forEach((report) => {
-      const key = report.employeeId;
-      const prev = map.get(key) || { production: 0, reports: 0 };
-      prev.production += Number(report.quantityProduced || 0);
+    for (const r of reports) {
+      const qty = Number(r.quantityProduced || 0);
+      lineQty.set(r.lineId, (lineQty.get(r.lineId) || 0) + qty);
+      productQty.set(r.productId, (productQty.get(r.productId) || 0) + qty);
+      const prev = supervisorAgg.get(r.employeeId) || { production: 0, reports: 0 };
+      prev.production += qty;
       prev.reports += 1;
-      map.set(key, prev);
-    });
-    return Array.from(map.entries())
-      .map(([employeeId, value]) => ({
-        id: employeeId,
-        name: _rawEmployees.find((employee) => employee.id === employeeId)?.name || employeeId,
-        production: value.production,
-        reports: value.reports,
-      }))
+      supervisorAgg.set(r.employeeId, prev);
+    }
+
+    const lines = Array.from(lineQty.entries())
+      .map(([id, production]) => ({ name: lineNameMap.get(id) || id, production }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawEmployees]);
+
+    const products = Array.from(productQty.entries())
+      .map(([id, production]) => ({ id, name: productNameMap.get(id) || id, production }))
+      .sort((a, b) => b.production - a.production)
+      .slice(0, 5);
+
+    const supervisors = Array.from(supervisorAgg.entries())
+      .map(([id, value]) => ({ id, name: employeeNameMap.get(id) || id, ...value }))
+      .sort((a, b) => b.production - a.production)
+      .slice(0, 5);
+
+    return { topLines: lines, topProducts: products, topSupervisors: supervisors };
+  }, [reports, _rawLines, _rawProducts, _rawEmployees]);
 
   // ── Roles chart data ──────────────────────────────────────────────────────
 

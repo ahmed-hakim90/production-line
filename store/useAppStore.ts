@@ -3619,6 +3619,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Subscribe to active (pending + in_progress) orders only — much cheaper than
     // subscribeAll which streams the entire collection on every change.
     // Completed/cancelled orders remain available from the initial _loadAppData load.
+    let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+
     return workOrderService.subscribeActive((activeOrders) => {
       set((state) => {
         // Keep completed/cancelled from the initial load; replace pending/in_progress
@@ -3643,7 +3645,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           ),
         };
       });
-      get()._rebuildLines();
+      // Debounce _rebuildLines so rapid bulk work-order updates trigger only
+      // one expensive rebuild instead of one per incoming document change.
+      if (rebuildTimer) clearTimeout(rebuildTimer);
+      rebuildTimer = setTimeout(() => {
+        get()._rebuildLines();
+        rebuildTimer = null;
+      }, 250);
     });
   },
 

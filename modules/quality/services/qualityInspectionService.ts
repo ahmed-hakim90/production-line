@@ -9,9 +9,10 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { isConfigured } from '@/services/firebase';
+import { db, isConfigured } from '@/services/firebase';
 import { activityLogService } from '@/services/activityLogService';
 import type {
   FileAttachmentMeta,
@@ -214,10 +215,10 @@ export const qualityInspectionService = {
       getDocs(query(qualityCAPARef(), where('workOrderId', '==', workOrderId))),
     ]);
 
-    for (const row of inspectionSnap.docs) await deleteDoc(row.ref);
-    for (const row of defectsSnap.docs) await deleteDoc(row.ref);
-    for (const row of reworkSnap.docs) await deleteDoc(row.ref);
-    for (const row of capaSnap.docs) await deleteDoc(row.ref);
+    const batch = writeBatch(db);
+    [...inspectionSnap.docs, ...defectsSnap.docs, ...reworkSnap.docs, ...capaSnap.docs]
+      .forEach((d) => batch.delete(d.ref));
+    await batch.commit();
 
     await activityLogService.logCurrentUser(
       'DELETE_REPORT',
