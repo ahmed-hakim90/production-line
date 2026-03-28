@@ -1049,7 +1049,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   _loadAppData: async () => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, productionPlanFollowUps, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
+    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, productionPlanFollowUps, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
       await Promise.all([
         productService.getAll(),
         lineService.getAll(),
@@ -1057,7 +1057,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         lineProductConfigService.getAll(),
         productionPlanService.getAll(),
         productionPlanFollowUpService.getAll(),
-        workOrderService.getAll(),
         costCenterService.getAll(),
         costCenterValueService.getAll(),
         costAllocationService.getAll(),
@@ -1141,7 +1140,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       productionPlans,
       productionPlanFollowUps,
       planReports,
-      workOrders,
+      // workOrders is intentionally omitted here — subscribeToWorkOrders()
+      // fires immediately after initializeApp() and populates active orders
+      // via subscribeActive(), which is far cheaper than a full getAll().
       costCenters,
       costCenterValues,
       costAllocations,
@@ -1156,9 +1157,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const allReports = todayReports;
     const products = buildProducts(rawProducts, allReports, configs);
+    // Pass empty workOrders for the initial build — subscribeToWorkOrders fires
+    // right after and triggers a debounced _rebuildLines() with active orders.
     const productionLines = buildProductionLines(
       rawLines, rawProducts, rawEmployees, todayReports, lineStatuses, configs,
-      productionPlans, planReports, workOrders
+      productionPlans, planReports, []
     );
     const employees: Employee[] = rawEmployees.map((e) => ({
       id: e.id!,

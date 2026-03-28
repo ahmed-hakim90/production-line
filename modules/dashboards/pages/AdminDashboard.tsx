@@ -403,6 +403,32 @@ export const AdminDashboard: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
 
+  // ── Shared O(1) lookup Maps — built once per dependency change ────────────
+  const lineNameMap = useMemo(
+    () => new Map(_rawLines.map((l) => [l.id || '', l.name])),
+    [_rawLines],
+  );
+  const productByIdMap = useMemo(
+    () => new Map(_rawProducts.map((p) => [p.id || '', p])),
+    [_rawProducts],
+  );
+  const employeeNameMap = useMemo(
+    () => new Map(_rawEmployees.map((e) => [e.id || '', e.name])),
+    [_rawEmployees],
+  );
+  const workOrderById = useMemo(
+    () => new Map(workOrders.map((w) => [w.id || '', w])),
+    [workOrders],
+  );
+  const assetCenterMap = useMemo(
+    () => new Map(assets.map((a) => [String(a.id || ''), String(a.centerId || '')])),
+    [assets],
+  );
+  const costCenterNameMap = useMemo(
+    () => new Map(costCenters.map((c) => [c.id || '', c.name])),
+    [costCenters],
+  );
+
   const alertCfg = useMemo(() => getAlertSettings(systemSettings), [systemSettings]);
   const isVisible = useCallback(
     (widgetId: string) => isWidgetVisible(systemSettings, 'adminDashboard', widgetId),
@@ -858,22 +884,24 @@ export const AdminDashboard: React.FC = () => {
 
   const costCentersSummary = useMemo(() => {
     const currentMonth = getCurrentMonth();
+    const valueMap = new Map(
+      costCenterValues
+        .filter((v) => v.month === currentMonth)
+        .map((v) => [String(v.costCenterId || ''), v]),
+    );
+    const allocatedSet = new Set(
+      costAllocations
+        .filter((a) => a.month === currentMonth)
+        .map((a) => String(a.costCenterId || '')),
+    );
     return costCenters
       .filter((c) => c.isActive)
-      .map((center) => {
-        const monthValue = costCenterValues.find(
-          (v) => v.costCenterId === center.id && v.month === currentMonth
-        );
-        const allocation = costAllocations.find(
-          (a) => a.costCenterId === center.id && a.month === currentMonth
-        );
-        return {
-          name: center.name,
-          type: center.type,
-          amount: monthValue?.amount ?? 0,
-          allocated: !!allocation,
-        };
-      })
+      .map((center) => ({
+        name: center.name,
+        type: center.type,
+        amount: valueMap.get(center.id || '')?.amount ?? 0,
+        allocated: allocatedSet.has(center.id || ''),
+      }))
       .slice(0, 6);
   }, [costCenters, costCenterValues, costAllocations]);
 
@@ -888,7 +916,7 @@ export const AdminDashboard: React.FC = () => {
     assetDepreciations
       .filter((entry) => entry.period === currentMonth && activeAssetIds.has(String(entry.assetId)))
       .forEach((entry) => {
-        const centerId = assets.find((asset) => String(asset.id) === String(entry.assetId))?.centerId || '';
+        const centerId = assetCenterMap.get(String(entry.assetId)) || '';
         if (!centerId) return;
         const prev = byCenter.get(centerId) || { amount: 0, assetsCount: 0 };
         prev.amount += Number(entry.depreciationAmount || 0);
@@ -899,7 +927,7 @@ export const AdminDashboard: React.FC = () => {
     const rows = Array.from(byCenter.entries())
       .map(([centerId, value]) => ({
         centerId,
-        centerName: costCenters.find((center) => center.id === centerId)?.name || '—',
+        centerName: costCenterNameMap.get(centerId) || '—',
         amount: value.amount,
         assetsCount: value.assetsCount,
       }))
@@ -908,7 +936,7 @@ export const AdminDashboard: React.FC = () => {
     const total = rows.reduce((sum, row) => sum + row.amount, 0);
 
     return { month: currentMonth, rows, total };
-  }, [assetDepreciations, assets, costCenters]);
+  }, [assetDepreciations, assets, assetCenterMap, costCenterNameMap]);
 
   const liveScanKpis = useMemo(() => {
     const activeWorkOrderIds = new Set(
@@ -936,10 +964,10 @@ export const AdminDashboard: React.FC = () => {
 
     const hottestFromLive = summaries
       .map(([woId, s]) => {
-        const wo = workOrders.find((w) => w.id === woId);
+        const wo = workOrderById.get(woId);
         if (!wo) return null;
-        const line = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
-        const product = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '—';
+        const line = lineNameMap.get(wo.lineId) ?? '—';
+        const product = productByIdMap.get(wo.productId)?.name ?? '—';
         return { woId, produced: s.completedUnits || 0, line, product };
       })
       .filter((x): x is { woId: string; produced: number; line: string; product: string } => !!x)
@@ -952,8 +980,8 @@ export const AdminDashboard: React.FC = () => {
         const producedNow = producedFromLive ?? w.actualProducedFromScans ?? w.scanSummary?.completedUnits ?? w.producedQuantity ?? 0;
         return {
           produced: producedNow,
-          line: _rawLines.find((l) => l.id === w.lineId)?.name ?? '—',
-          product: _rawProducts.find((p) => p.id === w.productId)?.name ?? '—',
+          line: lineNameMap.get(w.lineId) ?? '—',
+          product: productByIdMap.get(w.productId)?.name ?? '—',
         };
       })
       .sort((a, b) => b.produced - a.produced)[0];
@@ -980,7 +1008,7 @@ export const AdminDashboard: React.FC = () => {
 
     const rows = activeWOs.map((wo) => {
       const producedNow = liveProduction[wo.id ?? '']?.completedUnits ?? wo.actualProducedFromScans ?? wo.scanSummary?.completedUnits ?? wo.producedQuantity ?? 0;
-      const productAvgDaily = Math.max(0, Number(_rawProducts.find((p) => p.id === wo.productId)?.avgDailyProduction || 0));
+      const productAvgDaily = Math.max(0, Number(productByIdMap.get(wo.productId)?.avgDailyProduction || 0));
       const execution = calculateWorkOrderExecutionMetrics({
         quantity: wo.quantity,
         producedQuantity: producedNow,
@@ -1011,7 +1039,7 @@ export const AdminDashboard: React.FC = () => {
     const worstSupervisors = Array.from(bySupervisor.entries())
       .map(([supervisorId, agg]) => {
         const deviation = agg.weight > 0 ? Number((agg.weightedSum / agg.weight).toFixed(1)) : 0;
-        const name = _rawEmployees.find((e) => e.id === supervisorId)?.name ?? 'غير معروف';
+        const name = employeeNameMap.get(supervisorId) ?? 'غير معروف';
         return { supervisorId, name, deviation, delayed: agg.delayed };
       })
       .sort((a, b) => a.deviation - b.deviation)
@@ -1022,7 +1050,7 @@ export const AdminDashboard: React.FC = () => {
       avgDeviation: weightedDeviation !== null ? Number(weightedDeviation.toFixed(1)) : null,
       worstSupervisors,
     };
-  }, [workOrders, liveProduction, _rawEmployees, _rawProducts]);
+  }, [workOrders, liveProduction, employeeNameMap, productByIdMap]);
 
   const qualityKpis = useMemo(() => {
     const active = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed');
@@ -1064,7 +1092,7 @@ export const AdminDashboard: React.FC = () => {
       : (Object.entries(liveCostComputation.byProduct) as Array<[string, { quantityProduced: number; costPerUnit: number }]>);
     return sourceRows
       .map(([productId, d]) => {
-        const product = _rawProducts.find((p) => p.id === productId);
+        const product = productByIdMap.get(productId);
         return {
           id: productId,
           name: product?.name || productId,
@@ -1075,7 +1103,7 @@ export const AdminDashboard: React.FC = () => {
         };
       })
       .sort((a, b) => b.qty - a.qty);
-  }, [monthlyCostMode, monthlyCostSummary, liveCostComputation.byProduct, _rawProducts]);
+  }, [monthlyCostMode, monthlyCostSummary, liveCostComputation.byProduct, productByIdMap]);
 
   const productSummaryCategories = useMemo(() => {
     const categories = productSummary
@@ -1153,12 +1181,12 @@ export const AdminDashboard: React.FC = () => {
       })
       .map((row) => ({
         id: row.id || `${row.planId}-${row.componentId}`,
-        productName: _rawProducts.find((p) => p.id === row.productId)?.name || '—',
+        productName: productByIdMap.get(row.productId)?.name || '—',
         componentName: row.componentName || '—',
         shortageQty: Number(row.shortageQty || 0),
         note: row.note || '',
       }));
-  }, [productionPlanFollowUps, _rawProducts]);
+  }, [productionPlanFollowUps, productByIdMap]);
 
   const runQuickAction = useCallback((action: QuickActionItem) => {
     if (action.actionType === 'navigate' && action.target) {
