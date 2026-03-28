@@ -3616,27 +3616,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   subscribeToWorkOrders: () => {
-    return workOrderService.subscribeAll((orders) => {
-      const validWorkOrderIds = new Set(
-        orders
-          .map((order) => order.id)
-          .filter((id): id is string => !!id),
-      );
-
+    // Subscribe to active (pending + in_progress) orders only — much cheaper than
+    // subscribeAll which streams the entire collection on every change.
+    // Completed/cancelled orders remain available from the initial _loadAppData load.
+    return workOrderService.subscribeActive((activeOrders) => {
       set((state) => {
-        const liveProduction = Object.fromEntries(
-          Object.entries(state.liveProduction).filter(([workOrderId]) =>
-            validWorkOrderIds.has(workOrderId),
-          ),
+        // Keep completed/cancelled from the initial load; replace pending/in_progress
+        // with the live snapshot so we always reflect the latest active state.
+        const rest = state.workOrders.filter(
+          (w) => w.status !== 'pending' && w.status !== 'in_progress',
         );
-        const scanEventsToday = state.scanEventsToday.filter((event) =>
-          validWorkOrderIds.has(event.workOrderId),
+        const merged = [...rest, ...activeOrders];
+        const validWorkOrderIds = new Set(
+          merged.map((o) => o.id).filter((id): id is string => !!id),
         );
 
         return {
-          workOrders: orders,
-          liveProduction,
-          scanEventsToday,
+          workOrders: merged,
+          liveProduction: Object.fromEntries(
+            Object.entries(state.liveProduction).filter(([workOrderId]) =>
+              validWorkOrderIds.has(workOrderId),
+            ),
+          ),
+          scanEventsToday: state.scanEventsToday.filter((event) =>
+            validWorkOrderIds.has(event.workOrderId),
+          ),
         };
       });
       get()._rebuildLines();

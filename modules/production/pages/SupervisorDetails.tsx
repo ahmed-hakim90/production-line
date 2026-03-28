@@ -230,12 +230,9 @@ export const SupervisorDetails: React.FC = () => {
 
         let reportsByWorkOrder: ProductionReport[][] = [];
         try {
-          reportsByWorkOrder = await Promise.all(
-            supervisorOrders
-              .map((wo) => wo.id)
-              .filter((woId): woId is string => !!woId)
-              .map((woId) => reportService.getByWorkOrderId(woId)),
-          );
+          const woIds = supervisorOrders.map((wo) => wo.id).filter((woId): woId is string => !!woId);
+          const reportsByWOId = await reportService.getByWorkOrderIds(woIds);
+          reportsByWorkOrder = supervisorOrders.map((wo) => (wo.id ? (reportsByWOId[wo.id] ?? []) : []));
         } catch (reportsByWorkOrderError) {
           // Keep the details page usable even if work-order report lookups fail
           // (e.g., missing composite index in some environments).

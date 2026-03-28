@@ -260,4 +260,18 @@ export const workOrderService = {
       callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder)));
     });
   },
+
+  /** Real-time listener scoped to active work orders only (pending + in_progress).
+   * Significantly cheaper than subscribeAll — reads only active orders instead of
+   * the entire collection on every change. */
+  subscribeActive(callback: (orders: WorkOrder[]) => void): Unsubscribe {
+    if (!isConfigured) return () => {};
+    const q = query(
+      collection(db, COLLECTION),
+      where('status', 'in', ['pending', 'in_progress']),
+    );
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder)));
+    });
+  },
 };
