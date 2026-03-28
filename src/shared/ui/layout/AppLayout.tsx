@@ -43,11 +43,25 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
         </main>
 
         <footer className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
-          <div className="max-w-screen-2xl mx-auto px-4 sm:px-5 py-3 flex flex-col sm:flex-row justify-between items-center gap-2">
-            <p className="text-[11px] text-[var(--color-text-muted)] font-mono">
-              © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM —{' '}
-              <span className="text-primary font-semibold">v{APP_VERSION}</span>
-            </p>
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-5 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-center sm:text-start">
+              <p className="text-[11px] text-[var(--color-text-muted)] font-mono">
+                © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM —{' '}
+                <span className="text-primary font-semibold">v{APP_VERSION}</span>
+              </p>
+              <span className="text-[11px] text-[var(--color-text-muted)]">
+                تطوير بواسطة{' '}
+                <a
+                  href="https://hakimo-cv.vercel.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary font-semibold hover:underline underline-offset-2"
+                  dir="ltr"
+                >
+                  Ahmed Abdulhakim
+                </a>
+              </span>
+            </div>
             <div className="flex items-center gap-4 text-[11px] text-[var(--color-text-muted)]">
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />

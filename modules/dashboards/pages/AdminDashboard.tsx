@@ -2184,7 +2184,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">توزيع الأدوار</h3>
           </div>
           {rolesChartData.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-56">
+            <div style={{ direction: 'ltr' }} className="h-56 min-h-[14rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -2231,7 +2231,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">الإنتاج مقابل تكلفة الوحدة</h3>
           </div>
           {dailyChartData.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-72">
+            <div style={{ direction: 'ltr' }} className="h-72 min-h-[18rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={dailyChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" strokeOpacity={0.7} />
@@ -2414,7 +2414,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">أعلى 5 خطوط إنتاج</h3>
           </div>
           {topLines.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topLines} layout="vertical" margin={{ left: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -2439,7 +2439,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">أعلى 5 منتجات</h3>
           </div>
           {topProducts.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topProducts} layout="vertical" margin={{ left: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -2464,7 +2464,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">أعلى 5 مشرفين في الأداء</h3>
           </div>
           {topSupervisors.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topSupervisors} layout="vertical" margin={{ left: 70 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

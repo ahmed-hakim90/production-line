@@ -974,7 +974,9 @@ export const Employees: React.FC = () => {
       <Card className="py-3 px-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-bold text-[var(--color-text-muted)]">إجمالي المرتبات (حسب النتائج المعروضة)</span>
-          <span className="text-base font-extrabold text-primary">{filteredSalaryTotal.toLocaleString('ar-EG')} ج.م</span>
+          <span className="text-base font-extrabold text-primary">
+            {filteredSalaryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+          </span>
         </div>
       </Card>
 

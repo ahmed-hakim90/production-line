@@ -207,7 +207,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
             {ps.headerText}
           </h1>
           <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
-            نظام إدارة الإنتاج - مؤسسة المغربي
+           مؤسسة المغربي
           </p>
         </div>
 

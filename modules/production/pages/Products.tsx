@@ -31,7 +31,8 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useErpNavigate } from '@/hooks/useErpNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';

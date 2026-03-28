@@ -84,6 +84,8 @@ export const HRDashboard: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const uid = useAppStore((s) => s.uid);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const permissions = useAppStore((s) => s.userPermissions);
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
@@ -747,10 +749,15 @@ export const HRDashboard: React.FC = () => {
   }, [employees]);
 
   const deptBreakdown = useMemo(() => {
-    const map = new Map<string, { name: string; count: number }>();
-    departments.forEach((d) => map.set(d.id!, { name: d.name, count: 0 }));
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    departments.forEach((d) => {
+      const id = String(d.id || '').trim();
+      if (!id) return;
+      map.set(id, { id, name: d.name, count: 0 });
+    });
     employees.filter((e) => e.isActive).forEach((e) => {
-      const entry = map.get(e.departmentId);
+      const deptId = String(e.departmentId || '').trim();
+      const entry = map.get(deptId);
       if (entry) entry.count += 1;
     });
     return [...map.values()].sort((a, b) => b.count - a.count);
@@ -2003,10 +2010,10 @@ export const HRDashboard: React.FC = () => {
               <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد أقسام</p>
             ) : (
               <div className="space-y-3">
-                {deptBreakdown.map((d) => {
+                {deptBreakdown.map((d, index) => {
                   const pct = empKpis.active > 0 ? (d.count / empKpis.active) * 100 : 0;
                   return (
-                    <div key={d.name} className="flex items-center gap-3">
+                    <div key={d.id || `dept-${index}`} className="flex items-center gap-3">
                       <span className="text-sm font-medium text-[var(--color-text)] w-28 truncate">{d.name}</span>
                       <div className="flex-1 bg-[#f0f2f5] rounded-full h-4 overflow-hidden">
                         <div

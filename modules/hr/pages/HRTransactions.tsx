@@ -57,13 +57,13 @@ const TYPE_COLORS: Record<HRTransaction['type'], string> = {
 };
 
 const STATUS_MAP: Record<string, { label: string; color: HRTransaction['statusColor'] }> = {
-  approved: { label: 'تمت الموافقة', color: 'green' },
-  pending: { label: 'قيد الانتظار', color: 'yellow' },
-  rejected: { label: 'مرفوض', color: 'red' },
-  active: { label: 'نشط', color: 'green' },
+  approved: { label: 'ŘŞŮŘŞ Ř§ŮŮŮŘ§ŮŮŘŠ', color: 'green' },
+  pending: { label: 'ŮŮŘŻ Ř§ŮŘ§ŮŘŞŘ¸Ř§Řą', color: 'yellow' },
+  rejected: { label: 'ŮŘąŮŮŘś', color: 'red' },
+  active: { label: 'ŮŘ´Řˇ', color: 'green' },
   closed: { label: '8&788', color: 'gray' },
-  stopped: { label: 'متوقف', color: 'red' },
-  disbursed: { label: 'تم الصرف', color: 'blue' },
+  stopped: { label: 'ŮŘŞŮŮŮ', color: 'red' },
+  disbursed: { label: 'ŘŞŮ Ř§ŮŘľŘąŮ', color: 'blue' },
 };
 
 function toDate(val: any): Date {
@@ -139,7 +139,7 @@ export const HRTransactions: React.FC = () => {
     () =>
       employees
         .filter((e) => e.isActive !== false)
-        .map((e) => ({ value: e.id!, label: `${e.code || ''} — ${e.name}` })),
+        .map((e) => ({ value: e.id!, label: `${e.code || ''} â ${e.name}` })),
     [employees],
   );
 
@@ -178,9 +178,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: l.id!,
         type: 'leave',
-        typeLabel: `إجازة ${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`,
+        typeLabel: `ŘĽŘŹŘ§Ř˛ŘŠ ${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`,
         employeeId: l.employeeId,
-        description: `${l.totalDays} يوم — ${l.startDate} → ${l.endDate}${l.reason ? ` (${l.reason})` : ''}`,
+        description: `${l.totalDays} ŮŮŮ â ${l.startDate} â ${l.endDate}${l.reason ? ` (${l.reason})` : ''}`,
         amount: null,
         status: l.finalStatus || l.status,
         statusColor: STATUS_MAP[l.finalStatus || l.status]?.color || 'gray',
@@ -202,9 +202,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: l.id!,
         type: 'loan',
-        typeLabel: LOAN_TYPE_LABELS[l.loanType] || 'سلفة',
+        typeLabel: LOAN_TYPE_LABELS[l.loanType] || 'ŘłŮŮŘŠ',
         employeeId: l.employeeId,
-        description: `${formatCurrency(l.loanAmount)}${l.loanType === 'installment' ? ` — ${l.totalInstallments} قسط (${formatCurrency(l.installmentAmount)}/شهر) — متبقي ${l.remainingInstallments}` : ''}${l.reason ? ` (${l.reason})` : ''}`,
+        description: `${formatCurrency(l.loanAmount)}${l.loanType === 'installment' ? ` â ${l.totalInstallments} ŮŘłŘˇ (${formatCurrency(l.installmentAmount)}/Ř´ŮŘą) â ŮŘŞŘ¨ŮŮ ${l.remainingInstallments}` : ''}${l.reason ? ` (${l.reason})` : ''}`,
         amount: l.loanAmount,
         status,
         statusColor: STATUS_MAP[status]?.color || 'gray',
@@ -224,9 +224,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: a.id!,
         type: 'allowance',
-        typeLabel: `بدل: ${a.allowanceTypeName}`,
+        typeLabel: `Ř¨ŘŻŮ: ${a.allowanceTypeName}`,
         employeeId: a.employeeId,
-        description: `${formatCurrency(a.amount)} — ${a.isRecurring ? 'شهري متكرر' : 'مرة واحدة'} — من ${a.startMonth}${a.endMonth ? ` إلى ${a.endMonth}` : ''}`,
+        description: `${formatCurrency(a.amount)} â ${a.isRecurring ? 'Ř´ŮŘąŮ ŮŘŞŮŘąŘą' : 'ŮŘąŘŠ ŮŘ§Ř­ŘŻŘŠ'} â ŮŮ ${a.startMonth}${a.endMonth ? ` ŘĽŮŮ ${a.endMonth}` : ''}`,
         amount: a.amount,
         status: a.status,
         statusColor: a.status === 'active' ? 'green' : 'red',
@@ -243,9 +243,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: d.id!,
         type: 'deduction',
-        typeLabel: `استقطاع: ${d.deductionTypeName || d.category}`,
+        typeLabel: `Ř§ŘłŘŞŮŘˇŘ§Řš: ${d.deductionTypeName || d.category}`,
         employeeId: d.employeeId,
-        description: `${formatCurrency(d.amount)} — ${d.isRecurring ? 'شهري متكرر' : 'مرة واحدة'} — ${d.reason || ''}`,
+        description: `${formatCurrency(d.amount)} â ${d.isRecurring ? 'Ř´ŮŘąŮ ŮŘŞŮŘąŘą' : 'ŮŘąŘŠ ŮŘ§Ř­ŘŻŘŠ'} â ${d.reason || ''}`,
         amount: d.amount,
         status: d.status,
         statusColor: d.status === 'active' ? 'green' : 'red',
@@ -308,7 +308,7 @@ export const HRTransactions: React.FC = () => {
   }, [filtered]);
 
   const handleCancel = async (txn: HRTransaction) => {
-    if (!confirm('هل تريد إلغاء هذا الإجراء؟')) return;
+    if (!confirm('ŮŮ ŘŞŘąŮŘŻ ŘĽŮŘşŘ§ŘĄ ŮŘ°Ř§ Ř§ŮŘĽŘŹŘąŘ§ŘĄŘ')) return;
     setActionLoading(true);
     try {
       switch (txn.type) {
@@ -334,7 +334,7 @@ export const HRTransactions: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Cancel failed', err);
-      alert('فشل في الإلغاء');
+      alert('ŮŘ´Ů ŮŮ Ř§ŮŘĽŮŘşŘ§ŘĄ');
     } finally {
       setActionLoading(false);
     }
@@ -361,7 +361,7 @@ export const HRTransactions: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Delete failed', err);
-      alert('فشل في الحذف');
+      alert('ŮŘ´Ů ŮŮ Ř§ŮŘ­Ř°Ů');
     } finally {
       setActionLoading(false);
     }
@@ -383,7 +383,7 @@ export const HRTransactions: React.FC = () => {
     try {
       const amt = parseFloat(editAmount);
       if (isNaN(amt) || amt <= 0) {
-        alert('أدخل مبلغ صحيح');
+        alert('ŘŁŘŻŘŽŮ ŮŘ¨ŮŘş ŘľŘ­ŮŘ­');
         setActionLoading(false);
         return;
       }
@@ -399,7 +399,7 @@ export const HRTransactions: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Edit failed', err);
-      alert('فشل في التعديل');
+      alert('ŮŘ´Ů ŮŮ Ř§ŮŘŞŘšŘŻŮŮ');
     } finally {
       setActionLoading(false);
     }
@@ -407,15 +407,15 @@ export const HRTransactions: React.FC = () => {
 
   const handleExport = () => {
     const rows = filtered.map((t) => ({
-      'النوع': t.typeLabel,
-      'الموظف': getEmpName(t.employeeId),
-      'كود الموظف': getEmpCode(t.employeeId),
-      'الوصف': t.description,
-      'المبلغ': t.amount ?? '',
-      'الحالة': STATUS_MAP[t.status]?.label || t.status,
-      'التاريخ': t.dateLabel,
+      'Ř§ŮŮŮŘš': t.typeLabel,
+      'Ř§ŮŮŮŘ¸Ů': getEmpName(t.employeeId),
+      'ŮŮŘŻ Ř§ŮŮŮŘ¸Ů': getEmpCode(t.employeeId),
+      'Ř§ŮŮŘľŮ': t.description,
+      'Ř§ŮŮŘ¨ŮŘş': t.amount ?? '',
+      'Ř§ŮŘ­Ř§ŮŘŠ': STATUS_MAP[t.status]?.label || t.status,
+      'Ř§ŮŘŞŘ§ŘąŮŘŽ': t.dateLabel,
     }));
-    exportHRData(rows, 'حركات', 'سجل_حركات_الموارد_البشرية');
+    exportHRData(rows, 'Ř­ŘąŮŘ§ŘŞ', 'ŘłŘŹŮ_Ř­ŘąŮŘ§ŘŞ_Ř§ŮŮŮŘ§ŘąŘŻ_Ř§ŮŘ¨Ř´ŘąŮŘŠ');
   };
 
   const uniqueStatuses = useMemo(() => {
@@ -438,14 +438,14 @@ export const HRTransactions: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="سجل حركات الموارد البشرية"
-        subtitle="جميع الإجازات والسلف والبدلات والاستقطاعات في مكان واحد"
+        title="ŘłŘŹŮ Ř­ŘąŮŘ§ŘŞ Ř§ŮŮŮŘ§ŘąŘŻ Ř§ŮŘ¨Ř´ŘąŮŘŠ"
+        subtitle="ŘŹŮŮŘš Ř§ŮŘĽŘŹŘ§Ř˛Ř§ŘŞ ŮŘ§ŮŘłŮŮ ŮŘ§ŮŘ¨ŘŻŮŘ§ŘŞ ŮŘ§ŮŘ§ŘłŘŞŮŘˇŘ§ŘšŘ§ŘŞ ŮŮ ŮŮŘ§Ů ŮŘ§Ř­ŘŻ"
         icon="receipt_long"
         moreActions={[
           {
-            label: 'تصدير Excel',
+            label: 'ŘŞŘľŘŻŮŘą Excel',
             icon: 'download',
-            group: 'تصدير',
+            group: 'ŘŞŘľŘŻŮŘą',
             hidden: !canExportFromPage,
             onClick: handleExport,
           },
@@ -459,9 +459,9 @@ export const HRTransactions: React.FC = () => {
           className={`rounded-[var(--border-radius-lg)] p-3 text-center transition-all border-2 ${filterType === 'all' ? 'border-primary bg-primary/5' : 'border-transparent bg-[var(--color-card)]'}`}
         >
           <div className="text-2xl font-bold text-[var(--color-text)]">{stats.total}</div>
-          <div className="text-xs text-slate-500">الكل</div>
+          <div className="text-xs text-slate-500">Ř§ŮŮŮ</div>
         </button>
-        {([['leave', 'إجازات', 'beach_access'], ['loan', 'سُلف', 'payments'], ['allowance', 'بدلات', 'trending_up'], ['deduction', 'استقطاعات', 'trending_down']] as const).map(([key, label, icon]) => (
+        {([['leave', 'ŘĽŘŹŘ§Ř˛Ř§ŘŞ', 'beach_access'], ['loan', 'ŘłŮŮŮ', 'payments'], ['allowance', 'Ř¨ŘŻŮŘ§ŘŞ', 'trending_up'], ['deduction', 'Ř§ŘłŘŞŮŘˇŘ§ŘšŘ§ŘŞ', 'trending_down']] as const).map(([key, label, icon]) => (
           <button
             key={key}
             onClick={() => setFilterType(key)}
@@ -480,39 +480,39 @@ export const HRTransactions: React.FC = () => {
       <Card>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بحث</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř¨Ř­ŘŤ</label>
             <input
               type="text"
               className="input input-sm w-full"
-              placeholder="اسم / كود / وصف..."
+              placeholder="Ř§ŘłŮ / ŮŮŘŻ / ŮŘľŮ..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الموظف</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŮŮŘ¸Ů</label>
             <SearchableSelect
               options={empOptions}
               value={filterEmployee}
               onChange={setFilterEmployee}
-              placeholder="كل الموظفين"
+              placeholder="ŮŮ Ř§ŮŮŮŘ¸ŮŮŮ"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الحالة</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŘ­Ř§ŮŘŠ</label>
             <select
               className="input input-sm w-full"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
             >
-              <option value="">الكل</option>
+              <option value="">Ř§ŮŮŮ</option>
               {uniqueStatuses.map((s) => (
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">من تاريخ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ŮŮ ŘŞŘ§ŘąŮŘŽ</label>
             <input
               type="date"
               className="input input-sm w-full"
@@ -521,7 +521,7 @@ export const HRTransactions: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إلى تاريخ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ŘĽŮŮ ŘŞŘ§ŘąŮŘŽ</label>
             <input
               type="date"
               className="input input-sm w-full"
@@ -533,7 +533,7 @@ export const HRTransactions: React.FC = () => {
         {(filterType !== 'all' || filterEmployee || filterStatus || filterFrom || filterTo || search) && (
           <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
             <span className="material-icons-round text-sm">filter_list</span>
-            عرض {filtered.length} من {transactions.length} حركة
+            ŘšŘąŘś {filtered.length} ŮŮ {transactions.length} Ř­ŘąŮŘŠ
             <button
               className="text-primary hover:underline"
               onClick={() => {
@@ -545,7 +545,7 @@ export const HRTransactions: React.FC = () => {
                 setSearch('');
               }}
             >
-              مسح الفلتر
+              ŮŘłŘ­ Ř§ŮŮŮŘŞŘą
             </button>
           </div>
         )}
@@ -556,21 +556,21 @@ export const HRTransactions: React.FC = () => {
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-5xl mb-2">inbox</span>
-            <p className="font-bold">لا توجد حركات</p>
+            <p className="font-bold">ŮŘ§ ŘŞŮŘŹŘŻ Ř­ŘąŮŘ§ŘŞ</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="erp-thead">
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs">
-                  <th className="erp-th">النوع</th>
-                  <th className="erp-th">الموظف</th>
-                  <th className="erp-th">التفاصيل</th>
-                  <th className="erp-th">المبلغ</th>
-                  <th className="erp-th">الحالة</th>
-                  <th className="erp-th">التاريخ</th>
+                  <th className="erp-th">Ř§ŮŮŮŘš</th>
+                  <th className="erp-th">Ř§ŮŮŮŘ¸Ů</th>
+                  <th className="erp-th">Ř§ŮŘŞŮŘ§ŘľŮŮ</th>
+                  <th className="erp-th">Ř§ŮŮŘ¨ŮŘş</th>
+                  <th className="erp-th">Ř§ŮŘ­Ř§ŮŘŠ</th>
+                  <th className="erp-th">Ř§ŮŘŞŘ§ŘąŮŘŽ</th>
                   {canManage && (
-                    <th className="erp-th text-center">إجراءات</th>
+                    <th className="erp-th text-center">ŘĽŘŹŘąŘ§ŘĄŘ§ŘŞ</th>
                   )}
                 </tr>
               </thead>
@@ -610,7 +610,7 @@ export const HRTransactions: React.FC = () => {
                       {txn.description}
                     </td>
                     <td className="py-3 px-2 font-bold text-[var(--color-text)] whitespace-nowrap">
-                      {txn.amount !== null ? formatCurrency(txn.amount) : '—'}
+                      {txn.amount !== null ? formatCurrency(txn.amount) : 'â'}
                     </td>
                     <td className="py-3 px-2">
                       <Badge color={txn.statusColor}>
@@ -627,7 +627,7 @@ export const HRTransactions: React.FC = () => {
                             <button
                               onClick={() => openEdit(txn)}
                               className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-500 transition-colors"
-                              title="تعديل"
+                              title="ŘŞŘšŘŻŮŮ"
                               disabled={actionLoading}
                             >
                               <span className="material-icons-round text-lg">edit</span>
@@ -637,7 +637,7 @@ export const HRTransactions: React.FC = () => {
                             <button
                               onClick={() => handleCancel(txn)}
                               className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-500 transition-colors"
-                              title="إلغاء"
+                              title="ŘĽŮŘşŘ§ŘĄ"
                               disabled={actionLoading}
                             >
                               <span className="material-icons-round text-lg">block</span>
@@ -647,7 +647,7 @@ export const HRTransactions: React.FC = () => {
                             <button
                               onClick={() => setConfirmDelete(txn)}
                               className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors"
-                              title="حذف"
+                              title="Ř­Ř°Ů"
                               disabled={actionLoading}
                             >
                               <span className="material-icons-round text-lg">delete</span>
@@ -670,14 +670,14 @@ export const HRTransactions: React.FC = () => {
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
               <span className="material-icons-round text-primary">edit</span>
-              تعديل {editModal.typeLabel}
+              ŘŞŘšŘŻŮŮ {editModal.typeLabel}
             </h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-4">
-              {getEmpName(editModal.employeeId)} — {editModal.typeLabel}
+              {getEmpName(editModal.employeeId)} â {editModal.typeLabel}
             </p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المبلغ</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŮŘ¨ŮŘş</label>
                 <input
                   type="number"
                   className="input w-full"
@@ -688,7 +688,7 @@ export const HRTransactions: React.FC = () => {
               </div>
               {editModal.type === 'deduction' && (
                 <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">السبب</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŘłŘ¨Ř¨</label>
                   <input
                     type="text"
                     className="input w-full"
@@ -700,10 +700,10 @@ export const HRTransactions: React.FC = () => {
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <Button variant="secondary" size="sm" onClick={() => setEditModal(null)} disabled={actionLoading}>
-                إلغاء
+                ŘĽŮŘşŘ§ŘĄ
               </Button>
               <Button size="sm" onClick={handleEditSave} disabled={actionLoading}>
-                {actionLoading ? 'جاري الحفظ...' : 'حفظ'}
+                {actionLoading ? 'ŘŹŘ§ŘąŮ Ř§ŮŘ­ŮŘ¸...' : 'Ř­ŮŘ¸'}
               </Button>
             </div>
           </div>
@@ -717,18 +717,18 @@ export const HRTransactions: React.FC = () => {
             <div className="text-center">
               <span className="material-icons-round text-5xl text-red-500 mb-2">warning</span>
               <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">
-                تأكيد الحذف
+                ŘŞŘŁŮŮŘŻ Ř§ŮŘ­Ř°Ů
               </h3>
               <p className="text-sm text-[var(--color-text-muted)] mb-1">
-                هل تريد حذف هذا الإجراء نهائياً؟
+                ŮŮ ŘŞŘąŮŘŻ Ř­Ř°Ů ŮŘ°Ř§ Ř§ŮŘĽŘŹŘąŘ§ŘĄ ŮŮŘ§ŘŚŮŘ§ŮŘ
               </p>
               <p className="text-xs text-[var(--color-text-muted)] mb-4">
-                {confirmDelete.typeLabel} — {getEmpName(confirmDelete.employeeId)}
+                {confirmDelete.typeLabel} â {getEmpName(confirmDelete.employeeId)}
               </p>
             </div>
             <div className="flex justify-center gap-2">
               <Button variant="secondary" size="sm" onClick={() => setConfirmDelete(null)} disabled={actionLoading}>
-                تراجع
+                ŘŞŘąŘ§ŘŹŘš
               </Button>
               <Button
                 size="sm"
@@ -736,7 +736,7 @@ export const HRTransactions: React.FC = () => {
                 disabled={actionLoading}
                 className="!bg-red-600 hover:!bg-red-700"
               >
-                {actionLoading ? 'جاري الحذف...' : 'حذف نهائي'}
+                {actionLoading ? 'ŘŹŘ§ŘąŮ Ř§ŮŘ­Ř°Ů...' : 'Ř­Ř°Ů ŮŮŘ§ŘŚŮ'}
               </Button>
             </div>
           </div>

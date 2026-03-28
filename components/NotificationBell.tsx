@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useErpNavigate } from '@/hooks/useErpNavigate';
 import {
   Bell,
   BellOff,

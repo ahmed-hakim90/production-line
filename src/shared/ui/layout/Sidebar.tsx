@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { guestDemoAppPath } from '@/utils/guestDemoNav';
 import { usePermission, useCurrentRole } from '@/utils/permissions';
 import { MENU_CONFIG } from '@/config/menu.config';
 import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSidebar';
