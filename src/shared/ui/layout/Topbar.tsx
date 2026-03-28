@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
-import { useErpNavigate } from '@/hooks/useErpNavigate';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Download,
   Home,
