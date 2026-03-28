@@ -53,7 +53,7 @@ const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
 };
 
 const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
-  const explicit = Number((order as any).estimatedDays ?? (order as any).estimatedDurationDays ?? 0);
+  const explicit = Number(order.estimatedDays ?? order.estimatedDurationDays ?? 0);
   if (explicit > 0) return Math.ceil(explicit);
   if (avgDaily <= 0) return 0;
   return Math.ceil(Math.max(Number(order.quantity || 0), 0) / avgDaily);
@@ -107,7 +107,12 @@ export const WorkOrders: React.FC = () => {
   const [reportMetaByOrderId, setReportMetaByOrderId] = useState<Record<string, WorkOrderReportMeta>>({});
   const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
+  const printTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
+
+  useEffect(() => {
+    return () => { printTimersRef.current.forEach(clearTimeout); };
+  }, []);
   const canCreateWorkOrder = can('workOrders.create') || can('workOrders.componentInjection.manage');
 
   useEffect(() => {
@@ -412,10 +417,12 @@ export const WorkOrders: React.FC = () => {
       notes: String(order.notes || ''),
       showCosts: true,
     });
-    setTimeout(() => {
+    const t1 = setTimeout(() => {
       handlePrint();
-      setTimeout(() => setPrintData(null), 600);
+      const t2 = setTimeout(() => setPrintData(null), 600);
+      printTimersRef.current.push(t2);
     }, 220);
+    printTimersRef.current.push(t1);
   }, [productNameMap, lineNameMap, supervisorNameMap, handlePrint]);
 
   const handleExport = () => {

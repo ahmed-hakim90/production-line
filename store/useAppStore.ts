@@ -3624,7 +3624,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Completed/cancelled orders remain available from the initial _loadAppData load.
     let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
-    return workOrderService.subscribeActive((activeOrders) => {
+    const unsub = workOrderService.subscribeActive((activeOrders) => {
       set((state) => {
         // Keep completed/cancelled from the initial load; replace pending/in_progress
         // with the live snapshot so we always reflect the latest active state.
@@ -3656,6 +3656,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         rebuildTimer = null;
       }, 250);
     });
+    // Clear any pending debounce timer when the subscription is torn down
+    // so _rebuildLines never runs against a partially-cleaned-up store.
+    return () => {
+      if (rebuildTimer) clearTimeout(rebuildTimer);
+      unsub();
+    };
   },
 
   subscribeToScanEventsToday: () => {

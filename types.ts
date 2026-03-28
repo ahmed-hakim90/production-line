@@ -338,6 +338,8 @@ export interface WorkOrder {
   qualityReportCode?: string;
   qualityApprovedBy?: string;
   qualityApprovedAt?: any;
+  estimatedDays?: number;
+  estimatedDurationDays?: number;
   createdBy: string;
   createdAt?: any;
   completedAt?: any;

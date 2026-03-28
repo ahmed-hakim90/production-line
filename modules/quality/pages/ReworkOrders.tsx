@@ -36,16 +36,20 @@ export const ReworkOrders: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
+  const workOrderById  = useMemo(() => new Map(workOrders.map((w) => [w.id, w])), [workOrders]);
+  const lineNameMap    = useMemo(() => new Map(lines.map((l) => [l.id, l.name])), [lines]);
+  const productNameMap = useMemo(() => new Map(products.map((p) => [p.id, p.name])), [products]);
+
   const displayRows = useMemo(() => rows.map((row) => {
-    const workOrder = workOrders.find((w) => w.id === row.workOrderId);
+    const workOrder = workOrderById.get(row.workOrderId);
     return {
       ...row,
       workOrderNumber: workOrder?.workOrderNumber ?? row.workOrderId,
-      lineName: lines.find((line) => line.id === workOrder?.lineId)?.name ?? workOrder?.lineId ?? '—',
-      productName: products.find((product) => product.id === workOrder?.productId)?.name ?? workOrder?.productId ?? '—',
+      lineName: lineNameMap.get(workOrder?.lineId ?? '') ?? workOrder?.lineId ?? '—',
+      productName: productNameMap.get(workOrder?.productId ?? '') ?? workOrder?.productId ?? '—',
       statusLabel: STATUS_LABELS[row.status] ?? row.status,
     };
-  }), [rows, workOrders, lines, products]);
+  }), [rows, workOrderById, lineNameMap, productNameMap]);
   const printRows = useMemo(
     () =>
       displayRows.map((row) => ({
@@ -153,14 +157,14 @@ export const ReworkOrders: React.FC = () => {
                             setBusyId(row.id);
                             try {
                               await qualityInspectionService.updateRework(row.id, { status });
-                              const workOrder = workOrders.find((item) => item.id === row.workOrderId);
+                              const workOrder = workOrderById.get(row.workOrderId);
                               if (!workOrder) return;
                               const summary = await qualityInspectionService.buildWorkOrderSummary(workOrder.id!);
                               await qualityNotificationService.notifyReportStatusChanged({
                                 workOrderId: workOrder.id!,
                                 workOrderNumber: workOrder.workOrderNumber,
-                                lineName: lines.find((line) => line.id === workOrder.lineId)?.name ?? workOrder.lineId,
-                                productName: products.find((product) => product.id === workOrder.productId)?.name ?? workOrder.productId,
+                                lineName: lineNameMap.get(workOrder.lineId) ?? workOrder.lineId,
+                                productName: productNameMap.get(workOrder.productId) ?? workOrder.productId,
                                 typeLabel: 'Rework',
                                 statusLabel: status,
                                 summary,

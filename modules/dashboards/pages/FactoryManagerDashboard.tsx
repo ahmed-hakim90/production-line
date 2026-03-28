@@ -304,6 +304,12 @@ export const FactoryManagerDashboard: React.FC = () => {
     });
     return map;
   }, [_rawEmployees]);
+
+  // Shared O(1) lookup Maps — avoids O(n) .find() inside nested loops and useMemos
+  const productByIdMap  = useMemo(() => new Map(_rawProducts.map((p) => [p.id ?? '', p])), [_rawProducts]);
+  const lineByIdMap     = useMemo(() => new Map([..._rawLines, ...productionLines].map((l) => [l.id ?? '', l])), [_rawLines, productionLines]);
+  const employeeNameMap = useMemo(() => new Map(_rawEmployees.map((e) => [e.id ?? '', e.name])), [_rawEmployees]);
+
   const liveCostComputation = useMemo(
     () => computeLiveProductCosts(
       reports,
@@ -446,12 +452,12 @@ export const FactoryManagerDashboard: React.FC = () => {
     });
     return Array.from(lineMap.entries())
       .map(([lineId, qty]) => ({
-        name: _rawLines.find((l) => l.id === lineId)?.name || lineId,
+        name: lineByIdMap.get(lineId)?.name || lineId,
         production: qty,
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawLines]);
+  }, [reports, lineByIdMap]);
 
   // ── Chart 4: Top 5 Products by production ───────────────────────────────────
 
@@ -463,12 +469,12 @@ export const FactoryManagerDashboard: React.FC = () => {
     return Array.from(prodMap.entries())
       .map(([productId, qty]) => ({
         id: productId,
-        name: _rawProducts.find((p) => p.id === productId)?.name || productId,
+        name: productByIdMap.get(productId)?.name || productId,
         production: qty,
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawProducts]);
+  }, [reports, productByIdMap]);
 
   // ── Alerts ──────────────────────────────────────────────────────────────────
 
@@ -549,7 +555,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     }
 
     const rows = activeWOs.map((wo) => {
-      const productAvgDaily = Math.max(0, Number(_rawProducts.find((p) => p.id === wo.productId)?.avgDailyProduction || 0));
+      const productAvgDaily = Math.max(0, Number(productByIdMap.get(wo.productId)?.avgDailyProduction || 0));
       const execution = calculateWorkOrderExecutionMetrics({
         quantity: wo.quantity,
         producedQuantity: resolveWorkOrderProducedNow(wo),
@@ -580,7 +586,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     const worstSupervisors = Array.from(bySupervisor.entries())
       .map(([supervisorId, agg]) => {
         const deviation = agg.weight > 0 ? Number((agg.weightedSum / agg.weight).toFixed(1)) : 0;
-        const name = _rawEmployees.find((e) => e.id === supervisorId)?.name ?? 'غير معروف';
+        const name = employeeNameMap.get(supervisorId) ?? 'غير معروف';
         return { supervisorId, name, deviation, delayed: agg.delayed };
       })
       .sort((a, b) => a.deviation - b.deviation)
@@ -591,7 +597,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       avgDeviation: weightedDeviation !== null ? Number(weightedDeviation.toFixed(1)) : null,
       worstSupervisors,
     };
-  }, [workOrders, _rawEmployees, _rawProducts]);
+  }, [workOrders, employeeNameMap, productByIdMap]);
 
   const shortageRows = useMemo(() => {
     return productionPlanFollowUps
@@ -603,12 +609,12 @@ export const FactoryManagerDashboard: React.FC = () => {
       })
       .map((row) => ({
         id: row.id || `${row.planId}-${row.componentId}`,
-        productName: _rawProducts.find((p) => p.id === row.productId)?.name || '—',
+        productName: productByIdMap.get(row.productId)?.name || '—',
         componentName: row.componentName || '—',
         shortageQty: Number(row.shortageQty || 0),
         note: row.note || '',
       }));
-  }, [productionPlanFollowUps, _rawProducts]);
+  }, [productionPlanFollowUps, productByIdMap]);
 
   const complianceRows = useMemo(
     () => [
@@ -849,9 +855,10 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
               <div className="flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 xl:grid-cols-3 sm:gap-4">
                 {activeWOs.map((wo) => {
-                const product = _rawProducts.find((p) => p.id === wo.productId);
-                const lineName = productionLines.find((l) => l.id === wo.lineId)?.name ?? _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
-                const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
+                const product = productByIdMap.get(wo.productId);
+                const lineName = lineByIdMap.get(wo.lineId)?.name ?? '—';
+                const supervisorName = employeeNameMap.get(wo.supervisorId) ?? '—';
+                const supervisorObj = _rawEmployees.find((e) => e.id === wo.supervisorId);
                 const producedNow = resolveWorkOrderProducedNow(wo);
                 const reportCount = (wo.id ? workOrderCardMetricsData.reportsByWorkOrderId[wo.id]?.length : 0) || 0;
                 const effectiveStatus = wo.status === 'in_progress' && reportCount === 0 ? 'pending' : wo.status;
@@ -859,8 +866,8 @@ export const FactoryManagerDashboard: React.FC = () => {
                 const remaining = Math.max(wo.quantity - producedNow, 0);
                 const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {
                   producedNowRaw: producedNow,
-                  lineDailyWorkingHours: Number(_rawLines.find((l) => l.id === wo.lineId)?.dailyWorkingHours || 0),
-                  supervisorHourlyRate: Number(supervisor?.hourlyRate || laborSettings?.hourlyRate || 0),
+                  lineDailyWorkingHours: Number(lineByIdMap.get(wo.lineId)?.dailyWorkingHours || 0),
+                  supervisorHourlyRate: Number(supervisorObj?.hourlyRate || laborSettings?.hourlyRate || 0),
                   hourlyRate: Number(laborSettings?.hourlyRate || 0),
                   costCenters,
                   costCenterValues,
@@ -891,7 +898,7 @@ export const FactoryManagerDashboard: React.FC = () => {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <span className="material-icons-round text-indigo-400 text-base">person</span>
-                        <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
+                        <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisorName}</span>
                       </div>
                       {canViewCosts && (
                         <div className="flex items-center gap-2">
