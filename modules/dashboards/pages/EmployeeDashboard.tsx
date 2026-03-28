@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/UI';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../production/components/ProductionReportPrint';
-import { useAppStore, useShallowStore } from '../../../store/useAppStore';
+import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
@@ -20,7 +20,6 @@ import {
   getTodayDateString,
   countUniqueDays,
 } from '../../../utils/calculations';
-import { reportService } from '@/modules/production/services/reportService';
 import { usePermission } from '../../../utils/permissions';
 import type { ProductionReport, WorkOrder } from '../../../types';
 import type { InventoryTransferRequest } from '../../inventory/types';
@@ -118,6 +117,7 @@ export const EmployeeDashboard: React.FC = () => {
   const transferApprovalPermission = useAppStore(
     (s) => s.systemSettings.planSettings?.transferApprovalPermission || 'inventory.transfers.approve',
   );
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   const [period, setPeriod] = useState<Period>('daily');
   const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
@@ -203,28 +203,38 @@ export const EmployeeDashboard: React.FC = () => {
 
     if (period === 'daily') {
       setPeriodReports(todayReports.filter((r) => r.employeeId === employee.id));
+      setPeriodLoading(false);
       return;
     }
 
     let cancelled = false;
-    setPeriodLoading(true);
     const { start, end } = getDateRange(period);
-    reportService.getByDateRange(start, end).then((reports) => {
-      if (!cancelled) {
-        setPeriodReports(reports.filter((r) => r.employeeId === employee.id));
-        setPeriodLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        // Fallback to cached monthly snapshot to avoid empty UI on transient fetch errors.
-        if (period === 'monthly') {
-          setPeriodReports(monthlyReports.filter((r) => r.employeeId === employee.id));
+    const maxAgeMs = 5 * 60 * 1000;
+    const cacheKey = getProductionReportsRangeCacheKey(start, end);
+    const cached = useAppStore.getState().productionReportsRangeCache[cacheKey];
+    if (cached) {
+      setPeriodReports(cached.rows.filter((r) => r.employeeId === employee.id));
+      setPeriodLoading(false);
+    } else {
+      setPeriodLoading(true);
+    }
+    ensureProductionReportsForRange(start, end, { maxAgeMs })
+      .then((reports) => {
+        if (!cancelled) {
+          setPeriodReports(reports.filter((r) => r.employeeId === employee.id));
+          setPeriodLoading(false);
         }
-        setPeriodLoading(false);
-      }
-    });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          if (period === 'monthly') {
+            setPeriodReports(monthlyReports.filter((r) => r.employeeId === employee.id));
+          }
+          setPeriodLoading(false);
+        }
+      });
     return () => { cancelled = true; };
-  }, [period, employee?.id, todayReports, monthlyReports]);
+  }, [period, employee?.id, todayReports, monthlyReports, ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;

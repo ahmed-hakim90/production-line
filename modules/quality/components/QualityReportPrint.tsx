@@ -195,7 +195,7 @@ export const SingleIPQCPrint = React.forwardRef<HTMLDivElement, SingleIPQCPrintP
 
     const reportLink =
       typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}#/quality/ipqc`
+        ? `${window.location.origin}/quality/ipqc`
         : `ipqc|${data.workOrderNumber}|${data.date}|${data.statusLabel}`;
 
     return (
@@ -312,7 +312,7 @@ export const SingleFinalInspectionPrint = React.forwardRef<HTMLDivElement, Singl
 
     const reportLink =
       typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}#/quality/final-inspection`
+        ? `${window.location.origin}/quality/final-inspection`
         : `final|${data.workOrderNumber}|${data.date}|${data.statusLabel}`;
 
     return (

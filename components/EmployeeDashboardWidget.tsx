@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, Badge, LoadingSkeleton } from './UI';
-import { useShallowStore } from '../store/useAppStore';
+import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../store/useAppStore';
 import {
   formatNumber,
   calculateWasteRatio,
@@ -30,7 +30,6 @@ import {
   getReportWaste,
   countUniqueDays,
 } from '../utils/calculations';
-import { reportService } from '../modules/production/services/reportService';
 import type { ProductionReport, ProductionPlan } from '../types';
 
 // ─── Period Filter ───────────────────────────────────────────────────────────
@@ -133,6 +132,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
     _rawLines: s._rawLines,
     loading: s.loading,
   }));
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   const [period, setPeriod] = useState<Period>('daily');
   const [yesterdayReports, setYesterdayReports] = useState<ProductionReport[]>([]);
@@ -143,24 +143,54 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
   useEffect(() => {
     if (period !== 'yesterday') return;
     let cancelled = false;
-    setYesterdayLoading(true);
     const date = getYesterdayDate();
-    reportService.getByDateRange(date, date).then((reports) => {
-      if (!cancelled) { setYesterdayReports(reports); setYesterdayLoading(false); }
-    }).catch(() => { if (!cancelled) setYesterdayLoading(false); });
+    const maxAgeMs = 5 * 60 * 1000;
+    const ck = getProductionReportsRangeCacheKey(date, date);
+    const cached = useAppStore.getState().productionReportsRangeCache[ck];
+    if (cached) {
+      setYesterdayReports(cached.rows);
+      setYesterdayLoading(false);
+    } else {
+      setYesterdayLoading(true);
+    }
+    ensureProductionReportsForRange(date, date, { maxAgeMs })
+      .then((reports) => {
+        if (!cancelled) {
+          setYesterdayReports(reports);
+          setYesterdayLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setYesterdayLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [period]);
+  }, [period, ensureProductionReportsForRange]);
 
   useEffect(() => {
     if (period !== 'weekly') return;
     let cancelled = false;
-    setWeeklyLoading(true);
     const { start, end } = getWeekDateRange();
-    reportService.getByDateRange(start, end).then((reports) => {
-      if (!cancelled) { setWeeklyReports(reports); setWeeklyLoading(false); }
-    }).catch(() => { if (!cancelled) setWeeklyLoading(false); });
+    const maxAgeMs = 5 * 60 * 1000;
+    const ck = getProductionReportsRangeCacheKey(start, end);
+    const cached = useAppStore.getState().productionReportsRangeCache[ck];
+    if (cached) {
+      setWeeklyReports(cached.rows);
+      setWeeklyLoading(false);
+    } else {
+      setWeeklyLoading(true);
+    }
+    ensureProductionReportsForRange(start, end, { maxAgeMs })
+      .then((reports) => {
+        if (!cancelled) {
+          setWeeklyReports(reports);
+          setWeeklyLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWeeklyLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [period]);
+  }, [period, ensureProductionReportsForRange]);
 
   const allPeriodReports = useMemo((): ProductionReport[] => {
     switch (period) {

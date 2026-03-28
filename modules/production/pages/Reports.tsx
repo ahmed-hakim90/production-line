@@ -55,7 +55,7 @@ import {
 import { downloadReportsTemplate, ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ProductionReportPrint,
   SingleReportPrint,
@@ -72,11 +72,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
-import { stockService } from '../../inventory/services/stockService';
-import { warehouseService } from '../../inventory/services/warehouseService';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
-import { categoryService } from '../../catalog/services/categoryService';
-import { catalogRawMaterialService } from '../../catalog/services/catalogRawMaterialService';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { ReportShareCard, type ReportShareCardProps } from '@/src/components/erp/ReportShareCard';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
@@ -238,6 +234,7 @@ const toDateInputValue = (date: Date): string => {
 export const Reports: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const todayReports = useAppStore((s) => s.todayReports);
   const productionReports = useAppStore((s) => s.productionReports);
@@ -390,10 +387,12 @@ export const Reports: React.FC = () => {
   const [factorySearch, setFactorySearch] = useState('');
   const [factorySortKey, setFactorySortKey] = useState<FactoryGeneralSortKey>('totalProducedQty');
   const [factorySortDirection, setFactorySortDirection] = useState<'asc' | 'desc'>('desc');
-  const [stockBalances, setStockBalances] = useState<StockItemBalance[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
-  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
+  const reportsUiReferenceCache = useAppStore((s) => s.reportsUiReferenceCache);
+  const ensureReportsUiReferenceData = useAppStore((s) => s.ensureReportsUiReferenceData);
+  const stockBalances: StockItemBalance[] = reportsUiReferenceCache?.stockBalances ?? [];
+  const warehouses: Warehouse[] = reportsUiReferenceCache?.warehouses ?? [];
+  const categoryOptions: string[] = reportsUiReferenceCache?.categoryOptions ?? [];
+  const rawMaterialOptions = reportsUiReferenceCache?.rawMaterialOptions ?? [];
   const injectionCategoryTokens = useMemo(
     () => parseInjectionCategoryTokens(planSettings.injectionRawMaterialCategoryKeywords),
     [planSettings.injectionRawMaterialCategoryKeywords],
@@ -505,68 +504,8 @@ export const Reports: React.FC = () => {
   }, [can, fetchReportsFromStore, startDate, endDate, viewMode]);
 
   useEffect(() => {
-    let mounted = true;
-    Promise.all([stockService.getBalances(), warehouseService.getAll()])
-      .then(([balances, warehousesRows]) => {
-        if (!mounted) return;
-        setStockBalances(balances || []);
-        setWarehouses(warehousesRows || []);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setStockBalances([]);
-        setWarehouses([]);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    catalogRawMaterialService.getAll()
-      .then((rows) => {
-        if (!mounted) return;
-        setRawMaterialOptions(
-          rows
-            .filter((row) => Boolean(row.id))
-            .map((row) => ({
-              id: String(row.id),
-              name: String(row.name || '').trim(),
-              code: String(row.code || '').trim(),
-              categoryName: String(row.categoryName || '').trim(),
-            })),
-        );
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setRawMaterialOptions([]);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    categoryService.seedFromProductsModel()
-      .then(() => categoryService.getByType('product'))
-      .then((rows) => {
-        if (!mounted) return;
-        const names = rows
-          .filter((row) => row.isActive !== false)
-          .map((row) => String(row.name || '').trim())
-          .filter(Boolean);
-        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setCategoryOptions([]);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    void ensureReportsUiReferenceData();
+  }, [ensureReportsUiReferenceData]);
 
   const loadRangeReports = useCallback(
     async (from: string, to: string, append = false) => {
@@ -600,6 +539,7 @@ export const Reports: React.FC = () => {
       try {
         const rows = await reportService.getByDateRange(from, to);
         useAppStore.setState({ productionReports: rows });
+        useAppStore.getState().upsertProductionReportsRangeCache(from, to, rows);
         setRangeCursor(null);
         setRangeHasMore(false);
       } catch (error) {
@@ -2646,7 +2586,7 @@ export const Reports: React.FC = () => {
             label: 'تقارير الجودة',
             icon: 'verified',
             hidden: !can('quality.reports.view'),
-            onClick: () => { window.location.hash = '#/quality/reports'; },
+            onClick: () => { navigate('/quality/reports'); },
           },
           {
             label: syncingMissingTransfers ? 'جاري المزامنة...' : 'مزامنة تحويلات ناقصة',
@@ -4161,7 +4101,7 @@ export const Reports: React.FC = () => {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      window.location.hash = `#/quality/reports?workOrderId=${encodeURIComponent(wo.id || '')}`;
+                      navigate(`/quality/reports?workOrderId=${encodeURIComponent(wo.id || '')}`);
                     }}
                   >
                     فتح تقرير الجودة التفصيلي

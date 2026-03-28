@@ -48,7 +48,7 @@ export function buildGuestDemoRouteElements(routes: AppRouteDef[]): React.ReactN
 }
 
 /**
- * Public demo: same app as authenticated users, but URL stays under /demo/* (e.g. #/demo/admin-dashboard).
+ * Public demo: same app as authenticated users, but URL stays under /demo/* (e.g. /demo/admin-dashboard).
  */
 export const GuestDemoShell: React.FC<{ routes: AppRouteDef[] }> = ({ routes }) => {
   const navigate = useNavigate();

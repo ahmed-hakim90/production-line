@@ -42,16 +42,33 @@ initMessaging().then((messaging) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'dismiss') return;
-  const targetUrl = event.notification?.data?.link || '/';
+  const raw = String(event.notification?.data?.link || '/').trim() || '/';
+  let path = '/';
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const u = new URL(raw);
+      path = u.origin === self.location.origin ? `${u.pathname}${u.search}` || '/' : '/';
+    } else if (raw.startsWith('#/')) {
+      path = raw.slice(1);
+    } else if (raw.startsWith('#')) {
+      path = raw.slice(1) || '/';
+    } else {
+      path = raw.startsWith('/') ? raw : `/${raw}`;
+    }
+  } catch {
+    path = '/';
+  }
+  if (!path.startsWith('/')) path = `/${path}`;
+  const fullUrl = new URL(path, self.location.origin).href;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if ('focus' in client) {
-          client.postMessage({ type: 'notification-click', targetUrl });
+          client.postMessage({ type: 'notification-click', targetUrl: path });
           return client.focus();
         }
       }
-      if (clients.openWindow) return clients.openWindow(targetUrl);
+      if (clients.openWindow) return clients.openWindow(fullUrl);
       return undefined;
     }),
   );

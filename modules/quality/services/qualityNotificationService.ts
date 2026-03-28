@@ -17,7 +17,7 @@ interface QualityReportNotificationPayload {
 }
 
 const buildMessage = (payload: QualityReportNotificationPayload): string => {
-  const deepLink = `#/quality/reports?workOrderId=${payload.workOrderId}`;
+  const deepLink = `/quality/reports?workOrderId=${payload.workOrderId}`;
   return [
     `WO ${payload.workOrderNumber} — ${payload.lineName} — ${payload.productName}`,
     `${payload.typeLabel} | الحالة: ${payload.statusLabel}`,

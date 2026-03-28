@@ -378,3 +378,7 @@
 ## [4.0.70] - 2026-03-28
 
 - Add Freatures Updated
+
+## [4.0.71] - 2026-03-28
+
+- Add updated Error

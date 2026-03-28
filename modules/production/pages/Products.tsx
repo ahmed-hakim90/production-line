@@ -32,7 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAppStore } from '../../../store/useAppStore';
+import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
 import { buildProductCosts, buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
@@ -49,7 +49,6 @@ import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';
 import type { StockItemBalance } from '../../inventory/types';
-import { reportService } from '@/modules/production/services/reportService';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
@@ -192,6 +191,7 @@ export const Products: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
@@ -317,7 +317,7 @@ export const Products: React.FC = () => {
         const rows: StockItemBalance[] = [];
         let cursor: any = null;
         for (let page = 0; page < 5; page += 1) {
-          const res = await stockService.getBalancesPaged({ limit: 100, cursor });
+          const res = await stockService.getBalancesPaged({cursor });
           rows.push(...res.items);
           if (!res.hasMore || !res.nextCursor) break;
           cursor = res.nextCursor;
@@ -347,29 +347,33 @@ export const Products: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const loadScopedReports = async () => {
-      const now = new Date();
-      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const monthStart = `${month}-01`;
-      const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
-      const today = new Date().toISOString().slice(0, 10);
-      try {
-        const [todayPage, monthPage] = await Promise.all([
-          reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
-          reportService.listByDateRangePaged({ startDate: monthStart, endDate: monthEnd, limit: 100 }),
-        ]);
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthStart = `${month}-01`;
+    const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const maxAgeMs = 5 * 60 * 1000;
+    const kToday = getProductionReportsRangeCacheKey(today, today);
+    const kMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+    const cache = useAppStore.getState().productionReportsRangeCache;
+    if (cache[kToday]) setTodayReportsScoped(cache[kToday].rows);
+    if (cache[kMonth]) setMonthlyReportsScoped(cache[kMonth].rows);
+    void Promise.all([
+      ensureProductionReportsForRange(today, today, { maxAgeMs }),
+      ensureProductionReportsForRange(monthStart, monthEnd, { maxAgeMs }),
+    ])
+      .then(([todayRows, monthRows]) => {
         if (cancelled) return;
-        setTodayReportsScoped(todayPage.items);
-        setMonthlyReportsScoped(monthPage.items);
-      } catch {
+        setTodayReportsScoped(todayRows);
+        setMonthlyReportsScoped(monthRows);
+      })
+      .catch(() => {
         if (cancelled) return;
         setTodayReportsScoped([]);
         setMonthlyReportsScoped([]);
-      }
-    };
-    void loadScopedReports();
+      });
     return () => { cancelled = true; };
-  }, []);
+  }, [ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;

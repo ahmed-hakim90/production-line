@@ -21,7 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
-import { useAppStore } from '../../../store/useAppStore';
+import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import {
   formatNumber,
   buildDashboardKPIs,
@@ -41,7 +41,6 @@ import {
 import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
 import { ProductionLineStatus, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { reportService } from '@/modules/production/services/reportService';
 import {
   getKPIThreshold,
   getKPIColor,
@@ -144,6 +143,7 @@ export const Dashboard: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const uid = useAppStore((s) => s.uid);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
   const navigate = useNavigate();
 
   const { can } = usePermission();
@@ -181,29 +181,33 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const loadScopedReports = async () => {
-      const now = new Date();
-      const month = getCurrentMonth();
-      const monthStart = `${month}-01`;
-      const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
-      const today = new Date().toISOString().slice(0, 10);
-      try {
-        const [todayPage, monthPage] = await Promise.all([
-          reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
-          reportService.listByDateRangePaged({ startDate: monthStart, endDate: monthEnd, limit: 100 }),
-        ]);
+    const now = new Date();
+    const month = getCurrentMonth();
+    const monthStart = `${month}-01`;
+    const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const maxAgeMs = 5 * 60 * 1000;
+    const kToday = getProductionReportsRangeCacheKey(today, today);
+    const kMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+    const cache = useAppStore.getState().productionReportsRangeCache;
+    if (cache[kToday]) setTodayReportsScoped(cache[kToday].rows);
+    if (cache[kMonth]) setMonthlyReportsScoped(cache[kMonth].rows);
+    void Promise.all([
+      ensureProductionReportsForRange(today, today, { maxAgeMs }),
+      ensureProductionReportsForRange(monthStart, monthEnd, { maxAgeMs }),
+    ])
+      .then(([todayRows, monthRows]) => {
         if (cancelled) return;
-        setTodayReportsScoped(todayPage.items);
-        setMonthlyReportsScoped(monthPage.items);
-      } catch {
+        setTodayReportsScoped(todayRows);
+        setMonthlyReportsScoped(monthRows);
+      })
+      .catch(() => {
         if (cancelled) return;
         setTodayReportsScoped([]);
         setMonthlyReportsScoped([]);
-      }
-    };
-    void loadScopedReports();
+      });
     return () => { cancelled = true; };
-  }, []);
+  }, [ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -441,21 +445,31 @@ export const Dashboard: React.FC = () => {
       return;
     }
     let cancelled = false;
-    setChartLoading(true);
     const [y, m] = chartMonth.split('-').map(Number);
     const dim = new Date(y, m, 0).getDate();
     const startDate = `${chartMonth}-01`;
     const endDate = `${chartMonth}-${String(dim).padStart(2, '0')}`;
-    reportService.getByDateRange(startDate, endDate).then((reports) => {
-      if (!cancelled) {
-        setChartReports(reports);
-        setChartLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelled) setChartLoading(false);
-    });
+    const maxAgeMs = 5 * 60 * 1000;
+    const ck = getProductionReportsRangeCacheKey(startDate, endDate);
+    const cached = useAppStore.getState().productionReportsRangeCache[ck];
+    if (cached) {
+      setChartReports(cached.rows);
+      setChartLoading(false);
+    } else {
+      setChartLoading(true);
+    }
+    ensureProductionReportsForRange(startDate, endDate, { maxAgeMs })
+      .then((reports) => {
+        if (!cancelled) {
+          setChartReports(reports);
+          setChartLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setChartLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [canViewCosts, chartMonth, monthlyReports]);
+  }, [canViewCosts, chartMonth, monthlyReports, ensureProductionReportsForRange]);
 
   const dailyChartData = useMemo(() => {
     if (!canViewCosts || chartReports.length === 0) return [];

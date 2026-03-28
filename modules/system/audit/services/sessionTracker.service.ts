@@ -18,9 +18,8 @@ const buildCorrelationId = (): string => {
 };
 
 const getRoute = (): string => {
-  const hash = window.location.hash || '#/';
-  const normalized = hash.startsWith('#') ? hash.slice(1) : hash;
-  return normalized || '/';
+  const path = `${window.location.pathname}${window.location.search}`;
+  return path || '/';
 };
 
 const deriveModule = (route: string): string => {
@@ -118,16 +117,6 @@ const emitUserAction = (
 };
 
 const startDomTracking = (): Array<() => void> => {
-  const onRouteChanged = () => {
-    const route = getRoute();
-    emitUserAction('navigate', `Navigation to ${route}`, {
-      module: deriveModule(route),
-      entityType: 'route',
-      entityId: route,
-      metadata: { route },
-    });
-  };
-
   const onClick = (event: Event) => {
     const target = event.target as HTMLElement | null;
     if (!target) return;
@@ -154,16 +143,23 @@ const startDomTracking = (): Array<() => void> => {
     });
   };
 
-  window.addEventListener('hashchange', onRouteChanged);
   document.addEventListener('click', onClick, true);
 
-  return [
-    () => window.removeEventListener('hashchange', onRouteChanged),
-    () => document.removeEventListener('click', onClick, true),
-  ];
+  return [() => document.removeEventListener('click', onClick, true)];
 };
 
 export const sessionTrackerService = {
+  /** Called when the SPA route changes (React Router history), for audit trail. */
+  onAppRouteChange(route: string): void {
+    if (!state.running) return;
+    emitUserAction('navigate', `Navigation to ${route}`, {
+      module: deriveModule(route),
+      entityType: 'route',
+      entityId: route,
+      metadata: { route },
+    });
+  },
+
   start(params: { uid: string; userName?: string }): void {
     const nextName = params.userName || params.uid;
 

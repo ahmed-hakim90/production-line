@@ -281,7 +281,7 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
     if (tokens.length === 0) return;
 
     const notificationId = String(after.id);
-    const deepLink = '/#/activity-log';
+    const deepLink = '/activity-log';
     const multicast = {
       tokens,
       notification: {
@@ -454,7 +454,7 @@ export const onProductionReportCreated = onDocumentCreated(
             vibrate: [200, 100, 200],
           },
           fcmOptions: {
-            link: '/#/reports',
+            link: '/reports',
           },
         },
       });

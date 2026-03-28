@@ -22,7 +22,8 @@ import { createReportDuplicateError } from '../utils/reportDuplicateError';
 
 const COLLECTION = 'production_reports';
 const UNIQUE_COLLECTION = 'production_report_uniques';
-const MAX_PAGE_SIZE = 100;
+/** Max docs per query page; callers paginate until hasMore is false. */
+const MAX_PAGE_SIZE = 500;
 
 function isMissingIndexError(error: unknown): boolean {
   const code = String((error as { code?: string })?.code || '').toLowerCase();
@@ -93,16 +94,17 @@ export const reportService = {
   async listByDateRangePaged(params: ReportPagedParams): Promise<FirestorePageResult<ProductionReport>> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));
+    // startAfter must come before limit (Firestore cursor pagination); limit-before-startAfter only returns the first page.
     const constraints: any[] = [
       where('date', '>=', params.startDate),
       where('date', '<=', params.endDate),
       orderBy('date', 'desc'),
-      limit(pageSize),
     ];
     if (params.lineId) constraints.unshift(where('lineId', '==', params.lineId));
     if (params.productId) constraints.unshift(where('productId', '==', params.productId));
     if (params.employeeId) constraints.unshift(where('employeeId', '==', params.employeeId));
     if (params.cursor) constraints.push(startAfter(params.cursor));
+    constraints.push(limit(pageSize));
     const q = query(collection(db, COLLECTION), ...constraints);
     const snap = await getDocs(q);
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
@@ -159,9 +161,9 @@ export const reportService = {
           cursor,
         });
         all.push(...page.items);
+        if (!page.hasMore || !page.nextCursor) break;
         cursor = page.nextCursor;
-        if (!page.hasMore) break;
-      } while (cursor);
+      } while (true);
       return all;
     } catch (error) {
       console.error('reportService.getByDateRange error:', error);

@@ -15,6 +15,7 @@
  *   />
  */
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -125,6 +126,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   extra,
   loading,
 }) => {
+  const navigate = useNavigate();
   const visibleMoreActions = moreActions?.filter((a) => !a.hidden) ?? [];
 
   // Build groups for the dropdown
@@ -148,16 +150,16 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     }
     if (backConfig?.to) {
       const target = backConfig.to.startsWith('#')
-        ? backConfig.to
-        : `#${backConfig.to}`;
-      window.location.hash = target;
+        ? backConfig.to.slice(1)
+        : backConfig.to;
+      navigate(target);
       return;
     }
     if (window.history.length > 1) {
       window.history.back();
       return;
     }
-    window.location.hash = '#/';
+    navigate('/');
   };
 
   const backDisabled = backConfig?.disabled ?? false;

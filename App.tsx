@@ -1,7 +1,7 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Dashboard } from './modules/dashboards/pages/Dashboard';
@@ -202,6 +202,117 @@ const AuthUiStateGuard: React.FC = () => {
   return null;
 };
 
+/** Migrates old bookmarks like `/#/path` to `/path` once on load. */
+const LegacyHashRedirect: React.FC = () => {
+  const navigate = useNavigate();
+  useLayoutEffect(() => {
+    const { hash } = window.location;
+    if (!hash.startsWith('#/')) return;
+    navigate(hash.slice(1), { replace: true });
+  }, [navigate]);
+  return null;
+};
+
+const ServiceWorkerNavigateBridge: React.FC = () => {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const onWorkerMessage = (event: MessageEvent) => {
+      if (event?.data?.type !== 'notification-click') return;
+      const targetUrl = String(event.data.targetUrl || '/');
+      if (targetUrl.startsWith('/')) {
+        navigate(targetUrl, { replace: true });
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', onWorkerMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onWorkerMessage);
+  }, [navigate]);
+  return null;
+};
+
+const PresenceHeartbeatBridge: React.FC = () => {
+  const location = useLocation();
+  const { isAuthenticated, isPendingApproval } = useAuthUiSlice();
+  const uid = useAppStore((s) => s.uid);
+  const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id || '');
+  const userEmail = useAppStore((s) => s.userEmail);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const prevAuditRouteRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || !uid) {
+      prevAuditRouteRef.current = null;
+      return;
+    }
+    const route = `${location.pathname}${location.search}` || '/';
+    if (prevAuditRouteRef.current === route) return;
+    const prev = prevAuditRouteRef.current;
+    prevAuditRouteRef.current = route;
+    if (prev !== null) {
+      sessionTrackerService.onAppRouteChange(route);
+    }
+  }, [location.pathname, location.search, isAuthenticated, isPendingApproval, uid]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || !uid) return;
+    const getRoute = () => `${location.pathname}${location.search}` || '/';
+    const deriveModule = (route: string) => {
+      if (!route || route === '/') return 'dashboard';
+      const first = route.split('?')[0].split('/').filter(Boolean)[0];
+      return first || 'dashboard';
+    };
+
+    const emitHeartbeat = () => {
+      const route = getRoute();
+      void presenceService.heartbeat({
+        userId: uid,
+        employeeId: currentEmployeeId || '',
+        userEmail: userEmail || '',
+        displayName: userDisplayName || '',
+        roleId: userRoleId || '',
+        currentRoute: route,
+        currentModule: deriveModule(route),
+      });
+    };
+
+    emitHeartbeat();
+    const timer = window.setInterval(emitHeartbeat, 60_000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') emitHeartbeat();
+    };
+    const onBeforeUnload = () => {
+      void presenceService.markOffline(uid);
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    const unsubActions = eventBus.on(SystemEvents.USER_ACTION, (payload) => {
+      const action = String(payload.action || payload.description || 'user.action');
+      void presenceService.setLastAction(uid, action);
+    });
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      unsubActions();
+      void presenceService.markOffline(uid);
+    };
+  }, [
+    isAuthenticated,
+    isPendingApproval,
+    uid,
+    currentEmployeeId,
+    userEmail,
+    userDisplayName,
+    userRoleId,
+    location.pathname,
+    location.search,
+  ]);
+
+  return null;
+};
+
 const DailyWelcomeLauncher: React.FC = () => {
   const { openModal, hasModalTarget } = useGlobalModalManager();
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
@@ -243,9 +354,6 @@ const App: React.FC = () => {
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const uid = useAppStore((s) => s.uid);
   const addRealtimeNotification = useAppStore((s) => s.addRealtimeNotification);
-  const userEmail = useAppStore((s) => s.userEmail);
-  const userDisplayName = useAppStore((s) => s.userDisplayName);
-  const userRoleId = useAppStore((s) => s.userRoleId);
   const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id || '');
   const activeSessionUidRef = useRef<string | null>(null);
   const cleanupSubsRef = useRef<(() => void) | null>(null);
@@ -329,67 +437,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isAuthenticated || isPendingApproval || !uid) return;
-    const getRoute = () => {
-      const hash = window.location.hash || '#/';
-      return hash.startsWith('#') ? hash.slice(1) : hash;
-    };
-    const deriveModule = (route: string) => {
-      if (!route || route === '/') return 'dashboard';
-      const first = route.split('?')[0].split('/').filter(Boolean)[0];
-      return first || 'dashboard';
-    };
-
-    const emitHeartbeat = () => {
-      const route = getRoute();
-      void presenceService.heartbeat({
-        userId: uid,
-        employeeId: currentEmployeeId || '',
-        userEmail: userEmail || '',
-        displayName: userDisplayName || '',
-        roleId: userRoleId || '',
-        currentRoute: route,
-        currentModule: deriveModule(route),
-      });
-    };
-
-    emitHeartbeat();
-    const timer = window.setInterval(emitHeartbeat, 60_000);
-    const onRouteChanged = () => emitHeartbeat();
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') emitHeartbeat();
-    };
-    const onBeforeUnload = () => {
-      void presenceService.markOffline(uid);
-    };
-
-    window.addEventListener('hashchange', onRouteChanged);
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('beforeunload', onBeforeUnload);
-    const unsubActions = eventBus.on(SystemEvents.USER_ACTION, (payload) => {
-      const action = String(payload.action || payload.description || 'user.action');
-      void presenceService.setLastAction(uid, action);
-    });
-
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('hashchange', onRouteChanged);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      unsubActions();
-      void presenceService.markOffline(uid);
-    };
-  }, [
-    isAuthenticated,
-    isPendingApproval,
-    uid,
-    currentEmployeeId,
-    userEmail,
-    userDisplayName,
-    userRoleId,
-  ]);
-
-  useEffect(() => {
-    if (!isAuthenticated || isPendingApproval || !uid) return;
     const timer = window.setInterval(() => {
       void syncAttendanceFromDevices({ mode: 'scheduled' }).catch(() => {});
     }, 5 * 60 * 1000);
@@ -420,17 +467,8 @@ const App: React.FC = () => {
       unsub = fn;
     });
 
-    const onWorkerMessage = (event: MessageEvent) => {
-      if (event?.data?.type !== 'notification-click') return;
-      const targetUrl = String(event.data.targetUrl || '/');
-      if (targetUrl.startsWith('/')) {
-        window.location.hash = targetUrl;
-      }
-    };
-    navigator.serviceWorker?.addEventListener('message', onWorkerMessage);
     return () => {
       unsub();
-      navigator.serviceWorker?.removeEventListener('message', onWorkerMessage);
     };
   }, [addRealtimeNotification]);
 
@@ -525,7 +563,10 @@ const App: React.FC = () => {
     <GlobalModalManagerProvider>
       <AuthUiStateGuard />
       <DailyWelcomeLauncher />
-      <HashRouter>
+      <BrowserRouter>
+        <LegacyHashRedirect />
+        <ServiceWorkerNavigateBridge />
+        <PresenceHeartbeatBridge />
         <Routes>
           {AUTH_PUBLIC_ROUTES.map((r) => (
             <React.Fragment key={r.path}>
@@ -545,7 +586,7 @@ const App: React.FC = () => {
         </Routes>
         {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
         <ToastContainer />
-      </HashRouter>
+      </BrowserRouter>
     </GlobalModalManagerProvider>
   );
 };

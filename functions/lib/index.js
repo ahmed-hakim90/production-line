@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
-import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 initializeApp();
@@ -14,6 +14,8 @@ const USERS_COLLECTION = 'users';
 const ROLES_COLLECTION = 'roles';
 const ASSETS_COLLECTION = 'assets';
 const ASSET_DEPRECIATIONS_COLLECTION = 'asset_depreciations';
+const FCM_TOKEN_SUBCOLLECTION = 'fcmTokens';
+const REPORT_NOTIFY_ROLE_IDS = new Set(['admin', 'factory_manager', 'system_manager']);
 const toNumber = (value) => {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -225,7 +227,7 @@ export const sendPushOnNotificationCreate = onDocumentWritten({
     if (tokens.length === 0)
         return;
     const notificationId = String(after.id);
-    const deepLink = '/#/activity-log';
+    const deepLink = '/activity-log';
     const multicast = {
         tokens,
         notification: {
@@ -286,6 +288,125 @@ export const sendPushOnNotificationCreate = onDocumentWritten({
         }, { merge: true });
     });
     await cleanupBatch.commit();
+});
+export const onProductionReportCreated = onDocumentCreated({
+    document: 'production_reports/{reportId}',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (event) => {
+    const reportSnap = event.data;
+    if (!reportSnap?.exists)
+        return;
+    const reportId = String(event.params.reportId || reportSnap.id || '').trim();
+    if (!reportId)
+        return;
+    const report = reportSnap.data();
+    const producedQty = Number(report.quantityProduced ?? report.producedQty ?? 0);
+    const reportTitle = '📋 تقرير إنتاج جديد';
+    const reportBody = [
+        String(report.productName || report.reportCode || 'منتج'),
+        String(report.lineName || 'خط إنتاج'),
+        `${Number.isFinite(producedQty) ? producedQty : 0} وحدة`,
+    ].join(' — ');
+    const usersSnap = await db
+        .collection(USERS_COLLECTION)
+        .where('isActive', '==', true)
+        .get();
+    if (usersSnap.empty)
+        return;
+    const tokenEntries = [];
+    const seenTokens = new Set();
+    for (const userDoc of usersSnap.docs) {
+        const userData = userDoc.data();
+        const roleCandidate = String(userData.roleId || userData.role || '').trim().toLowerCase();
+        const canReceiveByRole = REPORT_NOTIFY_ROLE_IDS.has(roleCandidate);
+        if (!canReceiveByRole)
+            continue;
+        if (userData.notifications?.productionReports === false)
+            continue;
+        const userTokensSnap = await userDoc.ref.collection(FCM_TOKEN_SUBCOLLECTION).get();
+        userTokensSnap.forEach((tokenDoc) => {
+            const tokenData = tokenDoc.data();
+            const token = String(tokenData.token || '').trim();
+            if (!token || tokenData.enabled === false || seenTokens.has(token))
+                return;
+            seenTokens.add(token);
+            tokenEntries.push({ token, ref: tokenDoc.ref });
+        });
+    }
+    if (tokenEntries.length === 0)
+        return;
+    const allTokens = tokenEntries.map((entry) => entry.token);
+    const BATCH_SIZE = 500;
+    const cleanupRefs = [];
+    for (let i = 0; i < allTokens.length; i += BATCH_SIZE) {
+        const batchEntries = tokenEntries.slice(i, i + BATCH_SIZE);
+        const batchTokens = batchEntries.map((entry) => entry.token);
+        const sendResult = await getMessaging().sendEachForMulticast({
+            tokens: batchTokens,
+            notification: {
+                title: reportTitle,
+                body: reportBody,
+            },
+            data: {
+                type: 'production_report',
+                reportId,
+                productName: String(report.productName || ''),
+                lineName: String(report.lineName || ''),
+                producedQty: String(Number.isFinite(producedQty) ? producedQty : 0),
+                supervisorName: String(report.supervisorName || ''),
+                date: String(report.date || ''),
+                url: '/reports',
+                sound: 'notification.mp3',
+                clickAction: 'OPEN_REPORT',
+            },
+            android: {
+                notification: {
+                    channelId: 'production_reports',
+                    priority: 'high',
+                    sound: 'default',
+                },
+            },
+            webpush: {
+                headers: { Urgency: 'high' },
+                notification: {
+                    title: reportTitle,
+                    body: reportBody,
+                    icon: '/icons/pwa-icon-192.png',
+                    badge: '/icons/pwa-icon-192.png',
+                    tag: `production-report-${reportId}`,
+                    renotify: true,
+                    requireInteraction: false,
+                    silent: false,
+                    vibrate: [200, 100, 200],
+                },
+                fcmOptions: {
+                    link: '/reports',
+                },
+            },
+        });
+        sendResult.responses.forEach((response, idx) => {
+            if (response.success)
+                return;
+            const code = String(response.error?.code || '');
+            if (code.includes('messaging/invalid-registration-token')
+                || code.includes('messaging/registration-token-not-registered')
+                || code.includes('registration-token-not-registered')
+                || code.includes('invalid-registration-token')) {
+                cleanupRefs.push(batchEntries[idx].ref);
+            }
+        });
+    }
+    if (cleanupRefs.length === 0)
+        return;
+    const batch = db.batch();
+    cleanupRefs.forEach((ref) => {
+        batch.set(ref, {
+            enabled: false,
+            lastSeen: FieldValue.serverTimestamp(),
+        }, { merge: true });
+    });
+    await batch.commit();
 });
 export const adminDeleteUserHard = onCall({
     region: 'us-central1',

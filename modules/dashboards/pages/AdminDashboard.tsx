@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardSlice } from '../../../store/selectors';
-import { useAppStore } from '../../../store/useAppStore';
+import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { Card, KPIBox, Badge } from '../components/UI';
@@ -56,8 +56,6 @@ import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
-import { reportService } from '@/modules/production/services/reportService';
-import { dashboardStatsService } from '../../../services/dashboardStatsService';
 import { adminService, type SystemUsers } from '../services/adminService';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
@@ -397,6 +395,7 @@ export const AdminDashboard: React.FC = () => {
   const appLoading = useAppStore((s) => s.loading);
   const productsLoading = useAppStore((s) => s.productsLoading);
   const linesLoading = useAppStore((s) => s.linesLoading);
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
   const pageControl = useMemo(
     () => getExportImportPageControl(systemSettings.exportImport, 'adminDashboard'),
     [systemSettings.exportImport]
@@ -416,7 +415,6 @@ export const AdminDashboard: React.FC = () => {
   const [reports, setReports] = useState<ProductionReport[]>([]);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [rangeAggregate, setRangeAggregate] = useState<{ totalProduction: number; totalWaste: number; totalCost: number; reportsCount: number } | null>(null);
   const [monthlyCostSummary, setMonthlyCostSummary] = useState<MonthlyDashboardCostSummary | null>(null);
 
   // ── System metrics state ─────────────────────────────────────────────────
@@ -507,29 +505,35 @@ export const AdminDashboard: React.FC = () => {
     };
   }, [activeWorkOrders]);
 
-  // Fetch production reports by date range
+  // Fetch production reports by date range (shared Zustand cache + stale-while-revalidate)
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const { start, end } = dateRange;
+    const maxAgeMs = 5 * 60 * 1000;
+    const cacheKey = getProductionReportsRangeCacheKey(start, end);
+    const cached = useAppStore.getState().productionReportsRangeCache[cacheKey];
+    if (cached) {
+      setReports(cached.rows);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setReportsError(null);
-    Promise.all([
-      reportService.getByDateRange(dateRange.start, dateRange.end),
-      dashboardStatsService.getRangeTotals(dateRange.start, dateRange.end).catch(() => null),
-    ]).then(([data, aggregate]) => {
-      if (cancelled) return;
-      setReports(Array.isArray(data) ? data : []);
-      setRangeAggregate(aggregate);
-      setLoading(false);
-    }).catch((error) => {
-      if (cancelled) return;
-      const message = error instanceof Error ? error.message : 'تعذر تحميل تقارير الإنتاج.';
-      setReportsError(message);
-      setReports([]);
-      setRangeAggregate(null);
-      setLoading(false);
-    });
+    ensureProductionReportsForRange(start, end, { maxAgeMs })
+      .then((data) => {
+        if (cancelled) return;
+        setReports(data);
+        setLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : 'تعذر تحميل تقارير الإنتاج.';
+        setReportsError(message);
+        setReports([]);
+        setLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange.start, dateRange.end, ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -669,11 +673,11 @@ export const AdminDashboard: React.FC = () => {
   const kpis = useMemo(() => {
     const reportsTotalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
     const reportsTotalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
-    const hasAggregateData = Boolean(rangeAggregate && rangeAggregate.reportsCount > 0);
+    // Same source as FactoryManagerDashboard: sum loaded reports (not dashboardStats) so KPI matches raw data.
     const totalProduction = monthlyCostMode
       ? Number(monthlyCostSummary?.totals.producedQty || 0)
-      : (hasAggregateData ? (rangeAggregate?.totalProduction || 0) : reportsTotalProduction);
-    const totalWaste = hasAggregateData ? (rangeAggregate?.totalWaste || 0) : reportsTotalWaste;
+      : reportsTotalProduction;
+    const totalWaste = reportsTotalWaste;
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
@@ -731,7 +735,7 @@ export const AdminDashboard: React.FC = () => {
       totalIndirectCost,
       totalCost,
     };
-  }, [reports, rangeAggregate, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
+  }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
   // ── Cost Allocation Completion % ──────────────────────────────────────────
 

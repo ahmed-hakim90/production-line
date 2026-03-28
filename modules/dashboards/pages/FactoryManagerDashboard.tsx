@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAppStore } from '../../../store/useAppStore';
+import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { Card, Badge } from '../components/UI';
 import { PageHeader } from '@/src/components/erp/PageHeader';
@@ -10,7 +10,6 @@ import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
-import { reportService } from '@/modules/production/services/reportService';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
   calculateProgressRatio,
@@ -130,6 +129,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   const alertCfg = useMemo(() => getAlertSettings(systemSettings), [systemSettings]);
   const isVisible = useCallback(
@@ -186,17 +186,28 @@ export const FactoryManagerDashboard: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    reportService.getByDateRange(dateRange.start, dateRange.end).then((data) => {
-      if (!cancelled) {
-        setReports(data);
-        setLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelled) setLoading(false);
-    });
+    const { start, end } = dateRange;
+    const maxAgeMs = 5 * 60 * 1000;
+    const cacheKey = getProductionReportsRangeCacheKey(start, end);
+    const cached = useAppStore.getState().productionReportsRangeCache[cacheKey];
+    if (cached) {
+      setReports(cached.rows);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    ensureProductionReportsForRange(start, end, { maxAgeMs })
+      .then((data) => {
+        if (!cancelled) {
+          setReports(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange.start, dateRange.end, ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;
