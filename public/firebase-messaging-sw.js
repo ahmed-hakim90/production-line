@@ -15,26 +15,52 @@ async function initMessaging() {
   }
 }
 
+// Resolve notification type → hash-based route used inside the PWA.
+function resolveLink(data) {
+  if (!data) return '/#/';
+  if (data.url) {
+    const u = String(data.url);
+    // Already a full URL or hash URL → use as-is
+    if (u.startsWith('http') || u.startsWith('/#')) return u;
+    // Bare path like "/work-orders" → prepend hash
+    return '/#' + (u.startsWith('/') ? u : '/' + u);
+  }
+  if (data.link) return String(data.link);
+  // Type-based fallback
+  switch (String(data.type || '')) {
+    case 'work_order_completed': return '/#/work-orders';
+    case 'plan_completed':       return '/#/production-plans';
+    case 'production_report':    return '/#/reports';
+    default:                     return '/#/';
+  }
+}
+
 initMessaging().then((messaging) => {
   if (!messaging) return;
   messaging.onBackgroundMessage((payload) => {
     const title = payload.notification?.title || 'إشعار جديد';
-    const body = payload.notification?.body || '';
-    const link = payload.data?.url || payload.data?.link || '/';
+    const body  = payload.notification?.body  || '';
+    const link  = resolveLink(payload.data);
+    const tag   = payload.data?.notificationId
+               || payload.data?.reportId
+               || payload.data?.workOrderId
+               || payload.data?.planId
+               || 'erp-notification';
+
     self.registration.showNotification(title, {
       body,
       icon: '/icons/pwa-icon-192.png',
       badge: '/icons/pwa-icon-192.png',
-      data: { link },
+      data: { link, notificationType: payload.data?.type || '' },
       actions: [
-        { action: 'open', title: 'فتح' },
+        { action: 'open',    title: 'فتح' },
         { action: 'dismiss', title: 'تجاهل' },
       ],
       renotify: true,
       requireInteraction: false,
       silent: false,
       vibrate: [150, 50, 150],
-      tag: payload.data?.notificationId || payload.data?.reportId || 'erp-notification',
+      tag,
     });
   });
 });
@@ -42,15 +68,22 @@ initMessaging().then((messaging) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'dismiss') return;
-  const targetUrl = event.notification?.data?.link || '/';
+
+  const data       = event.notification.data || {};
+  const targetUrl  = String(data.link || '/#/');
+  const notifType  = String(data.notificationType || '');
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Focus an existing window if possible and send a message so the app
+      // can navigate to the right route without a full reload.
       for (const client of clientList) {
-        if ('focus' in client) {
-          client.postMessage({ type: 'notification-click', targetUrl });
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          client.postMessage({ type: 'notification-click', targetUrl, notificationType: notifType });
           return client.focus();
         }
       }
+      // No existing window — open the app at the target route.
       if (clients.openWindow) return clients.openWindow(targetUrl);
       return undefined;
     }),

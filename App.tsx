@@ -424,9 +424,14 @@ const App: React.FC = () => {
     const onWorkerMessage = (event: MessageEvent) => {
       if (event?.data?.type !== 'notification-click') return;
       const targetUrl = String(event.data.targetUrl || '/');
-      if (targetUrl.startsWith('/')) {
-        window.location.hash = targetUrl;
-      }
+      // targetUrl is already a hash-based route (e.g. "/#/work-orders")
+      // or a bare path (e.g. "/work-orders") — normalise to hash.
+      const hash = targetUrl.startsWith('/#')
+        ? targetUrl.slice(2)   // strip "/#" → "/work-orders"
+        : targetUrl.startsWith('/')
+          ? targetUrl          // bare path → use directly as hash
+          : '/' + targetUrl;
+      window.location.hash = hash;
     };
     navigator.serviceWorker?.addEventListener('message', onWorkerMessage);
     return () => {

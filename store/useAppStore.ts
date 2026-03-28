@@ -2396,24 +2396,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         return null;
       }
 
-      const activePlans = await productionPlanService.getActiveByLineAndProduct(data.lineId, data.productId);
-      const activePlan = activePlans.find((plan) => {
-        const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
-        return planType === reportType;
-      }) ?? activePlans[0] ?? null;
-
-      if (!planSettings.allowReportWithoutPlan && !activePlan) {
-        set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
-        return null;
-      }
-
-      if (!planSettings.allowOverProduction && activePlan) {
-        if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
-          set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
-          return null;
-        }
-      }
-
+      // ── Step 1: Detect the best-matching work order ──────────────────────
+      // Done BEFORE plan lookup so that an explicit planId on the work order
+      // can take priority over the line+product auto-match below.
       let activeWO: WorkOrder | null = null;
       if (data.workOrderId) {
         const selectedWO = await workOrderService.getById(data.workOrderId);
@@ -2455,6 +2440,35 @@ export const useAppStore = create<AppState>((set, get) => ({
           supervisorId: data.employeeId,
           reportType,
         });
+      }
+
+      // ── Step 2: Find the production plan ─────────────────────────────────
+      // Priority: explicit planId on the work order → then line+product match.
+      // This ensures reports always update the plan the work order belongs to,
+      // even when that plan lives on a different line or was linked manually.
+      let activePlan: ProductionPlan | null = null;
+      if (activeWO?.planId) {
+        activePlan = await productionPlanService.getById(activeWO.planId);
+      }
+      if (!activePlan) {
+        const activePlans = await productionPlanService.getActiveByLineAndProduct(data.lineId, data.productId);
+        activePlan = activePlans.find((plan) => {
+          const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
+          return planType === reportType;
+        }) ?? activePlans[0] ?? null;
+      }
+
+      // ── Step 3: Validate against plan settings ────────────────────────────
+      if (!planSettings.allowReportWithoutPlan && !activePlan) {
+        set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
+        return null;
+      }
+
+      if (!planSettings.allowOverProduction && activePlan) {
+        if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
+          set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
+          return null;
+        }
       }
 
       const reportData = { ...data, reportType, workOrderId: activeWO?.id || data.workOrderId || '' };
