@@ -38,21 +38,7 @@ export async function loadWorkOrderCardMetricsData(
     new Set(workOrders.map((wo) => wo.id).filter((id): id is string => Boolean(id))),
   );
 
-  const reportsEntries = await Promise.all(
-    uniqueWorkOrderIds.map(async (workOrderId) => {
-      try {
-        const reports = await reportService.getByWorkOrderId(workOrderId);
-        return [workOrderId, reports] as const;
-      } catch {
-        return [workOrderId, [] as ProductionReport[]] as const;
-      }
-    }),
-  );
-
-  const reportsByWorkOrderId: Record<string, ProductionReport[]> = {};
-  reportsEntries.forEach(([workOrderId, reports]) => {
-    reportsByWorkOrderId[workOrderId] = reports;
-  });
+  const reportsByWorkOrderId = await reportService.getByWorkOrderIds(uniqueWorkOrderIds);
 
   return {
     reportsByWorkOrderId,

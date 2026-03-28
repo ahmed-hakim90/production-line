@@ -165,26 +165,13 @@ export const WorkOrders: React.FC = () => {
     }
 
     const loadReportMeta = async () => {
-      const entries = await Promise.all(
-        orderIds.map(async (id) => {
-          try {
-            const reports = await reportService.getByWorkOrderId(id);
-            const firstReportDate = reports.reduce<string | null>((minDate, report) => {
-              const date = String(report.date || '').trim();
-              if (!date) return minDate;
-              if (!minDate || date < minDate) return date;
-              return minDate;
-            }, null);
-            const producedQuantity = reports.reduce((sum, report) => sum + Number(report.quantityProduced || 0), 0);
-            return [id, { count: reports.length, firstReportDate, producedQuantity }] as const;
-          } catch (error) {
-            console.error('work order report meta error', error);
-            return [id, { count: -1, firstReportDate: null, producedQuantity: 0 }] as const;
-          }
-        }),
-      );
-      if (cancelled) return;
-      setReportMetaByOrderId(Object.fromEntries(entries));
+      try {
+        const meta = await reportService.getMetaByWorkOrderIds(orderIds);
+        if (cancelled) return;
+        setReportMetaByOrderId(meta);
+      } catch (error) {
+        console.error('work order report meta error:', error);
+      }
     };
 
     void loadReportMeta();
