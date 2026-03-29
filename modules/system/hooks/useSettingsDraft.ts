@@ -94,6 +94,15 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
   const [localExportImport, setLocalExportImport] = useState<ExportImportSettings>(
     () => ({ pages: { ...(systemSettings.exportImport?.pages ?? {}) } })
   );
+  const [localMinimumClientVersion, setLocalMinimumClientVersion] = useState(
+    () => systemSettings.minimumClientVersion ?? '',
+  );
+  const [localForceClientUpdate, setLocalForceClientUpdate] = useState(
+    () => systemSettings.forceClientUpdate === true,
+  );
+  const [localClientUpdateMessageAr, setLocalClientUpdateMessageAr] = useState(
+    () => systemSettings.clientUpdateMessageAr ?? '',
+  );
 
   const normalizeQuickActions = useCallback(
     (items: QuickActionItem[]) => items.map((item, index) => ({ ...item, order: index })),
@@ -171,6 +180,12 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     setLocalQuickActions,
     localExportImport,
     setLocalExportImport,
+    localMinimumClientVersion,
+    setLocalMinimumClientVersion,
+    localForceClientUpdate,
+    setLocalForceClientUpdate,
+    localClientUpdateMessageAr,
+    setLocalClientUpdateMessageAr,
     normalizeQuickActions,
     getQuickActionMatch,
     normalizeCustomWidgets,

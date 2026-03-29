@@ -904,6 +904,12 @@ export interface SystemSettings {
   quickActions?: QuickActionItem[];
   exportImport?: ExportImportSettings;
   attendanceIntegration?: AttendanceIntegrationSettings;
+  /** أقل إصدار عميل مسموح (صيغة x.y.z) عند تفعيل forceClientUpdate */
+  minimumClientVersion?: string;
+  /** عند true مع minimumClientVersion أقل من إصدار البناء، يُمنع استخدام التطبيق حتى التحديث */
+  forceClientUpdate?: boolean;
+  /** رسالة تظهر على شاشة التحديث الإجباري */
+  clientUpdateMessageAr?: string;
 }
 
 // ─── Dynamic Roles & Permissions ─────────────────────────────────────────────

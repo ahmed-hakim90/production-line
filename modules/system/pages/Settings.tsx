@@ -42,6 +42,7 @@ import { KPIThresholdsSection } from '../components/settings/KPIThresholdsSectio
 import { PrintTemplateSettingsSection } from '../components/settings/PrintTemplateSettingsSection';
 import { ExportImportSettingsSection } from '../components/settings/ExportImportSettingsSection';
 import { BackupRestoreSection } from '../components/settings/BackupRestoreSection';
+import { ClientVersionSettingsSection } from '../components/settings/ClientVersionSettingsSection';
 import { AlertRulesSection } from '../components/settings/AlertRulesSection';
 import { QuickActionsSection } from '../components/settings/QuickActionsSection';
 import { DashboardWidgetsSection } from '../components/settings/DashboardWidgetsSection';
@@ -49,7 +50,7 @@ import { useSettingsDraft } from '../hooks/useSettingsDraft';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { PageHeader } from '../../../components/PageHeader';
 
-type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'backup';
+type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'clientVersion' | 'backup';
 
 const TABS: { key: SettingsTab; label: string; icon: string; adminOnly: boolean }[] = [
   { key: 'general', label: 'الإعدادات العامة', icon: 'settings', adminOnly: false },
@@ -59,6 +60,7 @@ const TABS: { key: SettingsTab; label: string; icon: string; adminOnly: boolean 
   { key: 'kpiThresholds', label: 'حدود المؤشرات', icon: 'tune', adminOnly: true },
   { key: 'printTemplate', label: 'إعدادات الطباعة', icon: 'print', adminOnly: true },
   { key: 'exportImport', label: 'التصدير والاستيراد', icon: 'import_export', adminOnly: true },
+  { key: 'clientVersion', label: 'إصدار التطبيق', icon: 'system_update', adminOnly: true },
   { key: 'backup', label: 'النسخ الاحتياطي', icon: 'backup', adminOnly: true },
 ];
 
@@ -316,6 +318,12 @@ export const Settings: React.FC = () => {
     setLocalQuickActions,
     localExportImport,
     setLocalExportImport,
+    localMinimumClientVersion,
+    setLocalMinimumClientVersion,
+    localForceClientUpdate,
+    setLocalForceClientUpdate,
+    localClientUpdateMessageAr,
+    setLocalClientUpdateMessageAr,
     normalizeQuickActions,
     getQuickActionMatch,
     normalizeCustomWidgets,
@@ -439,7 +447,7 @@ export const Settings: React.FC = () => {
     if (brandingLogoRef.current) brandingLogoRef.current.value = '';
   }, []);
 
-  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print' | 'exportImport') => {
+  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print' | 'exportImport' | 'clientVersion') => {
     setSaving(true);
     setSaveMessage('');
     try {
@@ -459,6 +467,12 @@ export const Settings: React.FC = () => {
         alertToggles: section === 'general' ? localAlertToggles : (systemSettings.alertToggles ?? DEFAULT_ALERT_TOGGLES),
         quickActions: section === 'quickActions' ? normalizeQuickActions(localQuickActions) : (systemSettings.quickActions ?? []),
         exportImport: section === 'exportImport' ? localExportImport : (systemSettings.exportImport ?? { pages: {} }),
+        minimumClientVersion:
+          section === 'clientVersion' ? localMinimumClientVersion.trim() : systemSettings.minimumClientVersion,
+        forceClientUpdate:
+          section === 'clientVersion' ? localForceClientUpdate : systemSettings.forceClientUpdate,
+        clientUpdateMessageAr:
+          section === 'clientVersion' ? localClientUpdateMessageAr.trim() : systemSettings.clientUpdateMessageAr,
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم الحفظ بنجاح');
@@ -467,7 +481,7 @@ export const Settings: React.FC = () => {
       setSaveMessage('فشل الحفظ');
     }
     setSaving(false);
-  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, updateSystemSettings]);
+  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, localMinimumClientVersion, localForceClientUpdate, localClientUpdateMessageAr, updateSystemSettings]);
   const handleSaveAll = useCallback(async () => {
     setSaving(true);
     setSaveMessage('');
@@ -486,6 +500,9 @@ export const Settings: React.FC = () => {
         alertToggles: localAlertToggles,
         quickActions: normalizeQuickActions(localQuickActions),
         exportImport: localExportImport,
+        minimumClientVersion: localMinimumClientVersion.trim(),
+        forceClientUpdate: localForceClientUpdate,
+        clientUpdateMessageAr: localClientUpdateMessageAr.trim(),
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
@@ -509,6 +526,9 @@ export const Settings: React.FC = () => {
     localAlertToggles,
     localQuickActions,
     localExportImport,
+    localMinimumClientVersion,
+    localForceClientUpdate,
+    localClientUpdateMessageAr,
     normalizeCustomWidgets,
     normalizeQuickActions,
     updateSystemSettings,
@@ -763,6 +783,10 @@ export const Settings: React.FC = () => {
         serialize(systemSettings.printTemplate) !== serialize(localPrint),
       exportImport:
         serialize(systemSettings.exportImport ?? { pages: {} }) !== serialize(localExportImport),
+      clientVersion:
+        (systemSettings.minimumClientVersion ?? '') !== localMinimumClientVersion ||
+        (systemSettings.forceClientUpdate === true) !== localForceClientUpdate ||
+        (systemSettings.clientUpdateMessageAr ?? '') !== localClientUpdateMessageAr,
     } as const;
   }, [
     serialize,
@@ -779,6 +803,9 @@ export const Settings: React.FC = () => {
     localKPIs,
     localPrint,
     localExportImport,
+    localMinimumClientVersion,
+    localForceClientUpdate,
+    localClientUpdateMessageAr,
     normalizeQuickActions,
     normalizeCustomWidgets,
   ]);
@@ -794,6 +821,7 @@ export const Settings: React.FC = () => {
     kpiThresholds: 'kpis',
     printTemplate: 'print',
     exportImport: 'exportImport',
+    clientVersion: 'clientVersion',
   };
   const handleTabChange = useCallback((nextTab: SettingsTab) => {
     if (nextTab === activeTab) return;
@@ -1083,6 +1111,23 @@ export const Settings: React.FC = () => {
           localExportImport={localExportImport}
           updateExportImportControl={updateExportImportControl}
           onSave={() => handleSave('exportImport')}
+        />
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* ── TAB: Client version / forced update ─────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'clientVersion' && isAdmin && (
+        <ClientVersionSettingsSection
+          isAdmin={isAdmin}
+          saving={saving}
+          localMinimumClientVersion={localMinimumClientVersion}
+          setLocalMinimumClientVersion={setLocalMinimumClientVersion}
+          localForceClientUpdate={localForceClientUpdate}
+          setLocalForceClientUpdate={setLocalForceClientUpdate}
+          localClientUpdateMessageAr={localClientUpdateMessageAr}
+          setLocalClientUpdateMessageAr={setLocalClientUpdateMessageAr}
+          onSave={() => handleSave('clientVersion')}
         />
       )}
 

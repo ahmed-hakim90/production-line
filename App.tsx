@@ -31,6 +31,7 @@ import { pushService } from './services/pushService';
 import { sessionTrackerService } from './modules/system/audit';
 import { userService } from './services/userService';
 import { BarChart3, Boxes, Factory, Hammer, Users, type LucideIcon } from 'lucide-react';
+import { ForcedClientUpdateGate } from './components/ForcedClientUpdateGate';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
@@ -602,6 +603,7 @@ const App: React.FC = () => {
           <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
         </Routes>
         {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
+        <ForcedClientUpdateGate />
         <ToastContainer />
       </BrowserRouter>
     </GlobalModalManagerProvider>
