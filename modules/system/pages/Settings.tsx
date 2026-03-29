@@ -1121,6 +1121,9 @@ export const Settings: React.FC = () => {
         <ClientVersionSettingsSection
           isAdmin={isAdmin}
           saving={saving}
+          firestoreMinimumClientVersion={systemSettings.minimumClientVersion}
+          firestoreForceClientUpdate={systemSettings.forceClientUpdate}
+          firestoreClientUpdateMessageAr={systemSettings.clientUpdateMessageAr}
           localMinimumClientVersion={localMinimumClientVersion}
           setLocalMinimumClientVersion={setLocalMinimumClientVersion}
           localForceClientUpdate={localForceClientUpdate}

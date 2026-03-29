@@ -8,6 +8,10 @@ const BUILD_VERSION = __APP_VERSION__;
 type ClientVersionSettingsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
+  /** القيم الحالية كما وردت من Firestore (`system_settings/global`) بعد آخر تحميل */
+  firestoreMinimumClientVersion?: string;
+  firestoreForceClientUpdate?: boolean;
+  firestoreClientUpdateMessageAr?: string;
   localMinimumClientVersion: string;
   setLocalMinimumClientVersion: (v: string) => void;
   localForceClientUpdate: boolean;
@@ -20,6 +24,9 @@ type ClientVersionSettingsSectionProps = {
 export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSectionProps> = ({
   isAdmin,
   saving,
+  firestoreMinimumClientVersion,
+  firestoreForceClientUpdate,
+  firestoreClientUpdateMessageAr,
   localMinimumClientVersion,
   setLocalMinimumClientVersion,
   localForceClientUpdate,
@@ -30,13 +37,19 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
 }) => {
   if (!isAdmin) return null;
 
+  const savedMinTrimmed = (firestoreMinimumClientVersion ?? '').trim();
+  const savedMsgTrimmed = (firestoreClientUpdateMessageAr ?? '').trim();
+  const savedForce = firestoreForceClientUpdate === true;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold">إصدار تطبيق الويب</h3>
           <p className="page-subtitle text-[var(--color-text-muted)] text-sm">
-            فرض تحديث للمستخدمين ذوي الإصدار الأقدم من الحد المحدد (بعد نشر build جديد على الاستضافة).
+            فرض تحديث للمستخدمين ذوي الإصدار الأقدم من الحد المحدد (بعد نشر build جديد على الاستضافة). من يملك صلاحية{' '}
+            <span className="font-medium text-[var(--color-text)]">إدارة الأدوار</span> لا تظهر له شاشة التحديث الإجباري ويمكنه
+            تصحيح الإعداد من هنا إن لزم.
           </p>
         </div>
         <Button type="button" onClick={onSave} disabled={saving} className="w-full sm:w-auto justify-center">
@@ -45,6 +58,38 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
           حفظ
         </Button>
       </div>
+
+      <Card className="bg-white border-slate-200 rounded-xl shadow-none">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+            <span className="material-icons-round text-primary text-xl">cloud</span>
+            آخر نسخة مسجّلة في Firebase
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)] -mt-1">
+            من مستند <span className="font-mono dir-ltr inline-block">system_settings / global</span> — القيم المحفوظة حالياً على الخادم (ليست مسودة التحرير).
+          </p>
+          <div className="rounded-lg border border-indigo-200/80 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/30 px-4 py-3 space-y-2 text-sm">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="text-[var(--color-text-muted)] shrink-0">أقل إصدار مسموح:</span>
+              <span className="font-mono font-bold text-[var(--color-text)] dir-ltr">
+                {savedMinTrimmed || '— غير محدد'}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-[var(--color-text-muted)]">التحديث الإجباري:</span>
+              <span className={savedForce ? 'font-semibold text-emerald-700 dark:text-emerald-400' : 'text-[var(--color-text-muted)]'}>
+                {savedForce ? 'مفعّل' : 'غير مفعّل'}
+              </span>
+            </div>
+            {savedMsgTrimmed ? (
+              <div className="pt-1 border-t border-indigo-200/60 dark:border-indigo-800/40">
+                <span className="text-xs text-[var(--color-text-muted)] block mb-1">الرسالة المحفوظة</span>
+                <p className="text-sm text-[var(--color-text)] leading-relaxed whitespace-pre-wrap">{savedMsgTrimmed}</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
       <Card className="bg-white border-slate-200 rounded-xl shadow-none">
         <div className="space-y-4">

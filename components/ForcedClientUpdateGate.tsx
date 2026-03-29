@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuthUiSlice } from '../store/selectors';
 import { useAppStore } from '../store/useAppStore';
+import { usePermission } from '../utils/permissions';
 import { compareSemVer, parseSemVerTriplet } from '../utils/semverCompare';
 import { hardClientReload } from '../utils/hardClientReload';
 import { Button } from '@/components/UI';
@@ -9,6 +10,8 @@ const CLIENT_VERSION = __APP_VERSION__;
 
 export const ForcedClientUpdateGate: React.FC = () => {
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
+  const { can } = usePermission();
+  const isSystemAdmin = can('roles.manage');
   const systemSettings = useAppStore((s) => s.systemSettings);
   const fetchSystemSettings = useAppStore((s) => s.fetchSystemSettings);
   const [applying, setApplying] = useState(false);
@@ -34,7 +37,7 @@ export const ForcedClientUpdateGate: React.FC = () => {
     void hardClientReload();
   }, []);
 
-  if (!isAuthenticated || isPendingApproval || loading || !mustUpdate) return null;
+  if (!isAuthenticated || isPendingApproval || loading || !mustUpdate || isSystemAdmin) return null;
 
   const message =
     (systemSettings.clientUpdateMessageAr ?? '').trim() ||
