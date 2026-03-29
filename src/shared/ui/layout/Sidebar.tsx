@@ -90,6 +90,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     [can],
   );
 
+  /** مجموعات الأكورديون فقط (غير flat). لو 1 أو 2 يبقوا مفتوحين دائماً في الشريط الموسّع */
+  const accordionGroupCount = useMemo(
+    () => visibleGroups.filter((g) => !g.flat).length,
+    [visibleGroups],
+  );
+  const alwaysExpandAccordions = accordionGroupCount >= 1 && accordionGroupCount <= 2;
+
   useEffect(() => { onClose(); setProfileOpen(false); }, [location.pathname]);
 
   useEffect(() => {
@@ -189,8 +196,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         {/* ── Navigation ───────────────────────────────────────────── */}
         <nav className={['flex-1 overflow-y-auto overflow-x-hidden py-2', collapsed ? 'px-1.5' : 'px-2'].join(' ')}>
           {visibleGroups.map((group, gIdx) => {
-            const active     = isActiveGroup(group.key);
-            const isOpen     = openGroup === group.key;
+            const active = isActiveGroup(group.key);
+            const isOpen = alwaysExpandAccordions || openGroup === group.key;
             const totalBadge = group.children.reduce((s, c) => s + (badgeCounts[c.key] || 0), 0);
             const { iconColor, activeBg } = getIconClasses(group.key, sidebarIconStyle);
 
@@ -303,9 +310,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
                 {/* Group header button */}
                 <button
-                  onClick={() => toggleGroup(group.key)}
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    if (alwaysExpandAccordions) return;
+                    toggleGroup(group.key);
+                  }}
                   className={[
                     'w-full flex items-center gap-2 px-2 py-2 rounded-[var(--border-radius-sm)] transition-colors select-none text-start',
+                    alwaysExpandAccordions ? 'cursor-default' : '',
                     active
                       ? `${iconColor} font-semibold`
                       : 'text-[var(--color-text)] font-medium hover:bg-[#f0f2f5]',
