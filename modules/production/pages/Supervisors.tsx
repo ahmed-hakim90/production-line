@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
+import { Search, Filter, SlidersHorizontal, Zap, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Performance Score ────────────────────────────────────────────────────────
@@ -158,8 +158,9 @@ export const Supervisors: React.FC = () => {
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [assignmentMapBySupervisor, setAssignmentMapBySupervisor] = useState<Map<string, string[]>>(new Map());
   const [statFilter, setStatFilter] = useState<StatFilter>('');
+  const [detailDrawerSupervisorId, setDetailDrawerSupervisorId] = useState<string | null>(null);
   const [hoveredSupervisor, setHoveredSupervisor] = useState<string | null>(null);
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [bulkPrintReports, setBulkPrintReports] = useState<ProductionReport[] | null>(null);
   const bulkPrintRef = useRef<HTMLDivElement>(null);
   const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
@@ -442,6 +443,14 @@ export const Supervisors: React.FC = () => {
         };
       });
   }, [_rawEmployees, reportsBySupervisor, today, rangeStart, rangeEnd, totalDaysInRange, productAvgDailyById, assignmentMapBySupervisor]);
+
+  const detailDrawerSupervisor = useMemo(
+    () =>
+      detailDrawerSupervisorId
+        ? supervisors.find((s) => s.id === detailDrawerSupervisorId) ?? null
+        : null,
+    [supervisors, detailDrawerSupervisorId],
+  );
 
   useEffect(() => {
     if (!rangeStart || !rangeEnd) return;
@@ -1025,9 +1034,10 @@ export const Supervisors: React.FC = () => {
         </button>
       )}
       <button
-        onClick={() => navigate(`/supervisors/${sup.id}`)}
+        type="button"
+        onClick={() => setDetailDrawerSupervisorId(sup.id!)}
         className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/10 rounded-[var(--border-radius-base)] transition-all"
-        title="عرض التفاصيل"
+        title="ملخص سريع"
       >
         <span className="material-icons-round text-lg">visibility</span>
       </button>
@@ -1209,12 +1219,191 @@ export const Supervisors: React.FC = () => {
           tableId="production-supervisors-table"
           bulkActions={bulkActions}
           renderActions={renderActions}
+          onRowClick={(sup) => setDetailDrawerSupervisorId(sup.id!)}
           emptyIcon="engineering"
           emptyTitle="لا يوجد مشرفين"
           emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لم يتم العثور على مشرفين بمستوى "مشرف" (level 2)'}
           pageSize={15}
         />
       </Card>
+
+      {detailDrawerSupervisor && (() => {
+        const sup = detailDrawerSupervisor;
+        const periodLabel = viewMode === 'today' ? `اليوم (${today})` : `${startDate} إلى ${endDate}`;
+        const { variant: scoreVariant, label: scoreLabel } = getScoreBadge(sup.performanceScore);
+        const scoreColorMap = { success: 'text-emerald-600', warning: 'text-amber-600', danger: 'text-rose-600' } as const;
+        const linePreview = sup.performanceByLine.slice(0, 8);
+        const lineExtra = sup.performanceByLine.length - linePreview.length;
+        const deviation = sup.deviationPct;
+        const deviationTone =
+          deviation === null
+            ? 'text-[var(--color-text-muted)]'
+            : deviation >= 0
+              ? 'text-emerald-600'
+              : deviation <= -20
+                ? 'text-rose-600'
+                : 'text-amber-600';
+        return (
+          <>
+            <div
+              className="fixed inset-0 bg-black/35 z-[60] mt-0"
+              onClick={() => setDetailDrawerSupervisorId(null)}
+              aria-hidden
+            />
+            <aside
+              className="fixed top-0 right-0 h-screen w-[min(460px,96vw)] bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl z-[61] overflow-y-auto flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-start justify-between gap-2 shrink-0">
+                <div className="min-w-0">
+                  <h3 className="font-black text-[var(--color-text)] text-sm leading-snug">{sup.name}</h3>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                    {sup.code ? <span className="font-mono">{sup.code}</span> : null}
+                    {sup.code ? ' · ' : ''}
+                    {getDepartmentName(sup.departmentId ?? '')} · {getJobPositionTitle(sup.jobPositionId ?? '')}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1">نطاق البيانات: {periodLabel}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {can('print') && (
+                    <button
+                      type="button"
+                      title="طباعة تقييم الأداء"
+                      onClick={() => printSupervisorPerformance(sup)}
+                      className="p-2 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Printer className="size-[18px]" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDetailDrawerSupervisorId(null)}
+                    className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded-[var(--border-radius-base)]"
+                    title="إغلاق"
+                  >
+                    <span className="material-icons-round text-lg">close</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 flex-1 space-y-4 text-sm">
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 space-y-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">ملخص سريع</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-2xl font-black tabular-nums ${scoreColorMap[scoreVariant]}`}>{sup.performanceScore}%</span>
+                    <Badge variant={scoreVariant}>{scoreLabel}</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">إجمالي الإنتاج (الفترة)</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{formatNumber(sup.totalProduced)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">نسبة الهالك</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{sup.scrapRate}%</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">إنتاج اليوم</span>
+                      <span className="font-black tabular-nums text-emerald-600">{formatNumber(sup.todayProduced)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">إنتاج الأسبوع</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{formatNumber(sup.weekProduced)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">أيام النشاط</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">
+                        {sup.activeDays}/{sup.totalDaysInRange}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">عدد التقارير</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{sup.reportCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">متوسط يومي فعلي</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{Number(sup.avgDailyActual.toFixed(1))}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">المتوسط المرجعي / يوم</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{Number(sup.benchmarkDaily.toFixed(1))}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">الانحراف عن المرجع</span>
+                      <span className={`font-black tabular-nums ${deviationTone}`}>
+                        {deviation === null ? '—' : `${deviation > 0 ? '+' : ''}${deviation}%`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">متوسط العمالة (تقارير)</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{sup.totalWorkers}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">آخر نشاط</span>
+                      <span className="font-bold text-[var(--color-text)]">{sup.lastActivity}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 space-y-2">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">الأداء حسب الخط</p>
+                  {linePreview.length === 0 ? (
+                    <p className="text-xs text-[var(--color-text-muted)]">لا توجد بيانات خطوط في هذه الفترة.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {linePreview.map((line) => {
+                        const lb = getScoreBadge(line.performanceScore);
+                        const lineTone =
+                          lb.variant === 'success'
+                            ? 'text-emerald-700'
+                            : lb.variant === 'warning'
+                              ? 'text-amber-700'
+                              : 'text-rose-700';
+                        return (
+                          <li key={line.lineId} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-bold text-[var(--color-text)] truncate" title={line.lineName}>
+                              {line.lineName}
+                            </span>
+                            <span className={`font-black tabular-nums shrink-0 ${lineTone}`}>{line.performanceScore}%</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {lineExtra > 0 && (
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)]">+{lineExtra} خط إضافي</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 pt-1">
+                  <Button
+                    variant="primary"
+                    className="w-full justify-center"
+                    onClick={() => {
+                      const id = sup.id!;
+                      setDetailDrawerSupervisorId(null);
+                      navigate(`/supervisors/${id}`);
+                    }}
+                  >
+                    فتح صفحة التفاصيل الكاملة
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-center"
+                    onClick={() => {
+                      const id = sup.id!;
+                      setDetailDrawerSupervisorId(null);
+                      navigate(`/employees/${id}`);
+                    }}
+                  >
+                    الملف الشخصي
+                  </Button>
+                </div>
+              </div>
+            </aside>
+          </>
+        );
+      })()}
 
       {/* Hidden print template */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>

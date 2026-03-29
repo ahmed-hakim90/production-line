@@ -1,7 +1,17 @@
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+import {
+  DetailCollapsibleSection,
+  PAGE_BG,
+  SectionSkeleton,
+  SURFACE_CARD,
+} from '@/src/components/erp/DetailPageChrome';
+import { Card as ErpCard, KPIBox, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
@@ -237,6 +247,14 @@ export const LineDetails: React.FC = () => {
     () => activePlan ? _rawProducts.find((p) => p.id === activePlan.productId)?.name ?? '—' : null,
     [activePlan, _rawProducts]
   );
+
+  const linePageSubtitle = useMemo(() => {
+    const parts: string[] = [];
+    if (line?.employeeName) parts.push(`الموظف: ${line.employeeName}`);
+    if (rawLine) parts.push(`${rawLine.dailyWorkingHours} ساعة · ${rawLine.maxWorkers} عامل`);
+    if (activePlanProduct) parts.push(`الخطة: ${activePlanProduct}`);
+    return parts.length > 0 ? parts.join(' · ') : 'تفاصيل خط الإنتاج';
+  }, [line?.employeeName, rawLine, activePlanProduct]);
 
   // ── Core metrics ──────────────────────────────────────────────────────────
 
@@ -633,23 +651,33 @@ export const LineDetails: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <LoadingSkeleton type="detail" />
+      <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
+        <div className={cn('sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm', PAGE_BG)}>
+          <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} loading />
+          <Card className={SURFACE_CARD}>
+            <SectionSkeleton rows={2} height={38} />
+          </Card>
+        </div>
+        <Card className={SURFACE_CARD}>
+          <SectionSkeleton rows={6} height={68} />
+        </Card>
       </div>
     );
   }
 
   if (!line && !loading) {
     return (
-      <div className="space-y-6">
-        <div className="text-center py-16 text-slate-400">
-          <span className="material-icons-round text-6xl mb-4 block opacity-30">precision_manufacturing</span>
-          <p className="font-bold text-lg">خط الإنتاج غير موجود</p>
-          <Button variant="outline" className="mt-4" onClick={() => navigate('/lines')}>
-            <span className="material-icons-round text-sm">arrow_forward</span>
-            العودة لخطوط الإنتاج
-          </Button>
-        </div>
+      <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
+        <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} />
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="space-y-4 p-6 text-center">
+            <span className="material-icons-round block text-6xl opacity-30 text-muted-foreground">precision_manufacturing</span>
+            <p className="text-lg font-bold text-destructive">خط الإنتاج غير موجود</p>
+            <Button type="button" variant="outline" onClick={() => navigate('/lines')}>
+              العودة لخطوط الإنتاج
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -658,102 +686,40 @@ export const LineDetails: React.FC = () => {
   const healthCfg = planHealth ? HEALTH_STATUS_CONFIG[planHealth.status] : null;
 
   return (
-    <div className="space-y-6">
-      {/* ── Alerts ──────────────────────────────────────────────────────────── */}
-      {alerts.length > 0 && alerts[0].type !== 'info' && (
-        <div className="space-y-2">
-          {alerts.filter((a) => a.type !== 'info').map((alert, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
-                alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
-                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
-              }`}
-            >
-              <span className="material-icons-round text-lg">{alert.icon}</span>
-              <span>{alert.message}</span>
+    <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
+      <div className={cn('sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm', PAGE_BG)}>
+        <PageHeader
+          title={line?.name ?? 'تفاصيل الخط'}
+          subtitle={linePageSubtitle}
+          icon="factory"
+          backAction={{ to: '/lines', label: 'رجوع' }}
+          extra={(
+            <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
+              {statusCfg.label}
+            </Badge>
+          )}
+        />
+        <Card className={SURFACE_CARD}>
+          <CardContent className="flex flex-wrap items-center justify-end gap-3 p-4">
+            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
+              {PERIOD_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant={period === opt.value ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setPeriod(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Enhanced Header ─────────────────────────────────────────────────── */}
-      <div className="flex items-start sm:items-center justify-between gap-3">
-        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-          <button
-            onClick={() => navigate('/lines')}
-            className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all shrink-0 mt-1 sm:mt-0"
-          >
-            <span className="material-icons-round">arrow_forward</span>
-          </button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] truncate">
-                {line?.name}
-              </h2>
-              <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
-                {statusCfg.label}
-              </Badge>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-              <span className="text-xs sm:text-sm text-[var(--color-text-muted)] font-medium flex items-center gap-1">
-                <span className="material-icons-round text-xs">person</span>
-                الموظف: <strong className="text-slate-600">{line?.employeeName}</strong>
-              </span>
-              {rawLine && (
-                <>
-                  <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
-                  <span className="text-xs sm:text-sm text-slate-400">
-                    {rawLine.dailyWorkingHours} ساعة · {rawLine.maxWorkers} عامل
-                  </span>
-                </>
-              )}
-              {activePlanProduct && (
-                <>
-                  <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
-                  <span className="text-xs sm:text-sm text-[var(--color-text-muted)] flex items-center gap-1">
-                    <span className="material-icons-round text-xs">event_note</span>
-                    الخطة: <strong className="text-primary">{activePlanProduct}</strong>
-                  </span>
-                </>
-              )}
-            </div>
-            {activePlan && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
-                {plannedEndDate && (
-                  <span className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1">
-                    <span className="material-icons-round text-xs">event</span>
-                    الانتهاء المتوقع: <strong className="text-slate-600">{plannedEndDate}</strong>
-                  </span>
-                )}
-                <span className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1">
-                  <span className="material-icons-round text-xs">inventory</span>
-                  المتبقي: <strong className="text-slate-600">{formatNumber(remainingQty)}</strong> وحدة
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="flex items-center justify-end">
-        <div className="erp-date-seg">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setPeriod(opt.value)}
-              className={`erp-date-seg-btn${
-                period === opt.value
-                  ? ' active' : ''}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Expanded KPI Cards ──────────────────────────────────────────────── */}
+      <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         <KPIBox
           label="الإنتاج مقابل الهدف"
@@ -848,9 +814,12 @@ export const LineDetails: React.FC = () => {
           />
         )}
       </div>
+      </DetailCollapsibleSection>
 
-      {canViewCosts && lineAllocatedCosts && (
-        <Card>
+      {canViewCosts && (
+        <DetailCollapsibleSection title="التكاليف والتوزيع" defaultOpen>
+      {lineAllocatedCosts && (
+        <ErpCard>
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-violet-500">account_balance</span>
@@ -908,11 +877,10 @@ export const LineDetails: React.FC = () => {
               لا توجد توزيعات تكلفة غير مباشرة على هذا الخط خلال الشهر الحالي.
             </div>
           )}
-        </Card>
+        </ErpCard>
       )}
 
-      {canViewCosts && (
-        <Card>
+        <ErpCard>
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-emerald-500">manage_accounts</span>
@@ -957,12 +925,14 @@ export const LineDetails: React.FC = () => {
               لا توجد تقارير كافية لحساب تكلفة المشرف على هذا الخط.
             </div>
           )}
-        </Card>
+        </ErpCard>
+        </DetailCollapsibleSection>
       )}
 
       {/* ── Plan Health Block ──────────────────────────────────────────────── */}
       {activePlan && planHealth && healthCfg && (
-        <Card>
+        <DetailCollapsibleSection title="صحة الخطة" defaultOpen>
+        <ErpCard>
           <div className="flex items-center gap-2 mb-5">
             <span className="material-icons-round text-violet-500">monitor_heart</span>
             <h3 className="text-lg font-bold">صحة الخطة</h3>
@@ -1018,11 +988,13 @@ export const LineDetails: React.FC = () => {
               <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{healthCfg.desc}</p>
             </div>
           </div>
-        </Card>
+        </ErpCard>
+        </DetailCollapsibleSection>
       )}
 
       {/* ── Charts with Tab Switcher ──────────────────────────────────────── */}
-      <Card>
+      <DetailCollapsibleSection title="تحليل الأداء" defaultOpen>
+      <ErpCard>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <span className="material-icons-round text-primary">show_chart</span>
@@ -1107,10 +1079,12 @@ export const LineDetails: React.FC = () => {
             </ResponsiveContainer>
           </div>
         )}
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
       {/* ── Capacity Section ──────────────────────────────────────────────── */}
-      <Card>
+      <DetailCollapsibleSection title="الطاقة الإنتاجية" defaultOpen>
+      <ErpCard>
         <div className="flex items-center gap-2 mb-5">
           <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
           <h3 className="text-lg font-bold">الطاقة الإنتاجية</h3>
@@ -1169,10 +1143,12 @@ export const LineDetails: React.FC = () => {
             </div>
           </div>
         )}
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
       {/* ── Alerts Section ────────────────────────────────────────────────── */}
-      <Card>
+      <DetailCollapsibleSection title="التنبيهات" defaultOpen>
+      <ErpCard>
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-amber-500">notifications_active</span>
           <h3 className="text-lg font-bold">التنبيهات</h3>
@@ -1194,11 +1170,13 @@ export const LineDetails: React.FC = () => {
             </div>
           ))}
         </div>
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
       {/* ── Active Work Orders ──────────────────────────────────────────── */}
       {can('workOrders.view') && lineWorkOrders.length > 0 && (
-        <Card className="!p-0 border-none overflow-hidden " title="">
+        <DetailCollapsibleSection title="أوامر الشغل النشطة" defaultOpen>
+        <ErpCard className="!p-0 border-none overflow-hidden " title="">
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
             <span className="material-icons-round text-primary">assignment</span>
             <h3 className="text-lg font-bold">أوامر الشغل النشطة</h3>
@@ -1241,11 +1219,13 @@ export const LineDetails: React.FC = () => {
               );
             })}
           </div>
-        </Card>
+        </ErpCard>
+        </DetailCollapsibleSection>
       )}
 
       {/* ── Reports Table ─────────────────────────────────────────────────── */}
-      <Card className="!p-0 border-none overflow-hidden " title="">
+      <DetailCollapsibleSection title="سجل التقارير" defaultOpen>
+      <ErpCard className="!p-0 border-none overflow-hidden " title="">
         <div className="px-6 py-4 border-b border-[var(--color-border)]">
           <h3 className="text-lg font-bold">سجل التقارير</h3>
         </div>
@@ -1305,7 +1285,8 @@ export const LineDetails: React.FC = () => {
             </span>
           </div>
         )}
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
       {/* View Workers Modal */}
       {viewWorkersData && (

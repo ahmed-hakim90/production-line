@@ -237,6 +237,8 @@ export const transferApprovalService = {
           note: request.note || `Approved production entry ${id}`,
           referenceNo: request.referenceNo,
           createdBy: approvedBy,
+          // يسمح بإتمام الإدخال إذا كان الرصيد الحالي سالباً بحيث تبقى النتيجة سالبة مؤقتاً (بيانات قديمة أو تسويات)
+          allowNegative: true,
         });
       } else {
         await stockService.createMovement({

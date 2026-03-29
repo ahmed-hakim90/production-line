@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Card } from '../UI';
-import { CUSTOM_WIDGET_TYPES } from '../../../../utils/dashboardConfig';
+import { ALL_DASHBOARD_WIDGET_DEFS, CUSTOM_WIDGET_TYPES } from '../../../../utils/dashboardConfig';
 import type { CustomWidgetConfig, CustomWidgetType, WidgetConfig } from '../../../../types';
 
 type WidgetFormState = {
@@ -33,6 +33,7 @@ type DashboardWidgetsSectionProps = {
   setWidgetForm: React.Dispatch<React.SetStateAction<WidgetFormState>>;
   addCustomWidget: () => void;
   onSave: () => void;
+  onMoveWidgetToDashboard: (fromKey: string, toKey: string, widgetId: string) => void;
 };
 
 export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = ({
@@ -53,6 +54,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
   setWidgetForm,
   addCustomWidget,
   onSave,
+  onMoveWidgetToDashboard,
 }) => {
   if (!isAdmin) return null;
 
@@ -92,7 +94,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
         <div className="space-y-1">
           {(localWidgets[selectedDashboardKey] || selectedWidgetDefs(selectedDashboardKey).map((def) => ({ id: def.id, visible: true }))).map((widget, index) => {
             const defs = selectedWidgetDefs(selectedDashboardKey);
-            const def = defs.find((d) => d.id === widget.id);
+            const def = defs.find((d) => d.id === widget.id) ?? ALL_DASHBOARD_WIDGET_DEFS[widget.id];
             if (!def) return null;
             const isCustom = localCustomWidgets.some((custom) => custom.id === widget.id);
 
@@ -137,6 +139,24 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
                     <span className="material-icons-round text-sm">delete</span>
                   </button>
                 )}
+                <select
+                  aria-label="نقل إلى لوحة"
+                  defaultValue=""
+                  onChange={(e) => {
+                    const toKey = e.target.value;
+                    e.target.value = '';
+                    if (!toKey || toKey === selectedDashboardKey) return;
+                    onMoveWidgetToDashboard(selectedDashboardKey, toKey, widget.id);
+                  }}
+                  className="text-[11px] font-bold border border-[var(--color-border)] rounded-[var(--border-radius-base)] py-1.5 px-2 bg-[var(--color-card)] text-[var(--color-text)] max-w-[140px]"
+                >
+                  <option value="">نقل إلى…</option>
+                  {Object.entries(dashboardLabels)
+                    .filter(([key]) => key !== selectedDashboardKey)
+                    .map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                </select>
                 <button
                   onClick={() => toggleWidget(selectedDashboardKey, widget.id)}
                   className={`w-10 h-6 rounded-full transition-all relative shrink-0 ${

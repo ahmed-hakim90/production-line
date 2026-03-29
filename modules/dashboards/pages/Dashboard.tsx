@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -20,7 +20,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
-import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
+import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import {
   formatNumber,
@@ -45,7 +45,6 @@ import {
   getKPIThreshold,
   getKPIColor,
   KPI_COLOR_CLASSES,
-  isWidgetVisible,
 } from '../../../utils/dashboardConfig';
 import {
   ComposedChart,
@@ -148,11 +147,6 @@ export const Dashboard: React.FC = () => {
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
-
-  const isVisible = useCallback(
-    (widgetId: string) => isWidgetVisible(systemSettings, 'dashboard', widgetId),
-    [systemSettings]
-  );
 
   const linkedEmployee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
@@ -570,9 +564,13 @@ export const Dashboard: React.FC = () => {
         <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
       </div> */}
 
-      <CustomDashboardWidgets dashboardKey="dashboard" systemSettings={systemSettings} />
-
-      {isVisible('kpi_row') && (
+      <OrderedDashboardWidgets
+        dashboardKey="dashboard"
+        systemSettings={systemSettings}
+        renderBuiltin={(widgetId) => {
+          switch (widgetId) {
+            case 'kpi_row':
+              return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {/* Production Card — Daily & Monthly */}
         <div className="bg-[var(--color-card)] p-4 sm:p-6 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-2 md:col-span-1">
@@ -604,10 +602,10 @@ export const Dashboard: React.FC = () => {
           return <KPIBox label="نسبة الهالك" value={`${kpis.wasteRatio}%`} icon="delete_sweep" trend="" trendUp={wasteColor === 'good'} colorClass={KPI_COLOR_CLASSES[wasteColor]} />;
         })()}
       </div>
-      )}
-
-      {/* ── Product Cost Analysis Section ── */}
-      {isVisible('product_cost_analysis') && canViewCosts && (
+              );
+            case 'product_cost_analysis':
+              if (!canViewCosts) return null;
+              return (
         <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
           <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -779,10 +777,10 @@ export const Dashboard: React.FC = () => {
             </div>
           ) : null}
         </div>
-      )}
-
-      {/* ── Daily Production vs Cost Chart ── */}
-      {isVisible('daily_cost_chart') && canViewCosts && (
+              );
+            case 'daily_cost_chart':
+              if (!canViewCosts) return null;
+              return (
         <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
           <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -904,10 +902,10 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-        {isVisible('production_lines') && <div className="lg:col-span-2 space-y-5 sm:space-y-6">
+              );
+            case 'production_lines':
+              return (
+          <>
           <div className="flex items-center justify-between px-2 gap-3">
             <h3 className="text-lg sm:text-xl font-bold flex items-center gap-3">
               <span className="w-2 h-7 bg-primary rounded-full shrink-0"></span>
@@ -995,9 +993,10 @@ export const Dashboard: React.FC = () => {
               </Card>
             ))}
           </div>
-        </div>}
-
-        {isVisible('smart_planning') && <div className="lg:col-span-1">
+          </>
+              );
+            case 'smart_planning':
+              return (
           <Card className="lg:sticky lg:top-24 border-primary/20 shadow-primary/5" title="التخطيط الذكي">
             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
@@ -1132,8 +1131,12 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
           </Card>
-        </div>}
-      </div>
+              );
+            default:
+              return null;
+          }
+        }}
+      />
 
       {/* ── Set Target Modal ── */}
 

@@ -358,10 +358,12 @@ ProductionReportPrint.displayName = 'ProductionReportPrint';
 export interface SingleReportPrintProps {
   report: ReportPrintRow | null;
   printSettings?: PrintTemplateSettings;
+  /** Unique root id when multiple export layouts exist on one page (e.g. showcase). */
+  exportRootId?: string;
 }
 
 export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPrintProps>(
-  ({ report, printSettings }, ref) => {
+  ({ report, printSettings, exportRootId }, ref) => {
     if (!report) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
@@ -373,12 +375,13 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     return (
       <PrintReportLayout
         ref={ref}
+        exportRootId={exportRootId}
         companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
         reportType="تقرير إنتاج"
         printDate={now}
         logoUrl={ps.logoUrl}
-        accentColor={ps.primaryColor}
-        footerText={ps.footerText}
+        brandAccent={ps.primaryColor}
+        footerTagline={ps.footerText?.trim() || undefined}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
         meta={{
@@ -475,8 +478,8 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
         reportType="أمر شغل"
         printDate={now}
         logoUrl={ps.logoUrl}
-        accentColor={ps.primaryColor}
-        footerText={ps.footerText}
+        brandAccent={ps.primaryColor}
+        footerTagline={ps.footerText?.trim() || undefined}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
         meta={{

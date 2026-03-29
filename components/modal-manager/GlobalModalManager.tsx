@@ -69,7 +69,7 @@ export const GlobalModalManagerProvider: React.FC<{ children: React.ReactNode }>
   const closeModal = useCallback((modalKey: string) => {
     setManagedStates((prev) => ({
       ...prev,
-      [modalKey]: { ...(prev[modalKey] || {}), isOpen: false },
+      [modalKey]: { isOpen: false, payload: undefined },
     }));
   }, []);
 

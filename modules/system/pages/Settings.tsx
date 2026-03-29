@@ -659,6 +659,28 @@ export const Settings: React.FC = () => {
     setWidgetForm((prev) => ({ ...prev, dashboardKey }));
   };
 
+  const moveWidgetToDashboard = (fromKey: string, toKey: string, widgetId: string) => {
+    if (fromKey === toKey) return;
+    const isCustom = localCustomWidgets.some((w) => w.id === widgetId);
+    setLocalWidgets((prev) => {
+      const fromList = [...(prev[fromKey] || selectedWidgetDefs(fromKey).map((d) => ({ id: d.id, visible: true })))];
+      const idx = fromList.findIndex((w) => w.id === widgetId);
+      if (idx === -1) return prev;
+      const [item] = fromList.splice(idx, 1);
+      const toList = [...(prev[toKey] || selectedWidgetDefs(toKey).map((d) => ({ id: d.id, visible: true })))];
+      if (toList.some((w) => w.id === widgetId)) return prev;
+      toList.push({ id: item.id, visible: item.visible });
+      return { ...prev, [fromKey]: fromList, [toKey]: toList };
+    });
+    if (isCustom) {
+      setLocalCustomWidgets((prev) =>
+        normalizeCustomWidgets(prev.map((w) => (w.id === widgetId ? { ...w, dashboardKey: toKey } : w)))
+      );
+    }
+    setSelectedDashboardKey(toKey);
+    setSaveMessage('');
+  };
+
   const addQuickAction = () => {
     const template = AVAILABLE_QUICK_ACTIONS[0];
     const newAction: QuickActionItem = {
@@ -718,10 +740,9 @@ export const Settings: React.FC = () => {
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
   const serialize = useCallback((value: unknown) => JSON.stringify(value), []);
   const dirtyBySection = useMemo(() => {
-    const savedQuickActions = (systemSettings.quickActions ?? [])
+    const savedQuickActionsSorted = (systemSettings.quickActions ?? [])
       .slice()
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .map((item, index) => ({ ...item, order: item.order ?? index }));
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return {
       general:
         serialize({ ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings }) !== serialize(localPlanSettings) ||
@@ -730,10 +751,10 @@ export const Settings: React.FC = () => {
         serialize({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay }) !== serialize(localDashboardDisplay) ||
         serialize({ ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles }) !== serialize(localAlertToggles),
       quickActions:
-        serialize(savedQuickActions) !== serialize(normalizeQuickActions(localQuickActions)),
+        serialize(normalizeQuickActions(savedQuickActionsSorted)) !== serialize(normalizeQuickActions(localQuickActions)),
       widgets:
         serialize(systemSettings.dashboardWidgets) !== serialize(localWidgets) ||
-        serialize(systemSettings.customDashboardWidgets ?? []) !== serialize(normalizeCustomWidgets(localCustomWidgets)),
+        serialize(normalizeCustomWidgets(systemSettings.customDashboardWidgets ?? [])) !== serialize(normalizeCustomWidgets(localCustomWidgets)),
       alerts:
         serialize(systemSettings.alertSettings) !== serialize(localAlerts),
       kpis:
@@ -1001,6 +1022,7 @@ export const Settings: React.FC = () => {
           setWidgetForm={setWidgetForm}
           addCustomWidget={addCustomWidget}
           onSave={() => handleSave('widgets')}
+          onMoveWidgetToDashboard={moveWidgetToDashboard}
         />
       )}
 

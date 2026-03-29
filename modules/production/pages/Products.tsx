@@ -18,10 +18,12 @@ import {
   Loader2,
   Package,
   Pencil,
+  Printer,
   ReceiptText,
   RefreshCcw,
   Save,
   Search,
+  Share2,
   SlidersHorizontal,
   Split,
   Trash2,
@@ -35,7 +37,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
-import { buildProductCosts, buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
+import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
 import { FirestoreProduct, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
@@ -64,6 +66,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useManagedPrint } from '../../../utils/printManager';
+import { shareToWhatsApp } from '../../../utils/reportExport';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -248,6 +252,48 @@ export const Products: React.FC = () => {
   const [warehouses, setWarehouses] = useState<InventoryWarehouse[]>([]);
   const [showWarehouseExportModal, setShowWarehouseExportModal] = useState(false);
   const [exportWarehouseId, setExportWarehouseId] = useState('');
+
+  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const [detailDrawerProductId, setDetailDrawerProductId] = useState<string | null>(null);
+  const [drawerMaterials, setDrawerMaterials] = useState<ProductMaterial[]>([]);
+  const [drawerMaterialsLoading, setDrawerMaterialsLoading] = useState(false);
+  const [drawerShareBusy, setDrawerShareBusy] = useState(false);
+  const productDetailPrintRef = useRef<HTMLDivElement>(null);
+
+  const detailDrawerProduct = useMemo(
+    () => (detailDrawerProductId ? products.find((p) => p.id === detailDrawerProductId) ?? null : null),
+    [products, detailDrawerProductId],
+  );
+
+  const handlePrintProductDetail = useManagedPrint({
+    contentRef: productDetailPrintRef,
+    printSettings: printTemplate,
+    documentTitle: detailDrawerProduct?.name ?? 'ملخص المنتج',
+  });
+
+  useEffect(() => {
+    if (!detailDrawerProductId) {
+      setDrawerMaterials([]);
+      setDrawerMaterialsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDrawerMaterialsLoading(true);
+    void productMaterialService
+      .getByProduct(detailDrawerProductId)
+      .then((m) => {
+        if (!cancelled) setDrawerMaterials(m);
+      })
+      .catch(() => {
+        if (!cancelled) setDrawerMaterials([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDrawerMaterialsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailDrawerProductId]);
 
   // Sort & Pagination & Selection
   const PAGE_SIZE = 20;
@@ -731,6 +777,21 @@ export const Products: React.FC = () => {
     />
   );
 
+  const handleShareProductDetail = async () => {
+    const el = productDetailPrintRef.current;
+    if (!el || !detailDrawerProduct) return;
+    setDrawerShareBusy(true);
+    try {
+      await shareToWhatsApp(
+        el,
+        `product-${detailDrawerProduct.code || detailDrawerProduct.id}`,
+        { width: 440, windowWidth: 480 },
+      );
+    } finally {
+      setDrawerShareBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Hidden file input */}
@@ -947,8 +1008,12 @@ export const Products: React.FC = () => {
                 const wasteBalance = productWarehouseBalances.getValue(planSettings?.wasteReceiveWarehouseId, product.id);
                 const finalBalance = productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, product.id);
                 return (
-                <tr key={product.id} className={`hover:bg-[#f8f9fa]/50 transition-colors group${selectedIds.has(product.id) ? ' bg-primary/5' : ''}`}>
-                  <td className="px-4 py-4 text-center">
+                <tr
+                  key={product.id}
+                  className={`cursor-pointer hover:bg-[#f8f9fa]/50 transition-colors group${selectedIds.has(product.id) ? ' bg-primary/5' : ''}`}
+                  onClick={() => setDetailDrawerProductId(product.id)}
+                >
+                  <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => toggleRow(product.id)} className="cursor-pointer" />
                   </td>
                   <td className="px-5 py-4">
@@ -959,8 +1024,11 @@ export const Products: React.FC = () => {
                       <div className="min-w-0">
                         <span
                           className="font-bold text-sm text-[var(--color-text)] hover:text-primary cursor-pointer transition-colors block truncate max-w-[280px]"
-                          onClick={() => navigate(`/products/${product.id}`)}
                           title={product.name}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/products/${product.id}`);
+                          }}
                         >
                           {shortProductName(product.name)}
                         </span>
@@ -1058,18 +1126,23 @@ export const Products: React.FC = () => {
                       </>
                     );
                   })()}
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-0.5 justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => navigate(`/products/${product.id}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="عرض التفاصيل">
+                      <button
+                        type="button"
+                        onClick={() => setDetailDrawerProductId(product.id)}
+                        className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all"
+                        title="ملخص سريع"
+                      >
                         <ProductIcon name="visibility" className="text-[18px]" />
                       </button>
                       {can("products.edit") && (
-                        <button onClick={() => openEdit(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
+                        <button type="button" onClick={() => openEdit(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
                           <ProductIcon name="edit" className="text-[18px]" />
                         </button>
                       )}
                       {can("products.delete") && (
-                        <button onClick={() => setDeleteConfirmId(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
+                        <button type="button" onClick={() => setDeleteConfirmId(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
                           <ProductIcon name="delete" className="text-[18px]" />
                         </button>
                       )}
@@ -1104,6 +1177,199 @@ export const Products: React.FC = () => {
           )}
         </div>
       </Card>
+
+      {detailDrawerProductId && detailDrawerProduct && (() => {
+        const p = detailDrawerProduct;
+        const raw = _rawProducts.find((r) => r.id === p.id);
+        const c = productCosts[p.id];
+        const hasMonthlyCost =
+          !!c && (c.totalCost > 0 || c.quantityProduced > 0 || c.costPerUnit > 0);
+        const decomposedBal = productWarehouseBalances.getValue(planSettings?.decomposedSourceWarehouseId, p.id);
+        const finishedWhBal = productWarehouseBalances.getValue(planSettings?.finishedReceiveWarehouseId, p.id);
+        const breakdown =
+          raw && canViewCosts
+            ? calculateProductCostBreakdown(raw, drawerMaterials, c?.costPerUnit ?? 0)
+            : null;
+        const monthKey = getCurrentMonth();
+        const activeThisMonth = (c?.quantityProduced ?? 0) > 0;
+        const selling = raw?.sellingPrice ?? 0;
+        return (
+          <>
+            <div
+              className="fixed inset-0 bg-black/35 z-[60] mt-0"
+              onClick={() => setDetailDrawerProductId(null)}
+              aria-hidden
+            />
+            <aside
+              className="fixed top-0 right-0 h-screen w-[min(460px,96vw)] bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl z-[61] overflow-y-auto flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-start justify-between gap-2 shrink-0">
+                <div className="min-w-0">
+                  <h3 className="font-black text-[var(--color-text)] text-sm leading-snug">{p.name}</h3>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1 font-mono">{p.code}{p.category ? ` · ${p.category}` : ''}</p>
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">الشهر الحالي: {monthKey}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    title="طباعة الملخص"
+                    onClick={() => handlePrintProductDetail()}
+                    className="p-2 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:bg-primary/10 hover:text-primary"
+                  >
+                    <Printer className="size-[18px]" />
+                  </button>
+                  <button
+                    type="button"
+                    title="مشاركة كصورة"
+                    disabled={drawerShareBusy}
+                    onClick={() => void handleShareProductDetail()}
+                    className="p-2 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+                  >
+                    {drawerShareBusy ? <Loader2 className="size-[18px] animate-spin" /> : <Share2 className="size-[18px]" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailDrawerProductId(null)}
+                    className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] rounded-[var(--border-radius-base)]"
+                    title="إغلاق"
+                  >
+                    <ProductIcon name="close" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 flex-1 space-y-4">
+                <div
+                  ref={productDetailPrintRef}
+                  className="arabic-export-root space-y-4 text-sm bg-[var(--color-card)]"
+                >
+                  <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 space-y-3">
+                    <p className="text-xs font-bold text-[var(--color-text-muted)]">ملخص سريع</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">رصيد مفكك</span>
+                        <span className="font-black tabular-nums text-[var(--color-text)]">{formatNumber(decomposedBal)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">كمية الإنتاج (الشهر الحالي)</span>
+                        <span className="font-black tabular-nums text-emerald-600">{formatNumber(c?.quantityProduced ?? 0)}</span>
+                        <span className="text-[10px] text-[var(--color-text-muted)] block mt-0.5">من التقارير/التكلفة الشهرية، وليس رصيد المخزن</span>
+                      </div>
+                      {canViewCosts && (
+                        <div>
+                          <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">متوسط تكلفة الوحدة (الشهر)</span>
+                          <span className="font-black tabular-nums text-primary">
+                            {hasMonthlyCost ? `${formatCost(c!.costPerUnit)} ج.م` : '—'}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">نشط هذا الشهر</span>
+                        <span className={`font-black ${activeThisMonth ? 'text-emerald-600' : 'text-[var(--color-text-muted)]'}`}>
+                          {activeThisMonth ? 'نعم' : 'لا'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-muted)]">
+                      رصيد مخزن «تم الصنع» في الجدول:{' '}
+                      <span className="font-bold text-[var(--color-text)] tabular-nums">{formatNumber(finishedWhBal)}</span>
+                    </div>
+                  </div>
+
+                  {canViewCosts && (
+                    <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 space-y-2">
+                      <p className="text-xs font-bold text-[var(--color-text-muted)]">تفاصيل التكاليف المعرفة للمنتج (للوحدة)</p>
+                      {drawerMaterialsLoading ? (
+                        <div className="flex items-center gap-2 text-[var(--color-text-muted)] py-2">
+                          <Loader2 className="size-4 animate-spin" />
+                          <span className="text-xs">جاري تحميل المواد…</span>
+                        </div>
+                      ) : breakdown ? (
+                        <>
+                          <ul className="space-y-1.5 text-xs">
+                            <li className="flex justify-between gap-2">
+                              <span className="text-[var(--color-text-muted)]">تكلفة الوحدة الصينية</span>
+                              <span className="font-bold tabular-nums">{formatCost(breakdown.chineseUnitCost)} ج.م</span>
+                            </li>
+                            <li className="flex justify-between gap-2">
+                              <span className="text-[var(--color-text-muted)]">المواد الخام</span>
+                              <span className="font-bold tabular-nums">{formatCost(breakdown.rawMaterialCost)} ج.م</span>
+                            </li>
+                            <li className="flex justify-between gap-2">
+                              <span className="text-[var(--color-text-muted)]">العلبة الداخلية</span>
+                              <span className="font-bold tabular-nums">{formatCost(breakdown.innerBoxCost)} ج.م</span>
+                            </li>
+                            <li className="flex justify-between gap-2">
+                              <span className="text-[var(--color-text-muted)]">نصيب الكرتونة الخارجية</span>
+                              <span className="font-bold tabular-nums">{formatCost(breakdown.cartonShare)} ج.م</span>
+                            </li>
+                            <li className="flex justify-between gap-2">
+                              <span className="text-[var(--color-text-muted)]">نصيب مصاريف الإنتاج (متوسط الشهر)</span>
+                              <span className="font-bold tabular-nums">{formatCost(breakdown.productionOverheadShare)} ج.م</span>
+                            </li>
+                          </ul>
+                          <div className="flex justify-between gap-2 pt-2 border-t border-[var(--color-border)] font-black text-amber-800">
+                            <span>إجمالي تفاصيل المنتج (للوحدة)</span>
+                            <span className="tabular-nums">{formatCost(breakdown.totalCalculatedCost)} ج.م</span>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-[var(--color-text-muted)]">لا تتوفر بيانات خام كافية لحساب التفصيل.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {canViewCosts && (
+                    <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 space-y-2">
+                      <p className="text-xs font-bold text-[var(--color-text-muted)]">تكاليف الإنتاج للشهر الحالي (إجمالي)</p>
+                      {hasMonthlyCost ? (
+                        <ul className="space-y-1.5 text-xs">
+                          <li className="flex justify-between gap-2">
+                            <span className="text-blue-600 font-medium">مباشر</span>
+                            <span className="font-bold tabular-nums">{formatCost(c!.laborCost)} ج.م</span>
+                          </li>
+                          <li className="flex justify-between gap-2">
+                            <span className="text-[var(--color-text-muted)] font-medium">غير مباشر</span>
+                            <span className="font-bold tabular-nums">{formatCost(c!.indirectCost)} ج.م</span>
+                          </li>
+                          <li className="flex justify-between gap-2 pt-2 border-t border-[var(--color-border)] font-black">
+                            <span>إجمالي تكاليف الإنتاج</span>
+                            <span className="tabular-nums text-amber-700">{formatCost(c!.totalCost)} ج.م</span>
+                          </li>
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-[var(--color-text-muted)]">لا توجد تكاليف إنتاج مسجلة لهذا المنتج في الشهر الحالي.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {canViewSellingPrice && (
+                    <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 flex justify-between items-center gap-2">
+                      <span className="text-xs font-bold text-[var(--color-text-muted)]">سعر البيع</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(selling)} ج.م</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 pt-1">
+                  <Button
+                    variant="primary"
+                    className="w-full justify-center"
+                    onClick={() => {
+                      const id = p.id;
+                      setDetailDrawerProductId(null);
+                      navigate(`/products/${id}`);
+                    }}
+                  >
+                    فتح صفحة التفاصيل الكاملة
+                  </Button>
+                </div>
+              </div>
+            </aside>
+          </>
+        );
+      })()}
 
       {/* ── Add / Edit Modal ── */}
       {showModal && (can("products.create") || can("products.edit")) && (

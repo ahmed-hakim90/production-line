@@ -932,19 +932,7 @@ export interface FirestoreUser {
     workOrderAlerts?: boolean;
     stockAlerts?: boolean;
   };
-  uiPreferences?: {
-    modalWorkspace?: {
-      items: Array<{
-        id: string;
-        title: string;
-        route: string;
-        favorite: boolean;
-        openerText?: string;
-        modalKey?: string;
-        openerSelector?: string;
-      }>;
-    };
-  };
+  uiPreferences?: Record<string, unknown>;
   createdAt?: any;
   createdBy?: string;
 }

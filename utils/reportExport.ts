@@ -6,24 +6,84 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import type { PaperSize, PaperOrientation } from '../types';
 
+// ─── Capture options (PNG / PDF / share) ───────────────────────────────────
+
+export interface CaptureOptions {
+  /**
+   * Inject RTL + Cairo on the cloned document so Arabic exports reliably (html2canvas).
+   * Default true.
+   */
+  cloneRtlAndFonts?: boolean;
+  /** Optional fixed canvas width in pixels (narrow cards). */
+  width?: number;
+  /** Optional window width hint for html2canvas layout. */
+  windowWidth?: number;
+}
+
+const applyRtlFontClone = (clonedDoc: Document) => {
+  clonedDoc.documentElement.setAttribute('dir', 'rtl');
+  clonedDoc.documentElement.setAttribute('lang', 'ar');
+  clonedDoc.documentElement.style.direction = 'rtl';
+
+  const link = clonedDoc.createElement('link');
+  link.rel = 'stylesheet';
+  link.href =
+    'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap';
+  clonedDoc.head.appendChild(link);
+
+  const style = clonedDoc.createElement('style');
+  /* letter-spacing (e.g. Tailwind tracking-*) breaks Arabic cursive joins in html2canvas */
+  style.textContent = `
+    html, body {
+      direction: rtl !important;
+    }
+    .print-root, .print-report, .arabic-export-root,
+    .print-root *, .print-report *, .arabic-export-root * {
+      letter-spacing: normal !important;
+      word-spacing: normal !important;
+      font-variant-ligatures: normal !important;
+      font-family: 'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif !important;
+    }
+  `;
+  clonedDoc.head.appendChild(style);
+};
+
+const ensureCairoLoaded = async () => {
+  if (typeof document === 'undefined' || !('fonts' in document)) return;
+  const fonts = (document as Document & { fonts: FontFaceSet }).fonts;
+  try {
+    await fonts.ready;
+    await Promise.all([
+      fonts.load("400 13px Cairo"),
+      fonts.load("600 13px Cairo"),
+      fonts.load("700 18px Cairo"),
+    ]);
+  } catch {
+    /* ignore */
+  }
+};
+
 // ─── Capture a DOM element as a canvas ──────────────────────────────────────
 
-const capture = async (el: HTMLElement) => {
-  // Wait for web fonts to load so Arabic shaping is stable in exported images.
-  if (typeof document !== 'undefined' && 'fonts' in document) {
-    try {
-      await (document as Document & { fonts: FontFaceSet }).fonts.ready;
-    } catch {
-      // Ignore and continue with capture fallback.
-    }
-  }
+const capture = async (el: HTMLElement, options?: CaptureOptions) => {
+  const { cloneRtlAndFonts = true, width, windowWidth } = options ?? {};
+
+  await ensureCairoLoaded();
 
   return html2canvas(el, {
     scale: 2,
     useCORS: true,
     backgroundColor: '#ffffff',
     logging: false,
-    letterRendering: true,
+    ...(width != null ? { width } : {}),
+    ...(windowWidth != null ? { windowWidth } : {}),
+    ...(cloneRtlAndFonts
+      ? {
+          onclone: (clonedDoc: Document) => {
+            applyRtlFontClone(clonedDoc);
+          },
+        }
+      : {}),
   });
 };
 
@@ -181,8 +241,12 @@ export const exportElementsToSinglePDF = async (
 
 // ─── Export element as image (PNG download) ─────────────────────────────────
 
-export const exportAsImage = async (el: HTMLElement, fileName: string) => {
-  const canvas = await capture(el);
+export const exportAsImage = async (
+  el: HTMLElement,
+  fileName: string,
+  captureOptions?: CaptureOptions,
+) => {
+  const canvas = await capture(el, captureOptions);
   const blob = await canvasToBlob(canvas);
   downloadBlob(blob, `${fileName}.png`);
 };
@@ -199,29 +263,39 @@ export type ShareResult = {
 export const shareToWhatsApp = async (
   el: HTMLElement,
   title: string,
+  captureOptions?: CaptureOptions,
 ): Promise<ShareResult> => {
-  const canvas = await capture(el);
+  const canvas = await capture(el, captureOptions);
   const pngBlob = await canvasToBlob(canvas, 'image/png');
   const jpgBlob = await canvasToBlob(canvas, 'image/jpeg', 0.92);
   const fileBaseName = toSafeFileBaseName(title);
 
-  // ── Step 1 (mobile): Try native file share first ──
-  // This is the only reliable way to send image directly to WhatsApp from browser.
-  if (isMobile() && navigator.share) {
-    const mobileFile = new File([jpgBlob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
+  const tryNativeShare = async (file: File): Promise<ShareResult | null> => {
+    if (!navigator.share) return null;
     try {
-      if (!navigator.canShare || navigator.canShare({ files: [mobileFile] })) {
-        await navigator.share({ files: [mobileFile] });
-        return { method: 'native_share', copied: false };
-      }
+      if (navigator.canShare && !navigator.canShare({ files: [file] })) return null;
+      await navigator.share({ files: [file], title });
+      return { method: 'native_share', copied: false };
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return { method: 'cancelled', copied: false };
       }
+      return null;
     }
+  };
+
+  // Mobile: prefer JPEG for smaller share payload
+  if (isMobile()) {
+    const mobileFile = new File([jpgBlob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
+    const mobileResult = await tryNativeShare(mobileFile);
+    if (mobileResult) return mobileResult;
+  } else {
+    // Desktop: some browsers support Web Share with files (e.g. Chrome)
+    const pngFile = new File([pngBlob], `${fileBaseName}.png`, { type: 'image/png' });
+    const desktopResult = await tryNativeShare(pngFile);
+    if (desktopResult) return desktopResult;
   }
 
-  // ── Step 2: Fallback — download image + open WhatsApp ──
   const isMobileDevice = isMobile();
   const fileName = `${fileBaseName}.${isMobileDevice ? 'jpg' : 'png'}`;
   const downloadTargetBlob = isMobileDevice ? jpgBlob : pngBlob;
@@ -230,13 +304,10 @@ export const shareToWhatsApp = async (
   let copied = false;
 
   if (isMobileDevice) {
-    // Mobile fallback: download first, then open WhatsApp so user can attach quickly.
-    // Small delay helps the browser start the download before navigation.
     setTimeout(() => {
       window.location.href = 'whatsapp://send';
     }, 250);
   } else {
-    // Desktop: copy image to clipboard so user can paste (Ctrl+V)
     try {
       if (navigator.clipboard?.write) {
         await navigator.clipboard.write([

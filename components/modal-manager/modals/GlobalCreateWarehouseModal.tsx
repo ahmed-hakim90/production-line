@@ -5,11 +5,13 @@ import { warehouseService } from '../../../modules/inventory/services/warehouseS
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import type { GlobalModalPayload } from '../modalOpenPayload';
 
 type Message = { type: 'success' | 'error'; text: string } | null;
 
 export const GlobalCreateWarehouseModal: React.FC = () => {
-  const { isOpen, close } = useManagedModalController(MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE);
+  const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE);
+  const whPayload = (payload || {}) as GlobalModalPayload;
   const { can } = usePermission();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -44,6 +46,7 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
       setMessage({ type: 'success', text: 'تمت إضافة المخزن بنجاح.' });
       setName('');
       setCode('');
+      whPayload.onSaved?.();
     } catch {
       setMessage({ type: 'error', text: 'تعذر إضافة المخزن. حاول مرة أخرى.' });
     } finally {

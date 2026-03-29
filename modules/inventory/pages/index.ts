@@ -4,3 +4,4 @@ export { StockTransactions } from './StockTransactions';
 export { StockMovementForm } from './StockMovementForm';
 export { StockCounts } from './StockCounts';
 export { TransferApprovals } from './TransferApprovals';
+export { QuickWarehouseTransfer } from './QuickWarehouseTransfer';

@@ -21,18 +21,24 @@ import { db, isConfigured } from './firebase';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BACKUP_VERSION = '2.0.0';
+const BACKUP_VERSION = '2.1.0';
 const BACKUPS_COLLECTION = 'backups';
 
 const ALL_COLLECTIONS = [
   // Core production
   'products',
   'production_lines',
+  'productionLines',
   'employees',
   'production_reports',
   'line_status',
   'line_product_config',
   'production_plans',
+  'production_plan_followups',
+  // Supervisors distribution & assignments
+  'supervisors',
+  'supervisor_line_assignments',
+  'supervisorAssignmentLog',
   // Work orders & notifications
   'work_orders',
   'notifications',
@@ -54,6 +60,8 @@ const ALL_COLLECTIONS = [
   'cost_center_values',
   'cost_allocations',
   'labor_settings',
+  'assets',
+  'asset_depreciations',
   // System
   'roles',
   'users',
@@ -70,6 +78,9 @@ const ALL_COLLECTIONS = [
   'allowance_types',
   'attendance_raw_logs',
   'attendance_logs',
+  'attendance_records',
+  'attendance_monthly_summaries',
+  'attendance_import_history',
   'leave_requests',
   'leave_balances',
   'employee_loans',
@@ -80,11 +91,15 @@ const ALL_COLLECTIONS = [
   'approval_settings',
   'approval_delegations',
   'approval_audit_logs',
+  'hr_notifications',
+  'employee_performance',
+  'employee_bonuses',
   // Payroll collections
   'payroll_months',
   'payroll_records',
   'payroll_audit_logs',
   'payroll_cost_summary',
+  'payroll_distributions',
   // HR Config collections
   'hr_config_modules',
   'hr_config_audit_logs',
@@ -111,6 +126,8 @@ const ALL_COLLECTIONS = [
 const COLLECTION_GROUPS = [
   // users/{userId}/preferences/{docId}
   'preferences',
+  // users/{userId}/fcmTokens/{tokenId}
+  'fcmTokens',
   // dashboardStats/{tenantId}/daily/{date}
   'daily',
 ] as const;

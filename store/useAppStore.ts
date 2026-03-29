@@ -3904,7 +3904,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       applyTheme(merged.theme);
       setupAutoThemeListener(merged.theme);
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = (error as Error).message;
+      set({ error: message });
+      throw error;
     }
   },
 

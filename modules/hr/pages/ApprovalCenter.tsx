@@ -179,8 +179,9 @@ export const ApprovalCenter: React.FC = () => {
     permissions,
   }), [approverEmployeeId, approverName, permissions]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent);
+    if (!silent) setLoading(true);
     try {
       let data: FirestoreApprovalRequest[];
       if (viewAll) {
@@ -216,7 +217,7 @@ export const ApprovalCenter: React.FC = () => {
     } catch (err) {
       console.error('Error loading approvals:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [viewAll, approverEmployeeId]);
 
@@ -255,7 +256,7 @@ export const ApprovalCenter: React.FC = () => {
       }
 
       setActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err) {
       console.error('Approval error:', err);
     } finally {
@@ -294,7 +295,7 @@ export const ApprovalCenter: React.FC = () => {
         }
       }
       setActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err) {
       console.error('Rejection error:', err);
     } finally {
@@ -332,7 +333,7 @@ export const ApprovalCenter: React.FC = () => {
           );
         }
       }
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err) {
       console.error('Cancel error:', err);
     } finally {

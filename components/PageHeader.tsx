@@ -14,12 +14,12 @@
  *     ]}
  *   />
  */
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
   Check,
   Download,
+  Factory,
   FileDown,
   Loader2,
   MoreHorizontal,
@@ -31,6 +31,10 @@ import {
   Settings,
   Trash2,
   Circle,
+  Pencil,
+  Package,
+  Upload,
+  User,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -43,19 +47,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { usePageBackSetter } from '@/src/shared/ui/layout/PageBackContext';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   add: Plus,
   check: Check,
   delete: Trash2,
   download: Download,
+  factory: Factory,
   file_download: FileDown,
+  edit: Pencil,
   more_horiz: MoreHorizontal,
+  package: Package,
   print: Printer,
   refresh: RefreshCw,
   save: Save,
   search: Search,
   settings: Settings,
+  upload: Upload,
+  user: User,
 };
 
 function renderActionIcon(icon?: string, className?: string, size = 16) {
@@ -127,6 +137,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   loading,
 }) => {
   const navigate = useNavigate();
+  const setPageBack = usePageBackSetter();
   const visibleMoreActions = moreActions?.filter((a) => !a.hidden) ?? [];
 
   // Build groups for the dropdown
@@ -142,7 +153,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     ? backAction
     : null;
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (!backAction) return;
     if (backConfig?.onClick) {
       backConfig.onClick();
@@ -160,10 +171,20 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       return;
     }
     navigate('/');
-  };
+  }, [backAction, backConfig, navigate]);
 
   const backDisabled = backConfig?.disabled ?? false;
   const backLabel = backConfig?.label || 'رجوع';
+
+  useEffect(() => {
+    if (!setPageBack) return;
+    if (!backAction) {
+      setPageBack(null);
+      return;
+    }
+    setPageBack({ label: backLabel, disabled: backDisabled, onClick: handleBack });
+    return () => setPageBack(null);
+  }, [backAction, backDisabled, backLabel, handleBack, setPageBack]);
 
   return (
     <div className="erp-page-head">
@@ -180,22 +201,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         {subtitle && <p className="page-subtitle">{subtitle}</p>}
       </div>
 
-      {/* Right: actions */}
+      {/* Right: actions — back control lives in Topbar (icon only) */}
       <div className="erp-page-actions">
-        {backAction && (
-          <Button
-            type="button"
-            variant="outline"
-            className="btn btn-secondary"
-            onClick={handleBack}
-            disabled={backDisabled}
-            title={backLabel}
-          >
-            <ArrowLeft size={16} />
-            <span className="hidden sm:inline">{backLabel}</span>
-          </Button>
-        )}
-
         {loading && (
           <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
             <Loader2 size={14} className="animate-spin" />

@@ -8,46 +8,7 @@
   box-sizing: border-box;
 }
 
-:root {
-  /* Typography scale */
-  --font-size-base: 13px;
-  --font-size-sm: 12px;
-  --font-size-xs: 11px;
-  --font-size-2xs: 10px;
-
-  /* Surfaces */
-  --color-bg:           #f0f2f5;
-  --color-card:         #ffffff;
-  --color-border:       #d1d8dd;
-  --color-text:         #1a1a1a;
-  --color-text-muted:   #8d99a6;
-
-  /* Sidebar */
-  --color-sidebar-bg:     #ffffff;
-  --color-sidebar-text:   #1f272e;
-  --color-sidebar-border: #e8e8e8;
-
-  /* Geometry */
-  --border-radius-sm:  4px;
-  --border-radius-base: 6px;
-  --border-radius-lg:  8px;
-  --border-radius-xl:  12px;
-
-  /* Elevation */
-  --shadow-card: none;
-  --shadow-dropdown: none;
-  --shadow-modal: none;
-
-  /* Chart palette */
-  --chart-1: #1392ec;
-  --chart-2: #10b981;
-  --chart-3: #f59e0b;
-  --chart-4: #ef4444;
-  --chart-5: #8b5cf6;
-  --chart-6: #ec4899;
-  --chart-7: #06b6d4;
-  --chart-8: #84cc16;
-}
+/* Design tokens live in src/index.css (:root). Chart palette + radii are defined there. */
 
 html, body, #root { height: 100%; }
 html, body { overscroll-behavior-y: none; }
@@ -63,7 +24,7 @@ body {
 
 /* ── Focus ──────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid rgb(var(--color-primary) / 0.4);
+  outline: 2px solid rgb(var(--color-primary) / 0.55);
   outline-offset: 2px;
 }
 
@@ -1416,6 +1377,7 @@ html.dark [class*="text-slate-500"] {
 
 /* Modal overlay backdrop */
 .erp-modal-overlay {
+  margin-top: -50px!important;
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.45);
@@ -2105,47 +2067,6 @@ table tbody tr[data-selected="true"] {
   background: rgb(var(--color-primary));
   flex-shrink: 0;
   margin-top: 5px;
-}
-
-/* ══════════════════════════════════════════════════════════
-   ERPNext MINIMIZED WINDOWS (GlobalModalEnhancer)
-   ══════════════════════════════════════════════════════════ */
-
-.erp-minimized-btn {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-base);
-  padding: 8px 10px;
-  box-shadow: var(--shadow-card);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 120ms;
-}
-.erp-minimized-btn:hover { border-color: rgb(var(--color-primary) / 0.4); color: rgb(var(--color-primary)); }
-
-.erp-minimized-panel {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-dropdown);
-  padding: 12px;
-  min-width: 240px;
-  max-width: 300px;
-}
-
-.erp-minimized-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--color-border);
-  background: #f8f9fa;
-  margin-bottom: 6px;
-  font-size: 12.5px;
 }
 
 /* ══════════════════════════════════════════════════════════

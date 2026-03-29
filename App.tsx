@@ -30,10 +30,13 @@ import { useJobsStore } from './components/background-jobs/useJobsStore';
 import { presenceService } from './services/presenceService';
 import { pushService } from './services/pushService';
 import { sessionTrackerService } from './modules/system/audit';
+import { userService } from './services/userService';
 import { BarChart3, Boxes, Factory, Hammer, Users, type LucideIcon } from 'lucide-react';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
+const LEGACY_MODAL_WORKSPACE_LS = 'global_modal_workspace_v1';
+const MODAL_WORKSPACE_CLEARED_FLAG = 'erp_modal_workspace_cleared_v1';
 
 const buildCurrentPath = (location: { pathname: string; search: string }) =>
   `${location.pathname}${location.search}`;
@@ -313,6 +316,31 @@ const PresenceHeartbeatBridge: React.FC = () => {
   return null;
 };
 
+/** One-time: drop minimized-window workspace localStorage + Firestore uiPreferences.modalWorkspace. */
+const ModalWorkspaceMigration: React.FC = () => {
+  const uid = useAppStore((s) => s.uid);
+  const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || loading || !uid) return;
+    if (localStorage.getItem(MODAL_WORKSPACE_CLEARED_FLAG)) return;
+    try {
+      localStorage.removeItem(LEGACY_MODAL_WORKSPACE_LS);
+    } catch {
+      /* ignore */
+    }
+    void userService.clearModalWorkspacePreference(uid).finally(() => {
+      try {
+        localStorage.setItem(MODAL_WORKSPACE_CLEARED_FLAG, '1');
+      } catch {
+        /* ignore */
+      }
+    });
+  }, [isAuthenticated, isPendingApproval, loading, uid]);
+
+  return null;
+};
+
 const DailyWelcomeLauncher: React.FC = () => {
   const { openModal, hasModalTarget } = useGlobalModalManager();
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
@@ -562,6 +590,7 @@ const App: React.FC = () => {
   return (
     <GlobalModalManagerProvider>
       <AuthUiStateGuard />
+      <ModalWorkspaceMigration />
       <DailyWelcomeLauncher />
       <BrowserRouter>
         <LegacyHashRedirect />

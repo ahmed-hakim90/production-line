@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   Download,
   Home,
   Lock,
@@ -17,6 +18,7 @@ import { MENU_CONFIG } from '@/config/menu.config';
 import { CommandPalette } from '@/components/CommandPalette';
 import { useCommandPalette } from '@/components/useCommandPalette';
 import { resolveMenuIcon } from './menuIconMap';
+import { usePageBackRegistration } from './PageBackContext';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -57,6 +59,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
 
   const { isActiveItem } = useSidebarActiveRoute();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+  const pageBack = usePageBackRegistration();
 
   /* Resolve breadcrumb from location */
   const breadcrumb = useMemo(() => {
@@ -136,6 +139,19 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           >
             <Sidebar size={18} className={`transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
           </button>
+
+          {pageBack && (
+            <button
+              type="button"
+              onClick={pageBack.onClick}
+              disabled={pageBack.disabled}
+              className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0 disabled:opacity-50 disabled:pointer-events-none"
+              title={pageBack.label}
+              aria-label={pageBack.label}
+            >
+              <ArrowLeft size={18} />
+            </button>
+          )}
 
           {/* Breadcrumb */}
           {breadcrumb ? (

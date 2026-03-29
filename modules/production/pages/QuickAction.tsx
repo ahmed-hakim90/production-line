@@ -3,7 +3,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
-import { exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
+import { exportAsImage, exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
@@ -464,19 +464,7 @@ export const QuickAction: React.FC = () => {
     if (!printRef.current) return;
     setExporting(true);
     try {
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      });
-      const url = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `تقرير-سريع-${today}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      await exportAsImage(printRef.current, `تقرير-سريع-${today}`);
     } finally {
       setExporting(false);
     }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { SingleReportPrint } from '../../../production/components/ProductionReportPrint';
 import { Card, Button } from '../UI';
 import type { PaperOrientation, PaperSize, PrintTemplateSettings, PrintThemePreset } from '../../../../types';
@@ -489,6 +490,19 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
           </div>
         </div>
       )}
+
+      <Card title="معمل تصدير الصور وواتساب">
+        <p className="text-sm text-[var(--color-text-muted)] mb-3">
+          جرّب تصدير PNG ومشاركة واتساب بنفس قالب التقرير الموحّد (تقرير إنتاج، تحويل مخزن، تقرير مجمّع).
+        </p>
+        <Link
+          to="/dev/image-export"
+          className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline"
+        >
+          <span className="material-icons-round text-base">open_in_new</span>
+          فتح معمل التصدير
+        </Link>
+      </Card>
     </>
   );
 };

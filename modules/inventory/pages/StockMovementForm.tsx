@@ -6,12 +6,22 @@ import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
-import type { RawMaterial, Warehouse, StockItemBalance, TransferRequestLine } from '../types';
+import type { RawMaterial, Warehouse, StockItemBalance } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
 import { exportToPDF, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
 import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData } from '../components/StockTransferPrint';
-import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
+import type { TransferDisplayUnitMode } from '../utils/transferUnits';
+import {
+  INV_REF_REGEX,
+  createTransferLine,
+  formatInvReference,
+  lineQuantityInPieces as lineQtyPieces,
+  validateTransferLines,
+  buildTransferRequestLines,
+  buildTransferPrintDataPayload,
+  type TransferFormLine,
+} from '../utils/transferFormShared';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import {
@@ -24,21 +34,7 @@ import {
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
-type TransferUnit = 'piece' | 'carton';
-type TransferLine = {
-  id: string;
-  itemId: string;
-  quantity: number;
-  unit: TransferUnit;
-};
-const INV_REF_REGEX = /^INV-(\d+)$/i;
-const formatInvReference = (seq: number) => `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
-const createTransferLine = (): TransferLine => ({
-  id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  itemId: '',
-  quantity: 0,
-  unit: 'piece',
-});
+type TransferLine = TransferFormLine;
 const APP_VERSION = __APP_VERSION__;
 
 export const StockMovementForm: React.FC = () => {
@@ -153,12 +149,17 @@ export const StockMovementForm: React.FC = () => {
     };
   }), [products, rawProductMetaById]);
 
-  const rawMaterialOptions = useMemo(() => rawMaterials.map((m) => ({
-    id: m.id || '',
-    name: m.name,
-    code: m.code,
-    minStock: Number(m.minStock || 0),
-  })), [rawMaterials]);
+  const rawMaterialOptions = useMemo(
+    () =>
+      rawMaterials.map((m) => ({
+        id: m.id || '',
+        name: m.name,
+        code: m.code,
+        minStock: Number(m.minStock || 0),
+        unitsPerCarton: 0,
+      })),
+    [rawMaterials],
+  );
 
   const itemOptions = itemType === 'finished_good' ? finishedGoodOptions : rawMaterialOptions;
   const selectedItem = itemOptions.find((item) => item.id === itemId);
@@ -227,14 +228,8 @@ export const StockMovementForm: React.FC = () => {
     return Number(row?.quantity || 0);
   };
 
-  const lineQuantityInPieces = (line: TransferLine) => {
-    const item = getItemById(line.itemId);
-    if (!item) return Number(line.quantity || 0);
-    if (itemType === 'finished_good' && line.unit === 'carton') {
-      return Number(line.quantity || 0) * Number(item.unitsPerCarton || 0);
-    }
-    return Number(line.quantity || 0);
-  };
+  const lineQuantityInPieces = (line: TransferLine) =>
+    lineQtyPieces(line, getItemById(line.itemId), itemType);
 
   useEffect(() => {
     if (!isFinishedTransferFlow || !hasAutoTransferSource) return;
@@ -252,43 +247,21 @@ export const StockMovementForm: React.FC = () => {
     setTransferItems([createTransferLine()]);
   };
 
-  const buildTransferPrintData = (resolvedReferenceNo: string, txId: string | null): StockTransferPrintData => {
-    const now = new Date().toISOString();
-    const transferNo = (resolvedReferenceNo || (txId ? `TR-${txId.slice(0, 8)}` : `TR-${Date.now()}`));
-    const printableItems = transferItems
-      .map((line) => {
-        const item = getItemById(line.itemId);
-        if (!item) return null;
-        const quantityPieces = lineQuantityInPieces(line);
-        const display = getTransferDisplay(
-          {
-            itemType,
-            quantity: quantityPieces,
-            requestQuantity: Number(line.quantity || 0),
-            requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
-            unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
-          },
-          transferDisplayUnit,
-        );
-        return {
-          itemName: item.name,
-          itemCode: item.code,
-          unitLabel: display.unitLabel,
-          quantity: display.quantity,
-          quantityPieces,
-          unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
-        };
-      })
-      .filter(Boolean) as NonNullable<StockTransferPrintData['items']>;
-    return {
-      transferNo,
-      createdAt: now,
-      fromWarehouseName: selectedFromWarehouse?.name || effectiveWarehouseId,
-      toWarehouseName: selectedToWarehouse?.name || toWarehouseId,
-      items: printableItems,
+  const buildTransferPrintData = (resolvedReferenceNo: string, txId: string | null): StockTransferPrintData =>
+    buildTransferPrintDataPayload({
+      resolvedReferenceNo,
+      txId,
+      transferItems,
+      itemType,
+      getItemById,
+      qtyInPieces: lineQuantityInPieces,
+      fromWarehouseName: selectedFromWarehouse?.name || '',
+      effectiveWarehouseId,
+      toWarehouseName: selectedToWarehouse?.name || '',
+      toWarehouseId,
+      transferDisplayUnit,
       createdBy: userDisplayName || 'Current User',
-    };
-  };
+    });
 
   const showShareFeedback = (result: ShareResult) => {
     if (result.method === 'native_share' || result.method === 'cancelled') return;
@@ -330,52 +303,18 @@ export const StockMovementForm: React.FC = () => {
       let txId: string | null = null;
 
       if (movementType === 'TRANSFER') {
-        if (transferItems.length === 0) {
-          setMessage({ type: 'error', text: 'أضف صنفًا واحدًا على الأقل في التحويلة.' });
+        const validationError = validateTransferLines(transferItems, itemType, getItemById);
+        if (validationError) {
+          setMessage({ type: 'error', text: validationError });
           return;
         }
 
-        const duplicate = new Set<string>();
-        for (const line of transferItems) {
-          const item = getItemById(line.itemId);
-          if (!item) {
-            setMessage({ type: 'error', text: 'كل صف يجب أن يحتوي على صنف.' });
-            return;
-          }
-          if (Number(line.quantity || 0) <= 0) {
-            setMessage({ type: 'error', text: `كمية الصنف "${item.name}" يجب أن تكون أكبر من صفر.` });
-            return;
-          }
-          const key = `${line.itemId}__${line.unit}`;
-          if (duplicate.has(key)) {
-            setMessage({ type: 'error', text: `لا يمكن تكرار نفس الصنف بنفس الوحدة أكثر من مرة: ${item.name}` });
-            return;
-          }
-          duplicate.add(key);
-
-          if (itemType === 'finished_good' && line.unit === 'carton' && Number(item.unitsPerCarton || 0) <= 0) {
-            setMessage({ type: 'error', text: `الصنف "${item.name}" لا يحتوي وحدات/كرتونة.` });
-            return;
-          }
-        }
-
-        const requestLines = transferItems
-          .map((line) => {
-            const item = getItemById(line.itemId);
-            if (!item) return null;
-            return {
-              itemType,
-              itemId: item.id,
-              itemName: item.name,
-              itemCode: item.code,
-              quantity: lineQuantityInPieces(line),
-              requestQuantity: Number(line.quantity || 0),
-              requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
-              unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
-              minStock: item.minStock,
-            };
-          })
-          .filter((line): line is TransferRequestLine => Boolean(line));
+        const requestLines = buildTransferRequestLines(
+          transferItems,
+          itemType,
+          getItemById,
+          lineQuantityInPieces,
+        );
         if (!requestLines.length) {
           setMessage({ type: 'error', text: 'تعذر تجهيز أصناف طلب التحويل.' });
           return;
@@ -409,7 +348,7 @@ export const StockMovementForm: React.FC = () => {
 
         txId = await stockService.createMovement({
           warehouseId: effectiveWarehouseId,
-          toWarehouseId: movementType === 'TRANSFER' ? toWarehouseId : undefined,
+          toWarehouseId: undefined,
           itemType,
           itemId: selectedItem.id,
           itemName: selectedItem.name,
@@ -481,24 +420,10 @@ export const StockMovementForm: React.FC = () => {
     }
 
     if (movementType === 'TRANSFER') {
-      if (transferItems.length === 0) {
-        setMessage({ type: 'error', text: 'أضف صنفًا واحدًا على الأقل في التحويلة.' });
+      const validationError = validateTransferLines(transferItems, itemType, getItemById);
+      if (validationError) {
+        setMessage({ type: 'error', text: validationError });
         return;
-      }
-      for (const line of transferItems) {
-        const item = getItemById(line.itemId);
-        if (!item) {
-          setMessage({ type: 'error', text: 'كل صف يجب أن يحتوي على صنف.' });
-          return;
-        }
-        if (Number(line.quantity || 0) <= 0) {
-          setMessage({ type: 'error', text: `كمية الصنف "${item.name}" يجب أن تكون أكبر من صفر.` });
-          return;
-        }
-        if (itemType === 'finished_good' && line.unit === 'carton' && Number(item.unitsPerCarton || 0) <= 0) {
-          setMessage({ type: 'error', text: `الصنف "${item.name}" لا يحتوي وحدات/كرتونة.` });
-          return;
-        }
       }
       setMessage(null);
       setPreviewData(buildTransferPrintData(referenceNo, null));

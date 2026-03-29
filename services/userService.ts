@@ -4,6 +4,7 @@
  */
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -74,6 +75,18 @@ export const userService = {
     } catch (error) {
       console.error('userService.update error:', error);
       throw error;
+    }
+  },
+
+  /** Remove deprecated minimized-modal workspace prefs (one-time migration helper). */
+  async clearModalWorkspacePreference(uid: string): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await updateDoc(doc(db, COLLECTION, uid), {
+        'uiPreferences.modalWorkspace': deleteField(),
+      });
+    } catch (error) {
+      console.warn('userService.clearModalWorkspacePreference:', error);
     }
   },
 
