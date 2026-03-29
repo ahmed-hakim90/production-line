@@ -170,7 +170,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             { section: 'منتج واحد (تفصيلي)', page: 'صفحة تفاصيل المنتج', path: '/products', icon: 'receipt_long', color: 'text-teal-500', features: ['شيت بيانات المنتج الأساسية', 'شيت تفصيل التكاليف مع سعر البيع وهامش الربح', 'شيت المواد الخام المستخدمة', 'شيت التكلفة حسب خط الإنتاج'] },
             { section: 'الموظفين', page: 'صفحة الموظفين', path: '/employees', icon: 'groups', color: 'text-purple-500', features: ['الكود والاسم والقسم والوظيفة', 'نوع التوظيف والمستوى والراتب', 'الوردية والبريد والحالة والصلاحيات'] },
             { section: 'تقارير مشرف', page: 'صفحة تفاصيل المشرف', path: '/supervisors', icon: 'person', color: 'text-orange-500', features: ['تقارير الإنتاج الخاصة بالمشرف', 'تكلفة الوحدة (حسب الصلاحية)', 'صف إجمالي بالمجاميع'] },
-            { section: 'ملخص المنتجات', page: 'لوحة تحكم المصنع', path: '/factory-dashboard', icon: 'summarize', color: 'text-indigo-500', features: ['اسم المنتج والكود والكمية', 'متوسط تكلفة الوحدة (حسب الصلاحية)'] },
+            { section: 'ملخص المنتجات', page: 'لوحة تحكم المصنع', path: '/', icon: 'summarize', color: 'text-indigo-500', features: ['اسم المنتج والكود والكمية', 'متوسط تكلفة الوحدة (حسب الصلاحية)'] },
             { section: 'بيانات الموارد البشرية', page: 'وحدة HR', path: '/hr', icon: 'badge', color: 'text-rose-500', features: ['كشوف المرتبات والحضور', 'الإجازات والقروض', 'تصدير عام لأي بيانات HR'] },
           ].map((item) => (
             <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-all">

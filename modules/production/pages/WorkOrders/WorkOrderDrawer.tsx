@@ -15,6 +15,8 @@ interface WorkOrderDrawerProps {
   onEdit: (order: WorkOrder) => void;
   onCloseOrder: (order: WorkOrder) => void;
   onPrint: (order: WorkOrder) => void;
+  canReopenCompleted?: boolean;
+  onReopenCompleted?: (order: WorkOrder) => void;
 }
 
 const STATUS_AR_MAP: Record<WorkOrderStatus, 'قيد التنفيذ' | 'مكتمل' | 'قيد الانتظار' | 'ملغي'> = {
@@ -44,9 +46,14 @@ export function WorkOrderDrawer({
   onEdit,
   onCloseOrder,
   onPrint,
+  canReopenCompleted,
+  onReopenCompleted,
 }: WorkOrderDrawerProps) {
   if (!order) return null;
   const effectiveStatus = rowView?.effectiveStatus ?? order.status;
+  const storedStatus = rowView?.storedStatus ?? order.status;
+  const showReopenCompleted =
+    Boolean(canReopenCompleted && onReopenCompleted && storedStatus === 'completed');
 
   const detailOrder = useMemo(() => {
     const targetQty = Number(order.quantity || 0);
@@ -97,6 +104,9 @@ export function WorkOrderDrawer({
         }
       }}
       onPrint={() => onPrint(order)}
+      showReopenCompleted={showReopenCompleted}
+      onReopenCompleted={showReopenCompleted ? () => onReopenCompleted!(order) : undefined}
+      storedCompleted={storedStatus === 'completed'}
     />
   );
 }

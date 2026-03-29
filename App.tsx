@@ -4,7 +4,7 @@ import './App.css';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { Dashboard } from './modules/dashboards/pages/Dashboard';
+import { HomeDashboardRouter } from './modules/dashboards/pages/HomeDashboardRouter';
 import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
 import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
 import { CATALOG_ROUTES } from './modules/catalog/routes';
@@ -19,7 +19,6 @@ import type { AppRouteDef } from './modules/shared/routes';
 import { useAppStore } from './store/useAppStore';
 import { useAuthUiSlice } from './store/selectors';
 import { onAuthChange } from './services/firebase';
-import { getHomeRoute } from './utils/permissions';
 import { eventBus, registerSystemEventListeners, SystemEvents } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
@@ -112,25 +111,14 @@ const playNotificationTone = () => {
   }
 };
 
-/** Redirects to the role-appropriate dashboard after login */
+/** After login: deep link if saved, otherwise unified home `/` */
 const LoginRedirect: React.FC = () => {
-  const permissions = useAppStore((s) => s.userPermissions);
-  const home = getHomeRoute(permissions);
-  const target = useMemo(() => {
-    // Employee role should always land on employee dashboard after login.
-    if (home === '/employee-dashboard') return home;
-    return consumePostLoginRedirect() ?? home;
-  }, [home]);
+  const target = useMemo(() => consumePostLoginRedirect() ?? '/', []);
   return <Navigate to={target} replace />;
 };
 
-/** Shows the main Dashboard or redirects to the role-specific one on `/` */
-const HomeRedirect: React.FC = () => {
-  const permissions = useAppStore((s) => s.userPermissions);
-  const home = getHomeRoute(permissions);
-  if (home === '/') return <Dashboard />;
-  return <Navigate to={home} replace />;
-};
+/** Unified home: content by role permissions */
+const HomeRedirect: React.FC = () => <HomeDashboardRouter />;
 
 const PROTECTED_ROUTES: AppRouteDef[] = [
   ...DASHBOARD_ROUTES,

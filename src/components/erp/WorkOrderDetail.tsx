@@ -37,6 +37,11 @@ interface WorkOrderDetailProps {
   onEdit: () => void
   onClose_order: () => void
   onPrint: () => void
+  /** عند أمر مكتمل: إظهار زر إعادة الفتح (صلاحية التعديل من الصفحة الأم) */
+  showReopenCompleted?: boolean
+  onReopenCompleted?: () => void
+  /** إن وُجد، يُستخدم لشريط الإجراءات بدل الاعتماد على نص الحالة المعروض */
+  storedCompleted?: boolean
 }
 
 const numberFormatter = new Intl.NumberFormat("ar-EG")
@@ -52,6 +57,9 @@ export function WorkOrderDetail({
   onEdit,
   onClose_order,
   onPrint,
+  showReopenCompleted,
+  onReopenCompleted,
+  storedCompleted,
 }: WorkOrderDetailProps) {
   const [activeTab, setActiveTab] = useState<TabId>("dates")
 
@@ -77,6 +85,8 @@ export function WorkOrderDetail({
   const progressValue = Number.isFinite(progress) ? progress : 0
 
   const remaining = Math.max(0, order.targetQty - order.producedQty)
+  const isCompletedFooter =
+    typeof storedCompleted === "boolean" ? storedCompleted : order.status === "مكتمل"
   const progressTone =
     progress >= 80 ? "var(--color-success)" : progress >= 50 ? "var(--color-warning)" : "var(--color-danger)"
   const daysLabel = order.daysRemaining < 0 ? `متأخر ${Math.abs(order.daysRemaining)} يوم` : `${order.daysRemaining} يوم`
@@ -267,14 +277,27 @@ export function WorkOrderDetail({
           <Button type="button" variant="outline" onClick={onPrint} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">
             طباعة
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose_order}
-            className="border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-destructive/10"
-          >
-            إغلاق الأمر
-          </Button>
+          {!isCompletedFooter ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose_order}
+              className="border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-destructive/10"
+            >
+              إغلاق الأمر
+            </Button>
+          ) : showReopenCompleted && onReopenCompleted ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onReopenCompleted}
+              className="border-amber-600/50 text-amber-800 hover:bg-amber-500/10 dark:text-amber-600"
+            >
+              إعادة فتح
+            </Button>
+          ) : (
+            <div className="min-h-9" aria-hidden />
+          )}
           <Button type="button" variant="default" onClick={onEdit}>
             تعديل
           </Button>

@@ -296,6 +296,8 @@ export interface SidebarItem {
   icon: string;
   label: string;
   permission: Permission;
+  /** If set, item matches visibility OR logic (same as menu `anyOfPermissions`). */
+  anyOfPermissions?: Permission[];
 }
 
 export interface SidebarGroup {
@@ -309,10 +311,18 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
     key: 'dashboards',
     label: 'لوحات التحكم',
     items: [
-      { path: '/', icon: 'dashboard', label: 'الرئيسية', permission: 'dashboard.view' },
-      { path: '/employee-dashboard', icon: 'assignment_ind', label: 'لوحة الموظف', permission: 'employeeDashboard.view' },
-      { path: '/factory-dashboard', icon: 'analytics', label: 'لوحة مدير المصنع', permission: 'factoryDashboard.view' },
-      { path: '/admin-dashboard', icon: 'shield', label: 'لوحة مدير النظام', permission: 'adminDashboard.view' },
+      {
+        path: '/',
+        icon: 'dashboard',
+        label: 'الرئيسية',
+        permission: 'dashboard.view',
+        anyOfPermissions: [
+          'dashboard.view',
+          'employeeDashboard.view',
+          'factoryDashboard.view',
+          'adminDashboard.view',
+        ],
+      },
     ],
   },
   {
@@ -427,7 +437,7 @@ const SIDEBAR_GROUP_ORDER: string[] = [
 ];
 
 const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
-  dashboards: ['/', '/employee-dashboard', '/factory-dashboard', '/admin-dashboard'],
+  dashboards: ['/'],
   catalog: ['/products', '/products/raw-materials', '/catalog/categories'],
   production: ['/lines', '/production-plans', '/work-orders', '/supervisors', '/supervisor-line-assignments', '/production-workers', '/reports', '/quick-action'],
   inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/quick-inventory-transfer', '/inventory/movements', '/inventory/counts'],
@@ -467,7 +477,6 @@ export const SIDEBAR_ITEMS: SidebarItem[] = SIDEBAR_GROUPS.flatMap((g) => g.item
 
 export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/': 'dashboard.view',
-  '/employee-dashboard': 'employeeDashboard.view',
   '/products': 'products.view',
   '/products/raw-materials': 'products.rawMaterials.view',
   '/products/:id': 'products.view',
@@ -499,8 +508,6 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/operations-monitor': 'activityLog.view',
   '/production-plans': 'plans.view',
   '/work-orders': 'workOrders.view',
-  '/factory-dashboard': 'factoryDashboard.view',
-  '/admin-dashboard': 'adminDashboard.view',
   '/quality/settings': 'quality.settings.view',
   '/quality/workers': 'quality.workers.view',
   '/quality/final-inspection': 'quality.finalInspection.view',
@@ -539,18 +546,8 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
 
 // ─── Role-based Home Route ───────────────────────────────────────────────────
 
-const HOME_ROUTES: { permission: Permission; path: string }[] = [
-  { permission: 'adminDashboard.view', path: '/admin-dashboard' },
-  { permission: 'factoryDashboard.view', path: '/factory-dashboard' },
-  { permission: 'employeeDashboard.view', path: '/employee-dashboard' },
-  { permission: 'dashboard.view', path: '/' },
-];
-
-/** Returns the appropriate home route based on the user's permissions (highest role first) */
-export function getHomeRoute(permissions: Record<string, boolean>): string {
-  for (const entry of HOME_ROUTES) {
-    if (permissions[entry.permission] === true) return entry.path;
-  }
+/** Unified home: role-specific dashboard content is chosen on `/` (see HomeDashboardRouter). */
+export function getHomeRoute(_permissions: Record<string, boolean>): string {
   return '/';
 }
 

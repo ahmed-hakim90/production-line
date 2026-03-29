@@ -10,6 +10,8 @@ export interface MenuItem {
   icon: string;
   path: string;
   permission: Permission;
+  /** If set, the item is visible when the user has any of these permissions (OR). */
+  anyOfPermissions?: Permission[];
   activePatterns?: string[];
   badgeSource?: () => Promise<number>;
 }
@@ -19,6 +21,19 @@ export interface MenuGroup {
   label: string;
   icon: string;
   children: MenuItem[];
+  /** When true, children render as top-level links (no group header / accordion). */
+  flat?: boolean;
+}
+
+/** Visible if `can` is true for any listed permission; otherwise uses `item.permission`. */
+export function canAccessMenuItem(
+  can: (permission: Permission) => boolean,
+  item: MenuItem,
+): boolean {
+  if (item.anyOfPermissions?.length) {
+    return item.anyOfPermissions.some((p) => can(p));
+  }
+  return can(item.permission);
 }
 
 // ─── Badge Sources ──────────────────────────────────────────────────────────
@@ -45,11 +60,21 @@ export const MENU_CONFIG: MenuGroup[] = [
     key: 'dashboards',
     label: 'لوحات التحكم',
     icon: 'space_dashboard',
+    flat: true,
     children: [
-      { key: 'home', label: 'الرئيسية', icon: 'dashboard', path: '/', permission: 'dashboard.view' },
-      { key: 'emp-dash', label: 'لوحة الموظف', icon: 'assignment_ind', path: '/employee-dashboard', permission: 'employeeDashboard.view' },
-      { key: 'factory-dash', label: 'لوحة مدير المصنع', icon: 'analytics', path: '/factory-dashboard', permission: 'factoryDashboard.view' },
-      { key: 'admin-dash', label: 'لوحة مدير النظام', icon: 'shield', path: '/admin-dashboard', permission: 'adminDashboard.view' },
+      {
+        key: 'home',
+        label: 'الرئيسية',
+        icon: 'dashboard',
+        path: '/',
+        permission: 'dashboard.view',
+        anyOfPermissions: [
+          'dashboard.view',
+          'employeeDashboard.view',
+          'factoryDashboard.view',
+          'adminDashboard.view',
+        ],
+      },
     ],
   },
   {

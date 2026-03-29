@@ -22,7 +22,7 @@ export const EXPORT_IMPORT_PAGE_REGISTRY: ExportImportPageRegistryItem[] = [
   { key: 'hrTransactions', label: 'صفحة سجل حركات HR', path: '/hr-transactions' },
   { key: 'attendanceList', label: 'صفحة سجل الحضور', path: '/attendance' },
   { key: 'payroll', label: 'صفحة كشف الرواتب', path: '/payroll' },
-  { key: 'adminDashboard', label: 'لوحة مدير النظام', path: '/admin-dashboard' },
+  { key: 'adminDashboard', label: 'لوحة مدير النظام', path: '/' },
 ];
 
 export function getExportImportPageControl(

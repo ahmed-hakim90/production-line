@@ -4,8 +4,7 @@ import { Layout } from './Layout';
 import { ProtectedRoute } from './ProtectedRoute';
 import { useAppStore } from '@/store/useAppStore';
 import { isPublicDemoEnabled } from '@/services/guestDemoEnv';
-import { getHomeRoute } from '@/utils/permissions';
-import { Dashboard } from '@/modules/dashboards/pages/Dashboard';
+import { HomeDashboardRouter } from '@/modules/dashboards/pages/HomeDashboardRouter';
 import type { AppRouteDef } from '@/modules/shared/routes';
 
 function guestDemoPath(appPath: string): string {
@@ -13,12 +12,7 @@ function guestDemoPath(appPath: string): string {
   return `/demo${appPath}`;
 }
 
-const GuestDemoHomeRedirect: React.FC = () => {
-  const permissions = useAppStore((s) => s.userPermissions);
-  const home = getHomeRoute(permissions);
-  if (home === '/') return <Dashboard />;
-  return <Navigate to={guestDemoPath(home)} replace />;
-};
+const GuestDemoHomeRedirect: React.FC = () => <HomeDashboardRouter />;
 
 export function buildGuestDemoRouteElements(routes: AppRouteDef[]): React.ReactNode {
   return routes.map((r) => {
@@ -48,7 +42,7 @@ export function buildGuestDemoRouteElements(routes: AppRouteDef[]): React.ReactN
 }
 
 /**
- * Public demo: same app as authenticated users, but URL stays under /demo/* (e.g. /demo/admin-dashboard).
+ * Public demo: same app as authenticated users, but URL stays under /demo/* (home at /demo).
  */
 export const GuestDemoShell: React.FC<{ routes: AppRouteDef[] }> = ({ routes }) => {
   const navigate = useNavigate();

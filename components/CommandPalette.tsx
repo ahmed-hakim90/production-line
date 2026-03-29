@@ -20,7 +20,7 @@ import {
   Circle,
   type LucideIcon,
 } from 'lucide-react';
-import { MENU_CONFIG } from '@/config/menu.config';
+import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { usePermission } from '@/utils/permissions';
 
 interface PaletteItem {
@@ -70,7 +70,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
     const items: PaletteItem[] = [];
     MENU_CONFIG.forEach((group) => {
       group.children.forEach((item) => {
-        if (can(item.permission)) {
+        if (canAccessMenuItem(can, item)) {
           items.push({
             key: item.key,
             label: item.label,

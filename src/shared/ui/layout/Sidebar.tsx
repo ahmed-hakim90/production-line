@@ -11,9 +11,8 @@ import {
   X,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { guestDemoAppPath } from '@/utils/guestDemoNav';
 import { usePermission, useCurrentRole } from '@/utils/permissions';
-import { MENU_CONFIG } from '@/config/menu.config';
+import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSidebar';
 import type { SidebarIconStyle } from '@/types';
 import { resolveMenuIcon } from './menuIconMap';
@@ -86,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const visibleGroups = useMemo(
     () =>
       MENU_CONFIG
-        .map((g) => ({ ...g, children: g.children.filter((i) => can(i.permission)) }))
+        .map((g) => ({ ...g, children: g.children.filter((i) => canAccessMenuItem(can, i)) }))
         .filter((g) => g.children.length > 0),
     [can],
   );
@@ -194,6 +193,78 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             const isOpen     = openGroup === group.key;
             const totalBadge = group.children.reduce((s, c) => s + (badgeCounts[c.key] || 0), 0);
             const { iconColor, activeBg } = getIconClasses(group.key, sidebarIconStyle);
+
+            /* ── Flat group: direct links (no accordion header) ── */
+            if (group.flat) {
+              if (collapsed) {
+                return (
+                  <React.Fragment key={group.key}>
+                    {group.children.map((item) => {
+                      const itemActive = isActiveItem(item);
+                      const badge      = badgeCounts[item.key] || 0;
+                      return (
+                        <div key={item.key} className="relative mb-0.5 group/nav">
+                          <NavLink
+                            to={item.path}
+                            className={[
+                              'w-full flex justify-center items-center h-9 rounded-[var(--border-radius-sm)] transition-colors',
+                              itemActive
+                                ? `${activeBg} ${iconColor}`
+                                : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)]',
+                            ].join(' ')}
+                          >
+                            {renderSidebarIcon(item.icon, undefined, 18)}
+                            {badge > 0 && (
+                              <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-rose-500 rounded-full" />
+                            )}
+                          </NavLink>
+                          <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]">
+                            {item.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              }
+
+              return (
+                <div key={group.key} className={gIdx > 0 ? 'mt-1' : ''}>
+                  {gIdx > 0 && (
+                    <div className="h-px bg-[var(--color-sidebar-border)] mx-2 mb-1" />
+                  )}
+                  {group.children.map((item) => {
+                    const itemActive = isActiveItem(item);
+                    const badge      = badgeCounts[item.key] || 0;
+                    return (
+                      <NavLink
+                        key={item.key}
+                        to={item.path}
+                        className={[
+                          'relative flex items-center gap-2 px-2 py-2 rounded-[var(--border-radius-sm)] text-[13px] transition-colors select-none text-start',
+                          itemActive
+                            ? `${activeBg} ${iconColor} font-semibold`
+                            : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] font-medium',
+                        ].join(' ')}
+                      >
+                        {itemActive && (
+                          <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current rounded-l-full" />
+                        )}
+                        <span className={`shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
+                          {renderSidebarIcon(item.icon, undefined, 17)}
+                        </span>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {badge > 0 && (
+                          <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full shrink-0">
+                            {badge > 99 ? '99+' : badge}
+                          </span>
+                        )}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              );
+            }
 
             /* ── Collapsed: icon-only pill ── */
             if (collapsed) {
