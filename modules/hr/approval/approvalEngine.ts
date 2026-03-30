@@ -26,6 +26,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import {
   approvalRequestsRef,
   approvalRequestDocRef,
@@ -258,6 +259,7 @@ export async function createRequest(
         ),
       ],
       sourceRequestId: options.sourceRequestId ?? null,
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
       createdBy: options.createdBy,
       updatedAt: serverTimestamp(),
@@ -344,6 +346,7 @@ export async function createRequest(
       ),
     ],
     sourceRequestId: options.sourceRequestId ?? null,
+    tenantId: getCurrentTenantId(),
     createdAt: serverTimestamp(),
     createdBy: options.createdBy,
     updatedAt: serverTimestamp(),

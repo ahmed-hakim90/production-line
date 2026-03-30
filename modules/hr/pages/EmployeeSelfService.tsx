@@ -192,7 +192,9 @@ export const EmployeeSelfService: React.FC = () => {
   useEffect(() => {
     if (!employeeId) return;
     if (activeTab !== 'leave' && activeTab !== 'requests') return;
-    void refreshLeaveData();
+    void refreshLeaveData().catch((err) => {
+      console.error('Employee self-service leave refresh error:', err);
+    });
   }, [activeTab, employeeId, refreshLeaveData]);
 
   const attendanceStats = useMemo(() => {

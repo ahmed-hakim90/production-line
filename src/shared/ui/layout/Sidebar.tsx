@@ -74,6 +74,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const userEmail          = useAppStore((s) => s.userEmail);
   const logout             = useAppStore((s) => s.logout);
   const sidebarIconStyle   = useAppStore((s) => (s.systemSettings?.theme?.sidebarIconStyle ?? 'colorful') as SidebarIconStyle);
+  const sidebarCompanyTitle = useAppStore((s) => {
+    const t = s.tenantCompanyName?.trim();
+    if (t) return t;
+    const f = s.systemSettings?.branding?.factoryName?.trim();
+    if (f) return f;
+    return 'مؤسسة المغربي';
+  });
   const location        = useLocation();
 
   const [openGroup,   setOpenGroup]   = useState<string | null>(null);
@@ -163,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           {showExpandedHeader && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-[12.5px] font-bold text-[var(--color-text)] truncate leading-tight">مؤسسة المغربي</p>
+                <p className="text-[12.5px] font-bold text-[var(--color-text)] truncate leading-tight">{sidebarCompanyTitle}</p>
                 <p className="text-[10px] text-[var(--color-text-muted)] truncate leading-tight">نظام إدارة الإنتاج</p>
               </div>
 

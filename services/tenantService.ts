@@ -232,4 +232,33 @@ export const tenantService = {
     );
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as PendingTenant) }));
   },
+
+  /** Super-admin: activate / suspend company (Firestore rules: `isSuperAdmin` update on `tenants`). */
+  async updateTenantStatus(
+    tenantId: string,
+    status: FirestoreTenant['status'],
+  ): Promise<void> {
+    if (!isConfigured) throw new Error('Firebase not configured');
+    await updateDoc(doc(db, TENANTS, tenantId), {
+      status,
+      updatedAt: serverTimestamp(),
+    } as Record<string, unknown>);
+  },
+
+  /**
+   * Super-admin: remove registry only (`tenants` + `tenant_slugs`).
+   * Does not delete business data; use Cloud Function `adminDeleteTenantCascade` for full wipe.
+   */
+  async deleteTenantRegistryOnly(tenantId: string): Promise<void> {
+    if (!isConfigured) throw new Error('Firebase not configured');
+    const t = await this.getById(tenantId);
+    if (!t) throw new Error('الشركة غير موجودة');
+    const slug = normalizeSlug(t.slug || '');
+    const batch = writeBatch(db);
+    if (slug) {
+      batch.delete(doc(db, TENANT_SLUGS, slug));
+    }
+    batch.delete(doc(db, TENANTS, tenantId));
+    await batch.commit();
+  },
 };

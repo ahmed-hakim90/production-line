@@ -91,6 +91,7 @@ export interface FirestoreProduct {
 
 export interface ProductMaterial {
   id?: string;
+  tenantId?: string;
   productId: string;
   materialId?: string;
   materialName: string;
@@ -837,6 +838,13 @@ export interface ThemeSettings {
   sidebarIconStyle: SidebarIconStyle;
   textColor?: string;
   mutedTextColor?: string;
+  /** عرض أقصى لحاوية المحتوى الرئيسي (قيمة CSS، مثل 1536px أو 100%). */
+  contentMaxWidth?: string;
+  /**
+   * تخصيص عرض المحتوى حسب بادئة المسار (مفتاح = بداية المسار، قيمة = max-width CSS).
+   * مثال: { "/inventory": "1200px" }
+   */
+  pageLayoutOverrides?: Record<string, string>;
 }
 
 export interface DashboardDisplaySettings {

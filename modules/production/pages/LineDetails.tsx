@@ -8,7 +8,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import {
   DetailCollapsibleSection,
-  PAGE_BG,
+  DetailPageShell,
+  DetailPageStickyHeader,
   SectionSkeleton,
   SURFACE_CARD,
 } from '@/src/components/erp/DetailPageChrome';
@@ -652,23 +653,23 @@ export const LineDetails: React.FC = () => {
 
   if (loading) {
     return (
-      <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
-        <div className={cn('sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm', PAGE_BG)}>
+      <DetailPageShell>
+        <DetailPageStickyHeader>
           <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} loading />
           <Card className={SURFACE_CARD}>
             <SectionSkeleton rows={2} height={38} />
           </Card>
-        </div>
+        </DetailPageStickyHeader>
         <Card className={SURFACE_CARD}>
           <SectionSkeleton rows={6} height={68} />
         </Card>
-      </div>
+      </DetailPageShell>
     );
   }
 
   if (!line && !loading) {
     return (
-      <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
+      <DetailPageShell>
         <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} />
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="space-y-4 p-6 text-center">
@@ -679,7 +680,7 @@ export const LineDetails: React.FC = () => {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </DetailPageShell>
     );
   }
 
@@ -687,8 +688,8 @@ export const LineDetails: React.FC = () => {
   const healthCfg = planHealth ? HEALTH_STATUS_CONFIG[planHealth.status] : null;
 
   return (
-    <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
-      <div className={cn('sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm', PAGE_BG)}>
+    <DetailPageShell>
+      <DetailPageStickyHeader>
         <PageHeader
           title={line?.name ?? 'تفاصيل الخط'}
           subtitle={linePageSubtitle}
@@ -718,7 +719,7 @@ export const LineDetails: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </DetailPageStickyHeader>
 
       <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -1338,7 +1339,7 @@ export const LineDetails: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </DetailPageShell>
   );
 };
 

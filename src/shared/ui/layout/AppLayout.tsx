@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { SidebarProvider, useSidebar } from './useSidebar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -6,6 +7,11 @@ import { PageBackProvider } from './PageBackContext';
 import { GlobalBackgroundJobs } from '@/components/background-jobs/GlobalBackgroundJobs';
 import { usePermission } from '@/utils/permissions';
 import { PageShell } from '@/src/shared/ui/layout/PageShell';
+import { useAppStore } from '@/store/useAppStore';
+import { DEFAULT_THEME } from '@/utils/dashboardConfig';
+import { resolveContentMaxWidthForPath } from '@/core/ui-engine/theme/tenantTheme';
+import { OfflineConnectionBanner } from './OfflineConnectionBanner';
+import { useOnlineStatus } from './useOnlineStatus';
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -18,6 +24,13 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { collapsed, toggleCollapse } = useSidebar();
   const { canViewActivityLog } = usePermission();
+  const location = useLocation();
+  const themeSettings = useAppStore((s) => s.systemSettings?.theme ?? DEFAULT_THEME);
+  const contentMaxWidth = useMemo(
+    () => resolveContentMaxWidthForPath(location.pathname, themeSettings),
+    [location.pathname, themeSettings],
+  );
+  const online = useOnlineStatus();
 
   // Margin matches sidebar width: collapsed=52px icon bar, expanded=260px
   const contentMargin = collapsed ? 'lg:mr-[52px]' : 'lg:mr-[260px]';
@@ -45,10 +58,20 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             onSidebarCollapseToggle={toggleCollapse}
           />
 
-          <main id="main-content" className="flex-1 pt-[52px]" tabIndex={-1}>
+          <OfflineConnectionBanner online={online} />
+
+          <main
+            id="main-content"
+            className={[
+              'flex-1',
+              online ? 'pt-[52px]' : 'pt-[calc(52px+2.75rem)]',
+            ].join(' ')}
+            tabIndex={-1}
+          >
             <div
-              className="max-w-screen-2xl mx-auto px-4 sm:px-5 animate-in fade-in duration-200"
+              className="mx-auto w-full px-4 sm:px-5 animate-in fade-in duration-200"
               style={{
+                maxWidth: `min(100%, ${contentMaxWidth})`,
                 paddingTop: 'var(--layout-main-padding-y, 1rem)',
                 paddingBottom: 'var(--layout-main-padding-y, 1rem)',
               }}
@@ -58,7 +81,10 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
           </main>
 
           <footer className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
-            <div className="max-w-screen-2xl mx-auto px-4 sm:px-5 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div
+              className="mx-auto w-full px-4 sm:px-5 py-3 flex flex-col sm:flex-row justify-between items-center gap-3"
+              style={{ maxWidth: `min(100%, ${contentMaxWidth})` }}
+            >
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-center sm:text-start">
                 <p className="text-[11px] text-[var(--color-text-muted)] font-mono">
                   © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM —{' '}

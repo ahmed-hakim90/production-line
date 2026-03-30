@@ -257,6 +257,8 @@ export const DEFAULT_THEME: ThemeSettings = {
   sidebarIconStyle: 'colorful',
   textColor: '#1a1a1a',
   mutedTextColor: '#8d99a6',
+  contentMaxWidth: '1536px',
+  pageLayoutOverrides: {},
 };
 
 export const DEFAULT_DASHBOARD_DISPLAY: DashboardDisplaySettings = {

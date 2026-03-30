@@ -43,9 +43,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   DetailCollapsibleSection,
+  DetailPageShell,
+  DetailPageStickyHeader,
   FIELD_ON_PANEL,
   NESTED_TILE,
-  PAGE_BG,
   SectionSkeleton,
   SURFACE_CARD,
 } from "@/src/components/erp/DetailPageChrome";
@@ -62,15 +63,15 @@ const CHART_TICK_PROPS = { fontSize: 11, fill: "hsl(var(--muted-foreground))" } 
 const arNumber = (value: number) => value.toLocaleString("ar-EG");
 const arDecimal = (value: number, fractionDigits = 2) =>
   value.toLocaleString("ar-EG", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+/** Arabic-Indic digits (U+0660–U+0669) → western 0–9; normalize ٫/٬ separators */
 const parseMoneyValue = (value?: string) => {
   if (!value) return 0;
-  const westernizedDigits = value.replace(/[٠-٩]/g, (digit) => String("ظ ١٢٣٤٥٦٧٨٩".indexOf(digit)));
-  const normalizedSeparators = westernizedDigits
-    .replace(/ظ¬/g, "") // Arabic thousands separator
-    .replace(/ظ«/g, ".") // Arabic decimal separator
-    .replace(/طŒ/g, ",");
-  const cleaned = normalizedSeparators.replace(/,/g, "");
-  const match = cleaned.match(/-?\d+(?:\.\d+)?/);
+  const arabicIndic = "٠١٢٣٤٥٦٧٨٩";
+  let s = value.replace(/[٠-٩]/g, (ch) => String(arabicIndic.indexOf(ch)));
+  s = s.replace(/\u066C/g, "").replace(/,/g, ""); // thousands
+  s = s.replace(/\u066B/g, ".").replace(/٫/g, "."); // decimal
+  s = s.replace(/\s/g, "");
+  const match = s.match(/-?\d+(?:\.\d+)?/);
   const parsed = Number(match?.[0] ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -589,12 +590,12 @@ export const ProductDetails: React.FC = () => {
 
   if (isError) {
     return (
-      <div dir="rtl" className={cn("min-h-screen space-y-4 p-4 md:p-6", PAGE_BG)}>
+      <DetailPageShell>
         <PageHeader title="تفاصيل المنتج" backAction={{ to: "/products", label: "رجوع" }} />
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="p-4 text-sm text-destructive">تعذر تحميل بيانات المنتج. حاول مرة أخرى.</CardContent>
         </Card>
-      </div>
+      </DetailPageShell>
     );
   }
 
@@ -606,8 +607,8 @@ export const ProductDetails: React.FC = () => {
     ) : null;
 
   return (
-    <div dir="rtl" className={cn("min-h-screen space-y-4 p-4 md:p-6", PAGE_BG)}>
-      <div className={cn("sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm", PAGE_BG)}>
+    <DetailPageShell>
+      <DetailPageStickyHeader>
         {isLoading || !sectionReady.header || !data ? (
           <>
             <PageHeader title="تفاصيل المنتج" backAction={{ to: "/products", label: "رجوع" }} loading={isLoading} />
@@ -693,7 +694,7 @@ export const ProductDetails: React.FC = () => {
             </CardContent>
           )}
         </Card>
-      </div>
+      </DetailPageStickyHeader>
 
       <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
         {isLoading || !sectionReady.kpis || !data ? (
@@ -1195,6 +1196,6 @@ export const ProductDetails: React.FC = () => {
           </div>
         )}
       </DetailCollapsibleSection>
-    </div>
+    </DetailPageShell>
   );
 };

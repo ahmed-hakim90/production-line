@@ -19,6 +19,8 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../../../components/PageHeader';
+import { Card as UiCard, CardContent } from '@/components/ui/card';
+import { DetailPageShell, DetailPageStickyHeader, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
 import { toast } from '../../../components/Toast';
 
 type ExtraColumnKey = 'materialsAndPackaging' | 'sellingPrice' | 'profit';
@@ -785,60 +787,63 @@ export const MonthlyProductionCosts: React.FC = () => {
   })();
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="تكلفة الإنتاج الشهرية"
-        subtitle="حساب ومراجعة تكلفة الإنتاج لكل منتج حسب الشهر"
-        icon="price_check"
-        primaryAction={canManage ? {
-          label: calculating
-            ? `جاري الحساب... ${calculateProgress.done}/${calculateProgress.total || products.length}`
-            : 'حساب الكل',
-          icon: 'calculate',
-          onClick: handleCalculateAll,
-          disabled: calculating || allClosed,
-        } : undefined}
-        extra={
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
-          />
-        }
-      />
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPIBox
-          label="عدد المنتجات"
-          value={displayRecords.length}
-          icon="inventory_2"
-          colorClass="bg-primary/10 text-primary"
-        />
-        <KPIBox
-          label="إجمالي الكمية"
-          value={formatCost(totalQty)}
-          icon="precision_manufacturing"
-          colorClass="bg-emerald-500/10 text-emerald-600"
-          unit="وحدة"
-        />
-        <KPIBox
-          label="إجمالي التكلفة"
-          value={formatCost(totalCost)}
-          icon="payments"
-          colorClass="bg-amber-500/10 text-amber-600"
-          unit="ج.م"
-        />
-        <KPIBox
-          label="متوسط تكلفة الوحدة"
-          value={formatCost(overallAvg)}
+    <DetailPageShell className="space-y-6">
+      <DetailPageStickyHeader>
+        <PageHeader
+          title="تكلفة الإنتاج الشهرية"
+          subtitle="حساب ومراجعة تكلفة الإنتاج لكل منتج حسب الشهر"
           icon="price_check"
-          colorClass="bg-violet-500/10 text-violet-600"
-          unit="ج.م"
+          primaryAction={canManage ? {
+            label: calculating
+              ? `جاري الحساب... ${calculateProgress.done}/${calculateProgress.total || products.length}`
+              : 'حساب الكل',
+            icon: 'calculate',
+            onClick: handleCalculateAll,
+            disabled: calculating || allClosed,
+          } : undefined}
+          extra={
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+            />
+          }
         />
-      </div>
+        <UiCard className={SURFACE_CARD}>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <KPIBox
+                label="عدد المنتجات"
+                value={displayRecords.length}
+                icon="inventory_2"
+                colorClass="bg-primary/10 text-primary"
+              />
+              <KPIBox
+                label="إجمالي الكمية"
+                value={formatCost(totalQty)}
+                icon="precision_manufacturing"
+                colorClass="bg-emerald-500/10 text-emerald-600"
+                unit="وحدة"
+              />
+              <KPIBox
+                label="إجمالي التكلفة"
+                value={formatCost(totalCost)}
+                icon="payments"
+                colorClass="bg-amber-500/10 text-amber-600"
+                unit="ج.م"
+              />
+              <KPIBox
+                label="متوسط تكلفة الوحدة"
+                value={formatCost(overallAvg)}
+                icon="price_check"
+                colorClass="bg-violet-500/10 text-violet-600"
+                unit="ج.م"
+              />
+            </div>
+          </CardContent>
+        </UiCard>
+      </DetailPageStickyHeader>
 
       {/* Month close banner */}
       {allClosed && (
@@ -1420,7 +1425,7 @@ export const MonthlyProductionCosts: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </DetailPageShell>
   );
 };
 

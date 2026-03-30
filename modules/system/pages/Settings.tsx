@@ -23,7 +23,12 @@ import {
   DEFAULT_EXPORT_IMPORT_PAGE_CONTROL,
 } from '../../../utils/dashboardConfig';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { applyTenantTheme, resolveTheme } from '../../../core/ui-engine/theme/tenantTheme';
+import {
+  applyAppTheme,
+  mergeTenantThemeForApply,
+  readCachedTenantTheme,
+  resolveTheme,
+} from '../../../core/ui-engine/theme/tenantTheme';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { userService } from '../../../services/userService';
 import type {
@@ -271,22 +276,6 @@ const ALERT_FIELDS: { key: keyof AlertSettings; label: string; icon: string; uni
   { key: 'overProductionThreshold', label: 'حد الإنتاج الزائد', icon: 'trending_up', unit: '%', description: 'نسبة تجاوز الهدف المسموحة — تنبيه عند التجاوز' },
 ];
 
-const mapThemeSettingsToTenantTheme = (theme: ThemeSettings) => {
-  const mode = theme.darkMode === 'auto'
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : theme.darkMode;
-  return resolveTheme({
-    preset: mode === 'dark' ? 'dark' : 'custom',
-    primaryColor: theme.primaryColor,
-    colorBg: theme.backgroundColor,
-    colorCard: mode === 'dark' ? '#0f172a' : '#ffffff',
-    colorBorder: mode === 'dark' ? '#1e293b' : '#e2e8f0',
-    colorText: mode === 'dark' ? '#e2e8f0' : (theme.textColor || '#0f172a'),
-    colorSidebarBg: mode === 'dark' ? '#0f172a' : '#ffffff',
-    colorSidebarText: mode === 'dark' ? '#cbd5e1' : '#334155',
-  });
-};
-
 export const Settings: React.FC = () => {
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
   const products = useAppStore((s) => s.products);
@@ -355,12 +344,21 @@ export const Settings: React.FC = () => {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const brandingLogoRef = useRef<HTMLInputElement>(null);
 
-  // Instant theme preview through the unified tenant-theme engine.
+  // Instant theme preview (merges with cached tenant logo / styles).
   useEffect(() => {
     if (activeTab === 'general') {
-      applyTenantTheme(mapThemeSettingsToTenantTheme(localTheme));
+      const base = readCachedTenantTheme() ?? resolveTheme();
+      applyAppTheme(mergeTenantThemeForApply(base, localTheme), localTheme);
     }
   }, [localTheme, activeTab]);
+
+  // Revert preview when leaving the General tab (back to last saved theme from store).
+  useEffect(() => {
+    if (activeTab === 'general') return;
+    const saved = systemSettings.theme ?? DEFAULT_THEME;
+    const base = readCachedTenantTheme() ?? resolveTheme();
+    applyAppTheme(mergeTenantThemeForApply(base, saved), saved);
+  }, [activeTab, systemSettings.theme]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -386,11 +384,12 @@ export const Settings: React.FC = () => {
     })();
   }, [isAdmin]);
 
-  // Revert to persisted theme when leaving settings page.
+  // Revert to persisted theme when leaving the settings page (uses latest store snapshot).
   useEffect(() => {
     return () => {
-      const saved = systemSettings.theme ?? DEFAULT_THEME;
-      applyTenantTheme(mapThemeSettingsToTenantTheme(saved));
+      const saved = useAppStore.getState().systemSettings.theme ?? DEFAULT_THEME;
+      const base = readCachedTenantTheme() ?? resolveTheme();
+      applyAppTheme(mergeTenantThemeForApply(base, saved), saved);
     };
   }, []);
 
@@ -401,9 +400,6 @@ export const Settings: React.FC = () => {
     setBackupMessage,
     backupHistory,
     historyLoading,
-    firebaseUsage,
-    firebaseUsageLoading,
-    firebaseUsageError,
     selectedMonth,
     setSelectedMonth,
     importFile,
@@ -414,19 +410,18 @@ export const Settings: React.FC = () => {
     showConfirmRestore,
     setShowConfirmRestore,
     importInputRef,
-    loadFirebaseUsage,
     handleExportFull,
     handleExportMonthly,
     handleExportSettings,
     handleFileSelect,
     clearImportSelection,
     handleRestore,
-    projectId,
-    firestoreUsagePercent,
-    firestoreRemainingBytes,
-    sparkDaily,
     restoreModes,
-    formatBytes,
+    skipAutoBackupBeforeRestore,
+    setSkipAutoBackupBeforeRestore,
+    useServerImport,
+    setUseServerImport,
+    isSuperAdmin,
   } = useBackupRestore({ activeTab, isAdmin });
 
   const handleLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1163,16 +1158,7 @@ export const Settings: React.FC = () => {
           backupMessage={backupMessage}
           setBackupMessage={setBackupMessage}
           backupProgress={backupProgress}
-          loadFirebaseUsage={loadFirebaseUsage}
-          firebaseUsageLoading={firebaseUsageLoading}
           backupLoading={backupLoading}
-          firebaseUsage={firebaseUsage}
-          projectId={projectId}
-          firebaseUsageError={firebaseUsageError}
-          formatBytes={formatBytes}
-          firestoreRemainingBytes={firestoreRemainingBytes}
-          firestoreUsagePercent={firestoreUsagePercent}
-          sparkDaily={sparkDaily}
           handleExportFull={handleExportFull}
           selectedMonth={selectedMonth}
           setSelectedMonth={setSelectedMonth}
@@ -1192,6 +1178,11 @@ export const Settings: React.FC = () => {
           backupHistory={backupHistory}
           showConfirmRestore={showConfirmRestore}
           handleRestore={handleRestore}
+          skipAutoBackupBeforeRestore={skipAutoBackupBeforeRestore}
+          setSkipAutoBackupBeforeRestore={setSkipAutoBackupBeforeRestore}
+          useServerImport={useServerImport}
+          setUseServerImport={setUseServerImport}
+          isSuperAdmin={isSuperAdmin}
         />
       )}
     </div>

@@ -4,10 +4,10 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 import {
   DetailCollapsibleSection,
-  PAGE_BG,
+  DetailPageShell,
+  DetailPageStickyHeader,
   SectionSkeleton,
   SURFACE_CARD,
 } from '@/src/components/erp/DetailPageChrome';
@@ -590,23 +590,23 @@ export const SupervisorDetails: React.FC = () => {
 
   if (loading) {
     return (
-      <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
-        <div className={cn('sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm', PAGE_BG)}>
+      <DetailPageShell>
+        <DetailPageStickyHeader>
           <PageHeader title="تفاصيل المشرف" backAction={{ to: '/supervisors', label: 'رجوع' }} loading />
           <Card className={SURFACE_CARD}>
             <SectionSkeleton rows={2} height={38} />
           </Card>
-        </div>
+        </DetailPageStickyHeader>
         <Card className={SURFACE_CARD}>
           <SectionSkeleton rows={6} height={68} />
         </Card>
-      </div>
+      </DetailPageShell>
     );
   }
 
   if (!employee) {
     return (
-      <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
+      <DetailPageShell>
         <PageHeader title="تفاصيل المشرف" backAction={{ to: '/supervisors', label: 'رجوع' }} />
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="space-y-4 p-6 text-center">
@@ -617,7 +617,7 @@ export const SupervisorDetails: React.FC = () => {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </DetailPageShell>
     );
   }
 
@@ -625,8 +625,8 @@ export const SupervisorDetails: React.FC = () => {
   const scoreBadge = performanceScore >= 85 ? { variant: 'success' as const, label: 'ممتاز' } : performanceScore >= 70 ? { variant: 'warning' as const, label: 'جيد' } : { variant: 'danger' as const, label: 'ضعيف' };
 
   return (
-    <div dir="rtl" className={cn('min-h-screen space-y-4 p-4 md:p-6', PAGE_BG)}>
-      <div className={cn('sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm', PAGE_BG)}>
+    <DetailPageShell>
+      <DetailPageStickyHeader>
         <PageHeader
           title={employee.name}
           subtitle={`${supervisorPageSubtitle} آ· متوسط ${avgWorkersPerReport} عامل`}
@@ -666,7 +666,7 @@ export const SupervisorDetails: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </DetailPageStickyHeader>
 
       <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -1130,7 +1130,7 @@ export const SupervisorDetails: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
-    </div>
+    </DetailPageShell>
   );
 };
 

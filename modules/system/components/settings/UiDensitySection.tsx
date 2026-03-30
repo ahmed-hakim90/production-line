@@ -1,12 +1,22 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Card } from '../UI';
 import { applyUiDensity, readUiDensity, writeUiDensity, type UiDensityMode } from '@/core/ui-engine/density/uiDensity';
+import { useAppStore } from '@/store/useAppStore';
 
 /**
- * Per-browser preference (localStorage). Visible to all users — does not require saving system settings.
+ * تفضيل محلي (localStorage). عند وجود كثافة في «محرك المظهر» المحفوظة تُطبَّق على الجلسة عبر `applyAppTheme`
+ * ويُفضّل مواءمة هذا القسم معها بعد التحميل أو تحديث الإعدادات.
  */
 export const UiDensitySection: React.FC = () => {
   const [mode, setMode] = useState<UiDensityMode>(() => readUiDensity());
+  const savedDensity = useAppStore((s) => s.systemSettings?.theme?.density);
+
+  useEffect(() => {
+    if (!savedDensity || savedDensity === readUiDensity()) return;
+    setMode(savedDensity);
+    writeUiDensity(savedDensity);
+    applyUiDensity(savedDensity);
+  }, [savedDensity]);
 
   const onChange = useCallback((next: UiDensityMode) => {
     setMode(next);
@@ -15,9 +25,10 @@ export const UiDensitySection: React.FC = () => {
   }, []);
 
   return (
-    <Card title="كثافة الواجهة">
+    <Card title="كثافة الواجهة (محلي)">
       <p className="text-xs text-[var(--color-text-muted)] mb-4">
-        يضبط المسافات وحجم الخط محلياً على هذا المتصفح فقط — مريح للقراءة أو مضغوط لعرض أكبر للبيانات.
+        يضبط المسافات والخطوط على هذا المتصفح فقط. الكثافة الافتراضية للمؤسسة تُحفظ من «محرك المظهر» في
+        الإعدادات العامة؛ عند تغييرها هنا دون حفظ الثيم قد تُستبدل عند إعادة تحميل الصفحة.
       </p>
       <div className="flex flex-wrap gap-2">
         {(

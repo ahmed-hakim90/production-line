@@ -9,15 +9,18 @@ import {
   collection,
   collectionGroup,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   serverTimestamp,
   writeBatch,
   query,
+  where,
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db, isConfigured } from './firebase';
+import { auth, db, isConfigured } from './firebase';
+import { getCurrentTenantIdOrNull } from '../lib/currentTenant';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -153,6 +156,29 @@ const SETTINGS_COLLECTIONS = [
 
 export type RestoreMode = 'merge' | 'replace' | 'full_reset';
 
+export interface ImportBackupOptions {
+  /** Skip downloading a full auto-backup before restore (avoids permission failures on read). */
+  skipAutoBackupBeforeRestore?: boolean;
+}
+
+function mapImportError(error: unknown): string {
+  const code = String((error as { code?: string })?.code || '').toLowerCase();
+  const msg = error instanceof Error ? error.message : '';
+  const combined = `${code} ${msg}`.toLowerCase();
+  if (
+    combined.includes('permission')
+    || combined.includes('insufficient')
+    || code.includes('permission-denied')
+  ) {
+    return (
+      'رفضت قواعد Firestore العملية. غالباً: نسخة من شركة أخرى (tenantId مختلف)، أو مجموعات users/roles بدون صلاحيات كافية، أو فشل النسخة التلقائية قبل الاستعادة. ' +
+      'جرّب تفعيل «تخطي النسخة التلقائية قبل الاستعادة»، أو استخدم «استعادة عبر الخادم» كمشرف منصة.'
+    );
+  }
+  if (msg) return msg;
+  return 'حدث خطأ أثناء الاستعادة';
+}
+
 export interface BackupMetadata {
   version: string;
   createdAt: string;
@@ -172,6 +198,8 @@ export interface BackupFile {
 
 export interface BackupHistoryEntry {
   id?: string;
+  /** Required for Firestore tenant isolation; set automatically in saveHistory. */
+  tenantId?: string;
   type: 'full' | 'monthly' | 'settings';
   mode?: RestoreMode;
   action: 'export' | 'import';
@@ -183,14 +211,6 @@ export interface BackupHistoryEntry {
   month?: string;
 }
 
-export interface FirebaseUsageEstimate {
-  generatedAt: string;
-  collectionsScanned: number;
-  totalDocuments: number;
-  estimatedBytes: number;
-  documentCounts: Record<string, number>;
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function readCollection(name: string): Promise<Record<string, any>[]> {
@@ -198,11 +218,91 @@ async function readCollection(name: string): Promise<Record<string, any>[]> {
   return snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
 }
 
+/**
+ * Tenant-scoped reads. Unscoped collection scans are denied by Firestore rules for
+ * tenant users; some top-level collections use non-standard layouts (dashboardStats, etc.).
+ */
+async function readCollectionTenantScoped(
+  name: string,
+  tenantId: string
+): Promise<Record<string, any>[]> {
+  try {
+    if (name === 'dashboardStats') {
+      const [dailySnap, monthlySnap] = await Promise.all([
+        getDocs(collection(db, 'dashboardStats', tenantId, 'daily')),
+        getDocs(collection(db, 'dashboardStats', tenantId, 'monthly')),
+      ]);
+      return [
+        ...dailySnap.docs.map((d) => ({ _docId: d.id, ...d.data() })),
+        ...monthlySnap.docs.map((d) => ({ _docId: d.id, ...d.data() })),
+      ];
+    }
+    if (name === 'tenants') {
+      const d = await getDoc(doc(db, 'tenants', tenantId));
+      return d.exists() ? [{ _docId: d.id, ...d.data() }] : [];
+    }
+    if (name === 'user_devices') {
+      const uid = auth?.currentUser?.uid;
+      if (!uid) return [];
+      const q = query(collection(db, 'user_devices'), where('userId', '==', uid));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
+    }
+    if (name === 'user_presence') {
+      const uid = auth?.currentUser?.uid;
+      if (!uid) return [];
+      const d = await getDoc(doc(db, 'user_presence', uid));
+      return d.exists() ? [{ _docId: d.id, ...d.data() }] : [];
+    }
+    const q = query(collection(db, name), where('tenantId', '==', tenantId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
+  } catch {
+    return [];
+  }
+}
+
 async function readCollectionGroup(
   name: string
 ): Promise<Record<string, any>[]> {
   const snap = await getDocs(collectionGroup(db, name));
   return snap.docs.map((d) => ({ _path: d.ref.path, ...d.data() }));
+}
+
+/** Subcollections / paths that are not readable via unscoped collectionGroup queries. */
+async function readCollectionGroupTenantScoped(
+  groupName: string,
+  tenantId: string
+): Promise<Record<string, any>[]> {
+  try {
+    if (groupName === 'daily') {
+      const snap = await getDocs(
+        collection(db, 'dashboardStats', tenantId, 'daily')
+      );
+      return snap.docs.map((d) => ({
+        _path: d.ref.path,
+        ...d.data(),
+      }));
+    }
+    if (groupName === 'preferences' || groupName === 'fcmTokens') {
+      const usersSnap = await getDocs(
+        query(collection(db, 'users'), where('tenantId', '==', tenantId))
+      );
+      const out: Record<string, any>[] = [];
+      for (const u of usersSnap.docs) {
+        const sub = await getDocs(
+          collection(db, 'users', u.id, groupName)
+        );
+        sub.docs.forEach((d) => {
+          out.push({ _path: d.ref.path, ...d.data() });
+        });
+      }
+      return out;
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 async function clearCollection(name: string): Promise<void> {
@@ -341,36 +441,12 @@ export function validateBackupFile(data: any): {
 // ─── Export Functions ────────────────────────────────────────────────────────
 
 export const backupService = {
-  async getUsageEstimate(): Promise<FirebaseUsageEstimate> {
-    if (!isConfigured) throw new Error('Firebase not configured');
-
-    const documentCounts: Record<string, number> = {};
-    let totalDocuments = 0;
-    let estimatedBytes = 0;
-
-    for (const name of ALL_COLLECTIONS) {
-      const docs = await readCollection(name);
-      documentCounts[name] = docs.length;
-      totalDocuments += docs.length;
-
-      try {
-        estimatedBytes += new Blob([JSON.stringify(docs)]).size;
-      } catch {
-        estimatedBytes += JSON.stringify(docs).length;
-      }
-    }
-
-    return {
-      generatedAt: new Date().toISOString(),
-      collectionsScanned: ALL_COLLECTIONS.length,
-      totalDocuments,
-      estimatedBytes,
-      documentCounts,
-    };
-  },
-
   async exportFullBackup(createdBy: string): Promise<void> {
     if (!isConfigured) throw new Error('Firebase not configured');
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) {
+      throw new Error('Tenant context not initialised');
+    }
 
     const collections: Record<string, Record<string, any>[]> = {};
     const collectionGroups: Record<string, Record<string, any>[]> = {};
@@ -378,14 +454,14 @@ export const backupService = {
     let totalDocuments = 0;
 
     for (const name of ALL_COLLECTIONS) {
-      const docs = await readCollection(name);
+      const docs = await readCollectionTenantScoped(name, tenantId);
       collections[name] = docs;
       documentCounts[name] = docs.length;
       totalDocuments += docs.length;
     }
 
     for (const groupName of COLLECTION_GROUPS) {
-      const docs = await readCollectionGroup(groupName);
+      const docs = await readCollectionGroupTenantScoped(groupName, tenantId);
       collectionGroups[groupName] = docs;
       documentCounts[`group:${groupName}`] = docs.length;
       totalDocuments += docs.length;
@@ -421,6 +497,10 @@ export const backupService = {
 
   async exportMonthlyBackup(month: string, createdBy: string): Promise<void> {
     if (!isConfigured) throw new Error('Firebase not configured');
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) {
+      throw new Error('Tenant context not initialised');
+    }
 
     const monthCollections = [
       'production_reports',
@@ -441,7 +521,7 @@ export const backupService = {
     let totalDocuments = 0;
 
     for (const name of monthCollections) {
-      const allDocs = await readCollection(name);
+      const allDocs = await readCollectionTenantScoped(name, tenantId);
       const filtered = allDocs.filter((d) => {
         const dateField = d.date || d.month || d.createdAt;
         if (typeof dateField === 'string') {
@@ -485,13 +565,17 @@ export const backupService = {
 
   async exportSettingsOnly(createdBy: string): Promise<void> {
     if (!isConfigured) throw new Error('Firebase not configured');
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) {
+      throw new Error('Tenant context not initialised');
+    }
 
     const collections: Record<string, Record<string, any>[]> = {};
     const documentCounts: Record<string, number> = {};
     let totalDocuments = 0;
 
     for (const name of SETTINGS_COLLECTIONS) {
-      const docs = await readCollection(name);
+      const docs = await readCollectionTenantScoped(name, tenantId);
       collections[name] = docs;
       documentCounts[name] = docs.length;
       totalDocuments += docs.length;
@@ -530,7 +614,8 @@ export const backupService = {
     file: BackupFile,
     mode: RestoreMode,
     createdBy: string,
-    onProgress?: (step: string, progress: number) => void
+    onProgress?: (step: string, progress: number) => void,
+    options?: ImportBackupOptions
   ): Promise<{ success: boolean; error?: string; restored: number }> {
     if (!isConfigured) {
       return { success: false, error: 'Firebase not configured', restored: 0 };
@@ -542,9 +627,12 @@ export const backupService = {
     }
 
     try {
-      // Safety: auto-backup before restore
-      onProgress?.('إنشاء نسخة احتياطية تلقائية قبل الاستعادة...', 5);
-      await this.exportFullBackup(`${createdBy} (auto-before-restore)`);
+      if (!options?.skipAutoBackupBeforeRestore) {
+        onProgress?.('إنشاء نسخة احتياطية تلقائية قبل الاستعادة...', 5);
+        await this.exportFullBackup(`${createdBy} (auto-before-restore)`);
+      } else {
+        onProgress?.('تخطي النسخة التلقائية — بدء الاستعادة...', 5);
+      }
 
       const collectionNames = Object.keys(file.collections);
       const collectionGroupNames = Object.keys(file.collectionGroups || {});
@@ -614,11 +702,11 @@ export const backupService = {
 
       onProgress?.('اكتمل!', 100);
       return { success: true, restored };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('importBackup error:', error);
       return {
         success: false,
-        error: error.message || 'حدث خطأ أثناء الاستعادة',
+        error: mapImportError(error),
         restored: 0,
       };
     }
@@ -628,8 +716,13 @@ export const backupService = {
 
   async saveHistory(entry: BackupHistoryEntry): Promise<void> {
     if (!isConfigured) return;
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return;
     try {
-      await addDoc(collection(db, BACKUPS_COLLECTION), entry);
+      await addDoc(collection(db, BACKUPS_COLLECTION), {
+        ...entry,
+        tenantId,
+      });
     } catch (error) {
       console.error('backupService.saveHistory error:', error);
     }
@@ -637,9 +730,12 @@ export const backupService = {
 
   async getHistory(maxEntries = 20): Promise<BackupHistoryEntry[]> {
     if (!isConfigured) return [];
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return [];
     try {
       const q = query(
         collection(db, BACKUPS_COLLECTION),
+        where('tenantId', '==', tenantId),
         orderBy('createdAt', 'desc'),
         limit(maxEntries)
       );

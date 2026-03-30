@@ -33,6 +33,36 @@ export function SectionSkeleton({ rows = 4, height = 16 }: { rows?: number; heig
   );
 }
 
+/** Outer wrapper: RTL, page background, padding — use with `DetailPageStickyHeader` for detail pages */
+export function DetailPageShell({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div dir="rtl" className={cn("min-h-screen space-y-4 p-4 md:p-6", PAGE_BG, className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Sticky top bar (header + optional filter card) with backdrop blur */
+export function DetailPageStickyHeader({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm", PAGE_BG, className)}>
+      {children}
+    </div>
+  );
+}
+
 export function DetailCollapsibleSection({
   title,
   defaultOpen = true,

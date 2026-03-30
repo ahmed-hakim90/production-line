@@ -70,14 +70,13 @@ service cloud.firestore {
         && request.resource.data.tenantId == currentUserDoc().data.tenantId;
     }
 
-    /** During migration, docs may lack tenantId; treat as single-tenant legacy. */
+    /** During migration, docs may lack tenantId; treat as single-tenant legacy (backfill tenantId for strict multi-tenant isolation). */
     function sameTenantOrLegacyRead() {
       return isActiveUser()
         && (
           resource == null
-          || (('tenantId' in resource.data)
-            && resource.data.tenantId == currentUserDoc().data.tenantId)
-          || (isSuperAdmin() && !('tenantId' in resource.data))
+          || !('tenantId' in resource.data)
+          || resource.data.tenantId == currentUserDoc().data.tenantId
         );
     }
 

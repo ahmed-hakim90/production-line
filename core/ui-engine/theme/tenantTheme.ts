@@ -1,5 +1,8 @@
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import type { ThemeSettings } from '@/types';
+import { DEFAULT_THEME } from '@/utils/dashboardConfig';
+import { applyUiDensity, writeUiDensity } from '@/core/ui-engine/density/uiDensity';
 
 export type TenantThemePreset = 'indigo-pro' | 'light' | 'dark' | 'factory' | 'custom';
 
@@ -155,6 +158,7 @@ function applyShadcnTokensFromTheme(theme: TenantTheme, root: HTMLElement) {
   root.style.setProperty('--popover', hexToHslTriplet(cardHex));
   root.style.setProperty('--popover-foreground', hexToHslTriplet(textHex));
   root.style.setProperty('--border', hexToHslTriplet(borderHex));
+  /* Border color for `border-input`; field fill uses `bg-card` / `bg-muted` in components, not page bg. */
   root.style.setProperty('--input', hexToHslTriplet(borderHex));
 
   const pHsl = hexToHslTriplet(primaryHex);
@@ -175,11 +179,20 @@ function applyShadcnTokensFromTheme(theme: TenantTheme, root: HTMLElement) {
     root.style.setProperty('--destructive-foreground', '210 40% 98%');
   } else {
     const rgb = hexToRgb(bgHex);
-    if (rgb) {
+    const cardRgb = hexToRgb(cardHex);
+    if (rgb && cardRgb) {
+      /* Stronger separation from page background so `bg-muted` fields are visible vs `--background`. */
       const muted = rgbToHslTriplet(
-        Math.round(rgb.r * 0.94 + 255 * 0.06),
-        Math.round(rgb.g * 0.94 + 255 * 0.06),
-        Math.round(rgb.b * 0.94 + 255 * 0.06),
+        Math.round(rgb.r * 0.72 + cardRgb.r * 0.28),
+        Math.round(rgb.g * 0.72 + cardRgb.g * 0.28),
+        Math.round(rgb.b * 0.72 + cardRgb.b * 0.28),
+      );
+      root.style.setProperty('--muted', muted);
+    } else if (rgb) {
+      const muted = rgbToHslTriplet(
+        Math.round(rgb.r * 0.88 + 255 * 0.12),
+        Math.round(rgb.g * 0.88 + 255 * 0.12),
+        Math.round(rgb.b * 0.88 + 255 * 0.12),
       );
       root.style.setProperty('--muted', muted);
     } else {
@@ -256,6 +269,77 @@ export function resolveTheme(theme?: Partial<TenantTheme> | null): TenantTheme {
   } as TenantTheme;
 }
 
+function isThemeSettingsRecord(v: unknown): v is ThemeSettings {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'darkMode' in v &&
+    'primaryColor' in v &&
+    'baseFontFamily' in v
+  );
+}
+
+/** Maps saved system theme + preview to tenant runtime tokens (colors / preset). */
+export function mapThemeSettingsToTenantTheme(theme: ThemeSettings): TenantTheme {
+  const mode =
+    theme.darkMode === 'auto'
+      ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light')
+      : theme.darkMode;
+  return resolveTheme({
+    preset: mode === 'dark' ? 'dark' : 'custom',
+    primaryColor: theme.primaryColor,
+    colorBg: theme.backgroundColor,
+    colorCard: mode === 'dark' ? '#0f172a' : '#ffffff',
+    colorBorder: mode === 'dark' ? '#1e293b' : '#e2e8f0',
+    colorText: mode === 'dark' ? '#e2e8f0' : (theme.textColor || '#0f172a'),
+    colorSidebarBg: mode === 'dark' ? '#0f172a' : '#ffffff',
+    colorSidebarText: mode === 'dark' ? '#cbd5e1' : '#334155',
+  });
+}
+
+/** Merge Firestore tenant visuals (e.g. logo) with authoritative system `ThemeSettings`. */
+export function mergeTenantThemeForApply(tenant: TenantTheme, settings: ThemeSettings): TenantTheme {
+  const base = mapThemeSettingsToTenantTheme(settings);
+  return {
+    ...base,
+    logo: tenant.logo ?? base.logo,
+    backgroundStyle: tenant.backgroundStyle ?? base.backgroundStyle,
+    sidebarStyle: tenant.sidebarStyle ?? base.sidebarStyle,
+  };
+}
+
+/**
+ * Strips `/t/:tenantSlug` so overrides like `/inventory` match real URLs such as `/t/acme/inventory`.
+ */
+export function stripTenantSegmentFromPathname(pathname: string): string {
+  const stripped = pathname.replace(/^\/t\/[^/]+/, '');
+  if (stripped === '') return '/';
+  return stripped.startsWith('/') ? stripped : `/${stripped}`;
+}
+
+/** Longest-prefix match for per-route `pageLayoutOverrides` max-width. */
+export function resolveContentMaxWidthForPath(pathname: string, settings: ThemeSettings): string {
+  const base = (settings.contentMaxWidth ?? DEFAULT_THEME.contentMaxWidth ?? '1536px').trim();
+  const o = settings.pageLayoutOverrides;
+  if (!o || typeof o !== 'object') return base;
+
+  const candidates = Array.from(new Set([pathname, stripTenantSegmentFromPathname(pathname)]));
+  let best: string | undefined;
+  let bestLen = 0;
+  for (const path of candidates) {
+    for (const [prefix, w] of Object.entries(o)) {
+      if (!prefix || typeof w !== 'string') continue;
+      if (path.startsWith(prefix) && prefix.length > bestLen) {
+        best = w.trim();
+        bestLen = prefix.length;
+      }
+    }
+  }
+  return best || base;
+}
+
 export function readCachedTenantTheme(): TenantTheme | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -278,7 +362,80 @@ export function cacheTenantTheme(theme: TenantTheme) {
   }
 }
 
-export function applyTenantTheme(theme: TenantTheme) {
+let autoDarkModeCleanup: (() => void) | null = null;
+
+/** Re-run when `darkMode === 'auto'` and the OS color scheme changes. */
+export function bindAutoDarkModeListener(settings: ThemeSettings, onReapply: () => void) {
+  if (typeof window === 'undefined') return;
+  if (autoDarkModeCleanup) {
+    autoDarkModeCleanup();
+    autoDarkModeCleanup = null;
+  }
+  if (settings.darkMode !== 'auto') return;
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const handler = () => onReapply();
+  mq.addEventListener('change', handler);
+  autoDarkModeCleanup = () => mq.removeEventListener('change', handler);
+}
+
+function applyThemeSettingsCss(settings: ThemeSettings, tenantPreset: TenantTheme['preset']) {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const t = { ...DEFAULT_THEME, ...settings };
+  root.style.setProperty('--color-secondary', toRgbChannels(t.secondaryColor));
+  root.style.setProperty('--color-success', toRgbChannels(t.successColor));
+  root.style.setProperty('--color-warning', toRgbChannels(t.warningColor));
+  root.style.setProperty('--color-danger', toRgbChannels(t.dangerColor));
+  root.style.setProperty('--color-secondary-hex', t.secondaryColor);
+  root.style.setProperty('--color-success-hex', t.successColor);
+  root.style.setProperty('--color-warning-hex', t.warningColor);
+  root.style.setProperty('--color-danger-hex', t.dangerColor);
+  root.style.setProperty('--color-text-muted', t.mutedTextColor || (tenantPreset === 'dark' ? '#94a3b8' : '#64748b'));
+
+  const fontStack = `'${t.baseFontFamily}', 'Noto Sans Arabic', sans-serif`;
+  root.style.setProperty('--font-family-base', fontStack);
+
+  const densityFactor = t.density === 'compact' ? 0.92 : 1;
+  const fs = Math.max(10, Math.round(t.baseFontSize * densityFactor));
+  root.style.setProperty('--font-size-base', `${fs}px`);
+  root.style.setProperty('--font-size-sm', `${Math.max(10, fs - 1)}px`);
+  root.style.setProperty('--font-size-xs', `${Math.max(10, fs - 2)}px`);
+  root.style.setProperty('--font-size-2xs', `${Math.max(9, fs - 3)}px`);
+
+  const br = Number(t.borderRadius ?? 6);
+  root.style.setProperty('--border-radius-sm', `${Math.max(2, Math.round(br * 0.6))}px`);
+  root.style.setProperty('--border-radius-base', `${br}px`);
+  root.style.setProperty('--border-radius-lg', `${Math.round(br * 1.4)}px`);
+  root.style.setProperty('--border-radius-xl', `${Math.round(br * 2)}px`);
+  root.style.setProperty('--density-scale', t.density === 'compact' ? '0.92' : '1');
+
+  writeUiDensity(t.density);
+  applyUiDensity(t.density);
+  root.style.setProperty('--font-size-base', `${fs}px`);
+  root.style.setProperty('--font-size-sm', `${Math.max(10, fs - 1)}px`);
+  root.style.setProperty('--font-size-xs', `${Math.max(10, fs - 2)}px`);
+  root.style.setProperty('--font-size-2xs', `${Math.max(9, fs - 3)}px`);
+
+  if (t.cssVars) {
+    Object.entries(t.cssVars).forEach(([key, value]) => {
+      root.style.setProperty(key, value);
+    });
+  }
+
+  const isDark = tenantPreset === 'dark';
+  document.body.style.backgroundColor = isDark ? '#020617' : t.backgroundColor;
+
+  const cw = (t.contentMaxWidth ?? DEFAULT_THEME.contentMaxWidth ?? '1536px').trim();
+  root.style.setProperty('--content-max-width', cw);
+}
+
+/** Applies merged tenant colors + full `ThemeSettings` (typography, density, layout tokens). */
+export function applyAppTheme(tenant: TenantTheme, settings: ThemeSettings) {
+  const merged = mergeTenantThemeForApply(tenant, settings);
+  applyTenantTheme(merged, settings);
+}
+
+export function applyTenantTheme(theme: TenantTheme, themeSettings?: ThemeSettings | null) {
   const root = document.documentElement;
   root.style.setProperty('--color-bg', theme.colorBg);
   root.style.setProperty('--color-card', theme.colorCard);
@@ -308,6 +465,22 @@ export function applyTenantTheme(theme: TenantTheme) {
 
   root.classList.toggle('dark', theme.preset === 'dark');
   applyShadcnTokensFromTheme(theme, root);
+  if (themeSettings) {
+    applyThemeSettingsCss(themeSettings, theme.preset);
+  }
+}
+
+/** Writes `ThemeSettings` to `tenants/{id}` so cold start / cache align with system_settings. */
+export async function syncTenantThemeSnapshot(
+  tenantId: string | null | undefined,
+  theme: ThemeSettings,
+): Promise<void> {
+  if (!tenantId || !isConfigured) return;
+  try {
+    await updateDoc(doc(db, 'tenants', tenantId), { theme });
+  } catch (error) {
+    console.error('Failed to sync tenant theme snapshot:', error);
+  }
 }
 
 export async function loadTenantTheme(tenantId?: string | null): Promise<TenantTheme> {
@@ -318,8 +491,12 @@ export async function loadTenantTheme(tenantId?: string | null): Promise<TenantT
   try {
     const ref = doc(db, 'tenants', tenantId);
     const snapshot = await getDoc(ref);
-    const data = snapshot.data() as { theme?: Partial<TenantTheme> } | undefined;
-    return resolveTheme(data?.theme ?? null);
+    const data = snapshot.data() as { theme?: unknown } | undefined;
+    const raw = data?.theme;
+    if (isThemeSettingsRecord(raw)) {
+      return mapThemeSettingsToTenantTheme(raw);
+    }
+    return resolveTheme(raw as Partial<TenantTheme> | null);
   } catch (error) {
     console.error('Failed to load tenant theme:', error);
     return PRESETS['indigo-pro'];

@@ -68,6 +68,8 @@ export interface ApprovalHistoryEntry {
 
 export interface FirestoreApprovalRequest {
   id?: string;
+  /** Set on create for Firestore security rules (tenant isolation). */
+  tenantId?: string;
   requestType: ApprovalRequestType;
   employeeId: string;
   employeeName: string;

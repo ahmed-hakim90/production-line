@@ -1,7 +1,7 @@
 {
   "name": "hakimo-erp-production-management",
   "private": true,
-  "version": "4.0.81",
+  "version": "4.0.82",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +17,8 @@
     "text:mojibake:report": "node scripts/fix-mojibake.mjs",
     "text:mojibake:apply": "node scripts/fix-mojibake.mjs --apply",
     "text:arabic:apply": "node scripts/fix-mojibake.mjs --apply-arabic",
-    "push": "git push"
+    "push": "git push",
+    "backup:sanitize": "node scripts/sanitize-backup.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

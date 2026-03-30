@@ -15,6 +15,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import {
   leaveRequestsRef,
   leaveBalancesRef,
@@ -111,6 +112,7 @@ export const leaveBalanceService = {
 
     const docRef = await addDoc(leaveBalancesRef(), {
       employeeId,
+      tenantId: getCurrentTenantId(),
       ...DEFAULT_LEAVE_BALANCE,
       lastUpdated: serverTimestamp(),
     });
@@ -265,6 +267,7 @@ export const leaveRequestService = {
     if (!isConfigured) return '';
     const docRef = await addDoc(leaveRequestsRef(), {
       ...data,
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
     });
     return docRef.id;

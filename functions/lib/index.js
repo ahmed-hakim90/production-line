@@ -6,6 +6,9 @@ import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/fire
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
+import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
+import { deleteTenantCascade } from './tenantDeleteCascade.js';
+import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRestore.js';
 initializeApp();
 const db = getFirestore();
 const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
@@ -742,6 +745,121 @@ export const getTenantFirestoreFootprint = onCall({
         avgDocBytesAssumption: TENANT_FOOTPRINT_AVG_DOC_BYTES,
         usageNoteAr: 'فوترة Firebase تُحسب على مستوى المشروع بالكامل (قراءات، كتابات، تخزين، شبكة). الأرقام هنا من استعلامات عدّ المستندات ذات tenantId. حجم التخزين تقدير تقريبي ولا يعكس الفوترة الفعلية.',
     };
+});
+/** Super-admin: export one tenant backup JSON (same shape as client backup file). */
+export const exportTenantBackup = onCall({
+    region: 'us-central1',
+    memory: '2GiB',
+    timeoutSeconds: 300,
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    await assertSuperAdmin(requesterUid);
+    const tenantId = String(request.data?.tenantId || '').trim();
+    if (!tenantId) {
+        throw new HttpsError('invalid-argument', 'يجب تمرير tenantId.');
+    }
+    const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+    if (!tenantSnap.exists) {
+        throw new HttpsError('not-found', 'الشركة غير موجودة.');
+    }
+    const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const requesterEmail = String(requesterSnap.data()?.email || '').trim();
+    const createdBy = requesterEmail || requesterUid;
+    try {
+        const backup = await buildTenantBackup(db, tenantId, createdBy);
+        assertBackupJsonSize(backup);
+        return { backup };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : 'فشل بناء النسخة الاحتياطية.';
+        if (msg.includes('كبيرة جداً')) {
+            throw new HttpsError('resource-exhausted', msg);
+        }
+        throw new HttpsError('internal', msg);
+    }
+});
+/** Super-admin: delete all tenant data in Firestore + Auth users for that tenant. */
+export const adminDeleteTenantCascade = onCall({
+    region: 'us-central1',
+    memory: '1GiB',
+    timeoutSeconds: 540,
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    await assertSuperAdmin(requesterUid);
+    const tenantId = String(request.data?.tenantId || '').trim();
+    const confirmPhrase = String(request.data?.confirmPhrase || '').trim();
+    if (!tenantId) {
+        throw new HttpsError('invalid-argument', 'يجب تمرير tenantId.');
+    }
+    const expected = `DELETE_TENANT_${tenantId}`;
+    if (confirmPhrase !== expected) {
+        throw new HttpsError('invalid-argument', `يجب إدخال نص التأكيد بالضبط: ${expected}`);
+    }
+    const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+    if (!tenantSnap.exists) {
+        throw new HttpsError('not-found', 'الشركة غير موجودة.');
+    }
+    const t = tenantSnap.data();
+    const slug = String(t.slug || '').trim().toLowerCase();
+    try {
+        const result = await deleteTenantCascade(db, tenantId, slug);
+        return { ok: true, ...result };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : 'فشل الحذف.';
+        throw new HttpsError('internal', msg);
+    }
+});
+const MAX_IMPORT_BACKUP_JSON_CHARS = 31 * 1024 * 1024;
+/** Super-admin: restore Firestore from backup JSON (Admin SDK — bypasses client security rules). */
+export const importTenantBackup = onCall({
+    region: 'us-central1',
+    memory: '2GiB',
+    timeoutSeconds: 540,
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    await assertSuperAdmin(requesterUid);
+    const data = request.data;
+    const mode = String(data?.mode || 'merge').trim();
+    if (!['merge', 'replace', 'full_reset'].includes(mode)) {
+        throw new HttpsError('invalid-argument', 'وضع الاستعادة غير صالح.');
+    }
+    const backup = data?.backup;
+    if (!backup || typeof backup !== 'object') {
+        throw new HttpsError('invalid-argument', 'يجب تمرير backup.');
+    }
+    const jsonLen = JSON.stringify(backup).length;
+    if (jsonLen > MAX_IMPORT_BACKUP_JSON_CHARS) {
+        throw new HttpsError('resource-exhausted', 'حجم النسخة كبير جداً لإرسالها عبر هذه الدالة. جرّب الاستعادة من العميل مع تفعيل «تخطي النسخة التلقائية» أو قسّم البيانات.');
+    }
+    const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const createdBy = String(requesterSnap.data()?.email || requesterUid);
+    try {
+        const restored = await runAdminImportBackup(db, backup, mode);
+        const tenantIdForHistory = String(data?.tenantIdForHistory || '').trim();
+        await saveAdminImportHistory(db, {
+            tenantId: tenantIdForHistory || undefined,
+            mode,
+            restored,
+            collectionNames: Object.keys(backup.collections || {}),
+            createdBy,
+            fileMetadataType: String(backup.metadata?.type || ''),
+        });
+        return { success: true, restored };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : 'فشلت الاستعادة';
+        throw new HttpsError('internal', msg);
+    }
 });
 /** Public: resolve tenant slug before login (client cannot read tenant_slugs without auth). */
 export const resolveTenantSlug = onCall({

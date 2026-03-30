@@ -3,7 +3,6 @@ import { Card, Button } from '../UI';
 import type {
   BackupFile,
   BackupHistoryEntry,
-  FirebaseUsageEstimate,
   RestoreMode,
 } from '../../../../services/backupService';
 
@@ -12,16 +11,7 @@ type BackupRestoreSectionProps = {
   backupMessage: { type: 'success' | 'error'; text: string } | null;
   setBackupMessage: React.Dispatch<React.SetStateAction<{ type: 'success' | 'error'; text: string } | null>>;
   backupProgress: { step: string; percent: number } | null;
-  loadFirebaseUsage: () => Promise<void>;
-  firebaseUsageLoading: boolean;
   backupLoading: boolean;
-  firebaseUsage: FirebaseUsageEstimate | null;
-  projectId: string;
-  firebaseUsageError: string;
-  formatBytes: (bytes: number) => string;
-  firestoreRemainingBytes: number;
-  firestoreUsagePercent: number;
-  sparkDaily: { reads: number; writes: number; deletes: number };
   handleExportFull: () => Promise<void>;
   selectedMonth: string;
   setSelectedMonth: React.Dispatch<React.SetStateAction<string>>;
@@ -41,6 +31,11 @@ type BackupRestoreSectionProps = {
   backupHistory: BackupHistoryEntry[];
   showConfirmRestore: boolean;
   handleRestore: () => Promise<void>;
+  skipAutoBackupBeforeRestore: boolean;
+  setSkipAutoBackupBeforeRestore: React.Dispatch<React.SetStateAction<boolean>>;
+  useServerImport: boolean;
+  setUseServerImport: React.Dispatch<React.SetStateAction<boolean>>;
+  isSuperAdmin: boolean;
 };
 
 export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
@@ -48,16 +43,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
   backupMessage,
   setBackupMessage,
   backupProgress,
-  loadFirebaseUsage,
-  firebaseUsageLoading,
   backupLoading,
-  firebaseUsage,
-  projectId,
-  firebaseUsageError,
-  formatBytes,
-  firestoreRemainingBytes,
-  firestoreUsagePercent,
-  sparkDaily,
   handleExportFull,
   selectedMonth,
   setSelectedMonth,
@@ -77,6 +63,11 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
   backupHistory,
   showConfirmRestore,
   handleRestore,
+  skipAutoBackupBeforeRestore,
+  setSkipAutoBackupBeforeRestore,
+  useServerImport,
+  setUseServerImport,
+  isSuperAdmin,
 }) => {
   if (!isAdmin) return null;
 
@@ -115,76 +106,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
           </div>
         </div>
       )}
-
-      <Card title="استهلاك Firebase (تقديري)">
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <Button onClick={loadFirebaseUsage} disabled={firebaseUsageLoading || backupLoading}>
-              {firebaseUsageLoading && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              <span className="material-icons-round text-sm">monitoring</span>
-              تحديث الاستهلاك
-            </Button>
-            {firebaseUsage?.generatedAt && (
-              <p className="text-xs text-slate-400">
-                آخر تحديث: {new Date(firebaseUsage.generatedAt).toLocaleString('ar-EG')}
-              </p>
-            )}
-            {projectId && (
-              <a
-                href={`https://console.firebase.google.com/project/${projectId}/usage`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-bold text-primary hover:underline"
-              >
-                فتح Firebase Console Usage
-              </a>
-            )}
-          </div>
-
-          {firebaseUsageError && (
-            <div className="px-4 py-3 rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 text-rose-700 text-sm font-bold">
-              {firebaseUsageError}
-            </div>
-          )}
-
-          {firebaseUsage && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60">
-                  <p className="text-[11px] text-slate-400">إجمالي المستندات</p>
-                  <p className="text-lg font-bold text-[var(--color-text)]">{firebaseUsage.totalDocuments.toLocaleString('ar-EG')}</p>
-                </div>
-                <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60">
-                  <p className="text-[11px] text-slate-400">الحجم التقديري الحالي</p>
-                  <p className="text-lg font-bold text-[var(--color-text)]">{formatBytes(firebaseUsage.estimatedBytes)}</p>
-                </div>
-                <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60">
-                  <p className="text-[11px] text-slate-400">المتبقي من Firestore المجاني</p>
-                  <p className="text-lg font-bold text-emerald-600">{formatBytes(firestoreRemainingBytes)}</p>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-bold text-slate-500">استهلاك مساحة Firestore المجانية (1 GiB)</p>
-                  <p className="text-xs font-bold text-[var(--color-text-muted)]">{firestoreUsagePercent.toFixed(1)}%</p>
-                </div>
-                <div className="w-full h-2.5 bg-[#f0f2f5] rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${firestoreUsagePercent}%` }} />
-                </div>
-              </div>
-
-              <div className="p-3 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 text-xs text-amber-700 space-y-1">
-                <p className="font-bold">حدود Spark اليومية (Firestore)</p>
-                <p>Reads: {sparkDaily.reads.toLocaleString('ar-EG')} / اليوم</p>
-                <p>Writes: {sparkDaily.writes.toLocaleString('ar-EG')} / اليوم</p>
-                <p>Deletes: {sparkDaily.deletes.toLocaleString('ar-EG')} / اليوم</p>
-                <p className="pt-1">مهم: العدادات اليومية الفعلية (Reads/Writes/Deletes) لا يتيحها Firebase Web SDK مباشرة؛ راجعها بدقة من Firebase Console.</p>
-              </div>
-            </>
-          )}
-        </div>
-      </Card>
 
       <Card title="تصدير نسخة احتياطية">
         <div className="space-y-4">
@@ -427,10 +348,49 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 }`}>
                   <span className="material-icons-round text-lg">warning</span>
                   {restoreMode === 'full_reset'
-                    ? 'تحذير: سيتم حذف جميع البيانات الحالية واستبدالها. سيتم إنشاء نسخة احتياطية تلقائية أولاً.'
-                    : 'تحذير: سيتم استبدال المجموعات المشمولة. سيتم إنشاء نسخة احتياطية تلقائية أولاً.'}
+                    ? useServerImport
+                      ? 'تحذير: سيتم حذف جميع البيانات الحالية واستبدالها بالنسخة الاحتياطية (عبر الخادم).'
+                      : skipAutoBackupBeforeRestore
+                        ? 'تحذير: سيتم حذف جميع البيانات الحالية واستبدالها. تم تخطي النسخة التلقائية — لا يوجد احتياطي تلقائي قبل الاستعادة.'
+                        : 'تحذير: سيتم حذف جميع البيانات الحالية واستبدالها بالنسخة الاحتياطية. سيتم إنشاء نسخة احتياطية تلقائية أولاً.'
+                    : useServerImport
+                      ? 'تحذير: سيتم استبدال المجموعات المشمولة (عبر الخادم).'
+                      : skipAutoBackupBeforeRestore
+                        ? 'تحذير: سيتم استبدال المجموعات المشمولة. تم تخطي النسخة التلقائية — لا يوجد احتياطي تلقائي قبل الاستعادة.'
+                        : 'تحذير: سيتم استبدال المجموعات المشمولة. سيتم إنشاء نسخة احتياطية تلقائية أولاً.'}
                 </div>
               )}
+
+              <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 bg-[var(--color-muted)]/10">
+                <p className="text-sm font-bold text-[var(--color-text)]">خيارات الاستعادة</p>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 rounded border-[var(--color-border)]"
+                    checked={skipAutoBackupBeforeRestore}
+                    disabled={backupLoading || useServerImport}
+                    onChange={(e) => setSkipAutoBackupBeforeRestore(e.target.checked)}
+                  />
+                  <span className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+                    تخطي النسخة الاحتياطية التلقائية قبل الاستعادة (مفيد عند فشل التصدير أو صلاحيات القراءة).
+                    {useServerImport ? ' (غير مُستخدم عند الاستعادة عبر الخادم.)' : ''}
+                  </span>
+                </label>
+                {isSuperAdmin ? (
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1 rounded border-[var(--color-border)]"
+                      checked={useServerImport}
+                      disabled={backupLoading}
+                      onChange={(e) => setUseServerImport(e.target.checked)}
+                    />
+                    <span className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+                      استعادة عبر الخادم (للمشرف العام): تستخدم Admin SDK وتتجاوز قواعد الأمان للعميل — مناسبة لـ users/roles ونسخ كاملة.
+                    </span>
+                  </label>
+                ) : null}
+              </div>
 
               <div className="flex justify-end">
                 <Button
@@ -454,7 +414,9 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               <span className="material-icons-round text-emerald-600">shield</span>
               <span className="text-sm font-bold text-emerald-700">نسخ تلقائي</span>
             </div>
-            <p className="text-xs text-emerald-600/80">يتم إنشاء نسخة احتياطية كاملة تلقائياً قبل أي عملية استعادة</p>
+            <p className="text-xs text-emerald-600/80">
+              يُفضّل إنشاء نسخة احتياطية كاملة تلقائياً قبل الاستعادة؛ يمكنك تخطيه من «خيارات الاستعادة» إذا فشل التصدير أو صلاحيات القراءة.
+            </p>
           </div>
           <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] border border-blue-200 dark:border-blue-800">
             <div className="flex items-center gap-2 mb-2">
@@ -560,7 +522,11 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               </p>
               <p className="text-xs text-[var(--color-text-muted)] mb-6 flex items-center justify-center gap-1">
                 <span className="material-icons-round text-xs">info</span>
-                سيتم إنشاء نسخة احتياطية تلقائية قبل البدء
+                {useServerImport
+                  ? 'ستتم الاستعادة عبر الخادم (Admin SDK) — بدون نسخة تلقائية من المتصفح.'
+                  : skipAutoBackupBeforeRestore
+                    ? 'تم اختيار تخطي النسخة التلقائية — لا يوجد احتياطي تلقائي قبل الاستعادة.'
+                    : 'سيتم إنشاء نسخة احتياطية تلقائية من المتصفح قبل البدء (إن لم يُختر التخطي).'}
               </p>
               <div className="flex items-center gap-3 justify-center">
                 <button

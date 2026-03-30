@@ -8,8 +8,21 @@ import {
 import { userService } from '../../../services/userService';
 import { roleService } from '../../system/services/roleService';
 import type { FirestoreRole, FirestoreTenant, FirestoreUser } from '../../../types';
+import {
+  exportTenantBackupCallable,
+  adminDeleteTenantCascadeCallable,
+} from '../../../modules/auth/services/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -81,11 +94,23 @@ export const TenantInsightsPage: React.FC = () => {
   const [roleDraft, setRoleDraft] = useState<Record<string, string>>({});
   const [busyRoleTenantId, setBusyRoleTenantId] = useState<string | null>(null);
   const [roleSaveError, setRoleSaveError] = useState<Record<string, string>>({});
+  const [busyTenantAction, setBusyTenantAction] = useState<string | null>(null);
+  const [platformMessage, setPlatformMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(
+    null,
+  );
+  const [registryDialog, setRegistryDialog] = useState<(FirestoreTenant & { id: string }) | null>(
+    null,
+  );
+  const [cascadeDialog, setCascadeDialog] = useState<(FirestoreTenant & { id: string }) | null>(null);
+  const [cascadeConfirm, setCascadeConfirm] = useState('');
 
   const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || '';
   const usageConsoleUrl = projectId
     ? `https://console.firebase.google.com/project/${projectId}/usage`
     : 'https://console.firebase.google.com/';
+  const firestoreExportUrl = projectId
+    ? `https://console.cloud.google.com/firestore/databases/-default-/import-export?project=${projectId}`
+    : 'https://console.cloud.google.com/firestore';
 
   const loadTenants = useCallback(async () => {
     setListLoading(true);
@@ -216,6 +241,116 @@ export const TenantInsightsPage: React.FC = () => {
     }
   };
 
+  const downloadJsonFile = (data: unknown, fileName: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleToggleTenantStatus = async (t: FirestoreTenant & { id: string }) => {
+    const cur = String(t.status || '').toLowerCase();
+    const next: FirestoreTenant['status'] = cur === 'suspended' ? 'active' : 'suspended';
+    setBusyTenantAction(`status:${t.id}`);
+    setPlatformMessage(null);
+    try {
+      await tenantService.updateTenantStatus(t.id, next);
+      setTenants((prev) =>
+        prev.map((row) => (row.id === t.id ? { ...row, status: next } : row)),
+      );
+      setPlatformMessage({
+        type: 'ok',
+        text: next === 'suspended' ? 'تم تعطيل الشركة.' : 'تم تفعيل الشركة.',
+      });
+    } catch (e: unknown) {
+      setPlatformMessage({
+        type: 'err',
+        text: e instanceof Error ? e.message : 'تعذر تحديث حالة الشركة.',
+      });
+    } finally {
+      setBusyTenantAction(null);
+    }
+  };
+
+  const handleExportTenantBackup = async (t: FirestoreTenant & { id: string }) => {
+    setBusyTenantAction(`backup:${t.id}`);
+    setPlatformMessage(null);
+    try {
+      const backup = await exportTenantBackupCallable(t.id);
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const slug = String(t.slug || 'tenant').replace(/[^a-z0-9_-]/gi, '_');
+      downloadJsonFile(backup, `backup_full_${slug}_${ts}.json`);
+      setPlatformMessage({ type: 'ok', text: 'تم تنزيل النسخة الاحتياطية للشركة.' });
+    } catch (e: unknown) {
+      setPlatformMessage({
+        type: 'err',
+        text: e instanceof Error ? e.message : 'فشل تصدير النسخة الاحتياطية.',
+      });
+    } finally {
+      setBusyTenantAction(null);
+    }
+  };
+
+  const handleConfirmDeleteRegistry = async () => {
+    if (!registryDialog) return;
+    const tenantId = registryDialog.id;
+    setBusyTenantAction(`registry:${tenantId}`);
+    setPlatformMessage(null);
+    try {
+      await tenantService.deleteTenantRegistryOnly(tenantId);
+      setRegistryDialog(null);
+      setTenants((prev) => prev.filter((x) => x.id !== tenantId));
+      setPlatformMessage({
+        type: 'ok',
+        text: 'تم حذف سجل الشركة والرابط. بيانات Firestore للشركة ما زالت موجودة إن لم تُحذف يدوياً.',
+      });
+    } catch (e: unknown) {
+      setPlatformMessage({
+        type: 'err',
+        text: e instanceof Error ? e.message : 'تعذر حذف السجل.',
+      });
+    } finally {
+      setBusyTenantAction(null);
+    }
+  };
+
+  const handleConfirmCascadeDelete = async () => {
+    if (!cascadeDialog) return;
+    const tenantId = cascadeDialog.id;
+    const expected = `DELETE_TENANT_${tenantId}`;
+    if (cascadeConfirm.trim() !== expected) {
+      setPlatformMessage({
+        type: 'err',
+        text: `يجب إدخال نص التأكيد بالضبط: ${expected}`,
+      });
+      return;
+    }
+    setBusyTenantAction(`cascade:${tenantId}`);
+    setPlatformMessage(null);
+    try {
+      const r = await adminDeleteTenantCascadeCallable(tenantId, cascadeConfirm.trim());
+      setCascadeDialog(null);
+      setCascadeConfirm('');
+      setTenants((prev) => prev.filter((x) => x.id !== tenantId));
+      setPlatformMessage({
+        type: 'ok',
+        text: `تم حذف بيانات الشركة من Firestore وحسابات المستخدمين المرتبطة. مستندات: ${r.deletedFirestoreDocs}، حسابات Auth: ${r.deletedAuthUsers}.`,
+      });
+    } catch (e: unknown) {
+      setPlatformMessage({
+        type: 'err',
+        text: e instanceof Error ? e.message : 'فشل الحذف الكامل.',
+      });
+    } finally {
+      setBusyTenantAction(null);
+    }
+  };
+
   const savePrimaryUserRole = async (tenantId: string, userId: string) => {
     const nextRole = roleDraft[tenantId];
     if (!nextRole) return;
@@ -271,6 +406,39 @@ export const TenantInsightsPage: React.FC = () => {
           </a>
         </div>
       </div>
+
+      <Card className="border-[var(--color-border)]">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">نسخة احتياطية لقاعدة Firestore بالكامل (المشروع)</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-[var(--color-text-muted)] space-y-2">
+          <p>
+            تصدير المشروع بالكامل يتم من Google Cloud (استيراد/تصدير مجدول أو لقطة إلى Cloud Storage)، وليس
+            كملف JSON واحد من المتصفح.
+          </p>
+          <a
+            href={firestoreExportUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-semibold text-[rgb(var(--color-primary))] hover:underline"
+          >
+            <span className="material-icons-round text-base">open_in_new</span>
+            فتح تصدير/استيراد Firestore في Google Cloud
+          </a>
+        </CardContent>
+      </Card>
+
+      {platformMessage ? (
+        <p
+          className={`text-sm rounded-md px-3 py-2 border ${
+            platformMessage.type === 'ok'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-700 border-rose-200'
+          }`}
+        >
+          {platformMessage.text}
+        </p>
+      ) : null}
 
       {listError ? (
         <p className="text-sm text-rose-600">{listError}</p>
@@ -342,6 +510,54 @@ export const TenantInsightsPage: React.FC = () => {
                       {fullUrl}
                     </p>
                   ) : null}
+                  <div className="flex flex-wrap gap-2 pt-3 mt-2 border-t border-[var(--color-border)]">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busyTenantAction !== null}
+                      onClick={() => void handleToggleTenantStatus(t)}
+                    >
+                      {busyTenantAction === `status:${t.id}` ? (
+                        <span className="material-icons-round animate-spin text-sm ml-1">progress_activity</span>
+                      ) : null}
+                      {String(t.status || '').toLowerCase() === 'suspended' ? 'تفعيل الشركة' : 'تعطيل الشركة'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busyTenantAction !== null}
+                      onClick={() => void handleExportTenantBackup(t)}
+                    >
+                      {busyTenantAction === `backup:${t.id}` ? (
+                        <span className="material-icons-round animate-spin text-sm ml-1">progress_activity</span>
+                      ) : null}
+                      نسخة احتياطية JSON
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-amber-900 border-amber-300"
+                      disabled={busyTenantAction !== null}
+                      onClick={() => setRegistryDialog(t)}
+                    >
+                      حذف السجل فقط
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={busyTenantAction !== null}
+                      onClick={() => {
+                        setCascadeConfirm('');
+                        setCascadeDialog(t);
+                      }}
+                    >
+                      حذف كامل للبيانات
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
                   {meta.kind === 'loading' ? (
@@ -541,6 +757,89 @@ export const TenantInsightsPage: React.FC = () => {
           })}
         </div>
       )}
+
+      <Dialog open={registryDialog !== null} onOpenChange={(open) => !open && setRegistryDialog(null)}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>حذف سجل الشركة</DialogTitle>
+            <DialogDescription className="text-right leading-relaxed">
+              سيتم حذف مستند الشركة في tenants والرابط في tenant_slugs فقط. بيانات العمل (المنتجات،
+              الموظفين، وغيرها) تبقى في Firestore ما لم تُحذف عبر «حذف كامل للبيانات».
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setRegistryDialog(null)}>
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busyTenantAction !== null}
+              onClick={() => void handleConfirmDeleteRegistry()}
+            >
+              تأكيد حذف السجل
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={cascadeDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCascadeDialog(null);
+            setCascadeConfirm('');
+          }
+        }}
+      >
+        <DialogContent dir="rtl" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>حذف كامل لبيانات الشركة</DialogTitle>
+            <DialogDescription className="text-right space-y-2 leading-relaxed">
+              <span className="block">
+                سيتم حذف مستندات Firestore المرتبطة بهذا المستأجر وحسابات Firebase Auth للمستخدمين
+                التابعين لهذه الشركة. لا يمكن التراجع.
+              </span>
+              {cascadeDialog ? (
+                <span className="block font-mono text-[11px] dir-ltr text-[var(--color-text)]" dir="ltr">
+                  أدخل بالضبط: DELETE_TENANT_{cascadeDialog.id}
+                </span>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={cascadeConfirm}
+            onChange={(e) => setCascadeConfirm(e.target.value)}
+            placeholder="نص التأكيد"
+            className="font-mono text-xs dir-ltr"
+            dir="ltr"
+            autoComplete="off"
+          />
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCascadeDialog(null);
+                setCascadeConfirm('');
+              }}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busyTenantAction !== null}
+              onClick={() => void handleConfirmCascadeDelete()}
+            >
+              {busyTenantAction?.startsWith('cascade:') ? (
+                <span className="material-icons-round animate-spin text-sm ml-1">progress_activity</span>
+              ) : null}
+              حذف نهائي
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

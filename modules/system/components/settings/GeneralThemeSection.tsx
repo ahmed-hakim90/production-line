@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../UI';
+import { resolveContentMaxWidthForPath } from '@/core/ui-engine/theme/tenantTheme';
 import type { ThemeSettings } from '../../../../types';
 
 type ThemePresetOption = {
@@ -33,6 +34,18 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
   fontFamilies,
   defaultTheme,
 }) => {
+  const [previewPath, setPreviewPath] = useState('/');
+  const previewMaxWidth = useMemo(
+    () => resolveContentMaxWidthForPath(previewPath, localTheme),
+    [previewPath, localTheme],
+  );
+
+  useEffect(() => {
+    if (previewPath === '/') return;
+    const keys = Object.keys(localTheme.pageLayoutOverrides ?? {});
+    if (!keys.includes(previewPath)) setPreviewPath('/');
+  }, [localTheme.pageLayoutOverrides, previewPath]);
+
   if (!isAdmin) return null;
 
   return (
@@ -373,11 +386,159 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           </div>
         </div>
 
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-icons-round text-primary text-lg">aspect_ratio</span>
+            <p className="text-sm font-bold text-[var(--color-text)]">التخطيط وعرض المحتوى</p>
+            <span className="text-xs text-[var(--color-text-muted)] font-medium">— عرض الحاوية الرئيسية وتخصيص حسب المسار</span>
+          </div>
+          <div className="space-y-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+            <div>
+              <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">أقصى عرض للمحتوى</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] mb-2">قيمة CSS (مثل 1536px أو 100%). تُطبَّق على المنطقة أسفل الشريط العلوي.</p>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {(['1536px', '1280px', '1200px', '100%'] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setLocalTheme((p) => ({ ...p, contentMaxWidth: preset }))}
+                    className={[
+                      'px-2.5 py-1 text-[11px] font-semibold rounded border transition-all',
+                      (localTheme.contentMaxWidth ?? '1536px') === preset
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40',
+                    ].join(' ')}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                dir="ltr"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-xs font-mono py-2 px-3 outline-none focus:border-primary bg-[var(--color-card)] text-[var(--color-text)]"
+                placeholder="1536px"
+                value={localTheme.contentMaxWidth ?? ''}
+                onChange={(e) => setLocalTheme((p) => ({ ...p, contentMaxWidth: e.target.value.trim() || undefined }))}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div>
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">استثناءات حسب المسار</p>
+                  <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                    بادئة المسار بعد معرّف المستأجر — مثال: <span dir="ltr">/inventory</span> يطابق{' '}
+                    <span dir="ltr">/t/your-slug/inventory</span>. يمكن أيضاً استخدام المسار الكامل إن رغبت.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLocalTheme((p) => {
+                      const o = { ...(p.pageLayoutOverrides ?? {}) };
+                      const n = Object.keys(o).length + 1;
+                      const k = `/section-${n}`;
+                      o[k] = p.contentMaxWidth ?? '1536px';
+                      return { ...p, pageLayoutOverrides: o };
+                    })
+                  }
+                  className="text-xs font-bold text-primary hover:underline shrink-0"
+                >
+                  + إضافة صف
+                </button>
+              </div>
+              <div className="space-y-2">
+                {Object.entries(localTheme.pageLayoutOverrides ?? {}).length === 0 ? (
+                  <p className="text-[11px] text-[var(--color-text-muted)]">لا توجد استثناءات — يُستخدم أقصى العرض العام فقط.</p>
+                ) : (
+                  Object.entries(localTheme.pageLayoutOverrides ?? {}).map(([prefix, width], idx) => (
+                    <div key={`${idx}-${prefix}`} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                      <input
+                        type="text"
+                        dir="ltr"
+                        className="flex-1 min-w-0 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-xs font-mono py-1.5 px-2 outline-none focus:border-primary bg-[var(--color-card)]"
+                        placeholder="/path-prefix"
+                        value={prefix}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setLocalTheme((p) => {
+                            const o = { ...(p.pageLayoutOverrides ?? {}) };
+                            delete o[prefix];
+                            if (next.trim()) o[next.trim()] = width;
+                            return { ...p, pageLayoutOverrides: o };
+                          });
+                        }}
+                      />
+                      <input
+                        type="text"
+                        dir="ltr"
+                        className="sm:w-36 border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-xs font-mono py-1.5 px-2 outline-none focus:border-primary bg-[var(--color-card)]"
+                        placeholder="1400px"
+                        value={width}
+                        onChange={(e) => {
+                          const w = e.target.value;
+                          setLocalTheme((p) => ({
+                            ...p,
+                            pageLayoutOverrides: { ...(p.pageLayoutOverrides ?? {}), [prefix]: w },
+                          }));
+                        }}
+                      />
+                      <button
+                        type="button"
+                        title="حذف"
+                        onClick={() =>
+                          setLocalTheme((p) => {
+                            const o = { ...(p.pageLayoutOverrides ?? {}) };
+                            delete o[prefix];
+                            return { ...p, pageLayoutOverrides: Object.keys(o).length ? o : {} };
+                          })
+                        }
+                        className="p-2 rounded-[var(--border-radius-base)] text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 shrink-0"
+                      >
+                        <span className="material-icons-round text-base">close</span>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
           <p className="text-xs font-bold text-[var(--color-text-muted)] px-4 py-2.5 bg-[var(--color-bg)] border-b border-[var(--color-border)]">
             معاينة مباشرة
           </p>
           <div className="p-4" style={{ backgroundColor: localTheme.backgroundColor }}>
+            <div className="flex flex-col gap-2 mb-3">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-text-muted)]">
+                <span className="font-bold text-[var(--color-text)]">محاكاة عرض الصفحة</span>
+                <label className="flex items-center gap-1.5">
+                  <span>مسار:</span>
+                  <select
+                    dir="ltr"
+                    className="text-[11px] font-mono border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] text-[var(--color-text)] py-1 px-2 max-w-[min(100%,220px)]"
+                    value={previewPath}
+                    onChange={(e) => setPreviewPath(e.target.value)}
+                  >
+                    <option value="/">/ (افتراضي)</option>
+                    {Object.keys(localTheme.pageLayoutOverrides ?? {}).map((k) => (
+                      <option key={k} value={k}>
+                        {k}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span dir="ltr" className="font-mono text-[var(--color-text)]">
+                  max-width: {previewMaxWidth}
+                </span>
+              </div>
+            </div>
+            <div
+              className="mx-auto w-full transition-[max-width] duration-200"
+              style={{ maxWidth: `min(100%, ${previewMaxWidth})` }}
+            >
             <div className="rounded-[var(--border-radius-lg)] mb-3 px-4 py-2.5 flex items-center justify-between"
               style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
               <div className="erp-page-actions">
@@ -431,6 +592,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: localTheme.dangerColor }} />
                 خطر
               </div>
+            </div>
             </div>
           </div>
         </div>

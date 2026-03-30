@@ -66,6 +66,7 @@ import { laborSettingsService } from '../modules/costs/services/laborSettingsSer
 import { monthlyProductionCostService } from '../modules/costs/services/monthlyProductionCostService';
 import { roleService } from '../modules/system/services/roleService';
 import { userService } from '../services/userService';
+import { tenantService } from '../services/tenantService';
 import { activityLogService } from '../modules/system/services/activityLogService';
 import { systemSettingsService } from '../modules/system/services/systemSettingsService';
 import { scanEventService } from '../modules/production/services/scanEventService';
@@ -80,7 +81,14 @@ import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
-import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
+import { DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
+import {
+  applyAppTheme,
+  cacheTenantTheme,
+  loadTenantTheme,
+  mergeTenantThemeForApply,
+  syncTenantThemeSnapshot,
+} from '../core/ui-engine/theme/tenantTheme';
 import {
   buildProducts,
   buildProductionLines,
@@ -532,6 +540,8 @@ interface AppState {
   userEmail: string | null;
   userDisplayName: string | null;
   userProfile: FirestoreUser | null;
+  /** من مستند tenants/{id}.name — بيانات الشركة */
+  tenantCompanyName: string;
 
   // Dynamic RBAC
   roles: FirestoreRole[];
@@ -820,6 +830,19 @@ function invalidateProductionReportsRangeCacheForDates(
 // Flag to prevent onAuthStateChanged from running initializeApp during admin user creation
 let _creatingUser = false;
 
+function reapplyThemeFromAppStore(get: () => AppState, options?: { syncTenantDoc?: boolean }) {
+  const theme = get().systemSettings?.theme ?? DEFAULT_THEME;
+  const tenantId = get().userProfile?.tenantId;
+  if (options?.syncTenantDoc) {
+    void syncTenantThemeSnapshot(tenantId, theme);
+  }
+  void loadTenantTheme(tenantId).then((tt) => {
+    const m = mergeTenantThemeForApply(tt, theme);
+    applyAppTheme(m, theme);
+    cacheTenantTheme(m);
+  });
+}
+
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -873,6 +896,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   userEmail: null,
   userDisplayName: null,
   userProfile: null,
+  tenantCompanyName: '',
 
   // Dynamic RBAC defaults (empty until login)
   roles: [],
@@ -991,6 +1015,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       userEmail: null,
       userDisplayName: null,
       userProfile: null,
+      tenantCompanyName: '',
       userRoleId: '',
       userRoleName: '',
       userRoleColor: '',
@@ -1161,23 +1186,40 @@ export const useAppStore = create<AppState>((set, get) => ({
   _loadAppData: async () => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, productionPlanFollowUps, workOrders, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
-      await Promise.all([
-        productService.getAll(),
-        lineService.getAll(),
-        employeeService.getAll(),
-        lineProductConfigService.getAll(),
-        productionPlanService.getAll(),
-        productionPlanFollowUpService.getAll(),
-        workOrderService.getAll(),
-        costCenterService.getAll(),
-        costCenterValueService.getAll(),
-        costAllocationService.getAll(),
-        laborSettingsService.get(),
-        assetService.getAll(),
-        assetDepreciationService.getByPeriod(currentMonth),
-        systemSettingsService.get(),
-      ]);
+    const tenantId = get().userProfile?.tenantId;
+    const [
+      rawProducts,
+      rawLines,
+      rawEmployees,
+      configs,
+      productionPlans,
+      productionPlanFollowUps,
+      workOrders,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      laborSettings,
+      assets,
+      assetDepreciations,
+      systemSettingsRaw,
+      tenantDoc,
+    ] = await Promise.all([
+      productService.getAll(),
+      lineService.getAll(),
+      employeeService.getAll(),
+      lineProductConfigService.getAll(),
+      productionPlanService.getAll(),
+      productionPlanFollowUpService.getAll(),
+      workOrderService.getAll(),
+      costCenterService.getAll(),
+      costCenterValueService.getAll(),
+      costAllocationService.getAll(),
+      laborSettingsService.get(),
+      assetService.getAll(),
+      assetDepreciationService.getByPeriod(currentMonth),
+      systemSettingsService.get(),
+      tenantId ? tenantService.getById(tenantId) : Promise.resolve(null),
+    ]);
 
     const today = getOperationalDateString(8);
     const { start: monthStart, end: monthEnd } = getMonthDateRange();
@@ -1269,8 +1311,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       assets,
       assetDepreciations,
       systemSettings: mergedSettings,
+      tenantCompanyName: tenantDoc?.name?.trim() ?? '',
     });
 
+    reapplyThemeFromAppStore(get);
 
     const allReports = todayReports;
     const products = buildProducts(rawProducts, allReports, configs);
@@ -3892,6 +3936,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         };
         set({ systemSettings: merged });
+        reapplyThemeFromAppStore(get);
         await get().fetchProducts();
       }
     } catch (error) {
@@ -3911,6 +3956,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
       await systemSettingsService.set(merged);
       set({ systemSettings: merged });
+      reapplyThemeFromAppStore(get, { syncTenantDoc: true });
       await get().fetchProducts();
     } catch (error) {
       const message = (error as Error).message;

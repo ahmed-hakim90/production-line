@@ -52,6 +52,7 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
         address: address.trim(),
         ...(existingTheme ? { theme: existingTheme } : {}),
       });
+      useAppStore.setState({ tenantCompanyName: name.trim() });
     } catch (e: any) {
       setErr(e?.message || 'فشل الحفظ');
     } finally {

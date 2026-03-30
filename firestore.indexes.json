@@ -1,6 +1,34 @@
 {
   "indexes": [
     {
+      "collectionGroup": "backups",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "product_materials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "productId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "production_reports",
       "queryScope": "COLLECTION",
       "fields": [
