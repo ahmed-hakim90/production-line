@@ -1,7 +1,7 @@
 {
   "mode": "report",
   "root": "D:\\hakim\\dev\\pro-tech-erp-production-management",
-  "scannedFiles": 546,
+  "scannedFiles": 556,
   "files": [
     {
       "rel": "scripts/fix-modules-arabic-smart.mjs",
@@ -34,49 +34,62 @@
     },
     {
       "rel": "scripts/fix-mojibake.report.json",
-      "safeMatches": [],
+      "safeMatches": [
+        {
+          "label": "emDash_mojibake",
+          "count": 2
+        },
+        {
+          "label": "enDash_mojibake",
+          "count": 2
+        },
+        {
+          "label": "ellipsis_mojibake",
+          "count": 2
+        }
+      ],
       "arHits": [
         {
-          "index": 274,
+          "index": 526,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 714,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 1203,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 1298,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 1393,
           "match": "ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط"
-        },
-        {
-          "index": 361,
-          "match": "ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط"
-        },
-        {
-          "index": 448,
-          "match": "ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\\\""
-        },
-        {
-          "index": 539,
-          "match": "ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\""
-        },
-        {
-          "index": 629,
-          "match": "ط§ظ„تظ‚ط§ط±يط±/ا"
         }
       ],
       "arExamples": [
         {
-          "index": 274,
-          "snippet": "s\": [\n        {\n          \"index\": 278,\n          \"match\": \"ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط\"\n        },\n        {\n          \"index\""
+          "index": 526,
+          "snippet": "s\": [\n        {\n          \"index\": 727,\n          \"match\": \"ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|\"\n        }\n      ],\n      \"arEx"
         },
         {
-          "index": 361,
-          "snippet": "   },\n        {\n          \"index\": 459,\n          \"match\": \"ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط\"\n        },\n        {\n          \"index\""
+          "index": 714,
+          "snippet": "kePairRe = /(ط[اأإآء-ي]|ظ[اأإآء-ي])/g;\\nconst hardBadRe = /(ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|â€”|â€“|â€¦|â€|Ã|Â)/g;\\n\\nfuncti"
         },
         {
-          "index": 448,
-          "snippet": "   },\n        {\n          \"index\": 701,\n          \"match\": \"ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\\\"\"\n        },\n        {\n          \"in"
+          "index": 1203,
+          "snippet": "s\": [\n        {\n          \"index\": 526,\n          \"match\": \"ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|\"\n        },\n        {\n         "
         },
         {
-          "index": 539,
-          "snippet": "   },\n        {\n          \"index\": 887,\n          \"match\": \"ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\"\n        },\n        {\n          \"inde"
+          "index": 1298,
+          "snippet": "   },\n        {\n          \"index\": 714,\n          \"match\": \"ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|\"\n        },\n        {\n         "
         },
         {
-          "index": 629,
-          "snippet": "  },\n        {\n          \"index\": 1133,\n          \"match\": \"ط§ظ„تظ‚ط§ط±يط±/ا\"\n        }\n      ],\n      \"arExamples\": [\n "
+          "index": 1393,
+          "snippet": "   },\n        {\n          \"index\": 955,\n          \"match\": \"ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط\"\n        },\n        {\n          \"index\""
         }
       ]
     }

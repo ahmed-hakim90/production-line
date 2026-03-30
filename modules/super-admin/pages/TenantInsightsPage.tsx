@@ -509,7 +509,7 @@ export const TenantInsightsPage: React.FC = () => {
 
                       {isOpen ? (
                         <div className="max-h-56 overflow-y-auto rounded-md border border-[var(--color-border)] text-xs">
-                          <table className="w-full text-right">
+                          <table className="erp-table w-full text-right">
                             <thead className="sticky top-0 bg-[var(--color-muted)]/50">
                               <tr>
                                 <th className="p-2 font-semibold">المجموعة</th>

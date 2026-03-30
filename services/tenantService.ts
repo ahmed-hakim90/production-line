@@ -30,6 +30,25 @@ function normalizeSlug(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
+/** Live input: lowercase, allowed chars only, collapse hyphens, trim edges. */
+export function sanitizeTenantSlugInput(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** Client-side check aligned with `slugPattern` before Firebase — returns Arabic message or null. */
+export function getTenantSlugValidationError(raw: string): string | null {
+  const slug = normalizeSlug(sanitizeTenantSlugInput(raw));
+  if (!slug) return 'يرجى إدخال معرّف للشركة في الرابط.';
+  if (!slugPattern.test(slug)) {
+    return 'معرّف الرابط غير صالح: أحرف إنجليزية صغيرة وأرقام وشرطات فقط، دون شرطة في البداية أو النهاية، وبطول مناسب.';
+  }
+  return null;
+}
+
 export const tenantService = {
   async resolveSlug(slug: string): Promise<{
     exists: boolean;

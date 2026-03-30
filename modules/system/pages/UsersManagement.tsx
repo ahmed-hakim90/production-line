@@ -452,7 +452,7 @@ export const UsersManagement: React.FC = () => {
           <LoadingSkeleton rows={7} type="table" />
         ) : (
           <div className="erp-table-scroll">
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
                 <tr className="text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
                   <th className="text-right py-2.5 px-3 text-[11px] uppercase tracking-[0.08em]">المستخدم</th>

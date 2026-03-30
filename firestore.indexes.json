@@ -593,6 +593,34 @@
       ]
     },
     {
+      "collectionGroup": "supervisor_line_assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lineId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "supervisor_line_assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "effectiveFrom",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "monthly_production_costs",
       "queryScope": "COLLECTION",
       "fields": [

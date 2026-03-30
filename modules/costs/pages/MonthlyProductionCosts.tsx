@@ -961,7 +961,7 @@ export const MonthlyProductionCosts: React.FC = () => {
               <p className="text-sm mt-1">جرظ‘ب تغيير البحث أو الفئة</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr className="bg-[#f8f9fa]/50 text-[var(--color-text-muted)]">
                   {baseColumns.rowIndex && <th className="erp-th">#</th>}

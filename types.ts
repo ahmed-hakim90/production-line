@@ -244,6 +244,7 @@ export type SupervisorLineAssignmentReason = 'assign' | 'reassign' | 'remove' | 
 
 export interface SupervisorLineAssignment {
   id?: string;
+  tenantId?: string;
   lineId: string;
   supervisorId: string;
   effectiveFrom: string;

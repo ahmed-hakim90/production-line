@@ -1,8 +1,10 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { AttendanceDailyView } from '../pages/AttendanceDailyView';
-import { AttendanceLogs } from '../pages/AttendanceLogs';
-import { AttendanceMonthlyReport } from '../pages/AttendanceMonthlyReport';
-import { AttendanceSyncDashboard } from '../pages/AttendanceSyncDashboard';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const AttendanceDailyView = lazyNamed(() => import('../pages/AttendanceDailyView'), 'AttendanceDailyView');
+const AttendanceLogs = lazyNamed(() => import('../pages/AttendanceLogs'), 'AttendanceLogs');
+const AttendanceMonthlyReport = lazyNamed(() => import('../pages/AttendanceMonthlyReport'), 'AttendanceMonthlyReport');
+const AttendanceSyncDashboard = lazyNamed(() => import('../pages/AttendanceSyncDashboard'), 'AttendanceSyncDashboard');
 
 export const ATTENDANCE_ROUTES: AppRouteDef[] = [
   { path: '/attendance/logs', permission: 'attendance.view', component: AttendanceLogs },

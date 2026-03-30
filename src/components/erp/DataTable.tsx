@@ -1,3 +1,8 @@
+/**
+ * Lightweight sortable table for simple dashboards (few columns, row actions).
+ * For toolbars, bulk actions, column visibility, and built-in search, use the organism:
+ * `@/src/shared/ui/organisms/DataTable/DataTable`.
+ */
 import { ReactNode, useMemo, useState } from "react"
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
 

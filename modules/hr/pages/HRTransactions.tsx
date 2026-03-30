@@ -560,7 +560,7 @@ export const HRTransactions: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs">
                   <th className="erp-th">إکآ§إ®آ„إ®آ†إ®آˆإکإ،</th>

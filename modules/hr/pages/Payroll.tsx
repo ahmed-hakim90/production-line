@@ -780,7 +780,7 @@ export const Payroll: React.FC = () => {
       {records.length > 0 && (
         <Card>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الموظف</th>

@@ -309,7 +309,7 @@ export const Lines: React.FC = () => {
           />
 
           <div className="overflow-x-auto">
-            <table>
+            <table className="erp-table">
               <thead>
                 <tr>
                   <th>الخط</th>

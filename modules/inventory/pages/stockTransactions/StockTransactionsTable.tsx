@@ -62,7 +62,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
   onOpenPendingEdit,
 }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-right border-collapse">
+    <table className="erp-table w-full text-right border-collapse">
       <thead className="erp-thead">
         <tr>
           <th className="erp-th text-center">
@@ -70,7 +70,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
               type="checkbox"
               checked={allFilteredSelected}
               onChange={toggleSelectAllFiltered}
-              aria-label="تحديد كل الصفوف المحددة"
+              aria-label="تحديد كل الصفوف الظاهرة"
             />
           </th>
           <th className="erp-th">التاريخ</th>

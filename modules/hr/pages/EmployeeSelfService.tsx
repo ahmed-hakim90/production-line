@@ -499,7 +499,7 @@ export const EmployeeSelfService: React.FC = () => {
           </div>
           <Card title="سجل الحضور الأخير">
             <div className="overflow-x-auto">
-              <table className="w-full text-right">
+              <table className="erp-table w-full text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -562,7 +562,7 @@ export const EmployeeSelfService: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right">
+              <table className="erp-table w-full text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">النوع</th>
@@ -609,7 +609,7 @@ export const EmployeeSelfService: React.FC = () => {
           {leaveBalance && (
             <Card title="رصيد الإجازات (المستخدم والمتاح)">
               <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-                <table className="w-full text-sm text-right">
+                <table className="erp-table w-full text-sm text-right">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">النوع</th>
@@ -724,7 +724,7 @@ export const EmployeeSelfService: React.FC = () => {
           {loans.length > 0 && (
             <Card title="السُلف">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-right">
+                <table className="erp-table w-full text-sm text-right">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">النوع</th>
@@ -908,7 +908,7 @@ export const EmployeeSelfService: React.FC = () => {
       {!loading && activeTab === 'requests' && (
         <Card title="طلباتي (إجازات وسُلف)">
           <div className="overflow-x-auto">
-            <table className="w-full text-right">
+            <table className="erp-table w-full text-right">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">النوع</th>

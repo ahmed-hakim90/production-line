@@ -301,7 +301,7 @@ export const Categories: React.FC = () => {
 
       <Card className="!p-0 border-none overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse">
+          <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الاسم</th>

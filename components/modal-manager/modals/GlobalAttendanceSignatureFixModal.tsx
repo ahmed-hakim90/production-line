@@ -158,7 +158,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
           </div>
 
           <div className="overflow-auto border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
-            <table className="min-w-full text-sm">
+            <table className="erp-table min-w-full text-sm">
               <thead className="bg-[var(--color-bg-alt)]">
                 <tr>
                   <th className="px-3 py-2 text-right">التاريخ</th>

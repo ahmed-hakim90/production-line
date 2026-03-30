@@ -1575,7 +1575,7 @@ export const HRDashboard: React.FC = () => {
               {/* â”€â”€â”€ STAGED ITEMS TABLE â”€â”€â”€ */}
               {qaStaged.length > 0 ? (
                 <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
-                  <table className="w-full text-sm">
+                  <table className="erp-table w-full text-sm">
                     <thead className="erp-thead">
                       <tr>
                         <th className="erp-th">#</th>
@@ -1772,7 +1772,7 @@ export const HRDashboard: React.FC = () => {
               <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد طلبات</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">الموظف</th>
@@ -1810,7 +1810,7 @@ export const HRDashboard: React.FC = () => {
               <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد سُلف</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">الموظف</th>
@@ -1908,7 +1908,7 @@ export const HRDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-border)]">
                     <th className="text-right pb-2 text-xs text-[var(--color-text-muted)] font-bold px-2">#</th>

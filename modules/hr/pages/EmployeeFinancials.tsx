@@ -719,7 +719,7 @@ export const EmployeeFinancials: React.FC = () => {
                 معاينة وتخصيص ({selectedEmps.length} موظف)
               </h4>
               <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">الموظف</th>
@@ -806,7 +806,7 @@ export const EmployeeFinancials: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الموظف</th>
@@ -850,7 +850,7 @@ export const EmployeeFinancials: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الموظف</th>
@@ -896,7 +896,7 @@ export const EmployeeFinancials: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الموظف</th>
@@ -945,7 +945,7 @@ export const EmployeeFinancials: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الموظف</th>
@@ -990,7 +990,7 @@ export const EmployeeFinancials: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الموظف</th>

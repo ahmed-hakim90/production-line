@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useTenantNavigate } from "@/lib/useTenantNavigate";
 import {
   BarChart3,
   Boxes,
@@ -26,7 +26,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import * as XLSX from "xlsx";
 import { useProductDetail } from "./hooks/useProductDetail";
 import { IndirectCostCards } from "@/src/components/erp/IndirectCostCards";
 import { productMaterialService } from "../../production/services/productMaterialService";
@@ -50,8 +49,6 @@ import {
   SectionSkeleton,
   SURFACE_CARD,
 } from "@/src/components/erp/DetailPageChrome";
-
-const queryClient = new QueryClient();
 
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   borderRadius: 8,
@@ -139,7 +136,8 @@ const SECTION_KEYS = [
 
 type SectionKey = (typeof SECTION_KEYS)[number];
 
-const downloadExcel = (rows: Array<Array<string | number>>, sheetName: string, fileName: string) => {
+const downloadExcel = async (rows: Array<Array<string | number>>, sheetName: string, fileName: string) => {
+  const XLSX = await import("xlsx");
   const workbook = XLSX.utils.book_new();
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
@@ -166,7 +164,7 @@ const resolveIndirectIconType = (label: string): IndirectCostItem["iconType"] =>
   return "custom";
 };
 
-const ProductDetailsContent: React.FC = () => {
+export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
   const { openModal } = useGlobalModalManager();
@@ -513,7 +511,7 @@ const ProductDetailsContent: React.FC = () => {
           </div>
           <div class="card">
             <h2 style="font-size:14px;font-weight:500;margin:0 0 8px 0;">التقارير التفصيلية</h2>
-            <table>
+            <table className="erp-table">
               <thead>
                 <tr>
                   <th>التاريخ</th><th>خط الإنتاج</th><th>المشرف</th><th>الكمية</th><th>الهالك</th><th>عمال</th><th>ساعات</th>
@@ -535,7 +533,7 @@ const ProductDetailsContent: React.FC = () => {
 
   const onExcel = () => {
     if (!data) return;
-    downloadExcel(
+    void downloadExcel(
       [
         ["التاريخ", "خط الإنتاج", "المشرف", "الكمية", "الهالك", "عمال", "ساعات"],
         ...filteredReports.map((row) => [
@@ -779,7 +777,7 @@ const ProductDetailsContent: React.FC = () => {
               <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">تفصيل تكلفة المنتج</h3>
               <p className="mb-3 text-xs font-medium text-slate-600 dark:text-muted-foreground">يتم الحساب تلقائياً عند تغيير أي عنصر</p>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] text-right">
+                <table className="erp-table w-full min-w-[700px] text-right">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
                       <th className="px-3 py-2 text-xs font-medium text-muted-foreground">عنصر التكلفة</th>
@@ -850,7 +848,7 @@ const ProductDetailsContent: React.FC = () => {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[660px] text-right">
+                  <table className="erp-table w-full min-w-[660px] text-right">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
                         <th className="px-3 py-2 text-xs font-medium text-muted-foreground">المادة الخام</th>
@@ -1013,7 +1011,7 @@ const ProductDetailsContent: React.FC = () => {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-right">
+                  <table className="erp-table w-full min-w-[720px] text-right">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
                         <th className="px-3 py-2 text-xs font-medium text-muted-foreground">خط الإنتاج</th>
@@ -1136,7 +1134,7 @@ const ProductDetailsContent: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[860px] text-right">
+                <table className="erp-table w-full min-w-[860px] text-right">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
                       <th className="px-3 py-2 text-xs font-medium text-muted-foreground">التاريخ</th>
@@ -1200,14 +1198,3 @@ const ProductDetailsContent: React.FC = () => {
     </div>
   );
 };
-
-export const ProductDetails: React.FC = () => {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ProductDetailsContent />
-    </QueryClientProvider>
-  );
-};
-
-
-

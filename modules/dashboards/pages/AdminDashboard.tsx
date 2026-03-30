@@ -1671,7 +1671,7 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">#</th>
@@ -1782,7 +1782,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-no-table-enhance="true">
+            <table className="erp-table w-full text-sm" data-no-table-enhance="true">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">المنتج</th>
@@ -2321,7 +2321,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             {costCentersSummary.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">المركز</th>
@@ -2376,7 +2376,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             {monthlyDepreciationSummary.rows.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">مركز التكلفة</th>
@@ -2500,7 +2500,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
         {topProducts.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">المنتج</th>

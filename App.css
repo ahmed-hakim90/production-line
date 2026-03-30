@@ -36,22 +36,23 @@ body {
 
 /* ══════════════════════════════════════════════════════════
    ERPNext Table System
-   Targets <table> elements used in DataTable + all pages
+   Scoped to .erp-table so shadcn/Radix tables are not double-styled.
+   Add className="erp-table" (or use components/ui/table which sets it).
    ══════════════════════════════════════════════════════════ */
 
-table {
+table.erp-table {
   border-collapse: collapse;
   width: 100%;
   font-size: 14px;
 }
 
 /* Header row */
-table thead tr {
+table.erp-table thead tr {
   background-color: var(--color-bg) !important;
   border-bottom: 1px solid var(--color-border) !important;
 }
 
-table thead th {
+table.erp-table thead th {
   padding: 8px 12px !important;
   font-size: 12px !important;
   font-weight: 600 !important;
@@ -62,16 +63,16 @@ table thead th {
 }
 
 /* Body rows */
-table tbody tr {
+table.erp-table tbody tr {
   border-bottom: 1px solid var(--color-border) !important;
   transition: background-color 100ms ease !important;
 }
 
-table tbody tr:hover {
+table.erp-table tbody tr:hover {
   background-color: var(--color-bg) !important;
 }
 
-table tbody td {
+table.erp-table tbody td {
   padding: 9px 12px !important;
   font-size: 13.5px !important;
   color: var(--color-text) !important;
@@ -775,6 +776,23 @@ button {
   margin-top: 6px;
 }
 
+/* Register company — branded panel background (imagegen asset in public/landing/) */
+.register-company-auth-panel.erp-auth-panel {
+  background:
+    linear-gradient(
+      155deg,
+      rgb(var(--color-primary) / 0.91) 0%,
+      rgb(30 27 75 / 0.88) 55%,
+      rgb(49 46 129 / 0.86) 100%
+    ),
+    url('/landing/register-panel-bg.png') center / cover no-repeat;
+}
+
+.register-company-auth-panel.erp-auth-panel::before,
+.register-company-auth-panel.erp-auth-panel::after {
+  display: none;
+}
+
 /* Footer link */
 .erp-auth-footer {
   text-align: center;
@@ -1403,9 +1421,9 @@ html.dark {
   --color-sidebar-border: #1e2a38;
 }
 
-html.dark table thead tr { background-color: #1a2433 !important; }
-html.dark table tbody tr:hover { background-color: #1a2433 !important; }
-html.dark table tbody tr { border-bottom-color: #1e2a38 !important; }
+html.dark table.erp-table thead tr { background-color: #1a2433 !important; }
+html.dark table.erp-table tbody tr:hover { background-color: #1a2433 !important; }
+html.dark table.erp-table tbody tr { border-bottom-color: #1e2a38 !important; }
 html.dark input, html.dark textarea, html.dark select {
   background-color: #1e2a38 !important;
   border-color: #1e2a38 !important;
@@ -1703,8 +1721,8 @@ select {
    ══════════════════════════════════════════════════════════ */
 
 /* Selected row highlight */
-table tbody tr.row-selected,
-table tbody tr[data-selected="true"] {
+table.erp-table tbody tr.row-selected,
+table.erp-table tbody tr[data-selected="true"] {
   background-color: rgb(var(--color-primary) / 0.05) !important;
 }
 

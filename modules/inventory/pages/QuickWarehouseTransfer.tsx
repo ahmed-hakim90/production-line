@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { FormField } from '@/components/ui/form-field';
 
 type ItemType = 'finished_good' | 'raw_material';
 const APP_VERSION = __APP_VERSION__;
@@ -414,8 +415,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">نوع الصنف</label>
+            <FormField id="transfer-item-type" label="نوع الصنف">
               <Select
                 value={itemType}
                 onValueChange={(value) => {
@@ -430,7 +430,10 @@ export const QuickWarehouseTransfer: React.FC = () => {
                   );
                 }}
               >
-                <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
+                <SelectTrigger
+                  id="transfer-item-type"
+                  className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -438,7 +441,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                   <SelectItem value="raw_material">مادة خام</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </FormField>
             <div />
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">المخزن المصدر *</label>

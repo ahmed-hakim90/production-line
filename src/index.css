@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+/* Fonts load once from index.html (single request; avoids duplicate Cairo fetch vs former @import). */
 
 @tailwind base;
 @tailwind components;
@@ -48,6 +48,8 @@
     --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
     --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.14);
     --density-scale: 1;
+    --page-shell-gap: 1rem;
+    --layout-main-padding-y: 1rem;
 
     /* Aliases for erp / slide-over components */
     --color-page-bg: var(--color-bg);

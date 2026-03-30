@@ -553,7 +553,7 @@ export const LineWorkerAssignment: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الكود</th>

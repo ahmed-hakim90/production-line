@@ -1,9 +1,11 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { RolesManagement } from '../pages/RolesManagement';
-import { OperationsMonitorPage } from '../pages/OperationsMonitor';
-import { Settings } from '../pages/Settings';
-import { UsersManagement } from '../pages/UsersManagement';
-import { ImageExportShowcase } from '../pages/ImageExportShowcase';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const RolesManagement = lazyNamed(() => import('../pages/RolesManagement'), 'RolesManagement');
+const OperationsMonitorPage = lazyNamed(() => import('../pages/OperationsMonitor'), 'OperationsMonitorPage');
+const Settings = lazyNamed(() => import('../pages/Settings'), 'Settings');
+const UsersManagement = lazyNamed(() => import('../pages/UsersManagement'), 'UsersManagement');
+const ImageExportShowcase = lazyNamed(() => import('../pages/ImageExportShowcase'), 'ImageExportShowcase');
 
 export const SYSTEM_ROUTES: AppRouteDef[] = [
   { path: '/system/users', permission: 'users.manage', component: UsersManagement },

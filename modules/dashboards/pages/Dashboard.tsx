@@ -706,7 +706,7 @@ export const Dashboard: React.FC = () => {
                 })}
               </div>
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-right border-collapse">
+                <table className="erp-table w-full text-right border-collapse">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">المنتج</th>

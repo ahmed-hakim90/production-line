@@ -1,11 +1,12 @@
 {
   "name": "hakimo-erp-production-management",
   "private": true,
-  "version": "4.0.80",
+  "version": "4.0.81",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:analyze": "vite build --mode analyze",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:functions": "npm --prefix functions run typecheck",
     "arch:check:legacy-imports": "node scripts/check-legacy-imports.mjs",
@@ -68,6 +69,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.6",
+    "rollup-plugin-visualizer": "^7.0.1",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",

@@ -42,6 +42,7 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.PRODUCTION_SUPERVISOR_ASSIGNMENT_HISTORY);
   const history = useSupervisorStore((state) => state.history);
   const historyLoading = useSupervisorStore((state) => state.historyLoading);
+  const historyError = useSupervisorStore((state) => state.historyError);
   const fetchHistory = useSupervisorStore((state) => state.fetchHistory);
   const clearHistory = useSupervisorStore((state) => state.clearHistory);
 
@@ -87,10 +88,12 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
         <div className="max-h-[60vh] overflow-auto p-4">
           {historyLoading ? (
             <p className="py-8 text-center text-sm font-normal text-gray-500">جاري تحميل السجل...</p>
+          ) : historyError ? (
+            <p className="py-8 text-center text-sm font-normal text-red-700">{historyError}</p>
           ) : history.length === 0 ? (
             <p className="py-8 text-center text-sm font-normal text-gray-500">لا يوجد سجل تعيينات لهذا الخط</p>
           ) : (
-            <table className="w-full border-collapse text-sm">
+            <table className="erp-table w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-right">
                   <th className="px-3 py-2 text-xs font-medium text-gray-500">التاريخ</th>

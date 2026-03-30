@@ -1,5 +1,5 @@
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import {
   BrowserRouter,
@@ -12,8 +12,10 @@ import {
   useParams,
 } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { PageRouteFallback } from './components/PageRouteFallback';
+import { RouterRealtimeSubscriptions } from './components/RouterRealtimeSubscriptions';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { HomeDashboardRouter } from './modules/dashboards/pages/HomeDashboardRouter';
+import { lazyNamed } from './modules/shared/routes/lazyNamed';
 import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
 import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
 import { CATALOG_ROUTES } from './modules/catalog/routes';
@@ -45,16 +47,19 @@ import { setCurrentTenant } from './lib/currentTenant';
 import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
 import { tenantService } from './services/tenantService';
 import { setAppLanguage, type SupportedLanguage } from './src/i18n';
-import { RegisterCompany } from './modules/auth/pages/RegisterCompany';
-import { LandingPage } from './modules/auth/pages/LandingPage';
-import { CompanyNotApprovedPage } from './modules/auth/pages/CompanyNotApprovedPage';
 import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
 import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
 import { SuperAdminGuard } from './modules/super-admin/SuperAdminGuard';
-import { SuperAdminShell } from './modules/super-admin/SuperAdminShell';
-import { TenantsApproval } from './modules/super-admin/pages/TenantsApproval';
-import { TenantInsightsPage } from './modules/super-admin/pages/TenantInsightsPage';
 import { AuthBrandedLoadingPage } from './components/system-ui/AuthLoadingState';
+
+const HomeDashboardRouter = lazyNamed(() => import('./modules/dashboards/pages/HomeDashboardRouter'), 'HomeDashboardRouter');
+const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
+const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
+const CompanyNotApprovedPage = lazyNamed(() => import('./modules/auth/pages/CompanyNotApprovedPage'), 'CompanyNotApprovedPage');
+const SuperAdminShell = lazyNamed(() => import('./modules/super-admin/SuperAdminShell'), 'SuperAdminShell');
+const TenantsApproval = lazyNamed(() => import('./modules/super-admin/pages/TenantsApproval'), 'TenantsApproval');
+const TenantInsightsPage = lazyNamed(() => import('./modules/super-admin/pages/TenantInsightsPage'), 'TenantInsightsPage');
+import { UiDensityBootstrap } from './core/ui-engine/density/UiDensityBootstrap';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
@@ -143,7 +148,11 @@ const LoginRedirect: React.FC = () => {
 };
 
 /** Unified home: content by role permissions */
-const HomeRedirect: React.FC = () => <HomeDashboardRouter />;
+const HomeRedirect: React.FC = () => (
+  <Suspense fallback={<PageRouteFallback />}>
+    <HomeDashboardRouter />
+  </Suspense>
+);
 
 const PROTECTED_ROUTES: AppRouteDef[] = [
   ...DASHBOARD_ROUTES,
@@ -414,11 +423,15 @@ const TenantPublicRoute: React.FC<{ resolveElement: PublicRouteDef['resolveEleme
   resolveElement,
 }) => {
   const { isAuthenticated, isPendingApproval } = useAuthUiSlice();
-  return resolveElement({
-    isAuthenticated,
-    isPendingApproval,
-    loginRedirectElement: <LoginRedirect />,
-  });
+  return (
+    <Suspense fallback={<PageRouteFallback />}>
+      {resolveElement({
+        isAuthenticated,
+        isPendingApproval,
+        loginRedirectElement: <LoginRedirect />,
+      })}
+    </Suspense>
+  );
 };
 
 const defaultTenantResolve: TenantSlugResolveValue = {
@@ -541,7 +554,11 @@ const TenantLayout: React.FC = () => {
   }
 
   if (gate === 'inactive') {
-    return <CompanyNotApprovedPage tenantSlug={tenantSlug} status={tenantResolve.tenantStatus} />;
+    return (
+      <Suspense fallback={<PageRouteFallback />}>
+        <CompanyNotApprovedPage tenantSlug={tenantSlug} status={tenantResolve.tenantStatus} />
+      </Suspense>
+    );
   }
 
   return (
@@ -588,10 +605,6 @@ const App: React.FC = () => {
   useTenantTheme();
 
   const initializeApp = useAppStore((s) => s.initializeApp);
-  const subscribeToDashboard = useAppStore((s) => s.subscribeToDashboard);
-  const subscribeToLineStatuses = useAppStore((s) => s.subscribeToLineStatuses);
-  const subscribeToWorkOrders = useAppStore((s) => s.subscribeToWorkOrders);
-  const subscribeToScanEventsToday = useAppStore((s) => s.subscribeToScanEventsToday);
   const syncAttendanceFromDevices = useAppStore((s) => s.syncAttendanceFromDevices);
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const uid = useAppStore((s) => s.uid);
@@ -659,16 +672,8 @@ const App: React.FC = () => {
       activeSessionUidRef.current = user.uid;
 
       const cleanupEvents = registerSystemEventListeners();
-      const unsubReports = subscribeToDashboard();
-      const unsubStatuses = subscribeToLineStatuses();
-      const unsubWorkOrders = subscribeToWorkOrders();
-      const unsubScans = subscribeToScanEventsToday();
       cleanupSubsRef.current = () => {
         cleanupEvents();
-        unsubReports();
-        unsubStatuses();
-        unsubWorkOrders();
-        unsubScans();
       };
       sessionTrackerService.start({
         uid: user.uid,
@@ -683,7 +688,7 @@ const App: React.FC = () => {
       cleanupSubsRef.current?.();
       cleanupSubsRef.current = null;
     };
-  }, [initializeApp, subscribeToDashboard, subscribeToLineStatuses, subscribeToWorkOrders, subscribeToScanEventsToday]);
+  }, [initializeApp]);
 
   useEffect(() => {
     if (!isAuthenticated || isPendingApproval || !uid) return;
@@ -757,26 +762,62 @@ const App: React.FC = () => {
 
   return (
     <GlobalModalManagerProvider>
+      <UiDensityBootstrap />
       <AuthUiStateGuard />
       <ModalWorkspaceMigration />
       <DailyWelcomeLauncher />
       <BrowserRouter>
+        <RouterRealtimeSubscriptions />
         <LegacyHashRedirect />
         <ServiceWorkerNavigateBridge />
         <PresenceHeartbeatBridge />
         <Routes>
-          <Route path="/register-company" element={<RegisterCompany />} />
+          <Route
+            path="/register-company"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <RegisterCompany />
+              </Suspense>
+            }
+          />
           <Route path="/super-admin" element={<SuperAdminGuard />}>
-            <Route element={<SuperAdminShell />}>
+            <Route
+              element={
+                <Suspense fallback={<PageRouteFallback />}>
+                  <SuperAdminShell />
+                </Suspense>
+              }
+            >
               <Route index element={<Navigate to="tenants" replace />} />
-              <Route path="tenants" element={<TenantsApproval />} />
-              <Route path="insights" element={<TenantInsightsPage />} />
+              <Route
+                path="tenants"
+                element={
+                  <Suspense fallback={<PageRouteFallback />}>
+                    <TenantsApproval />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="insights"
+                element={
+                  <Suspense fallback={<PageRouteFallback />}>
+                    <TenantInsightsPage />
+                  </Suspense>
+                }
+              />
             </Route>
           </Route>
           <Route path="/login" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/login`} replace />} />
           <Route path="/setup" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/setup`} replace />} />
           <Route path="/pending" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/pending`} replace />} />
-          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <LandingPage />
+              </Suspense>
+            }
+          />
           <Route path="/t/:tenantSlug" element={<TenantLayout />}>
             {AUTH_PUBLIC_ROUTES.map((r) => (
               <Route
@@ -814,7 +855,9 @@ const App: React.FC = () => {
                     path={childPath}
                     element={
                       <ProtectedRoute permission={r.permission}>
-                        <Component />
+                        <Suspense fallback={<PageRouteFallback />}>
+                          <Component />
+                        </Suspense>
                       </ProtectedRoute>
                     }
                   />

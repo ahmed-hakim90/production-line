@@ -125,7 +125,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               </div>
             </div>
             <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الصنف</th>
@@ -212,7 +212,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               </div>
             </div>
             <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الصنف</th>

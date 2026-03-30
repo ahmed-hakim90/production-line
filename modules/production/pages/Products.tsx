@@ -962,7 +962,7 @@ export const Products: React.FC = () => {
         )}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse">
+          <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th w-10 text-center">
@@ -1609,7 +1609,7 @@ export const Products: React.FC = () => {
                   </div>
 
                   <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-                    <table className="w-full text-right text-sm border-collapse">
+                    <table className="erp-table w-full text-right text-sm border-collapse">
                       <thead className="erp-thead">
                         <tr>
                           <th className="erp-th">صف</th>

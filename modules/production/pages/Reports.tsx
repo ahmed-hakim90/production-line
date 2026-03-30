@@ -41,17 +41,13 @@ import { formatNumber, getOperationalDateString } from '../../../utils/calculati
 import { buildReportsCosts, buildSupervisorHourlyRatesMap, estimateReportCost, formatCost } from '../../../utils/costCalculations';
 import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus, ReportComponentScrapItem, ProductionLineStatus } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { exportFactoryGeneralReport, exportReportsByDateRange, exportWorkOrders } from '../../../utils/exportExcel';
-import { exportToPDF, exportElementsToSinglePDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
-import {
-  parseExcelFile,
-  parseReportDateUpdateExcelFile,
-  toReportData,
+import type { ShareResult } from '../../../utils/reportExport';
+import type {
   ImportResult,
   ParsedReportRow,
   ReportDateUpdateImportResult,
 } from '../../../utils/importExcel';
-import { downloadReportsTemplate, ReportsTemplateLookups } from '../../../utils/downloadTemplates';
+import type { ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
 import { useLocation } from 'react-router-dom';
@@ -1045,6 +1041,7 @@ export const Reports: React.FC = () => {
       if (isMobilePrint) {
         setExporting(true);
         try {
+          const { exportToPDF } = await import('../../../utils/reportExport');
           await exportToPDF(singlePrintRef.current, `تقرير-إنتاج-${row.lineName}-${row.date}`, {
             paperSize: printTemplate?.paperSize,
             orientation: printTemplate?.orientation,
@@ -1066,6 +1063,7 @@ export const Reports: React.FC = () => {
     if (isMobilePrint) {
       setExporting(true);
       try {
+        const { exportToPDF } = await import('../../../utils/reportExport');
         await exportToPDF(bulkPrintRef.current, `تقارير-الإنتاج-${startDate}`, {
           paperSize: printTemplate?.paperSize,
           orientation: printTemplate?.orientation,
@@ -1101,6 +1099,7 @@ export const Reports: React.FC = () => {
       }
       setExporting(true);
       try {
+        const { shareToWhatsApp } = await import('../../../utils/reportExport');
         const result = await shareToWhatsApp(
           sharePrintRef.current,
           `تقرير-إنتاج-${row.date}-${row.lineName}`,
@@ -1677,6 +1676,7 @@ export const Reports: React.FC = () => {
     if (!bulkPrintRef.current) return;
     setExporting(true);
     try {
+      const { exportToPDF } = await import('../../../utils/reportExport');
       await exportToPDF(bulkPrintRef.current, `تقارير-الإنتاج-${startDate}`, {
         paperSize: printTemplate?.paperSize,
         orientation: printTemplate?.orientation,
@@ -1691,6 +1691,7 @@ export const Reports: React.FC = () => {
     if (!bulkPrintRef.current) return;
     setExporting(true);
     try {
+      const { shareToWhatsApp } = await import('../../../utils/reportExport');
       const result = await shareToWhatsApp(bulkPrintRef.current, `تقارير الإنتاج ${startDate}`);
       showShareFeedback(result);
     } finally {
@@ -1895,6 +1896,7 @@ export const Reports: React.FC = () => {
     resetImportState();
     let dateUpdateTemplateDetected = false;
     try {
+      const { parseReportDateUpdateExcelFile, parseExcelFile } = await import('../../../utils/importExcel');
       const dateUpdateResult = await parseReportDateUpdateExcelFile(file);
       if (dateUpdateResult.detectedTemplate) {
         dateUpdateTemplateDetected = true;
@@ -1997,6 +1999,7 @@ export const Reports: React.FC = () => {
     resetImportState();
     setImportFileName('');
 
+    const { toReportData } = await import('../../../utils/importExcel');
     let done = 0;
     let failed = 0;
     for (const row of validRows) {
@@ -2259,6 +2262,7 @@ export const Reports: React.FC = () => {
         .slice(0, rows.length)
         .filter((el): el is HTMLDivElement => !!el);
       if (!printableElements.length) return;
+      const { exportElementsToSinglePDF } = await import('../../../utils/reportExport');
       await exportElementsToSinglePDF(
         printableElements,
         `تقارير-الإنتاج-منفصلة-${startDate}`,
@@ -2318,7 +2322,12 @@ export const Reports: React.FC = () => {
       actions.splice(1, 0, {
         label: 'تصدير المحدد',
         icon: 'download',
-        action: (items) => exportReportsByDateRange(items, startDate, endDate, lookups, canViewCosts ? reportCosts : undefined),
+        action: (items) => {
+          void (async () => {
+            const { exportReportsByDateRange } = await import('../../../utils/exportExcel');
+            exportReportsByDateRange(items, startDate, endDate, lookups, canViewCosts ? reportCosts : undefined);
+          })();
+        },
         permission: 'export',
       });
     }
@@ -2374,6 +2383,7 @@ export const Reports: React.FC = () => {
             supervisorHourlyRates,
           )
         : undefined;
+      const { exportReportsByDateRange } = await import('../../../utils/exportExcel');
       exportReportsByDateRange(filtered, from, to, lookups, exportCosts);
     } catch (error) {
       setSaveToastType('error');
@@ -2496,7 +2506,10 @@ export const Reports: React.FC = () => {
             icon: 'analytics',
             group: 'تصدير',
             hidden: !canExportFromPage || factoryGeneralRows.length === 0,
-            onClick: () => exportFactoryGeneralReport(factoryGeneralExportRows, startDate, endDate),
+            onClick: () =>
+              void import('../../../utils/exportExcel').then(({ exportFactoryGeneralReport }) =>
+                exportFactoryGeneralReport(factoryGeneralExportRows, startDate, endDate),
+              ),
           },
           {
             label: 'تقارير Excel',
@@ -2510,7 +2523,10 @@ export const Reports: React.FC = () => {
             icon: 'assignment',
             group: 'تصدير',
             hidden: !canExportFromPage || !can('workOrders.view') || workOrders.length === 0,
-            onClick: () => exportWorkOrders(workOrders, { getProductName, getLineName, getSupervisorName: getEmployeeName }),
+            onClick: () =>
+              void import('../../../utils/exportExcel').then(({ exportWorkOrders }) =>
+                exportWorkOrders(workOrders, { getProductName, getLineName, getSupervisorName: getEmployeeName }),
+              ),
           },
           {
             label: 'طباعة',
@@ -2541,7 +2557,10 @@ export const Reports: React.FC = () => {
             icon: 'file_download',
             group: 'استيراد',
             hidden: !canImportFromPage,
-            onClick: () => downloadReportsTemplate(templateLookups),
+            onClick: () =>
+              void import('../../../utils/downloadTemplates').then(({ downloadReportsTemplate }) =>
+                downloadReportsTemplate(templateLookups),
+              ),
           },
           {
             label: 'رفع Excel',
@@ -2687,7 +2706,7 @@ export const Reports: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">{renderFactorySortHeader('الخط', 'lineName')}</th>
@@ -3570,7 +3589,14 @@ export const Reports: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold">استيراد تقارير من Excel</h3>
-                    <button onClick={() => downloadReportsTemplate(templateLookups)} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
+                    <button
+                      onClick={() =>
+                        void import('../../../utils/downloadTemplates').then(({ downloadReportsTemplate }) =>
+                          downloadReportsTemplate(templateLookups),
+                        )
+                      }
+                      className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline"
+                    >
                       <ReportIcon name="download" className="text-sm" />
                       تحميل نموذج
                     </button>
@@ -3607,7 +3633,14 @@ export const Reports: React.FC = () => {
                   <ReportIcon name="warning" className="text-5xl text-[var(--color-text-muted)] block mb-3" />
                   <p className="font-bold text-[var(--color-text-muted)]">لا توجد بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد أن الملف يحتوي على أعمدة: التاريخ، خط الإنتاج، المنتج، المشرف، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
-                  <button onClick={() => downloadReportsTemplate(templateLookups)} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
+                  <button
+                  onClick={() =>
+                    void import('../../../utils/downloadTemplates').then(({ downloadReportsTemplate }) =>
+                      downloadReportsTemplate(templateLookups),
+                    )
+                  }
+                  className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto"
+                >
                     <ReportIcon name="download" className="text-sm" />
                     تحميل نموذج التقارير
                   </button>
@@ -3680,7 +3713,7 @@ export const Reports: React.FC = () => {
                   </div>
 
                   <div className="hidden md:block overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
-                    <table className="w-full text-right border-collapse text-sm">
+                    <table className="erp-table w-full text-right border-collapse text-sm">
                       <thead className="erp-thead">
                         <tr>
                           <th className="erp-th">#</th>
@@ -3836,7 +3869,7 @@ export const Reports: React.FC = () => {
                   </div>
 
                   <div className="hidden md:block overflow-x-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
-                    <table className="w-full text-right border-collapse text-sm">
+                    <table className="erp-table w-full text-right border-collapse text-sm">
                       <thead className="erp-thead">
                         <tr>
                           <th className="erp-th">#</th>

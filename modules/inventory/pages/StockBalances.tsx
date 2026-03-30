@@ -183,7 +183,7 @@ export const StockBalances: React.FC = () => {
 
       <Card className="!p-0 overflow-hidden">
         <div className="overflow-x-auto erp-table-scroll">
-          <table className="w-full text-right border-collapse">
+          <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الصنف</th>

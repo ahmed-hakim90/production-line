@@ -695,7 +695,7 @@ const PayrollPreviewPanel: React.FC = () => {
 
       <Card title="معاينة كشف المرتبات">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الموظف</th>

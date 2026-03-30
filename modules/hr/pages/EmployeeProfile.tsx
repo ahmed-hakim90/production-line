@@ -274,7 +274,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
         }
       >
         <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-          <table className="w-full text-sm text-right">
+          <table className="erp-table w-full text-sm text-right">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">النوع</th>
@@ -379,7 +379,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
         }
       >
         <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-          <table className="w-full text-sm text-right">
+          <table className="erp-table w-full text-sm text-right">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">النوع</th>
@@ -1085,7 +1085,7 @@ export const EmployeeProfile: React.FC = () => {
           </Card>
           <Card title="سجلات الحضور">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -1184,7 +1184,7 @@ export const EmployeeProfile: React.FC = () => {
         <div className="space-y-6">
           <Card title="ملخص رصيد الإجازات (المستخدم والمتاح)">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">نوع الإجازة</th>
@@ -1225,7 +1225,7 @@ export const EmployeeProfile: React.FC = () => {
           </Card>
           <Card title="طلبات الإجازة">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">النوع</th>
@@ -1290,7 +1290,7 @@ export const EmployeeProfile: React.FC = () => {
           )}
           <Card title="السُلف">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">النوع</th>

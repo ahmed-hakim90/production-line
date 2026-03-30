@@ -87,7 +87,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
           })}
         </div>
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">المؤشر</th>

@@ -235,7 +235,7 @@ export const CostSettings: React.FC = () => {
             </Button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="erp-table w-full text-sm border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الشهر</th>

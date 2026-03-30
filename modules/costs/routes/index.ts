@@ -1,12 +1,14 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { CostCenters } from '../pages/CostCenters';
-import { CostCenterDistribution } from '../pages/CostCenterDistribution';
-import { CostSettings } from '../pages/CostSettings';
-import { MonthlyProductionCosts } from '../pages/MonthlyProductionCosts';
-import { AssetsList } from '../pages/AssetsList';
-import { AssetDetails } from '../pages/AssetDetails';
-import { DepreciationReport } from '../pages/DepreciationReport';
-import { CostDataHealth } from '../pages/CostDataHealth';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const CostCenters = lazyNamed(() => import('../pages/CostCenters'), 'CostCenters');
+const CostCenterDistribution = lazyNamed(() => import('../pages/CostCenterDistribution'), 'CostCenterDistribution');
+const CostSettings = lazyNamed(() => import('../pages/CostSettings'), 'CostSettings');
+const MonthlyProductionCosts = lazyNamed(() => import('../pages/MonthlyProductionCosts'), 'MonthlyProductionCosts');
+const AssetsList = lazyNamed(() => import('../pages/AssetsList'), 'AssetsList');
+const AssetDetails = lazyNamed(() => import('../pages/AssetDetails'), 'AssetDetails');
+const DepreciationReport = lazyNamed(() => import('../pages/DepreciationReport'), 'DepreciationReport');
+const CostDataHealth = lazyNamed(() => import('../pages/CostDataHealth'), 'CostDataHealth');
 
 export const COST_ROUTES: AppRouteDef[] = [
   { path: '/cost-centers', permission: 'costs.view', component: CostCenters },

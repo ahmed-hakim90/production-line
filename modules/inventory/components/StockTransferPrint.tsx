@@ -138,7 +138,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
           </p>
         </div>
 
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '4mm' : '8mm' }}>
+        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '4mm' : '8mm' }}>
           <tbody>
             {summaryPairRow('رقم التحويلة', data.transferNo, 'تاريخ الحركة', movementDate)}
             {summaryPairRow('من المخزن', data.fromWarehouseName, 'إلى المخزن', data.toWarehouseName, true)}
@@ -156,7 +156,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
               لا توجد أصناف في هذه التحويلة.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <thead>
                 <tr style={{ background: palette.tableHeaderBg, color: palette.tableHeaderText }}>
                   <th style={{ border: `1px solid ${palette.border}`, padding: '2.5mm 2mm', fontSize: isThermal ? '7pt' : '10pt', width: '20%' }}>كود الصنف</th>

@@ -111,7 +111,7 @@ export function WorkOrdersTable({
             </div>
           )}
 
-          <table className={styles.table}>
+          <table className={`${styles.table} erp-table`}>
             <thead>
               <tr>
                 <th>رقم الأمر</th>

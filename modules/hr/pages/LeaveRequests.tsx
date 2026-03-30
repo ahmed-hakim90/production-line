@@ -518,7 +518,7 @@ export const LeaveRequests: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   {isHR && <th className="erp-th">الموظف</th>}

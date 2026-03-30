@@ -1203,7 +1203,7 @@ export const ProductDetails: React.FC = () => {
                   </div>
                 ))}
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5pt', marginBottom: '8mm' }}>
+              <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5pt', marginBottom: '8mm' }}>
                 <thead className="erp-thead">
                   <tr style={{ background: '#f1f5f9' }}>
                     <th style={{ padding: '3mm 4mm', textAlign: 'right', fontWeight: 800, fontSize: '9pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>عنصر التكلفة</th>
@@ -1229,7 +1229,7 @@ export const ProductDetails: React.FC = () => {
               {materials.length > 0 && (
                 <>
                   <h3 style={{ margin: '0 0 4mm', fontSize: '13pt', fontWeight: 800, color: '#334155' }}>المواد الخام المستخدمة</h3>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
+                  <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
                     <thead className="erp-thead">
                       <tr style={{ background: '#f1f5f9' }}>
                         <th style={{ padding: '2.5mm 4mm', textAlign: 'right', fontWeight: 800, fontSize: '8.5pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>اسم المادة</th>
@@ -1540,7 +1540,7 @@ export const ProductDetails: React.FC = () => {
 
           {/* Cost Items Table */}
           <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)] mb-4">
-            <table className="w-full text-right border-collapse">
+            <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">عنصر التكلفة</th>
@@ -1768,7 +1768,7 @@ export const ProductDetails: React.FC = () => {
                 <p className="text-sm font-bold">لا توجد مواد خام مسجلة</p>
               </div>
             ) : (
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">اسم المادة</th>
@@ -1853,7 +1853,7 @@ export const ProductDetails: React.FC = () => {
           {costByLine.length > 0 && (
             <Card title="تكلفة الإنتاج حسب خط الإنتاج">
               <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse">
+                <table className="erp-table w-full text-right border-collapse">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">خط الإنتاج</th>
@@ -1977,7 +1977,7 @@ export const ProductDetails: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse">
+            <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">التاريخ</th>

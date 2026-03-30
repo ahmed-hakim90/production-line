@@ -5,6 +5,7 @@ import { Topbar } from './Topbar';
 import { PageBackProvider } from './PageBackContext';
 import { GlobalBackgroundJobs } from '@/components/background-jobs/GlobalBackgroundJobs';
 import { usePermission } from '@/utils/permissions';
+import { PageShell } from '@/src/shared/ui/layout/PageShell';
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -45,8 +46,14 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
           />
 
           <main id="main-content" className="flex-1 pt-[52px]" tabIndex={-1}>
-            <div className="max-w-screen-2xl mx-auto px-4 sm:px-5 py-4 sm:py-5 animate-in fade-in duration-200">
-              {children}
+            <div
+              className="max-w-screen-2xl mx-auto px-4 sm:px-5 animate-in fade-in duration-200"
+              style={{
+                paddingTop: 'var(--layout-main-padding-y, 1rem)',
+                paddingBottom: 'var(--layout-main-padding-y, 1rem)',
+              }}
+            >
+              <PageShell>{children}</PageShell>
             </div>
           </main>
 

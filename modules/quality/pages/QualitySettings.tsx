@@ -447,7 +447,7 @@ export const QualitySettings: React.FC = () => {
 
           <Card className="xl:col-span-2" title="قائمة أسباب العيوب">
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="erp-table min-w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الكود</th>

@@ -1,3 +1,7 @@
+/**
+ * Full-featured data grid: search, column visibility, bulk actions, sticky header, ERP styling.
+ * For small static tables use `DataTable` from `@/src/components/erp/DataTable`.
+ */
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useTableSettings } from '@/core/ui-engine/table-settings/useTableSettings';
 import { TABLE_WIDTH_CLASS } from '@/core/ui-engine/table-settings/tableSettings.types';

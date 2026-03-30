@@ -600,7 +600,7 @@ export const HRImport: React.FC = () => {
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات أقسام في الملف (ورقة "الأقسام")</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="erp-table w-full text-sm">
                     <thead className="erp-thead">
                       <tr>
                         <th className="erp-th">#</th>
@@ -655,7 +655,7 @@ export const HRImport: React.FC = () => {
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات مناصب في الملف (ورقة "المناصب")</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="erp-table w-full text-sm">
                     <thead className="erp-thead">
                       <tr>
                         <th className="erp-th">#</th>
@@ -732,7 +732,7 @@ export const HRImport: React.FC = () => {
                     </div>
                   )}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="erp-table w-full text-sm">
                       <thead className="erp-thead">
                         <tr>
                           <th className="erp-th">#</th>

@@ -113,7 +113,7 @@ export const ReworkOrders: React.FC = () => {
         )}
         <div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr className="border-b border-[var(--color-border)] text-slate-500">
                 <th className="erp-th">أمر الشغل</th>

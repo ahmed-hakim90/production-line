@@ -212,7 +212,7 @@ export const AssetDetails: React.FC = () => {
       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
         <div className="p-4 border-b border-[var(--color-border)] font-semibold">سجل الإهلاك الشهري</div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr className="bg-[#f8f9fa]/50 text-[var(--color-text-muted)]">
                 <th className="erp-th">الفترة</th>

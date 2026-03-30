@@ -52,7 +52,7 @@ export const GlobalBackgroundJobs: React.FC = () => {
 
             <div className="p-4 overflow-auto">
               <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">Date</th>

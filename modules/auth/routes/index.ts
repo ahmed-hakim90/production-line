@@ -1,9 +1,11 @@
 import React from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import type { PublicRouteDef } from '../../shared/routes';
-import { Setup } from '../pages/Setup';
-import { Login } from '../pages/Login';
-import { PendingApproval } from '../pages/PendingApproval';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const Setup = lazyNamed(() => import('../pages/Setup'), 'Setup');
+const Login = lazyNamed(() => import('../pages/Login'), 'Login');
+const PendingApproval = lazyNamed(() => import('../pages/PendingApproval'), 'PendingApproval');
 
 const NavigateToTenantLogin: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();

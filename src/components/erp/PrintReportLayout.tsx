@@ -248,7 +248,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
               </p>
             </div>
 
-            <table className="w-full border-collapse">
+            <table className="erp-table w-full border-collapse">
               <tbody>
                 {section.rows.map((row, ri) => (
                   <tr key={ri} className="border-b border-slate-100 last:border-0">

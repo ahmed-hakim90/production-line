@@ -249,6 +249,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
 
         {/* ── Data Table ── */}
         <table
+          className="erp-table"
           style={{
             width: '100%',
             borderCollapse: 'collapse',

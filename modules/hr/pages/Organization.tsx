@@ -373,7 +373,7 @@ const DataTable: React.FC<{
   children: React.ReactNode;
 }> = ({ headers, canEdit, children }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-sm">
+    <table className="erp-table w-full text-sm">
       <thead className="erp-thead">
         <tr>
           {headers.map((h, i) => {

@@ -467,7 +467,7 @@ export const QualityDefectsPrint = React.forwardRef<HTMLDivElement, QualityDefec
             </p>
           )}
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
+        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
           <thead>
             <tr style={{ background: 'var(--print-th-bg, #f1f5f9)' }}>
               <Th>#</Th>
@@ -558,7 +558,7 @@ export const ReworkOrdersPrint = React.forwardRef<HTMLDivElement, ReworkOrdersPr
             تقرير أوامر إعادة التشغيل
           </h2>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
+        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
           <thead>
             <tr style={{ background: 'var(--print-th-bg, #f1f5f9)' }}>
               <Th>#</Th>

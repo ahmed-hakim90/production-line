@@ -3,12 +3,13 @@ import {
   collection,
   doc,
   getDocs,
-  query,
   serverTimestamp,
   updateDoc,
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { SupervisorLineAssignment, SupervisorLineAssignmentReason } from '../../../types';
 
 const COLLECTION = 'supervisor_line_assignments';
@@ -44,13 +45,13 @@ const isActiveForDate = (item: SupervisorLineAssignment, date: string): boolean 
 export const supervisorLineAssignmentService = {
   async getAll(): Promise<SupervisorLineAssignment[]> {
     if (!isConfigured) return [];
-    const snap = await getDocs(collection(db, COLLECTION));
+    const snap = await getDocs(tenantQuery(db, COLLECTION));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SupervisorLineAssignment));
   },
 
   async getByLine(lineId: string): Promise<SupervisorLineAssignment[]> {
     if (!isConfigured || !lineId) return [];
-    const q = query(collection(db, COLLECTION), where('lineId', '==', lineId));
+    const q = tenantQuery(db, COLLECTION, where('lineId', '==', lineId));
     const snap = await getDocs(q);
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SupervisorLineAssignment));
     rows.sort((a, b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')));
@@ -60,7 +61,7 @@ export const supervisorLineAssignmentService = {
   async getActiveByDate(date: string): Promise<SupervisorLineAssignment[]> {
     if (!isConfigured) return [];
     const normalizedDate = normalizeDate(date);
-    const q = query(collection(db, COLLECTION), where('effectiveFrom', '<=', normalizedDate));
+    const q = tenantQuery(db, COLLECTION, where('effectiveFrom', '<=', normalizedDate));
     const snap = await getDocs(q);
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SupervisorLineAssignment));
     const active = rows.filter((item) => isActiveForDate(item, normalizedDate));
@@ -112,9 +113,11 @@ export const supervisorLineAssignmentService = {
 
     const toClose = lineRows.filter((row) => row.isActive !== false);
     const closeAt = addDays(effectiveFrom, -1);
+    const tenantId = getCurrentTenantId();
     for (const row of toClose) {
       if (!row.id) continue;
       await updateDoc(doc(db, COLLECTION, row.id), {
+        tenantId,
         isActive: false,
         effectiveTo: closeAt,
         changedBy: input.changedBy || '',
@@ -124,6 +127,7 @@ export const supervisorLineAssignmentService = {
     }
 
     const ref = await addDoc(collection(db, COLLECTION), {
+      tenantId,
       lineId,
       supervisorId,
       effectiveFrom,
@@ -143,6 +147,7 @@ export const supervisorLineAssignmentService = {
     const current = await this.getCurrentByLine(lineId, normalizedDate);
     if (!current?.id) return;
     await updateDoc(doc(db, COLLECTION, current.id), {
+      tenantId: getCurrentTenantId(),
       isActive: false,
       effectiveTo: addDays(normalizedDate, -1),
       changedBy: changedBy || '',

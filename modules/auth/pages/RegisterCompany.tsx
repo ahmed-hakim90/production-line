@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { tenantService } from '../../../services/tenantService';
+import { defaultTenantSlug } from '@/lib/tenantPaths';
+import {
+  tenantService,
+  sanitizeTenantSlugInput,
+  getTenantSlugValidationError,
+} from '../../../services/tenantService';
 import { useAppStore } from '../../../store/useAppStore';
 
-const defaultSlug = import.meta.env.VITE_DEFAULT_TENANT_SLUG || 'default';
-
-/** Matches `Login.tsx` — left panel + container + mobile brand for auth flow consistency. */
-const AuthShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+/** Matches `Login.tsx` — left panel + container + mobile brand; optional panel background class. */
+const AuthShell: React.FC<{ children: React.ReactNode; panelClassName?: string }> = ({
+  children,
+  panelClassName,
+}) => (
   <div className="erp-auth-page" dir="rtl">
-    <div className="erp-auth-panel">
+    <div className={['erp-auth-panel', panelClassName].filter(Boolean).join(' ')}>
       <div className="erp-auth-panel-logo">
         <span className="material-icons-round" style={{ fontSize: 26, color: '#fff' }}>
           factory
@@ -35,7 +41,9 @@ const AuthShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="erp-auth-container">
       <div className="erp-auth-brand">
         <div className="erp-auth-logo">
-          <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
+          <span className="material-icons-round" style={{ fontSize: 26 }}>
+            factory
+          </span>
         </div>
         <div className="erp-auth-app-name">HAKIMO ERP</div>
         <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
@@ -44,6 +52,17 @@ const AuthShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     </div>
   </div>
 );
+
+function mapRegisterCompanyError(err: unknown): string {
+  const code = (err as { code?: string })?.code ?? '';
+  const msg = typeof (err as Error)?.message === 'string' ? (err as Error).message : '';
+  if (code === 'auth/email-already-in-use') return 'البريد الإلكتروني مستخدم بالفعل.';
+  if (code === 'auth/invalid-email') return 'صيغة البريد الإلكتروني غير صحيحة.';
+  if (code === 'auth/weak-password') return 'كلمة المرور ضعيفة. جرّب مزيجاً من الأحرف والأرقام.';
+  if (code === 'auth/network-request-failed') return 'تعذر الاتصال. تحقق من الشبكة وحاول مجدداً.';
+  if (msg && /[\u0600-\u06FF]/.test(msg)) return msg;
+  return msg || 'تعذر إرسال الطلب. حاول لاحقاً.';
+}
 
 export const RegisterCompany: React.FC = () => {
   const navigate = useTenantNavigate();
@@ -57,12 +76,18 @@ export const RegisterCompany: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const normalizedSlug = slug.trim().toLowerCase();
+  const normalizedSlug = sanitizeTenantSlugInput(slug);
+  const loginHref = `/t/${defaultTenantSlug()}/login`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!slug.trim() || !name.trim() || !adminEmail.trim() || !password || !adminDisplayName.trim()) {
+    const slugErr = getTenantSlugValidationError(slug);
+    if (slugErr) {
+      setError(slugErr);
+      return;
+    }
+    if (!name.trim() || !adminEmail.trim() || !password || !adminDisplayName.trim()) {
       setError('يرجى تعبئة الحقول المطلوبة.');
       return;
     }
@@ -83,20 +108,15 @@ export const RegisterCompany: React.FC = () => {
       });
       await initializeApp();
       navigate(`/t/${normalizedSlug}/pending`, { replace: true });
-    } catch (err: any) {
-      const code = err?.code ?? '';
-      setError(
-        code === 'auth/email-already-in-use'
-          ? 'البريد الإلكتروني مستخدم بالفعل'
-          : err?.message || 'تعذر إرسال الطلب',
-      );
+    } catch (err: unknown) {
+      setError(mapRegisterCompanyError(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AuthShell>
+    <AuthShell panelClassName="register-company-auth-panel">
       <div className="erp-auth-card">
         <div className="erp-auth-card-body">
           <div className="erp-auth-headline">
@@ -105,13 +125,13 @@ export const RegisterCompany: React.FC = () => {
           </div>
 
           {error ? (
-            <div className="erp-alert erp-alert-error" style={{ marginBottom: 14 }}>
+            <div className="erp-alert erp-alert-error" style={{ marginBottom: 14 }} role="alert">
               <span className="material-icons-round text-[17px] shrink-0">error_outline</span>
               <span>{error}</span>
             </div>
           ) : null}
 
-          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-0" autoComplete="on">
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-0" autoComplete="on" noValidate>
             <div className="erp-auth-field">
               <label htmlFor="reg-slug">معرّف الشركة في الرابط (بالإنجليزية)</label>
               <div className="erp-auth-input-wrap">
@@ -120,15 +140,20 @@ export const RegisterCompany: React.FC = () => {
                   id="reg-slug"
                   className="erp-auth-input"
                   value={slug}
-                  onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  onChange={(e) => setSlug(sanitizeTenantSlugInput(e.target.value))}
                   placeholder="acme-corp"
                   dir="ltr"
                   autoComplete="off"
-                  required
+                  spellCheck={false}
+                  aria-invalid={Boolean(error && error.includes('معرّف الرابط'))}
+                  aria-describedby="reg-slug-hint"
                 />
               </div>
-              <p className="erp-auth-field-hint">
+              <p id="reg-slug-hint" className="erp-auth-field-hint">
                 رابط الدخول لشركتك: <span dir="ltr">/t/{normalizedSlug || 'your-company'}/login</span>
+                <span className="block mt-1 font-normal text-[var(--color-text-muted)]">
+                  أحرف إنجليزية صغيرة وأرقام وشرطات فقط؛ لا يبدأ أو ينتهي بشرطة.
+                </span>
               </p>
             </div>
 
@@ -160,6 +185,7 @@ export const RegisterCompany: React.FC = () => {
                     onChange={(e) => setPhone(e.target.value)}
                     dir="ltr"
                     inputMode="tel"
+                    autoComplete="tel"
                     placeholder="+20 10 0000 0000"
                   />
                 </div>
@@ -175,6 +201,7 @@ export const RegisterCompany: React.FC = () => {
                   className="erp-auth-input"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
+                  autoComplete="street-address"
                   placeholder="المدينة - المنطقة الصناعية - الشارع"
                 />
               </div>
@@ -262,7 +289,7 @@ export const RegisterCompany: React.FC = () => {
 
             <div className="erp-auth-footer">
               لديك حساب؟{' '}
-              <Link to={`/t/${defaultSlug}/login`}>تسجيل الدخول</Link>
+              <Link to={loginHref}>تسجيل الدخول</Link>
             </div>
           </form>
         </div>
@@ -270,6 +297,3 @@ export const RegisterCompany: React.FC = () => {
     </AuthShell>
   );
 };
-
-
-

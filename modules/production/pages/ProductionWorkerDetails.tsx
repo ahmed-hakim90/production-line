@@ -510,7 +510,7 @@ export const ProductionWorkerDetails: React.FC = () => {
               <h3 className="text-lg font-bold">سجل التقارير</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>

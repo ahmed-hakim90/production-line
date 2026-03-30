@@ -545,7 +545,7 @@ const MonthlyAdvanceTable: React.FC<{
   onDelete: (id: string) => void;
 }> = ({ loans, employeeMap, canDisburse, canDelete, actionLoading, onDisburse, onDelete }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-sm">
+    <table className="erp-table w-full text-sm">
       <thead className="erp-thead">
         <tr>
           <th className="erp-th">الكود</th>
@@ -628,7 +628,7 @@ const InstallmentTable: React.FC<{
   onDelete: (id: string) => void;
 }> = ({ loans, employeeMap, expandedLoan, setExpandedLoan, canDisburse, canDelete, actionLoading, onDisburse, onDelete }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-sm">
+    <table className="erp-table w-full text-sm">
       <thead className="erp-thead">
         <tr>
           <th className="erp-th">الكود</th>

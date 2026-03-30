@@ -163,7 +163,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
       {records.length > 0 && (
         <Card>
           <div className="erp-table-scroll">
-            <table className="w-full text-sm text-right">
+            <table className="erp-table w-full text-sm text-right">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الموظف</th>

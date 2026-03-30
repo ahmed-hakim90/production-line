@@ -225,7 +225,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
 
         <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
           <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تقييم تفصيلي لكل خط</p>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '2mm', fontSize: isThermal ? '7pt' : '9.5pt' }}>
+          <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '2mm', fontSize: isThermal ? '7pt' : '9.5pt' }}>
             <thead>
               <tr style={{ background: palette.tableHeaderBg }}>
                 <Th>الخط</Th>

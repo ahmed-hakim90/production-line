@@ -683,7 +683,7 @@ export const WorkOrders: React.FC = () => {
               ))}
             </div>
             <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm" data-no-table-enhance="true">
+            <table className="erp-table w-full text-sm" data-no-table-enhance="true">
               <thead className="erp-thead">
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
                   <th className="erp-th">رقم الأمر</th>

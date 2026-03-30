@@ -852,7 +852,7 @@ export const LineDetails: React.FC = () => {
 
           {lineAllocatedCosts.centers.length > 0 ? (
             <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-              <table className="w-full text-right text-sm">
+              <table className="erp-table w-full text-right text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">مركز التكلفة</th>
@@ -894,7 +894,7 @@ export const LineDetails: React.FC = () => {
 
           {dailySupervisorCostRows.length > 0 ? (
             <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-              <table className="w-full text-right text-sm">
+              <table className="erp-table w-full text-right text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -1231,7 +1231,7 @@ export const LineDetails: React.FC = () => {
           <h3 className="text-lg font-bold">سجل التقارير</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse">
+          <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">التاريخ</th>

@@ -1369,7 +1369,7 @@ export const ProductionPlans: React.FC = () => {
               ))}
             </div>
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead>
                   <tr className="bg-[#f8f9fa]/50 border-b border-[var(--color-border)]">
                     {canEdit && (

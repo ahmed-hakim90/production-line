@@ -149,7 +149,7 @@ export const StockCounts: React.FC = () => {
       {activeSession && (
         <Card title={`جلسة جرد: ${activeSession.warehouseName}`}>
           <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse">
+            <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الصنف</th>
