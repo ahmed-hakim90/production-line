@@ -79,7 +79,13 @@ export const signInWithEmail = async (
 export const createUserWithEmail = async (
   email: string,
   password: string,
-  userData?: { displayName: string; roleId: string; createdBy: string },
+  userData?: {
+    displayName: string;
+    roleId: string;
+    createdBy: string;
+    tenantId: string;
+    isActive?: boolean;
+  },
 ): Promise<{ uid: string }> => {
   if (!isConfigured) throw new Error('Firebase not configured');
 
@@ -103,7 +109,8 @@ export const createUserWithEmail = async (
         email,
         displayName: userData.displayName,
         roleId: userData.roleId,
-        isActive: true,
+        tenantId: userData.tenantId,
+        isActive: userData.isActive ?? true,
         createdBy: userData.createdBy,
         createdAt: fsTs(),
       });
@@ -185,6 +192,60 @@ export const runAssetDepreciationCallable = async (input?: { period?: string }):
   >(functionsClient, 'runAssetDepreciationJob');
   try {
     const result = await callable(input);
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export type ResolveTenantSlugResult = {
+  exists: boolean;
+  tenantId?: string;
+  status?: string;
+  pendingRegistration?: boolean;
+};
+
+/** Pre-login: resolves company slug via Cloud Function (Firestore tenant_slugs is auth-only). */
+export const resolveTenantSlugCallable = async (slug: string): Promise<ResolveTenantSlugResult> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ slug: string }, ResolveTenantSlugResult>(
+    functionsClient,
+    'resolveTenantSlug',
+  );
+  try {
+    const result = await callable({ slug: slug.trim().toLowerCase() });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export type TenantFirestoreFootprint = {
+  tenantId: string;
+  slug: string;
+  name: string;
+  status: string;
+  userCount: number;
+  collectionsWithData: number;
+  totalDocuments: number;
+  perCollection: Record<string, number>;
+  failedCollections: string[];
+  estimatedStorageBytes: number;
+  avgDocBytesAssumption: number;
+  usageNoteAr: string;
+};
+
+/** Super-admin: per-tenant Firestore document counts (Cloud Function + Admin SDK). */
+export const getTenantFirestoreFootprintCallable = async (
+  tenantId: string,
+): Promise<TenantFirestoreFootprint> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ tenantId: string }, TenantFirestoreFootprint>(
+    functionsClient,
+    'getTenantFirestoreFootprint',
+  );
+  try {
+    const result = await callable({ tenantId: tenantId.trim() });
     return result.data;
   } catch (error: any) {
     throw normalizeCallableError(error);

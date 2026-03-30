@@ -4,7 +4,8 @@
  */
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { withTenantPath } from '@/lib/tenantPaths';
 import {
   BarChart3,
   Boxes,
@@ -63,6 +64,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef  = useRef<HTMLDivElement>(null);
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
   const { can }  = usePermission();
 
@@ -104,9 +106,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
   useEffect(() => { setActiveIdx(0); }, [filtered.length]);
 
   const go = useCallback((item: PaletteItem) => {
-    navigate(item.path);
+    navigate(withTenantPath(tenantSlug, item.path));
     onClose();
-  }, [navigate, onClose]);
+  }, [navigate, onClose, tenantSlug]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

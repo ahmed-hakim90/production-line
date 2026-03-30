@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useParams } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronLeft,
@@ -16,6 +16,7 @@ import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSidebar';
 import type { SidebarIconStyle } from '@/types';
 import { resolveMenuIcon } from './menuIconMap';
+import { withTenantPath } from '@/lib/tenantPaths';
 
 export interface SidebarProps {
   open: boolean;
@@ -66,6 +67,7 @@ function getIconClasses(
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can }  = usePermission();
   const { roleName, roleColor, isReadOnly } = useCurrentRole();
   const userDisplayName    = useAppStore((s) => s.userDisplayName);
@@ -212,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       return (
                         <div key={item.key} className="relative mb-0.5 group/nav">
                           <NavLink
-                            to={item.path}
+                            to={withTenantPath(tenantSlug, item.path)}
                             className={[
                               'w-full flex justify-center items-center h-9 rounded-[var(--border-radius-sm)] transition-colors',
                               itemActive
@@ -246,7 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                     return (
                       <NavLink
                         key={item.key}
-                        to={item.path}
+                        to={withTenantPath(tenantSlug, item.path)}
                         className={[
                           'relative flex items-center gap-2 px-2 py-2 rounded-[var(--border-radius-sm)] text-[13px] transition-colors select-none text-start',
                           itemActive
@@ -352,7 +354,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         return (
                           <NavLink
                             key={item.path}
-                            to={item.path}
+                            to={withTenantPath(tenantSlug, item.path)}
                             className={[
                               'relative flex items-center gap-2 pr-2.5 pl-2 py-1.5 rounded-[var(--border-radius-sm)] text-[12.5px] transition-colors',
                               itemActive

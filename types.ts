@@ -912,16 +912,60 @@ export interface SystemSettings {
   clientUpdateMessageAr?: string;
 }
 
+// ─── Multi-tenant ────────────────────────────────────────────────────────────
+
+export interface FirestoreTenant {
+  id?: string;
+  slug: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  theme?: ThemeSettings;
+  status: 'pending' | 'active' | 'suspended';
+  createdAt?: any;
+  approvedAt?: any;
+  approvedBy?: string;
+}
+
+export interface TenantSlugDoc {
+  tenantId: string;
+}
+
+export interface PendingTenant {
+  id?: string;
+  slug: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  adminEmail: string;
+  adminDisplayName: string;
+  requestedAt?: any;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  adminUid?: string;
+}
+
 // ─── Dynamic Roles & Permissions ─────────────────────────────────────────────
 
 /** @deprecated use FirestoreRole + dynamic permissions instead */
 export type UserRole = 'admin' | 'factory_manager' | 'hall_supervisor' | 'supervisor';
+
+/** Stable key for defaults and Cloud Functions (e.g. admin, factory_manager) */
+export type FirestoreRoleKey =
+  | 'admin'
+  | 'factory_manager'
+  | 'hall_supervisor'
+  | 'supervisor'
+  | 'hr_manager'
+  | 'accountant';
 
 export interface FirestoreRole {
   id?: string;
   name: string;
   color: string;
   permissions: Record<string, boolean>;
+  tenantId?: string;
+  roleKey?: FirestoreRoleKey;
 }
 
 export interface FirestoreUser {
@@ -931,7 +975,8 @@ export interface FirestoreUser {
   code?: string;
   roleId: string;
   role?: string;
-  tenantId?: string;
+  tenantId: string;
+  isSuperAdmin?: boolean;
   isActive: boolean;
   notifications?: {
     productionReports?: boolean;

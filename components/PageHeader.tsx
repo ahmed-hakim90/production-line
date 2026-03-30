@@ -15,7 +15,8 @@
  *   />
  */
 import React, { useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { tenantHomePath } from '@/lib/tenantPaths';
 import {
   Check,
   Download,
@@ -136,6 +137,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   extra,
   loading,
 }) => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
   const setPageBack = usePageBackSetter();
   const visibleMoreActions = moreActions?.filter((a) => !a.hidden) ?? [];
@@ -170,8 +172,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       window.history.back();
       return;
     }
-    navigate('/');
-  }, [backAction, backConfig, navigate]);
+    navigate(tenantHomePath(tenantSlug));
+  }, [backAction, backConfig, navigate, tenantSlug]);
 
   const backDisabled = backConfig?.disabled ?? false;
   const backLabel = backConfig?.label || 'رجوع';

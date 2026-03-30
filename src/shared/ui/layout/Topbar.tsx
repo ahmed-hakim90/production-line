@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Download,
@@ -19,6 +19,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { useCommandPalette } from '@/components/useCommandPalette';
 import { resolveMenuIcon } from './menuIconMap';
 import { usePageBackRegistration } from './PageBackContext';
+import { tenantHomePath } from '@/lib/tenantPaths';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -46,11 +47,13 @@ function useScrolled(threshold = 4): boolean {
 }
 
 export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseToggle }) => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { isReadOnly } = useCurrentRole();
   const { canViewActivityLog } = usePermission();
   const { collapsed }  = useSidebar();
   const navigate       = useNavigate();
   const location       = useLocation();
+  const homePath       = tenantHomePath(tenantSlug);
   const scrolled       = useScrolled();
 
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -157,7 +160,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {breadcrumb ? (
             <nav className="hidden sm:flex items-center gap-1 text-[12.5px] min-w-0">
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate(homePath)}
                 className="flex items-center gap-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
               >
                 {renderTopbarIcon(breadcrumb.groupIcon, undefined, 13)}
@@ -171,7 +174,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             </nav>
           ) : (
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(homePath)}
               className="hidden sm:flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--color-text)] hover:text-primary transition-colors"
             >
               <Home size={15} />

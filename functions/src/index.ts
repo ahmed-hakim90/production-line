@@ -5,11 +5,17 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 
 initializeApp();
 
 const db = getFirestore();
-const STATS_ROOT = 'dashboardStats/global';
+
+const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
+const TENANTS_COLLECTION = 'tenants';
+const PENDING_TENANTS_COLLECTION = 'pending_tenants';
+
+const statsRootForTenant = (tenantId: string) => `dashboardStats/${tenantId || 'global'}`;
 const EMPLOYEES_COLLECTION = 'employees';
 const USER_DEVICES_COLLECTION = 'user_devices';
 const USERS_COLLECTION = 'users';
@@ -17,10 +23,10 @@ const ROLES_COLLECTION = 'roles';
 const ASSETS_COLLECTION = 'assets';
 const ASSET_DEPRECIATIONS_COLLECTION = 'asset_depreciations';
 const FCM_TOKEN_SUBCOLLECTION = 'fcmTokens';
-const REPORT_NOTIFY_ROLE_IDS = new Set(['admin', 'factory_manager', 'system_manager']);
 
 type ReportLike = {
   date?: string;
+  tenantId?: string;
   quantityProduced?: number;
   componentScrapItems?: Array<{ quantity?: number }>;
   totalCost?: number;
@@ -40,6 +46,7 @@ const normalizeReport = (value: ReportLike | undefined): Required<ReportLike> | 
   if (!value || !value.date || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
   return {
     date: value.date,
+    tenantId: String(value.tenantId || 'global').trim() || 'global',
     quantityProduced: toNumber(value.quantityProduced),
     componentScrapItems: Array.isArray(value.componentScrapItems) ? value.componentScrapItems : [],
     totalCost: toNumber(value.totalCost),
@@ -92,17 +99,39 @@ const calculateMonthlyDepreciationSafe = (
 const runAssetDepreciationForPeriod = async (periodInput?: string) => {
   const period = normalizePeriod(periodInput);
   const periodEnd = periodEndDate(period);
-  const activeAssetsSnap = await db
-    .collection(ASSETS_COLLECTION)
-    .where('status', '==', 'active')
-    .get();
 
   let processedAssets = 0;
   let createdEntries = 0;
   let skippedEntries = 0;
 
-  for (const assetDoc of activeAssetsSnap.docs) {
+  const tenantsSnap = await db.collection(TENANTS_COLLECTION).get();
+  const activeTenantIds = tenantsSnap.docs
+    .filter((d) => String((d.data() as { status?: string }).status || '') === 'active')
+    .map((d) => d.id);
+
+  const assetQueries: Promise<FirebaseFirestore.QuerySnapshot>[] = [];
+  if (activeTenantIds.length === 0) {
+    assetQueries.push(
+      db.collection(ASSETS_COLLECTION).where('status', '==', 'active').get(),
+    );
+  } else {
+    activeTenantIds.forEach((tid) => {
+      assetQueries.push(
+        db
+          .collection(ASSETS_COLLECTION)
+          .where('status', '==', 'active')
+          .where('tenantId', '==', tid)
+          .get(),
+      );
+    });
+  }
+
+  const assetSnapshots = await Promise.all(assetQueries);
+  const assetDocs = assetSnapshots.flatMap((s) => s.docs);
+
+  for (const assetDoc of assetDocs) {
     const asset = assetDoc.data() as {
+      tenantId?: string;
       purchaseDate?: string;
       purchaseCost?: number;
       salvageValue?: number;
@@ -111,6 +140,7 @@ const runAssetDepreciationForPeriod = async (periodInput?: string) => {
       accumulatedDepreciation?: number;
       currentValue?: number;
     };
+    const assetTenantId = String(asset.tenantId || 'global').trim() || 'global';
     const purchaseDate = new Date(String(asset.purchaseDate || ''));
     if (Number.isNaN(purchaseDate.getTime()) || purchaseDate > periodEnd) {
       skippedEntries += 1;
@@ -147,6 +177,7 @@ const runAssetDepreciationForPeriod = async (periodInput?: string) => {
 
       const batch = db.batch();
       batch.set(depRef, {
+        tenantId: assetTenantId,
         assetId: assetDoc.id,
         period: cursor,
         depreciationAmount,
@@ -183,10 +214,22 @@ const runAssetDepreciationForPeriod = async (periodInput?: string) => {
   };
 };
 
+const assertSuperAdmin = async (uid: string): Promise<void> => {
+  const userSnap = await db.collection(USERS_COLLECTION).doc(uid).get();
+  if (!userSnap.exists) {
+    throw new HttpsError('permission-denied', 'المستخدم غير موجود.');
+  }
+  const user = userSnap.data() as { isSuperAdmin?: boolean };
+  if (user.isSuperAdmin !== true) {
+    throw new HttpsError('permission-denied', 'هذه العملية متاحة لمشرف المنصة فقط.');
+  }
+};
+
 const hasManageUsersPermission = async (uid: string): Promise<boolean> => {
   const userSnap = await db.collection(USERS_COLLECTION).doc(uid).get();
   if (!userSnap.exists) return false;
-  const user = userSnap.data() as { roleId?: string };
+  const user = userSnap.data() as { roleId?: string; isSuperAdmin?: boolean };
+  if (user.isSuperAdmin === true) return true;
   const roleId = String(user.roleId || '').trim();
   if (!roleId) return false;
   const roleSnap = await db.collection(ROLES_COLLECTION).doc(roleId).get();
@@ -194,6 +237,21 @@ const hasManageUsersPermission = async (uid: string): Promise<boolean> => {
   const role = roleSnap.data() as { permissions?: Record<string, boolean> };
   const permissions = role.permissions || {};
   return permissions['users.manage'] === true || permissions['roles.manage'] === true;
+};
+
+const userReceivesProductionReportPush = async (roleId: string): Promise<boolean> => {
+  const rid = String(roleId || '').trim();
+  if (!rid) return false;
+  const roleSnap = await db.collection(ROLES_COLLECTION).doc(rid).get();
+  if (!roleSnap.exists) return false;
+  const role = roleSnap.data() as {
+    roleKey?: string;
+    permissions?: Record<string, boolean>;
+  };
+  const key = String(role.roleKey || '').toLowerCase();
+  if (key === 'admin' || key === 'factory_manager' || key === 'system_manager') return true;
+  const p = role.permissions || {};
+  return p['reports.view'] === true && p['factoryDashboard.view'] === true;
 };
 
 const hasAnyPermission = async (uid: string, permissionKeys: string[]): Promise<boolean> => {
@@ -210,8 +268,10 @@ const hasAnyPermission = async (uid: string, permissionKeys: string[]): Promise<
 };
 
 const applyDelta = async (report: Required<ReportLike>, factor: 1 | -1) => {
-  const dailyRef = db.doc(`${STATS_ROOT}/daily/${report.date}`);
-  const monthlyRef = db.doc(`${STATS_ROOT}/monthly/${monthKey(report.date)}`);
+  const tid = String(report.tenantId || 'global').trim() || 'global';
+  const root = statsRootForTenant(tid);
+  const dailyRef = db.doc(`${root}/daily/${report.date}`);
+  const monthlyRef = db.doc(`${root}/monthly/${monthKey(report.date)}`);
   const wasteQuantity = deriveComponentWaste(report.componentScrapItems);
   const payload = {
     totalProduction: FieldValue.increment(report.quantityProduced * factor),
@@ -375,14 +435,19 @@ export const onProductionReportCreated = onDocumentCreated(
       `${Number.isFinite(producedQty) ? producedQty : 0} وحدة`,
     ].join(' — ');
 
-    const usersSnap = await db
+    const reportTenant = String((report as { tenantId?: string }).tenantId || '').trim();
+    let usersQuery: FirebaseFirestore.Query = db
       .collection(USERS_COLLECTION)
-      .where('isActive', '==', true)
-      .get();
+      .where('isActive', '==', true);
+    if (reportTenant) {
+      usersQuery = usersQuery.where('tenantId', '==', reportTenant);
+    }
+    const usersSnap = await usersQuery.get();
     if (usersSnap.empty) return;
 
     const tokenEntries: Array<{ token: string; ref: FirebaseFirestore.DocumentReference }> = [];
     const seenTokens = new Set<string>();
+    const roleNotifyCache = new Map<string, boolean>();
 
     for (const userDoc of usersSnap.docs) {
       const userData = userDoc.data() as {
@@ -390,8 +455,12 @@ export const onProductionReportCreated = onDocumentCreated(
         role?: string;
         notifications?: { productionReports?: boolean };
       };
-      const roleCandidate = String(userData.roleId || userData.role || '').trim().toLowerCase();
-      const canReceiveByRole = REPORT_NOTIFY_ROLE_IDS.has(roleCandidate);
+      const roleId = String(userData.roleId || userData.role || '').trim();
+      let canReceiveByRole = roleNotifyCache.get(roleId);
+      if (canReceiveByRole === undefined) {
+        canReceiveByRole = await userReceivesProductionReportPush(roleId);
+        roleNotifyCache.set(roleId, canReceiveByRole);
+      }
       if (!canReceiveByRole) continue;
       if (userData.notifications?.productionReports === false) continue;
 
@@ -508,6 +577,17 @@ export const adminDeleteUserHard = onCall(
       throw new HttpsError('failed-precondition', 'لا يمكن حذف حسابك الحالي.');
     }
 
+    const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const targetUserSnap = await db.collection(USERS_COLLECTION).doc(targetUid).get();
+    if (!targetUserSnap.exists) {
+      throw new HttpsError('not-found', 'المستخدم غير موجود.');
+    }
+    const reqCtx = requesterSnap.data() as { tenantId?: string; isSuperAdmin?: boolean } | undefined;
+    const tgtCtx = targetUserSnap.data() as { tenantId?: string } | undefined;
+    if (!reqCtx?.isSuperAdmin && reqCtx?.tenantId !== tgtCtx?.tenantId) {
+      throw new HttpsError('permission-denied', 'لا يمكنك إدارة مستخدم من شركة أخرى.');
+    }
+
     const linkedEmployees = await db
       .collection(EMPLOYEES_COLLECTION)
       .where('userId', '==', targetUid)
@@ -576,11 +656,29 @@ export const adminUpdateUserCredentials = onCall(
       throw new HttpsError('invalid-argument', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
     }
 
+    const requesterSnapUpd = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const targetUserSnapUpd = await db.collection(USERS_COLLECTION).doc(targetUid).get();
+    if (!targetUserSnapUpd.exists) {
+      throw new HttpsError('not-found', 'المستخدم غير موجود.');
+    }
+    const reqUpd = requesterSnapUpd.data() as { tenantId?: string; isSuperAdmin?: boolean } | undefined;
+    const tgtUpd = targetUserSnapUpd.data() as { tenantId?: string } | undefined;
+    if (!reqUpd?.isSuperAdmin && reqUpd?.tenantId !== tgtUpd?.tenantId) {
+      throw new HttpsError('permission-denied', 'لا يمكنك إدارة مستخدم من شركة أخرى.');
+    }
+
     if (nextEmail) {
-      const existing = await db
-        .collection(USERS_COLLECTION)
-        .where('email', '==', nextEmail)
-        .get();
+      const tenantId = String(tgtUpd?.tenantId || '').trim();
+      const existing = tenantId
+        ? await db
+          .collection(USERS_COLLECTION)
+          .where('email', '==', nextEmail)
+          .where('tenantId', '==', tenantId)
+          .get()
+        : await db
+          .collection(USERS_COLLECTION)
+          .where('email', '==', nextEmail)
+          .get();
       const usedByOther = existing.docs.some((docSnap) => docSnap.id !== targetUid);
       if (usedByOther) {
         throw new HttpsError('already-exists', 'البريد الإلكتروني مستخدم بالفعل.');
@@ -666,5 +764,166 @@ export const runAssetDepreciationJob = onCall(
 
     const requestedPeriod = String((request.data as { period?: string } | undefined)?.period || '').trim();
     return runAssetDepreciationForPeriod(requestedPeriod || undefined);
+  },
+);
+
+const TENANT_FOOTPRINT_AVG_DOC_BYTES = 900;
+
+/** Super-admin: aggregate document counts per tenant (for platform insights). */
+export const getTenantFirestoreFootprint = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 120,
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    await assertSuperAdmin(requesterUid);
+
+    const tenantId = String((request.data as { tenantId?: string })?.tenantId || '').trim();
+    if (!tenantId) {
+      throw new HttpsError('invalid-argument', 'يجب تمرير tenantId.');
+    }
+
+    const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+    if (!tenantSnap.exists) {
+      throw new HttpsError('not-found', 'الشركة غير موجودة.');
+    }
+    const t = tenantSnap.data() as { slug?: string; name?: string; status?: string };
+
+    const perCollection: Record<string, number> = {};
+    const failedCollections: string[] = [];
+
+    const chunkSize = 12;
+    for (let i = 0; i < TENANT_SCOPED_COLLECTIONS.length; i += chunkSize) {
+      const slice = TENANT_SCOPED_COLLECTIONS.slice(i, i + chunkSize);
+      await Promise.all(
+        slice.map(async (collName) => {
+          try {
+            const q = db.collection(collName).where('tenantId', '==', tenantId);
+            const agg = await q.count().get();
+            const c = agg.data().count;
+            if (c > 0) {
+              perCollection[collName] = c;
+            }
+          } catch {
+            failedCollections.push(collName);
+          }
+        }),
+      );
+    }
+
+    try {
+      const ss = await db.collection('system_settings').doc(tenantId).get();
+      if (ss.exists) {
+        perCollection.system_settings_doc = 1;
+      }
+    } catch {
+      failedCollections.push('system_settings_doc');
+    }
+
+    try {
+      const dailyAgg = await db
+        .collection('dashboardStats')
+        .doc(tenantId)
+        .collection('daily')
+        .count()
+        .get();
+      const d = dailyAgg.data().count;
+      if (d > 0) {
+        perCollection['dashboardStats/daily'] = d;
+      }
+    } catch {
+      failedCollections.push('dashboardStats/daily');
+    }
+
+    try {
+      const monthlyAgg = await db
+        .collection('dashboardStats')
+        .doc(tenantId)
+        .collection('monthly')
+        .count()
+        .get();
+      const m = monthlyAgg.data().count;
+      if (m > 0) {
+        perCollection['dashboardStats/monthly'] = m;
+      }
+    } catch {
+      failedCollections.push('dashboardStats/monthly');
+    }
+
+    const totalDocuments = Object.values(perCollection).reduce((sum, n) => sum + n, 0);
+    const userCount = perCollection.users ?? 0;
+    const collectionsWithData = Object.keys(perCollection).length;
+    const estimatedStorageBytes = Math.round(totalDocuments * TENANT_FOOTPRINT_AVG_DOC_BYTES);
+
+    return {
+      tenantId,
+      slug: String(t.slug || ''),
+      name: String(t.name || ''),
+      status: String(t.status || ''),
+      userCount,
+      collectionsWithData,
+      totalDocuments,
+      perCollection,
+      failedCollections,
+      estimatedStorageBytes,
+      avgDocBytesAssumption: TENANT_FOOTPRINT_AVG_DOC_BYTES,
+      usageNoteAr:
+        'فوترة Firebase تُحسب على مستوى المشروع بالكامل (قراءات، كتابات، تخزين، شبكة). الأرقام هنا من استعلامات عدّ المستندات ذات tenantId. حجم التخزين تقدير تقريبي ولا يعكس الفوترة الفعلية.',
+    };
+  },
+);
+
+/** Public: resolve tenant slug before login (client cannot read tenant_slugs without auth). */
+export const resolveTenantSlug = onCall(
+  {
+    region: 'us-central1',
+    memory: '128MiB',
+    cors: true,
+    invoker: 'public',
+  },
+  async (request) => {
+    const slug = String((request.data as { slug?: string })?.slug || '')
+      .trim()
+      .toLowerCase();
+    if (!slug || !/^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$/.test(slug)) {
+      throw new HttpsError('invalid-argument', 'معرّف الشركة غير صالح.');
+    }
+
+    const slugSnap = await db.collection(TENANT_SLUGS_COLLECTION).doc(slug).get();
+    if (slugSnap.exists) {
+      const tenantId = String((slugSnap.data() as { tenantId?: string })?.tenantId || '').trim();
+      if (!tenantId) {
+        return { exists: false as const };
+      }
+      const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+      const status = tenantSnap.exists
+        ? String((tenantSnap.data() as { status?: string })?.status || 'active')
+        : 'unknown';
+      return { exists: true as const, tenantId, status };
+    }
+
+    const pendingSnap = await db
+      .collection(PENDING_TENANTS_COLLECTION)
+      .where('slug', '==', slug)
+      .where('status', '==', 'pending')
+      .limit(1)
+      .get();
+    if (!pendingSnap.empty) {
+      const docSnap = pendingSnap.docs[0];
+      const data = docSnap.data() as { status?: string };
+      return {
+        exists: true as const,
+        tenantId: docSnap.id,
+        status: String(data?.status || 'pending'),
+        pendingRegistration: true as const,
+      };
+    }
+
+    return { exists: false as const };
   },
 );

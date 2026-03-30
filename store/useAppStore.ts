@@ -47,6 +47,7 @@ import {
   auth,
   runAssetDepreciationCallable,
 } from '../services/firebase';
+import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
@@ -919,6 +920,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         email,
         displayName,
         roleId: defaultRole.id!,
+        tenantId: getCurrentTenantId(),
         isActive: false,
         createdBy: 'self-register',
       });
@@ -929,7 +931,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         uid,
         userEmail: email,
         userDisplayName: displayName,
-        userProfile: { id: uid, email, displayName, roleId: defaultRole.id!, isActive: false },
+        userProfile: {
+          id: uid,
+          email,
+          displayName,
+          roleId: defaultRole.id!,
+          tenantId: getCurrentTenantId(),
+          isActive: false,
+        },
         loading: false,
       });
     } catch (error: any) {
@@ -967,6 +976,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Auth: Logout ──────────────────────────────────────────────────────────
 
   logout: async () => {
+    setCurrentTenant(null);
     const { uid, userEmail } = get();
     if (uid && userEmail) {
       activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج');
@@ -1031,6 +1041,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       displayName,
       roleId,
       createdBy: get().uid ?? '',
+      tenantId: getCurrentTenantId(),
     });
 
     get()._logActivity('CREATE_USER', `إنشاء مستخدم: ${displayName} (${email})`, { newUid, roleId });
@@ -1061,16 +1072,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, authError: null });
     try {
       const uid = currentUser.uid;
-
-      const roles = await roleService.seedIfEmpty();
-      set({ roles });
 
       const userDoc = await userService.get(uid);
       if (!userDoc) {
         await signOut();
+        setCurrentTenant(null);
         set({
           loading: false,
           isAuthenticated: false,
@@ -1078,6 +1087,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         return;
       }
+
+      const slugTenantId = getCurrentTenantIdOrNull();
+      if (!userDoc.isSuperAdmin && slugTenantId && userDoc.tenantId !== slugTenantId) {
+        await signOut();
+        setCurrentTenant(null);
+        set({
+          loading: false,
+          isAuthenticated: false,
+          authError: 'هذا الحساب لا ينتمي لهذه الشركة.',
+        });
+        return;
+      }
+
+      setCurrentTenant(userDoc.tenantId);
 
       if (!userDoc.isActive) {
         set({
@@ -1091,6 +1114,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         return;
       }
+
+      const roles = await roleService.seedIfEmpty();
+      set({ roles });
 
       const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
 
@@ -1121,6 +1147,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const userDoc = await userService.get(uid);
       if (!userDoc) return false;
       if (!userDoc.isActive) return false;
+
+      setCurrentTenant(userDoc.tenantId);
 
       const roles = get().roles.length > 0 ? get().roles : await roleService.seedIfEmpty();
       if (roles.length > 0 && get().roles.length === 0) set({ roles });

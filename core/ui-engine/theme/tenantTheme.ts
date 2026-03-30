@@ -306,9 +306,10 @@ export async function loadTenantTheme(tenantId?: string | null): Promise<TenantT
   }
 
   try {
-    const ref = doc(db, 'tenants', tenantId, 'theme');
+    const ref = doc(db, 'tenants', tenantId);
     const snapshot = await getDoc(ref);
-    return resolveTheme(snapshot.data() as Partial<TenantTheme> | null);
+    const data = snapshot.data() as { theme?: Partial<TenantTheme> } | undefined;
+    return resolveTheme(data?.theme ?? null);
   } catch (error) {
     console.error('Failed to load tenant theme:', error);
     return PRESETS['indigo-pro'];

@@ -13,6 +13,8 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from './firebase';
 import type { AppNotification } from '../types';
+import { getCurrentTenantId } from '../lib/currentTenant';
+import { tenantQuery } from '../lib/tenantFirestore';
 export {
   registerFCMToken,
   initFCMListener,
@@ -35,7 +37,7 @@ export const notificationService = {
   async getAll(): Promise<AppNotification[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
       results.sort(sortByCreatedAtDesc);
       return results;
@@ -48,10 +50,7 @@ export const notificationService = {
   async getByRecipient(recipientId: string): Promise<AppNotification[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
-        where('recipientId', '==', recipientId),
-      );
+      const q = tenantQuery(db, COLLECTION, where('recipientId', '==', recipientId));
       const snap = await getDocs(q);
       const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
       results.sort(sortByCreatedAtDesc);
@@ -67,6 +66,7 @@ export const notificationService = {
     try {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
+        tenantId: getCurrentTenantId(),
         createdAt: serverTimestamp(),
       });
       return ref.id;
@@ -88,8 +88,9 @@ export const notificationService = {
   async markAllAsRead(recipientId: string): Promise<void> {
     if (!isConfigured) return;
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('recipientId', '==', recipientId),
         where('isRead', '==', false),
       );
@@ -105,10 +106,7 @@ export const notificationService = {
 
   subscribeToRecipient(recipientId: string, callback: (notifications: AppNotification[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    const q = query(
-      collection(db, COLLECTION),
-      where('recipientId', '==', recipientId),
-    );
+    const q = tenantQuery(db, COLLECTION, where('recipientId', '==', recipientId));
     return onSnapshot(
       q,
       (snap) => {
@@ -126,7 +124,7 @@ export const notificationService = {
   subscribeAll(callback: (notifications: AppNotification[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
     return onSnapshot(
-      collection(db, COLLECTION),
+      tenantQuery(db, COLLECTION),
       (snap) => {
         const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
         results.sort(sortByCreatedAtDesc);

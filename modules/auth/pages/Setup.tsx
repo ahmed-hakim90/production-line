@@ -3,15 +3,17 @@
  * Only accessible when zero users exist in the system.
  */
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { createUserWithEmail, signOut, isConfigured } from '../../../services/firebase';
 import { userService } from '../../../services/userService';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { roleService } from '../../system/services/roleService';
 
 type Step = 'name' | 'email' | 'password';
 
 export const Setup: React.FC = () => {
   const navigate = useNavigate();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const [checking, setChecking] = useState(true);
   const [hasUsers, setHasUsers] = useState(false);
@@ -27,15 +29,18 @@ export const Setup: React.FC = () => {
 
   useEffect(() => {
     if (!isConfigured) { setChecking(false); return; }
-    userService.getAll()
-      .then((users) => { if (users.length > 0) setHasUsers(true); })
+    userService
+      .getAll()
+      .then((users) => {
+        if (users.length > 0) setHasUsers(true);
+      })
       .catch(() => {})
       .finally(() => setChecking(false));
   }, []);
 
   useEffect(() => {
-    if (!checking && hasUsers) navigate('/login', { replace: true });
-  }, [checking, hasUsers, navigate]);
+    if (!checking && hasUsers) navigate(`/t/${tenantSlug}/login`, { replace: true });
+  }, [checking, hasUsers, navigate, tenantSlug]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,12 +58,13 @@ export const Setup: React.FC = () => {
         email,
         displayName: name,
         roleId: adminRole.id!,
+        tenantId: getCurrentTenantId(),
         isActive: true,
         createdBy: 'setup',
       });
       await signOut();
       setSuccess(true);
-      setTimeout(() => navigate('/login', { replace: true }), 2000);
+      setTimeout(() => navigate(`/t/${tenantSlug}/login`, { replace: true }), 2000);
     } catch (err: any) {
       const code = err?.code ?? '';
       setError(

@@ -1,7 +1,16 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { HomeDashboardRouter } from './modules/dashboards/pages/HomeDashboardRouter';
@@ -16,6 +25,7 @@ import { SYSTEM_ROUTES } from './modules/system/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import { ATTENDANCE_ROUTES } from './modules/attendance/routes';
 import type { AppRouteDef } from './modules/shared/routes';
+import type { PublicRouteDef } from './modules/shared/routes/types';
 import { useAppStore } from './store/useAppStore';
 import { useAuthUiSlice } from './store/selectors';
 import { onAuthChange } from './services/firebase';
@@ -32,6 +42,17 @@ import { sessionTrackerService } from './modules/system/audit';
 import { userService } from './services/userService';
 import { BarChart3, Boxes, Factory, Hammer, Users, type LucideIcon } from 'lucide-react';
 import { ForcedClientUpdateGate } from './components/ForcedClientUpdateGate';
+import { setCurrentTenant } from './lib/currentTenant';
+import { defaultTenantSlug, tenantHomePath, withTenantPath } from './lib/tenantPaths';
+import { tenantService } from './services/tenantService';
+import { RegisterCompany } from './modules/auth/pages/RegisterCompany';
+import { CompanyNotApprovedPage } from './modules/auth/pages/CompanyNotApprovedPage';
+import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
+import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
+import { SuperAdminGuard } from './modules/super-admin/SuperAdminGuard';
+import { SuperAdminShell } from './modules/super-admin/SuperAdminShell';
+import { TenantsApproval } from './modules/super-admin/pages/TenantsApproval';
+import { TenantInsightsPage } from './modules/super-admin/pages/TenantInsightsPage';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
@@ -41,8 +62,12 @@ const MODAL_WORKSPACE_CLEARED_FLAG = 'erp_modal_workspace_cleared_v1';
 const buildCurrentPath = (location: { pathname: string; search: string }) =>
   `${location.pathname}${location.search}`;
 
-const shouldPersistRedirect = (path: string) =>
-  !!path && path !== '/login' && path !== '/setup' && path !== '/pending';
+const shouldPersistRedirect = (path: string) => {
+  if (!path) return false;
+  const lower = path.toLowerCase();
+  if (lower.includes('/login') || lower.includes('/setup') || lower.includes('/pending')) return false;
+  return true;
+};
 
 const savePostLoginRedirect = (path: string) => {
   if (!shouldPersistRedirect(path)) return;
@@ -112,9 +137,19 @@ const playNotificationTone = () => {
   }
 };
 
-/** After login: deep link if saved, otherwise unified home `/` */
+/** After login: deep link if saved, otherwise tenant home */
 const LoginRedirect: React.FC = () => {
-  const target = useMemo(() => consumePostLoginRedirect() ?? '/', []);
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const target = useMemo(() => {
+    const saved = consumePostLoginRedirect();
+    if (saved) {
+      if (saved.startsWith('/t/')) return saved;
+      if (saved.startsWith('/') && tenantSlug) {
+        return `/t/${tenantSlug}${saved}`;
+      }
+    }
+    return tenantHomePath(tenantSlug);
+  }, [tenantSlug]);
   return <Navigate to={target} replace />;
 };
 
@@ -133,47 +168,43 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...ATTENDANCE_ROUTES,
 ];
 
-const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
+/** `/products` → `products` (real URLs are `/t/:tenantSlug/products`). */
+const tenantRelativePath = (absolutePath: string): string =>
+  absolutePath === '/' || absolutePath === '' ? '' : absolutePath.replace(/^\//, '');
+
+const TenantCatchAll: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  return <Navigate to={tenantHomePath(tenantSlug)} replace />;
+};
+
+const TenantPathRedirect: React.FC<{ redirectTo: string }> = ({ redirectTo }) => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const target =
+    redirectTo === '/' || redirectTo === ''
+      ? tenantHomePath(tenantSlug)
+      : withTenantPath(tenantSlug, redirectTo);
+  return <Navigate to={target} replace />;
+};
+
+const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
   isAuthenticated,
   isPendingApproval,
 }) => {
   const location = useLocation();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   if (!isAuthenticated) {
     savePostLoginRedirect(buildCurrentPath(location));
-    return <Navigate to="/login" replace />;
+    return <Navigate to={`/t/${tenantSlug}/login`} replace />;
   }
 
   if (isPendingApproval) {
-    return <Navigate to="/pending" replace />;
+    return <Navigate to={`/t/${tenantSlug}/pending`} replace />;
   }
 
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<HomeRedirect />} />
-        {PROTECTED_ROUTES.map((r) => {
-          if (r.redirectTo) {
-            return (
-              <React.Fragment key={r.path}>
-                <Route path={r.path} element={<Navigate to={r.redirectTo} replace />} />
-              </React.Fragment>
-            );
-          }
-
-          if (!r.component || !r.permission) return null;
-          const Component = r.component;
-          return (
-            <React.Fragment key={r.path}>
-              <Route
-                path={r.path}
-                element={<ProtectedRoute permission={r.permission}><Component /></ProtectedRoute>}
-              />
-            </React.Fragment>
-          );
-        })}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Outlet />
     </Layout>
   );
 };
@@ -330,6 +361,124 @@ const ModalWorkspaceMigration: React.FC = () => {
   return null;
 };
 
+type TenantGate = 'loading' | 'ready' | 'missing' | 'suspended' | 'inactive';
+
+const DEFAULT_TENANT_SLUG = defaultTenantSlug();
+
+const TenantPublicRoute: React.FC<{ resolveElement: PublicRouteDef['resolveElement'] }> = ({
+  resolveElement,
+}) => {
+  const { isAuthenticated, isPendingApproval } = useAuthUiSlice();
+  return resolveElement({
+    isAuthenticated,
+    isPendingApproval,
+    loginRedirectElement: <LoginRedirect />,
+  });
+};
+
+const defaultTenantResolve: TenantSlugResolveValue = {
+  pendingRegistration: false,
+  tenantStatus: '',
+};
+
+const TenantLayout: React.FC = () => {
+  const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
+  const [gate, setGate] = useState<TenantGate>('loading');
+  const [tenantResolve, setTenantResolve] = useState<TenantSlugResolveValue>(defaultTenantResolve);
+
+  useEffect(() => {
+    let alive = true;
+    setGate('loading');
+    setTenantResolve(defaultTenantResolve);
+    setCurrentTenant(null);
+    void (async () => {
+      try {
+        const r = await tenantService.resolveSlug(tenantSlug);
+        if (!alive) return;
+        if (!r.exists || !r.tenantId) {
+          setGate('missing');
+          return;
+        }
+        setCurrentTenant(r.tenantId);
+        if (r.pendingRegistration) {
+          setTenantResolve({
+            pendingRegistration: true,
+            tenantStatus: r.status || 'pending',
+          });
+          setGate('ready');
+          return;
+        }
+        if (r.status === 'suspended') {
+          setGate('suspended');
+          return;
+        }
+        if (r.status !== 'active') {
+          setTenantResolve({
+            pendingRegistration: false,
+            tenantStatus: r.status || 'pending',
+          });
+          setGate('inactive');
+          return;
+        }
+        setTenantResolve({
+          pendingRegistration: false,
+          tenantStatus: r.status || 'active',
+        });
+        setGate('ready');
+      } catch {
+        if (!alive) return;
+        setGate('missing');
+      }
+    })();
+    return () => {
+      alive = false;
+      setCurrentTenant(null);
+    };
+  }, [tenantSlug]);
+
+  if (gate === 'loading') {
+    return (
+      <div className="erp-auth-page has-panel" dir="rtl">
+        <div className="erp-auth-container erp-auth-loading-wrap">
+          <p className="text-[13px] text-[var(--color-text-muted)] font-semibold">جاري تحميل بيانات الشركة...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (gate === 'missing') {
+    return (
+      <div className="erp-auth-page" dir="rtl">
+        <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
+          <h2 className="text-lg font-bold mb-2">شركة غير موجودة</h2>
+          <p className="text-sm text-[var(--color-text-muted)]">تأكد من رابط تسجيل الدخول أو معرّف الشركة.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (gate === 'suspended') {
+    return (
+      <div className="erp-auth-page" dir="rtl">
+        <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
+          <h2 className="text-lg font-bold mb-2 text-rose-600">الشركة موقوفة</h2>
+          <p className="text-sm text-[var(--color-text-muted)]">تواصل مع الدعم لمزيد من المعلومات.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (gate === 'inactive') {
+    return <CompanyNotApprovedPage tenantSlug={tenantSlug} status={tenantResolve.tenantStatus} />;
+  }
+
+  return (
+    <TenantSlugResolveProvider value={tenantResolve}>
+      <Outlet />
+    </TenantSlugResolveProvider>
+  );
+};
+
 const DailyWelcomeLauncher: React.FC = () => {
   const { openModal, hasModalTarget } = useGlobalModalManager();
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
@@ -391,6 +540,7 @@ const App: React.FC = () => {
       window.clearTimeout(resolveTimer);
       setAuthResolved(true);
       if (!user) {
+        setCurrentTenant(null);
         sessionTrackerService.stop('auth_logout');
         activeSessionUidRef.current = null;
         clearSubscriptions();
@@ -586,21 +736,64 @@ const App: React.FC = () => {
         <ServiceWorkerNavigateBridge />
         <PresenceHeartbeatBridge />
         <Routes>
-          {AUTH_PUBLIC_ROUTES.map((r) => (
-            <React.Fragment key={r.path}>
+          <Route path="/register-company" element={<RegisterCompany />} />
+          <Route path="/super-admin" element={<SuperAdminGuard />}>
+            <Route element={<SuperAdminShell />}>
+              <Route index element={<Navigate to="tenants" replace />} />
+              <Route path="tenants" element={<TenantsApproval />} />
+              <Route path="insights" element={<TenantInsightsPage />} />
+            </Route>
+          </Route>
+          <Route path="/login" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/login`} replace />} />
+          <Route path="/setup" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/setup`} replace />} />
+          <Route path="/pending" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/pending`} replace />} />
+          <Route path="/" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/login`} replace />} />
+          <Route path="/t/:tenantSlug" element={<TenantLayout />}>
+            {AUTH_PUBLIC_ROUTES.map((r) => (
               <Route
+                key={r.path}
                 path={r.path}
-                element={r.resolveElement({
-                  isAuthenticated,
-                  isPendingApproval,
-                  loginRedirectElement: <LoginRedirect />,
-                })}
+                element={<TenantPublicRoute resolveElement={r.resolveElement} />}
               />
-            </React.Fragment>
-          ))}
-
-          {/* Protected: All app routes inside Layout */}
-          <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
+            ))}
+            <Route
+              element={
+                <ProtectedTenantShell
+                  isAuthenticated={isAuthenticated}
+                  isPendingApproval={isPendingApproval}
+                />
+              }
+            >
+              <Route index element={<HomeRedirect />} />
+              {PROTECTED_ROUTES.map((r) => {
+                const childPath = tenantRelativePath(r.path);
+                if (!childPath) return null;
+                if (r.redirectTo) {
+                  return (
+                    <Route
+                      key={r.path}
+                      path={childPath}
+                      element={<TenantPathRedirect redirectTo={r.redirectTo} />}
+                    />
+                  );
+                }
+                if (!r.component || !r.permission) return null;
+                const Component = r.component;
+                return (
+                  <Route
+                    key={r.path}
+                    path={childPath}
+                    element={
+                      <ProtectedRoute permission={r.permission}>
+                        <Component />
+                      </ProtectedRoute>
+                    }
+                  />
+                );
+              })}
+              <Route path="*" element={<TenantCatchAll />} />
+            </Route>
+          </Route>
         </Routes>
         {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
         <ForcedClientUpdateGate />

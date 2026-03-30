@@ -7,14 +7,16 @@ import {
   getDocs,
   getDoc,
   addDoc,
-  setDoc,
   updateDoc,
   deleteDoc,
   onSnapshot,
+  query,
+  where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { FirestoreRole } from '../../../types';
 import { ALL_PERMISSIONS, type Permission } from '../../../utils/permissions';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
 
 const COLLECTION = 'roles';
 
@@ -34,14 +36,15 @@ function permsFrom(enabled: Permission[]): Record<string, boolean> {
   return obj;
 }
 
-let _defaultRoles: Omit<FirestoreRole, 'id'>[] | null = null;
-function getDefaultRoles(): Omit<FirestoreRole, 'id'>[] {
+let _defaultRoles: Omit<FirestoreRole, 'id' | 'tenantId'>[] | null = null;
+function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
   if (!_defaultRoles) {
     _defaultRoles = [
       {
         name: 'مدير النظام',
         color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
         permissions: allPerms(true),
+        roleKey: 'admin',
       },
       {
         name: 'مدير المصنع',
@@ -62,6 +65,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id'>[] {
           'print',
           'export',
         ]),
+        roleKey: 'factory_manager',
       },
       {
         name: 'مشرف الصالة',
@@ -87,6 +91,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id'>[] {
           'print',
           'export',
         ]),
+        roleKey: 'hall_supervisor',
       },
       {
         name: 'مشرف',
@@ -100,6 +105,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id'>[] {
           'print',
           'export',
         ]),
+        roleKey: 'supervisor',
       },
       {
         name: 'مدير الموارد البشرية',
@@ -142,6 +148,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id'>[] {
           'export',
           'import',
         ]),
+        roleKey: 'hr_manager',
       },
       {
         name: 'محاسب',
@@ -160,28 +167,24 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id'>[] {
           'print',
           'export',
         ]),
+        roleKey: 'accountant',
       },
     ];
   }
   return _defaultRoles;
 }
 
-const DEFAULT_ROLE_DOC_IDS = [
-  'default_admin',
-  'default_factory_manager',
-  'default_floor_supervisor',
-  'default_supervisor',
-  'default_hr_manager',
-  'default_accountant',
-] as const;
-
 let seedIfEmptyInFlight: Promise<FirestoreRole[]> | null = null;
+
+function rolesCollectionQuery() {
+  return query(collection(db, COLLECTION), where('tenantId', '==', getCurrentTenantId()));
+}
 
 export const roleService = {
   async getAll(): Promise<FirestoreRole[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(rolesCollectionQuery());
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreRole));
     } catch (error) {
       console.error('roleService.getAll error:', error);
@@ -194,7 +197,9 @@ export const roleService = {
     try {
       const snap = await getDoc(doc(db, COLLECTION, id));
       if (!snap.exists()) return null;
-      return { id: snap.id, ...snap.data() } as FirestoreRole;
+      const row = { id: snap.id, ...snap.data() } as FirestoreRole;
+      if (row.tenantId && row.tenantId !== getCurrentTenantId()) return null;
+      return row;
     } catch (error) {
       console.error('roleService.getById error:', error);
       throw error;
@@ -204,7 +209,10 @@ export const roleService = {
   async create(data: Omit<FirestoreRole, 'id'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
-      const ref = await addDoc(collection(db, COLLECTION), data);
+      const ref = await addDoc(collection(db, COLLECTION), {
+        ...data,
+        tenantId: getCurrentTenantId(),
+      });
       return ref.id;
     } catch (error) {
       console.error('roleService.create error:', error);
@@ -234,7 +242,7 @@ export const roleService = {
 
   subscribeAll(callback: (roles: FirestoreRole[]) => void): () => void {
     if (!isConfigured) return () => {};
-    return onSnapshot(collection(db, COLLECTION), (snap) => {
+    return onSnapshot(rolesCollectionQuery(), (snap) => {
       const roles = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreRole));
       callback(roles);
     });
@@ -245,19 +253,18 @@ export const roleService = {
     if (seedIfEmptyInFlight) return seedIfEmptyInFlight;
 
     seedIfEmptyInFlight = (async () => {
+      const tid = getCurrentTenantId();
       const existing = await this.getAll();
       if (existing.length > 0) return existing;
 
       const defaults = getDefaultRoles();
       await Promise.all(
-        defaults.map(async (role, idx) => {
-          const roleDocId = DEFAULT_ROLE_DOC_IDS[idx] ?? `default_role_${idx}`;
-          const roleRef = doc(db, COLLECTION, roleDocId);
-          const roleSnap = await getDoc(roleRef);
-          if (!roleSnap.exists()) {
-            await setDoc(roleRef, role);
-          }
-        }),
+        defaults.map((role) =>
+          addDoc(collection(db, COLLECTION), {
+            ...role,
+            tenantId: tid,
+          }),
+        ),
       );
 
       return this.getAll();

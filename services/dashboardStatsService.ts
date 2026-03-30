@@ -6,9 +6,9 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../modules/auth/services/firebase';
+import { getCurrentTenantId } from '../lib/currentTenant';
 
 const ROOT_COLLECTION = 'dashboardStats';
-const TENANT_ID = 'global';
 const DAILY_COLLECTION = 'daily';
 const MAX_RANGE_DAYS = 370;
 
@@ -30,7 +30,7 @@ export const dashboardStatsService = {
       return { totalProduction: 0, totalWaste: 0, totalCost: 0, reportsCount: 0 };
     }
     const q = query(
-      collection(db, ROOT_COLLECTION, TENANT_ID, DAILY_COLLECTION),
+      collection(db, ROOT_COLLECTION, getCurrentTenantId(), DAILY_COLLECTION),
       where('date', '>=', startDate),
       where('date', '<=', endDate),
       limit(MAX_RANGE_DAYS),

@@ -6,12 +6,13 @@ import {
   limit as firestoreLimit,
   orderBy,
   QueryConstraint,
-  query,
   serverTimestamp,
   writeBatch,
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../../auth/services/firebase';
+import { getCurrentTenantIdOrNull } from '../../../../lib/currentTenant';
+import { tenantQuery } from '../../../../lib/tenantFirestore';
 import type { AuditRecord, CreateAuditLogInput } from '../types/audit.types';
 import { SystemEvents } from '../../../../shared/events';
 
@@ -37,57 +38,51 @@ const sanitizeLimit = (input?: number): number => {
   return Math.min(normalized, MAX_OPERATION_EVENTS_LIMIT);
 };
 
+const auditPayload = (
+  input: CreateAuditLogInput,
+  tenantId: string,
+): Omit<AuditRecord, 'id' | 'timestamp'> & { timestamp: ReturnType<typeof serverTimestamp> } => ({
+  tenantId,
+  event: input.event,
+  entityType: input.entityType,
+  entityId: input.entityId,
+  action: input.action,
+  description: input.description,
+  module: input.module,
+  performedBy: input.performedBy,
+  userName: input.userName,
+  metadata: input.metadata ?? {},
+  batchId: input.batchId ?? null,
+  correlationId: input.correlationId ?? null,
+  operation: input.operation ?? null,
+  status: input.status ?? null,
+  startedAt: input.startedAt ?? null,
+  endedAt: input.endedAt ?? null,
+  durationMs: input.durationMs ?? null,
+  errorCode: input.errorCode ?? null,
+  errorMessage: input.errorMessage ?? null,
+  timestamp: serverTimestamp(),
+});
+
 export const auditService = {
   async createAuditLog(input: CreateAuditLogInput): Promise<void> {
     if (!isConfigured) return;
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return;
     await addDoc(collection(db, AUDIT_COLLECTION), {
-      event: input.event,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      action: input.action,
-      description: input.description,
-      module: input.module,
-      performedBy: input.performedBy,
-      userName: input.userName,
-      metadata: input.metadata ?? {},
-      batchId: input.batchId ?? null,
-      correlationId: input.correlationId ?? null,
-      operation: input.operation ?? null,
-      status: input.status ?? null,
-      startedAt: input.startedAt ?? null,
-      endedAt: input.endedAt ?? null,
-      durationMs: input.durationMs ?? null,
-      errorCode: input.errorCode ?? null,
-      errorMessage: input.errorMessage ?? null,
-      timestamp: serverTimestamp(),
+      ...auditPayload(input, tenantId),
     } satisfies Omit<AuditRecord, 'id' | 'timestamp'> & { timestamp: any });
   },
 
   async createAuditLogsBatch(inputs: CreateAuditLogInput[]): Promise<void> {
     if (!isConfigured || inputs.length === 0) return;
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return;
     const batch = writeBatch(db);
     inputs.forEach((input) => {
       const ref = doc(collection(db, AUDIT_COLLECTION));
       batch.set(ref, {
-        event: input.event,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        action: input.action,
-        description: input.description,
-        module: input.module,
-        performedBy: input.performedBy,
-        userName: input.userName,
-        metadata: input.metadata ?? {},
-        batchId: input.batchId ?? null,
-        correlationId: input.correlationId ?? null,
-        operation: input.operation ?? null,
-        status: input.status ?? null,
-        startedAt: input.startedAt ?? null,
-        endedAt: input.endedAt ?? null,
-        durationMs: input.durationMs ?? null,
-        errorCode: input.errorCode ?? null,
-        errorMessage: input.errorMessage ?? null,
-        timestamp: serverTimestamp(),
+        ...auditPayload(input, tenantId),
       } satisfies Omit<AuditRecord, 'id' | 'timestamp'> & { timestamp: any });
     });
     await batch.commit();
@@ -99,8 +94,11 @@ export const auditService = {
     maxResults: number = 100,
   ): Promise<AuditRecord[]> {
     if (!isConfigured) return [];
-    const q = query(
-      collection(db, AUDIT_COLLECTION),
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return [];
+    const q = tenantQuery(
+      db,
+      AUDIT_COLLECTION,
       where('entityType', '==', entityType),
       where('entityId', '==', entityId),
       orderBy('timestamp', 'desc'),
@@ -118,8 +116,11 @@ export const auditService = {
     maxResults: number = 100,
   ): Promise<AuditRecord[]> {
     if (!isConfigured) return [];
-    const q = query(
-      collection(db, AUDIT_COLLECTION),
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return [];
+    const q = tenantQuery(
+      db,
+      AUDIT_COLLECTION,
       where('performedBy', '==', userId),
       orderBy('timestamp', 'desc'),
       firestoreLimit(maxResults),
@@ -133,8 +134,11 @@ export const auditService = {
 
   async getBatchTimeline(batchId: string, maxResults: number = 200): Promise<AuditRecord[]> {
     if (!isConfigured) return [];
-    const q = query(
-      collection(db, AUDIT_COLLECTION),
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return [];
+    const q = tenantQuery(
+      db,
+      AUDIT_COLLECTION,
       where('batchId', '==', batchId),
       orderBy('timestamp', 'asc'),
       firestoreLimit(maxResults),
@@ -148,6 +152,8 @@ export const auditService = {
 
   async getOperationEvents(filters: OperationEventsFilters = {}): Promise<AuditRecord[]> {
     if (!isConfigured) return [];
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) return [];
     const constraints: QueryConstraint[] = [
       where('event', '==', SystemEvents.OPERATION_STATUS),
     ];
@@ -175,7 +181,7 @@ export const auditService = {
     constraints.push(firestoreLimit(sanitizeLimit(filters.maxResults)));
 
     try {
-      const q = query(collection(db, AUDIT_COLLECTION), ...constraints);
+      const q = tenantQuery(db, AUDIT_COLLECTION, ...constraints);
       const snap = await getDocs(q);
       return snap.docs.map((docSnap) => ({
         id: docSnap.id,

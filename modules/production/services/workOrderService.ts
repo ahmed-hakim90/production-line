@@ -20,6 +20,8 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { WorkOrder } from '../../../types';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 
 const COLLECTION = 'work_orders';
 const MAX_PAGE_SIZE = 100;
@@ -49,7 +51,7 @@ export const workOrderService = {
     if (params.productId) constraints.unshift(where('productId', '==', params.productId));
     if (params.supervisorId) constraints.unshift(where('supervisorId', '==', params.supervisorId));
     if (params.cursor) constraints.push(startAfter(params.cursor));
-    const q = query(collection(db, COLLECTION), ...constraints);
+    const q = tenantQuery(db, COLLECTION, ...constraints);
     const snap = await getDocs(q);
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
@@ -90,7 +92,7 @@ export const workOrderService = {
   async getByLine(lineId: string): Promise<WorkOrder[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('lineId', '==', lineId));
+      const q = tenantQuery(db, COLLECTION, where('lineId', '==', lineId));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
     } catch (error) {
@@ -102,8 +104,9 @@ export const workOrderService = {
   async getActiveByLine(lineId: string): Promise<WorkOrder[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('lineId', '==', lineId),
         where('status', 'in', ['pending', 'in_progress']),
       );
@@ -118,7 +121,7 @@ export const workOrderService = {
   async getByPlan(planId: string): Promise<WorkOrder[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('planId', '==', planId));
+      const q = tenantQuery(db, COLLECTION, where('planId', '==', planId));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
     } catch (error) {
@@ -130,7 +133,7 @@ export const workOrderService = {
   async getBySupervisor(supervisorId: string): Promise<WorkOrder[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('supervisorId', '==', supervisorId));
+      const q = tenantQuery(db, COLLECTION, where('supervisorId', '==', supervisorId));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
     } catch (error) {
@@ -142,8 +145,9 @@ export const workOrderService = {
   async getActiveByLineAndProduct(lineId: string, productId: string): Promise<WorkOrder[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('lineId', '==', lineId),
         where('productId', '==', productId),
         where('status', 'in', ['pending', 'in_progress']),
@@ -161,6 +165,7 @@ export const workOrderService = {
     try {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
+        tenantId: getCurrentTenantId(),
         createdAt: serverTimestamp(),
       });
       return ref.id;
@@ -241,7 +246,7 @@ export const workOrderService = {
     if (!isConfigured) return 'WO-0001';
     try {
       const year = new Date().getFullYear();
-      const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'), limit(1));
+      const q = tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc'), limit(1));
       const snap = await getDocs(q);
       if (snap.empty) return `WO-${year}-0001`;
       const last = snap.docs[0].data() as WorkOrder;
@@ -256,7 +261,7 @@ export const workOrderService = {
 
   subscribeAll(callback: (orders: WorkOrder[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    return onSnapshot(collection(db, COLLECTION), (snap) => {
+    return onSnapshot(tenantQuery(db, COLLECTION), (snap) => {
       callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder)));
     });
   },

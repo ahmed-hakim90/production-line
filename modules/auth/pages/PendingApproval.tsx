@@ -44,10 +44,11 @@ export const PendingApproval: React.FC = () => {
                 <span className="material-icons-round" style={{ fontSize: 32, color: '#d97706' }}>hourglass_top</span>
               </div>
               <h1 className="text-[16px] font-bold text-[var(--color-text)]">
-                في انتظار موافقة المسؤول
+                شركة قيد اعتماد المنصة
               </h1>
               <p className="text-[12.5px] text-[var(--color-text-muted)] mt-2 leading-relaxed">
-                تم إنشاء حسابك بنجاح. يرجى انتظار موافقة مسؤول النظام حتى تتمكن من الوصول إليه.
+                تم إنشاء حسابك وتسجيل الشركة بنجاح. يرجى انتظار موافقة إدارة المنصة على تفعيل الشركة؛ بعدها يمكنك
+                استخدام النظام بالكامل.
               </p>
             </div>
 

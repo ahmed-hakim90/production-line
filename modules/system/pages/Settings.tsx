@@ -49,6 +49,7 @@ import { DashboardWidgetsSection } from '../components/settings/DashboardWidgets
 import { useSettingsDraft } from '../hooks/useSettingsDraft';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { PageHeader } from '../../../components/PageHeader';
+import { CompanyTenantSection } from '../components/settings/CompanyTenantSection';
 
 type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'clientVersion' | 'backup';
 
@@ -913,6 +914,8 @@ export const Settings: React.FC = () => {
             saving={saving}
             onSave={() => handleSave('general')}
           />
+
+          <CompanyTenantSection isAdmin={isAdmin} />
 
           <GeneralBrandingSection
             isAdmin={isAdmin}

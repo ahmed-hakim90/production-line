@@ -12,9 +12,12 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  query,
+  where,
 } from 'firebase/firestore';
 import { db, isConfigured } from './firebase';
 import type { FirestoreUser } from '../types';
+import { getCurrentTenantId } from '../lib/currentTenant';
 
 const COLLECTION = 'users';
 
@@ -35,7 +38,9 @@ export const userService = {
   async getAll(): Promise<FirestoreUser[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(
+        query(collection(db, COLLECTION), where('tenantId', '==', getCurrentTenantId())),
+      );
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreUser));
     } catch (error) {
       console.error('userService.getAll error:', error);
@@ -49,6 +54,7 @@ export const userService = {
     try {
       await setDoc(doc(db, COLLECTION, uid), {
         ...data,
+        tenantId: data.tenantId || getCurrentTenantId(),
         createdAt: serverTimestamp(),
       });
     } catch (error) {

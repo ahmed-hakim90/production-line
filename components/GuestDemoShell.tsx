@@ -4,6 +4,7 @@ import { Layout } from './Layout';
 import { ProtectedRoute } from './ProtectedRoute';
 import { useAppStore } from '@/store/useAppStore';
 import { isPublicDemoEnabled } from '@/services/guestDemoEnv';
+import { tenantLoginPath } from '@/lib/tenantPaths';
 import { HomeDashboardRouter } from '@/modules/dashboards/pages/HomeDashboardRouter';
 import type { AppRouteDef } from '@/modules/shared/routes';
 
@@ -50,7 +51,7 @@ export const GuestDemoShell: React.FC<{ routes: AppRouteDef[] }> = ({ routes }) 
 
   useLayoutEffect(() => {
     if (!isPublicDemoEnabled()) {
-      navigate('/login', { replace: true });
+      navigate(tenantLoginPath(), { replace: true });
       return;
     }
     bootstrapGuestDemo();

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
+import { useTenantSlugResolve } from '../context/TenantSlugResolveContext';
 
 export const Login: React.FC = () => {
   const login    = useAppStore((s) => s.login);
@@ -15,6 +16,8 @@ export const Login: React.FC = () => {
   const [showPwd, setShowPwd]       = useState(false);
   const [localError, setLocalError] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
+
+  const { pendingRegistration } = useTenantSlugResolve();
 
   const errorMsg = localError || authError;
 
@@ -96,6 +99,16 @@ export const Login: React.FC = () => {
               <h3>{mode === 'login' ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}</h3>
               <p>{mode === 'login' ? 'أدخل بياناتك للوصول إلى النظام' : 'سيتم مراجعة الحساب من قِبل المسؤول'}</p>
             </div>
+
+            {pendingRegistration && (
+              <div className="erp-alert erp-alert-info" style={{ marginBottom: 14 }}>
+                <span className="material-icons-round text-[17px] shrink-0">hourglass_top</span>
+                <span>
+                  تسجيل هذه الشركة ما زال بانتظار موافقة إدارة المنصة. سجّل الدخول بحساب المسؤول الذي أنشأته عند
+                  التسجيل؛ بعد الموافقة يُفعّل الوصول تلقائياً.
+                </span>
+              </div>
+            )}
 
             {/* Tab switcher */}
             <div className="erp-auth-tabs">
