@@ -165,7 +165,7 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     let result: { success: boolean; error?: string; restored: number };
 
     if (runServer) {
-      setBackupProgress({ step: 'استعادة عبر الخادم (Admin SDK)...', 40 });
+      setBackupProgress({ step: 'استعادة عبر الخادم (Admin SDK)...', percent: 40 });
       setJobProgress(jobId, {
         processedRows: 40,
         totalRows: 100,
