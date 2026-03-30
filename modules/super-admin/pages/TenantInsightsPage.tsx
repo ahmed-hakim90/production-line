@@ -251,8 +251,8 @@ export const TenantInsightsPage: React.FC = () => {
       <div>
         <h1 className="text-xl font-bold text-[var(--color-text)]">إحصائيات الشركات</h1>
         <p className="text-sm text-[var(--color-text-muted)] mt-1 max-w-3xl leading-relaxed">
-          ????? لكل شركة: عدد المستخدمين، عدد مجموعات Firestore التي تحتوي بيانات لهذه الشركة، وإجمالي
-          المستندات ???????? بـ <code className="text-xs bg-[var(--color-muted)] px-1 rounded">tenantId</code>.
+          لكل شركة: عدد المستخدمين، عدد مجموعات Firestore التي تحتوي بيانات لهذه الشركة، وإجمالي
+          المستندات المرتبطة بـ <code className="text-xs bg-[var(--color-muted)] px-1 rounded">tenantId</code>.
           حجم التخزين <strong>تقدير تقريبي</strong> فقط — الفوترة الفعلية لـ Firebase على مستوى المشروع
           بالكامل ويُراجعها من Google Cloud / Firebase Console.
         </p>
@@ -354,7 +354,7 @@ export const TenantInsightsPage: React.FC = () => {
                     <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/20 p-3 space-y-2 text-sm">
                       {meta.approverLabel ? (
                         <p className="text-[var(--color-text)]">
-                          <span className="font-semibold text-[var(--color-text-muted)]">اعتمد ?????: </span>
+                          <span className="font-semibold text-[var(--color-text-muted)]">اعتمد من قبل: </span>
                           {meta.approverLabel}
                         </p>
                       ) : null}
@@ -412,7 +412,7 @@ export const TenantInsightsPage: React.FC = () => {
                                   void savePrimaryUserRole(t.id, meta.primaryUser.id)
                                 }
                               >
-                                {busyRoleTenantId === t.id ? 'جاري الحفم' : 'حفظ الدور'}
+                                {busyRoleTenantId === t.id ? 'جاري الحفظ' : 'حفظ الدور'}
                               </Button>
                             </div>
                           ) : (
@@ -423,10 +423,10 @@ export const TenantInsightsPage: React.FC = () => {
                           ) : null}
                         </>
                       ) : (
-                        <p className="text-xs text-[var(--color-text-muted)]">لا يوجد مستخدمون ??????? بهذا المستأجر في collection users.</p>
+                        <p className="text-xs text-[var(--color-text-muted)]">لا يوجد مستخدمون مرتبطون بهذا المستأجر في collection users.</p>
                       )}
                       <p className="text-[11px] text-[var(--color-text-muted)]">
-                        إجمالي مستخدمي الشركة في ??????: {meta.users.length}
+                        إجمالي مستخدمي الشركة في Firestore: {meta.users.length}
                       </p>
                     </div>
                   ) : null}

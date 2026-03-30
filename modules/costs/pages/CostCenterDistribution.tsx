@@ -646,13 +646,13 @@ export const CostCenterDistribution: React.FC = () => {
             />
               {!allowsManualInput && (
                 <p className="text-xs text-[var(--color-text-muted)]">
-                  هذا المركز يعتمد على المرتبات فقططŒ لذلك الإدخال اليدوي غير مفعل.
+                  هذا المركز يعتمد على المرتبات فقط، لذلك الإدخال اليدوي غير مفعل.
                 </p>
               )}
               {(center.valueSource === 'salaries' || center.valueSource === 'combined') && (
                 <div className="space-y-2">
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    إجمالي المرتبات {existingValue ? 'ال??????' : 'المحسوبة'} للشهر: <span className="font-bold text-primary">{formatCost(salariesAmount)} ج.م</span>
+                    إجمالي المرتبات {existingValue ? 'المدخلة' : 'المحسوبة'} للشهر: <span className="font-bold text-primary">{formatCost(salariesAmount)} ج.م</span>
                     {center.valueSource === 'combined' && (
                       <>
                         {' '}+ تعديل ثابت: <span className="font-bold text-primary">{formatCost(fixedAdjustment)} ج.م</span>

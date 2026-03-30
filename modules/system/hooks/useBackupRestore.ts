@@ -28,7 +28,7 @@ const formatBytes = (bytes: number): string => {
 const RESTORE_MODES: { value: RestoreMode; label: string; icon: string; description: string; color: string }[] = [
   { value: 'merge', label: 'دمج', icon: 'merge', description: 'دمج البيانات الجديدة مع البيانات الحالية — لا يتم حذف أي شيء', color: 'emerald' },
   { value: 'replace', label: 'استبدال', icon: 'swap_horiz', description: 'استبدال المجموعات المشمولة فقط — المجموعات الأخرى تبقى', color: 'amber' },
-  { value: 'full_reset', label: 'إعادة تعيين كاملة', icon: 'restart_alt', description: 'حذف كل شيء واستبداله بالنسخة ?????????? — عملية لا رجعة فيها', color: 'rose' },
+  { value: 'full_reset', label: 'إعادة تعيين كاملة', icon: 'restart_alt', description: 'حذف كل شيء واستبداله بالنسخة الاحتياطية — عملية لا رجعة فيها', color: 'rose' },
 ];
 
 type UseBackupRestoreParams = {
@@ -101,7 +101,7 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     setBackupMessage(null);
     try {
       await backupService.exportFullBackup(userEmail || 'admin');
-      setBackupMessage({ type: 'success', text: 'تم تصدير النسخة ?????????? الكاملة بنجاح' });
+      setBackupMessage({ type: 'success', text: 'تم تصدير النسخة الاحتياطية الكاملة بنجاح' });
       loadBackupHistory();
     } catch (err: any) {
       setBackupMessage({ type: 'error', text: err.message || 'فشل التصدير' });

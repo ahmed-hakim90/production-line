@@ -30,12 +30,12 @@ export function getTransferDisplay(
     if (unitsPerCarton > 0) {
       return { quantity: qtyPieces / unitsPerCarton, unitLabel: 'كرتونة' };
     }
-    return { quantity: qtyPieces, unitLabel: '????' };
+    return { quantity: qtyPieces, unitLabel: 'قطعة' };
   }
 
   if (line.requestUnit === 'piece' && requestQty > 0) {
-    return { quantity: requestQty, unitLabel: '????' };
+    return { quantity: requestQty, unitLabel: 'قطعة' };
   }
-  return { quantity: qtyPieces, unitLabel: '????' };
+  return { quantity: qtyPieces, unitLabel: 'قطعة' };
 }
 

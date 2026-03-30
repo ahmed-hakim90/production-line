@@ -100,7 +100,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
         >
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
             <h3 id="stock-tx-pending-title" className="text-lg font-bold">
-              ??? تحويلة معلقة #{selectedPending.referenceNo}
+              طلب تحويلة معلقة #{selectedPending.referenceNo}
             </h3>
             <button
               type="button"
@@ -160,7 +160,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               <span className="material-icons-round text-sm" aria-hidden>
                 print
               </span>
-              ?????
+              طباعة
             </Button>
           </div>
         </div>
@@ -272,7 +272,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                 <span className="material-icons-round text-sm" aria-hidden>
                   print
                 </span>
-                ?????
+                طباعة
               </Button>
             )}
           </div>
@@ -313,7 +313,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           <div className="p-6 overflow-auto flex-1 space-y-4">
             <div className="space-y-2">
               <label htmlFor="stock-tx-edit-note" className="text-sm font-bold text-[var(--color-text-muted)]">
-                ??????
+                ملاحظة
               </label>
               <input
                 id="stock-tx-edit-note"
@@ -335,7 +335,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                   <div className="md:col-span-5 space-y-1">
                     <label className="text-xs font-bold text-slate-600" htmlFor={`stock-tx-edit-qty-${idx}`}>
                       الكمية (
-                      {line.requestUnit === 'carton' ? 'كرتونة' : line.requestUnit === 'piece' ? '????' : 'وحدة'})
+                      {line.requestUnit === 'carton' ? 'كرتونة' : line.requestUnit === 'piece' ? 'قطعة' : 'وحدة'})
                     </label>
                     <input
                       id={`stock-tx-edit-qty-${idx}`}

@@ -652,7 +652,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                                   )
                                 }
                               >
-                                ????
+                                قطعة
                               </button>
                               <button
                                 type="button"

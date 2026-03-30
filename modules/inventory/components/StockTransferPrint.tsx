@@ -87,7 +87,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
         ? [{
             itemName: data.itemName,
             itemCode: data.itemCode || '—',
-            unitLabel: data.quantityCartons != null ? 'كرتونة' : '????',
+            unitLabel: data.quantityCartons != null ? 'كرتونة' : 'قطعة',
             quantity: data.quantityCartons ?? data.quantityPieces ?? 0,
             quantityPieces: data.quantityPieces ?? 0,
             unitsPerCarton: data.unitsPerCarton,
@@ -98,7 +98,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
       .filter((item) => item.unitLabel === 'كرتونة')
       .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     const totalLoosePieces = transferItems
-      .filter((item) => item.unitLabel === '????')
+      .filter((item) => item.unitLabel === 'قطعة')
       .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     const hasLoosePieces = totalLoosePieces > 0;
     const movementDate = new Date(data.createdAt).toLocaleDateString('ar-EG');
@@ -143,7 +143,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
             {summaryPairRow('رقم التحويلة', data.transferNo, 'تاريخ الحركة', movementDate)}
             {summaryPairRow('من المخزن', data.fromWarehouseName, 'إلى المخزن', data.toWarehouseName, true)}
             {summaryPairRow('عدد الأصناف', transferItems.length.toLocaleString('en-US'), 'المنفذ', data.createdBy)}
-            {summaryPairRow('إجمالي الكراتين', totalCartons.toLocaleString('en-US'), hasLoosePieces ? 'إجمالي ?????' : '', hasLoosePieces ? totalLoosePieces.toLocaleString('en-US') : '', true)}
+            {summaryPairRow('إجمالي الكراتين', totalCartons.toLocaleString('en-US'), hasLoosePieces ? 'إجمالي القطع' : '', hasLoosePieces ? totalLoosePieces.toLocaleString('en-US') : '', true)}
           </tbody>
         </table>
 
@@ -185,7 +185,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
 
         <div style={{ marginTop: isThermal ? '3mm' : '10mm', borderTop: `1px solid ${palette.border}`, paddingTop: '3mm', textAlign: 'center' }}>
           <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
-            {ps.footerText} — ?????: {printedAt}
+            {ps.footerText} — طباعة: {printedAt}
           </p>
         </div>
       </div>
@@ -216,7 +216,7 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
               {
                 itemName: data.itemName,
                 itemCode: data.itemCode || '—',
-                unitLabel: data.quantityCartons != null ? 'كرتونة' : '????',
+                unitLabel: data.quantityCartons != null ? 'كرتونة' : 'قطعة',
                 quantity: data.quantityCartons ?? data.quantityPieces ?? 0,
                 quantityPieces: data.quantityPieces ?? 0,
                 unitsPerCarton: data.unitsPerCarton,
@@ -242,7 +242,7 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
     const itemRows = transferItems.flatMap((item, idx) => {
       const cartonQty =
         item.unitLabel === 'كرتونة' ? Number(item.quantity || 0).toLocaleString('ar-EG') : '—';
-      const unitNote = item.unitsPerCarton ? `${item.unitLabel} (${item.unitsPerCarton} ????/كرتونة)` : item.unitLabel;
+      const unitNote = item.unitsPerCarton ? `${item.unitLabel} (${item.unitsPerCarton} قطعة/كرتونة)` : item.unitLabel;
       return [
         {
           label: `صنف ${idx + 1}`,
@@ -250,8 +250,8 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
           highlight: true as const,
         },
         {
-          label: 'الوحدة / الكراتين / ?????',
-          value: `${unitNote} | كراتين: ${cartonQty} | ???: ${Number(item.quantityPieces || 0).toLocaleString('ar-EG')}`,
+          label: 'الوحدة / الكراتين / القطع',
+          value: `${unitNote} | كراتين: ${cartonQty} | قطع: ${Number(item.quantityPieces || 0).toLocaleString('ar-EG')}`,
         },
       ];
     });
@@ -280,7 +280,7 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
         ]}
         kpis={[
           { label: 'إجمالي الكراتين', value: totalCartons, color: 'indigo' },
-          { label: 'إجمالي ?????', value: totalPieces, color: 'default' },
+          { label: 'إجمالي القطع', value: totalPieces, color: 'default' },
           { label: 'عدد الأصناف', value: transferItems.length, color: 'default' },
           { label: 'الحالة', value: 'للاعتماد', color: 'green' },
         ]}
@@ -289,7 +289,7 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
             title: 'بيانات التحويل',
             rows: [
               { label: 'المنفذ', value: data.createdBy || '—' },
-              ...(data.note?.trim() ? [{ label: '??????', value: data.note }] : []),
+              ...(data.note?.trim() ? [{ label: 'ملاحظة', value: data.note }] : []),
             ],
           },
           {

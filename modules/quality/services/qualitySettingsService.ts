@@ -37,7 +37,7 @@ const DEFAULT_REWORK_POLICIES: QualityReworkPolicySettings = {
 
 const DEFAULT_PRINT_TEMPLATES: QualityPrintTemplateSettings = {
   headerText: 'تقرير الجودة',
-  footerText: 'تم الإنشاء ?????? ???? الإنتاج',
+  footerText: 'تم الإنشاء تلقائياً من الإنتاج',
   showSignatureInspector: true,
   showSignatureSupervisor: true,
   showSignatureQualityManager: true,
@@ -93,7 +93,7 @@ export const qualitySettingsService = {
     if (payload.printTemplates) {
       await activityLogService.logCurrentUser(
         'QUALITY_UPDATE_PRINT_TEMPLATES',
-        'تحديث إعدادات ????? الجودة',
+        'تحديث إعدادات طباعة الجودة',
         { printTemplates: payload.printTemplates },
       );
     }
@@ -154,10 +154,10 @@ export const qualitySettingsService = {
     const existing = await this.getReasons(false);
     if (existing.length > 0) return;
     const defaults: Omit<QualityReasonCatalogItem, 'id' | 'createdAt' | 'updatedAt'>[] = [
-      { code: 'FIN-SCRATCH', labelAr: 'خدش في ???????', category: '?????', severityDefault: 'medium', isActive: true },
+      { code: 'FIN-SCRATCH', labelAr: 'خدش في الطلاء', category: 'تشطيب', severityDefault: 'medium', isActive: true },
       { code: 'ASSY-MISS', labelAr: 'نقص في التجميع', category: 'تجميع', severityDefault: 'high', isActive: true },
       { code: 'COLOR-MISMATCH', labelAr: 'اختلاف لون', category: 'لون', severityDefault: 'low', isActive: true },
-      { code: 'SIZE-OFF', labelAr: 'مقاس غير ?????', category: 'مقاس', severityDefault: 'high', isActive: true },
+      { code: 'SIZE-OFF', labelAr: 'مقاس غير مطابق', category: 'مقاس', severityDefault: 'high', isActive: true },
       { code: 'PACK-DAMAGE', labelAr: 'تلف في التعبئة', category: 'تعبئة', severityDefault: 'medium', isActive: true },
     ];
     await Promise.all(defaults.map((item) => this.createReason(item)));
@@ -250,7 +250,7 @@ export const qualitySettingsService = {
     await this.setSettingsHub({ samplingPlans: next });
     await activityLogService.logCurrentUser(
       'QUALITY_UPSERT_SAMPLING_PLAN',
-      'حفظ ??? سحب عينات',
+      'حفظ خطة سحب عينات',
       { planId: plan.id, frequencyMinutes: plan.frequencyMinutes, sampleSize: plan.sampleSize },
     );
   },
@@ -262,7 +262,7 @@ export const qualitySettingsService = {
     });
     await activityLogService.logCurrentUser(
       'QUALITY_REMOVE_SAMPLING_PLAN',
-      'حذف ??? سحب عينات',
+      'حذف خطة سحب عينات',
       { planId: id },
     );
   },

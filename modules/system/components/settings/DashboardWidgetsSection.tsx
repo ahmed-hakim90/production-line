@@ -63,7 +63,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold">إعدادات عناصر لوحات التحكم</h3>
-          <p className="page-subtitle">تحكم في ترتيب ????? العناصر من مكان واحد، مع إمكانية إضافة Widget جديد.</p>
+          <p className="page-subtitle">تحكم في ترتيب وظهور العناصر من مكان واحد، مع إمكانية إضافة Widget جديد.</p>
         </div>
         <Button onClick={onSave} disabled={saving}>
           {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}

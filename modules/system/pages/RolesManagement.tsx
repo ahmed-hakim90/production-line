@@ -53,7 +53,7 @@ export const RolesManagement: React.FC = () => {
           <div className="text-center py-16 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-20">admin_panel_settings</span>
             <p className="font-bold text-base">لا توجد أدوار بعد</p>
-            <p className="text-sm mt-1">ابدأ بإنشاء أول دور ??????</p>
+            <p className="text-sm mt-1">ابدأ بإنشاء أول دور للمؤسسة</p>
           </div>
         </Card>
       ) : (
@@ -162,7 +162,7 @@ export const RolesManagement: React.FC = () => {
               <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف الدور</h3>
-            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا الدور؟ تأكد من عدم وجود مستخدمين ??????? به.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا الدور؟ تأكد من عدم وجود مستخدمين مرتبطين به.</p>
             <div className="flex items-center justify-center gap-2">
               <button className="btn btn-secondary" onClick={() => setDeleteConfirmId(null)}>إلغاء</button>
               <button

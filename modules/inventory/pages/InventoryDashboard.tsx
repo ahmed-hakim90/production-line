@@ -67,7 +67,7 @@ export const InventoryDashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <KPICard label="عدد المخازن" value={warehouses.length} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="أصناف ???? بالمخزون" value={balances.length} iconType="trend" color="gray" loading={loading} />
+        <KPICard label="أصناف ذات رصيد بالمخزون" value={balances.length} iconType="trend" color="gray" loading={loading} />
         <KPICard label="إجمالي الكمية" value={formatNumber(totalQty)} iconType="metric" color="green" loading={loading} />
         <KPICard label="أصناف منخفضة" value={lowItems.length} iconType="money" color="amber" loading={loading} />
       </div>

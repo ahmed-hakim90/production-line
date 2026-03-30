@@ -368,7 +368,7 @@ export const QuickAction: React.FC = () => {
       return;
     }
     if (Number(quantity || 0) <= 0 || Number(hours || 0) <= 0 || (requiresWorkers && workersTotal <= 0)) {
-      setSaveError('أكمل الحقول ???????? أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
+      setSaveError('أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
       return;
     }
     setSaving(true);
@@ -552,7 +552,7 @@ export const QuickAction: React.FC = () => {
     <div className="erp-ds-clean space-y-6">
       <PageHeader
         title="إدخال سريع"
-        subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، ?????? ومشاركة."
+        subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، طباعة ومشاركة."
         icon="bolt"
       />
 
@@ -624,7 +624,7 @@ export const QuickAction: React.FC = () => {
               </Select>
               {scopedActiveWOs.length === 0 && (
                 <p className="mt-1.5 text-[11px] text-slate-400">
-                  لا توجد أوامر شغل ???? ?????? بالمشرف المختار.
+                  لا توجد أوامر شغل مرتبطة بالمشرف المختار.
                 </p>
               )}
             </div>
@@ -866,13 +866,13 @@ export const QuickAction: React.FC = () => {
             </div>
             )}
             <div className="md:col-span-2">
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">??????</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ملاحظات</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
                 className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12 resize-y"
-                placeholder="اكتب أي ?????? إضافية للتقرير..."
+                placeholder="اكتب أي ملاحظات إضافية للتقرير..."
               />
             </div>
           </div>
@@ -911,7 +911,7 @@ export const QuickAction: React.FC = () => {
             <span className="material-icons-round text-emerald-500 text-2xl">check_circle</span>
             <div>
               <p className="font-bold text-emerald-700">تم حفظ التقرير بنجاح!</p>
-              <p className="text-sm text-emerald-600 dark:text-emerald-500">يمكنك الآن ??????? أو التصدير أو المشاركة.</p>
+              <p className="text-sm text-emerald-600 dark:text-emerald-500">يمكنك الآن الطباعة أو التصدير أو المشاركة.</p>
             </div>
           </div>
 
@@ -919,7 +919,7 @@ export const QuickAction: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
             <Button onClick={() => handlePrint()} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">print</span>
-              ?????
+              طباعة
             </Button>
             <Button variant="secondary" disabled={exporting} onClick={handleExportPDF} className="w-full sm:w-auto">
               {exporting ? (
@@ -967,7 +967,7 @@ export const QuickAction: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">??????</p>
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملاحظات</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{printReport.employeeName}</p>
                   </div>
                   <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
@@ -1005,7 +1005,7 @@ export const QuickAction: React.FC = () => {
                 )}
                 {printReport.notes?.trim() && (
                   <div className="bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-lg)] p-3 border border-amber-100 dark:border-amber-900/20">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">??????</p>
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملاحظات</p>
                     <p className="text-sm font-medium text-[var(--color-text)]">{printReport.notes}</p>
                   </div>
                 )}

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -69,7 +69,7 @@ export const ReworkOrders: React.FC = () => {
           <p className="page-subtitle">متابعة حالات إعادة التشغيل</p>
         </div>
         <div className="erp-page-actions">
-          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>????? التقرير</Button>
+          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>طباعة التقرير</Button>
           <Button
             variant="outline"
             onClick={async () => {

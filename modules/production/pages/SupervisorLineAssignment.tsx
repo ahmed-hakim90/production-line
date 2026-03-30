@@ -105,7 +105,7 @@ const SearchableSupervisorField: React.FC<SearchableSupervisorFieldProps> = ({
       {open && (
         <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white">
           {filtered.length === 0 && (
-            <div className="px-3 py-2 text-xs font-normal text-gray-500">لا توجد نتائج ??????</div>
+            <div className="px-3 py-2 text-xs font-normal text-gray-500">لا توجد نتائج مطابقة</div>
           )}
           {filtered.map((item) => (
             <button
@@ -154,7 +154,7 @@ const LineCard = memo(({
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-gray-800">{line.name}</h3>
-          {pending && <span className="h-2 w-2 rounded-full bg-amber-500" title="تغييرات غير ??????" />}
+          {pending && <span className="h-2 w-2 rounded-full bg-amber-500" title="تغييرات غير محفوظة" />}
         </div>
         <div
           className={`rounded-full px-2 py-0.5 text-xs font-normal ${
@@ -357,7 +357,7 @@ export const SupervisorLineAssignment: React.FC = () => {
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-medium text-gray-800">توزيع المشرفين على ??????</h1>
+              <h1 className="text-lg font-medium text-gray-800">توزيع المشرفين على الخطوط</h1>
               <p className="text-xs font-normal text-gray-500">
                 تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط
               </p>
@@ -392,7 +392,7 @@ export const SupervisorLineAssignment: React.FC = () => {
               <span className="text-sm">#</span>
             </div>
             <div>
-              <p className="text-xs font-normal text-gray-500">إجمالي ??????</p>
+              <p className="text-xs font-normal text-gray-500">إجمالي التعيينات</p>
               <p className="text-xl font-medium text-gray-800">{toAr(totalLines)}</p>
             </div>
           </div>
@@ -501,7 +501,7 @@ export const SupervisorLineAssignment: React.FC = () => {
         <>
           <section>
             <div className="mb-2 flex items-center gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">???? بدون مشرف</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">خطوط بدون مشرف</p>
               <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: '#FAEEDA', color: '#BA7517' }}>
                 {toAr(withoutSupervisor.length)}
               </span>
@@ -523,7 +523,7 @@ export const SupervisorLineAssignment: React.FC = () => {
               ))}
               {withoutSupervisor.length === 0 && (
                 <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-normal text-gray-500">
-                  لا توجد ???? في هذا القسم حسب الفلاتر الحالية.
+                  لا توجد خطوط في هذا القسم حسب الفلاتر الحالية.
                 </div>
               )}
             </div>
@@ -531,7 +531,7 @@ export const SupervisorLineAssignment: React.FC = () => {
 
           <section>
             <div className="mb-2 flex items-center gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">???? بها مشرف</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">خطوط بها مشرف</p>
               <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: 'rgb(var(--color-primary) / 0.12)', color: 'rgb(var(--color-primary))' }}>
                 {toAr(withSupervisor.length)}
               </span>
@@ -553,7 +553,7 @@ export const SupervisorLineAssignment: React.FC = () => {
               ))}
               {withSupervisor.length === 0 && (
                 <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-normal text-gray-500">
-                  لا توجد ???? في هذا القسم حسب الفلاتر الحالية.
+                  لا توجد خطوط في هذا القسم حسب الفلاتر الحالية.
                 </div>
               )}
             </div>

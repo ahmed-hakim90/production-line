@@ -36,7 +36,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
   if (!isAdmin) return null;
 
   return (
-    <Card title="محرك ??????">
+    <Card title="محرك المظهر">
       <div className="space-y-6">
         <div>
           <div className="flex items-center gap-2 mb-3">
@@ -105,7 +105,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               { key: 'secondaryColor' as const, label: 'اللون الثانوي' },
               { key: 'successColor' as const, label: 'لون النجاح' },
               { key: 'warningColor' as const, label: 'لون التحذير' },
-              { key: 'dangerColor' as const, label: 'لون ?????' },
+              { key: 'dangerColor' as const, label: 'لون الخطر' },
               { key: 'backgroundColor' as const, label: 'لون الخلفية' },
             ]).map((color) => (
               <div key={color.key} className="flex items-center gap-3 p-3 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
@@ -136,7 +136,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">الوضع</p>
-              <p className="text-xs text-[var(--color-text-muted)]">فاتح، داكن، أو تلقائي حسب ??????</p>
+              <p className="text-xs text-[var(--color-text-muted)]">فاتح، داكن، أو تلقائي حسب الجهاز</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0 w-full sm:w-auto">
@@ -168,7 +168,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">نوع الخط</p>
-              <p className="text-xs text-[var(--color-text-muted)]">الخط المستخدم في جميع أنحاء ???????</p>
+              <p className="text-xs text-[var(--color-text-muted)]">الخط المستخدم في جميع أنحاء الواجهة</p>
             </div>
           </div>
           <select
@@ -317,7 +317,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">كثافة العرض</p>
-              <p className="text-xs text-[var(--color-text-muted)]">مريح ???? مساحة أكبر، مضغوط يعرض محتوى أكثر</p>
+              <p className="text-xs text-[var(--color-text-muted)]">مريح يعطي مساحة أكبر، مضغوط يعرض محتوى أكثر</p>
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -348,7 +348,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">ألوان أيقونات القائمة</p>
-              <p className="text-xs text-[var(--color-text-muted)]">ملوّن ???? كل قسم لونه، رئيسي يوحّد اللون، محايد رمادي هادئ</p>
+              <p className="text-xs text-[var(--color-text-muted)]">ملوّن يعطي كل قسم لونه، رئيسي يوحّد اللون، محايد رمادي هادئ</p>
             </div>
           </div>
           <div className="flex gap-2 shrink-0 flex-wrap">
@@ -429,7 +429,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] text-[9px] font-bold"
                 style={{ backgroundColor: localTheme.dangerColor + '15', color: localTheme.dangerColor }}>
                 <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: localTheme.dangerColor }} />
-                ???
+                خطر
               </div>
             </div>
           </div>
@@ -441,7 +441,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             { label: 'ثانوي', color: localTheme.secondaryColor },
             { label: 'نجاح', color: localTheme.successColor },
             { label: 'تحذير', color: localTheme.warningColor },
-            { label: '???', color: localTheme.dangerColor },
+            { label: 'خطر', color: localTheme.dangerColor },
             { label: 'خلفية', color: localTheme.backgroundColor },
           ]).map((swatch) => (
             <div key={swatch.label} className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] border border-[var(--color-border)]">

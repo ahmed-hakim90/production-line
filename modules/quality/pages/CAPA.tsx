@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -118,7 +118,7 @@ export const CAPA: React.FC = () => {
           <p className="page-subtitle">الإجراءات التصحيحية والوقائية</p>
         </div>
         <div className="erp-page-actions">
-          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>????? التقرير</Button>
+          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>طباعة التقرير</Button>
           <Button
             variant="outline"
             onClick={async () => {
@@ -211,7 +211,7 @@ export const CAPA: React.FC = () => {
           <textarea
             value={form.actionPlan}
             onChange={(e) => setForm((s) => ({ ...s, actionPlan: e.target.value }))}
-            placeholder="??? الإجراء"
+            placeholder="وصف الإجراء"
             className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm min-h-[100px]"
           />
 

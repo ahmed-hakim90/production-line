@@ -176,7 +176,7 @@ export const transferApprovalService = {
       .filter((line) => Number(line.quantity) > 0)
       .map((line) => ({ ...line, quantity: Number(line.quantity) }));
     if (!lines.length) {
-      throw new Error('لا توجد أصناف صالحة في ??? التحويل.');
+      throw new Error('لا توجد أصناف صالحة في طلب التحويل.');
     }
     const resolvedReferenceNo = input.referenceNo?.trim() || await this.getNextInvReferenceNo();
     const payload: InventoryTransferRequest = {
@@ -209,9 +209,9 @@ export const transferApprovalService = {
   async approveRequest(id: string, approvedBy: string, options?: ApproveRequestOptions): Promise<void> {
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
-    if (!request) throw new Error('??? التحويل غير موجود.');
+    if (!request) throw new Error('طلب التحويل غير موجود.');
     if (request.status !== 'pending') {
-      throw new Error('لا يمكن اعتماد ??? غير معلق.');
+      throw new Error('لا يمكن اعتماد طلب غير معلق.');
     }
 
     const requestType: TransferRequestType = request.requestType || 'transfer';
@@ -281,9 +281,9 @@ export const transferApprovalService = {
   async rejectRequest(id: string, rejectedBy: string, rejectionReason?: string, rejectedByUserId?: string): Promise<void> {
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
-    if (!request) throw new Error('??? التحويل غير موجود.');
+    if (!request) throw new Error('طلب التحويل غير موجود.');
     if (request.status !== 'pending') {
-      throw new Error('لا يمكن رفض ??? غير معلق.');
+      throw new Error('لا يمكن رفض طلب غير معلق.');
     }
     const rejectPatch: Record<string, any> = {
       status: 'rejected',
@@ -299,7 +299,7 @@ export const transferApprovalService = {
   async cancelRequest(id: string, cancelledBy: string, cancellationReason?: string, cancelledByUserId?: string): Promise<void> {
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
-    if (!request) throw new Error('??? التحويل غير موجود.');
+    if (!request) throw new Error('طلب التحويل غير موجود.');
     if (request.status !== 'approved') {
       throw new Error('يمكن إلغاء التحويلات المعتمدة فقط.');
     }
@@ -335,9 +335,9 @@ export const transferApprovalService = {
   async updateRequest(id: string, updates: UpdateTransferRequestInput): Promise<void> {
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
-    if (!request) throw new Error('??? التحويل غير موجود.');
+    if (!request) throw new Error('طلب التحويل غير موجود.');
     if (request.status !== 'pending') {
-      throw new Error('يمكن تعديل ال???ات المعلقة فقط.');
+      throw new Error('يمكن تعديل الطلبات المعلقة فقط.');
     }
 
     const patch: Record<string, any> = {};

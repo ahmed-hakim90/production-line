@@ -23,14 +23,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
   if (!isAdmin) return null;
 
   return (
-    <Card title="سلوك ??????">
+    <Card title="سلوك النظام">
       <div className="space-y-4">
         {([
-          { key: 'allowMultipleActivePlans' as keyof PlanSettings, label: 'السماح ???? متعددة ???? على نفس الخط', icon: 'playlist_add', desc: 'عند ???????? لن يُسمح بإنشاء ??? جديدة على خط يحتوي بالفعل على ??? ????.' },
-          { key: 'allowReportWithoutPlan' as keyof PlanSettings, label: 'السماح بالتقارير بدون ???', icon: 'assignment', desc: 'عند ???????? لن يتمكن المشرفون من إنشاء تقارير إنتاج بدون ??? ????.' },
-          { key: 'allowOverProduction' as keyof PlanSettings, label: 'السماح بالإنتاج الزائد', icon: 'trending_up', desc: 'عند ???????? لن يُسمح بإضافة تقارير بعد الوصول إلى الكمية ???????.' },
-          { key: 'autoClosePlan' as keyof PlanSettings, label: 'إغلاق ال??? تلقائياً عند الاكتمال', icon: 'event_available', desc: 'عند التفعيل، يتم تغيير حالة ال??? إلى "مكتملة" تلقائياً عند الوصول للكمية ???????.' },
-          { key: 'requireFinishedStockApprovalForReports' as keyof PlanSettings, label: 'اعتماد دخول تم الصنع من التقارير', icon: 'approval', desc: 'عند التفعيل، لا تتم إضافة المنتج التام تلقائياً للمخزن بعد التقرير، بل ???? ??? اعتماد للمستخدم المخول.' },
+          { key: 'allowMultipleActivePlans' as keyof PlanSettings, label: 'السماح بخطط متعددة نشطة على نفس الخط', icon: 'playlist_add', desc: 'عند التعطيل لن يُسمح بإنشاء خطة جديدة على خط يحتوي بالفعل على خطة نشطة.' },
+          { key: 'allowReportWithoutPlan' as keyof PlanSettings, label: 'السماح بالتقارير بدون خطة', icon: 'assignment', desc: 'عند التعطيل لن يتمكن المشرفون من إنشاء تقارير إنتاج بدون خطة نشطة.' },
+          { key: 'allowOverProduction' as keyof PlanSettings, label: 'السماح بالإنتاج الزائد', icon: 'trending_up', desc: 'عند التعطيل لن يُسمح بإضافة تقارير بعد الوصول إلى الكمية المخططة.' },
+          { key: 'autoClosePlan' as keyof PlanSettings, label: 'إغلاق الخطة تلقائياً عند الاكتمال', icon: 'event_available', desc: 'عند التفعيل، يتم تغيير حالة الخطة إلى "مكتملة" تلقائياً عند الوصول للكمية المخططة.' },
+          { key: 'requireFinishedStockApprovalForReports' as keyof PlanSettings, label: 'اعتماد دخول تم الصنع من التقارير', icon: 'approval', desc: 'عند التفعيل، لا تتم إضافة المنتج التام تلقائياً للمخزن بعد التقرير، بل يتطلب طلب اعتماد للمستخدم المخول.' },
           { key: 'allowNegativeDecomposedStock' as keyof PlanSettings, label: 'السماح بالسالب في مخزن المفكك', icon: 'remove_circle_outline', desc: 'عند التفعيل، يمكن خصم مواد خام من مخزن المفكك حتى لو الرصيد غير كافٍ في التقارير، واعتماد تحويلات صادرة من مخزن المفكك المحدد في الإعدادات بنفس الشرط (مع صلاحية الموافقة على التحويل بالسالب).' },
           { key: 'allowNegativeFinishedTransferStock' as keyof PlanSettings, label: 'السماح بتحويل تم الصنع بالسالب', icon: 'swap_horiz', desc: 'عند التفعيل، يمكن اعتماد تحويلات صادرة من مخزن "تم الصنع" حتى لو الرصيد أقل من الكمية (مع صلاحية الموافقة على التحويل بالسالب).' },
         ]).map((setting) => (
@@ -130,7 +130,7 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <p className="text-sm font-bold text-[var(--color-text)]">مخزن المواد الخام</p>
             </div>
             <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              المنتجات التي لها رصيد في هذا المخزن يتم اعتبارها "خامات" ولن ???? في الإنتاج أو التكاليف أو قوائم اختيار المنتج.
+              المنتجات التي لها رصيد في هذا المخزن يتم اعتبارها "خامات" ولن تظهر في الإنتاج أو التكاليف أو قوائم اختيار المنتج.
             </p>
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
@@ -150,7 +150,7 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <p className="text-sm font-bold text-[var(--color-text)]">مخزن المفكك (خصم الخامات)</p>
             </div>
             <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              عند تسجيل تقرير إنتاج، ?????? يخصم مكونات المنتج (الخامات) من هذا المخزن.
+              عند تسجيل تقرير إنتاج، يُخصم مكونات المنتج (الخامات) من هذا المخزن.
             </p>
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
@@ -266,14 +266,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             <p className="text-sm font-bold text-[var(--color-text)]">وحدة عرض تحويلات المنتج النهائي</p>
           </div>
           <p className="text-xs text-[var(--color-text-muted)] mb-3">
-            يحدد ????? عرض كميات تحويلات المنتج النهائي في الشاشات ????????: ???? أو كرتونة.
+            يحدد كيفية عرض كميات تحويلات المنتج النهائي في الشاشات ذات الصلة: قطعة أو كرتونة.
           </p>
           <select
             className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
             value={localPlanSettings.transferDisplayUnit ?? 'piece'}
             onChange={(e) => setLocalPlanSettings((p) => ({ ...p, transferDisplayUnit: e.target.value as 'piece' | 'carton' }))}
           >
-            <option value="piece">????</option>
+            <option value="piece">قطعة</option>
             <option value="carton">كرتونة</option>
           </select>
         </div>

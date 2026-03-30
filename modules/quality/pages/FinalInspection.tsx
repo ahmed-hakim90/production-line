@@ -106,7 +106,7 @@ export const FinalInspection: React.FC = () => {
     });
     const requiresReason = status === 'failed' || status === 'rework';
     if (requiresReason && !reasonCode) {
-      setMessage({ type: 'error', text: 'سبب العيب ????? عند الفشل أو إعادة التشغيل.' });
+      setMessage({ type: 'error', text: 'سبب العيب مطلوب عند الفشل أو إعادة التشغيل.' });
       return;
     }
 
@@ -235,7 +235,7 @@ export const FinalInspection: React.FC = () => {
       setUploadProgress(0);
       setMessage({
         type: 'success',
-        text: printAfterSave ? 'تم حفظ تقرير الفحص النهائي وإرسال أمر ???????.' : 'تم حفظ تقرير الفحص النهائي بنجاح.',
+        text: printAfterSave ? 'تم حفظ تقرير الفحص النهائي وإرسال أمر الطباعة.' : 'تم حفظ تقرير الفحص النهائي بنجاح.',
       });
       actionTrackerService.succeedOperation(trackedOperation, {
         metadata: {
@@ -270,7 +270,7 @@ export const FinalInspection: React.FC = () => {
           <p className="page-subtitle">تسجيل نتيجة الفحص النهائي لكل أمر شغل</p>
         </div>
         <div className="erp-page-actions">
-          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>????? التقرير</Button>
+          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>طباعة التقرير</Button>
           <Button
             variant="outline"
             onClick={async () => {
@@ -354,7 +354,7 @@ export const FinalInspection: React.FC = () => {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             disabled={!canInspect}
-            placeholder="???????"
+            placeholder="ملاحظات إضافية"
             className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           />
           <div className="md:col-span-2 space-y-2">
@@ -419,7 +419,7 @@ export const FinalInspection: React.FC = () => {
             disabled={!canInspect || busy || !workOrderId || !currentEmployee?.id || !canPrint}
             onClick={() => onSubmit(true)}
           >
-            حفظ و?????
+            حفظ وطباعة
           </Button>
           <Button variant="primary" disabled={!canInspect || busy || !workOrderId || !currentEmployee?.id} onClick={() => onSubmit(false)}>
             حفظ تقرير الفحص النهائي

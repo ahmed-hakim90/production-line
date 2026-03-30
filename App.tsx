@@ -6,7 +6,6 @@ import {
   Routes,
   Route,
   Navigate,
-  Link,
   Outlet,
   useLocation,
   useNavigate,
@@ -47,6 +46,7 @@ import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenan
 import { tenantService } from './services/tenantService';
 import { setAppLanguage, type SupportedLanguage } from './src/i18n';
 import { RegisterCompany } from './modules/auth/pages/RegisterCompany';
+import { LandingPage } from './modules/auth/pages/LandingPage';
 import { CompanyNotApprovedPage } from './modules/auth/pages/CompanyNotApprovedPage';
 import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
 import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
@@ -144,68 +144,6 @@ const LoginRedirect: React.FC = () => {
 
 /** Unified home: content by role permissions */
 const HomeRedirect: React.FC = () => <HomeDashboardRouter />;
-
-const LandingPage: React.FC = () => {
-  return (
-    <div className="erp-auth-page" dir="rtl">
-      <div className="erp-auth-card p-8 max-w-3xl mx-auto mt-12">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold mb-2">Hakimo ERP</h1>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            منصة موحدة لإدارة الإنتاج والمخزون والموارد البشرية. اختر الإجراء المناسب للمتابعة.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Link
-            to={`/t/${DEFAULT_TENANT_SLUG}/login`}
-            className="rounded-xl border border-[var(--color-border)] bg-white p-4 hover:bg-[var(--color-surface-hover)] transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="material-icons-round text-[var(--color-primary)]">login</span>
-              <span className="font-semibold text-[var(--color-text)]">تسجيل الدخول</span>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)]">الدخول إلى لوحة الشركة للحسابات المعتمدة.</p>
-          </Link>
-          <Link
-            to="/register-company"
-            className="rounded-xl border border-[var(--color-border)] bg-white p-4 hover:bg-[var(--color-surface-hover)] transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="material-icons-round text-[var(--color-primary)]">add_business</span>
-              <span className="font-semibold text-[var(--color-text)]">تسجيل شركة جديدة</span>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)]">إرسال طلب إنشاء شركة جديدة ببيانات المدير.</p>
-          </Link>
-          <a
-            href="mailto:support@hakimoerp.com"
-            className="rounded-xl border border-[var(--color-border)] bg-white p-4 hover:bg-[var(--color-surface-hover)] transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="material-icons-round text-[var(--color-primary)]">support_agent</span>
-              <span className="font-semibold text-[var(--color-text)]">الدعم الفني</span>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)]">التواصل مع فريق الدعم في حال وجود مشكلة دخول أو تفعيل.</p>
-          </a>
-        </div>
-
-        <div className="mt-5 text-center">
-          <p className="text-xs text-[var(--color-text-muted)]">
-            إذا وصلت إلى هذه الصفحة من رابط شركة غير صحيح، يمكنك بدء جلسة جديدة من هنا.
-          </p>
-          <div className="mt-3">
-            <Link
-              to={`/t/${DEFAULT_TENANT_SLUG}/login`}
-              className="inline-flex items-center justify-center rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-            >
-              ابدأ الآن
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const PROTECTED_ROUTES: AppRouteDef[] = [
   ...DASHBOARD_ROUTES,

@@ -189,7 +189,7 @@ export const TransferApprovals: React.FC = () => {
     if (!requestId || !canApprove) return;
     const request = requests.find((row) => row.id === requestId);
     if (isSelfProductionEntryRequest(request)) {
-      toast.warning('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتماد ????? من مستخدم آخر مخوّل.');
+      toast.warning('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتمادها من مستخدم آخر مخوّل.');
       return;
     }
     setProcessingId(requestId);
@@ -256,15 +256,15 @@ export const TransferApprovals: React.FC = () => {
     if (!canApprove || bulkApproving || loading) return;
     const targets = bulkApproveEligible;
     if (!targets.length) {
-      toast.info('لا توجد ????? معلقة يمكن اعتمادها دفعة واحدة.');
+      toast.info('لا توجد طلبات معلقة يمكن اعتمادها دفعة واحدة.');
       return;
     }
     const pendingSelfSkipped = requests.filter(
       (r) => r.status === 'pending' && r.id && isSelfProductionEntryRequest(r),
     ).length;
-    let confirmMsg = `سيتم اعتماد ${targets.length} ?????.`;
+    let confirmMsg = `سيتم اعتماد ${targets.length} طلبات.`;
     if (pendingSelfSkipped > 0) {
-      confirmMsg += ` (${pendingSelfSkipped} ????? لن يُعتمد تلقائياً لأنها دخول تم الصنع بإنشائك.)`;
+      confirmMsg += ` (${pendingSelfSkipped} طلبات لن يُعتمد تلقائياً لأنها دخول تم الصنع بإنشائك.)`;
     }
     confirmMsg += ' هل تريد المتابعة؟';
     if (!window.confirm(confirmMsg)) return;
@@ -283,7 +283,7 @@ export const TransferApprovals: React.FC = () => {
           });
           ok += 1;
         } catch (e: any) {
-          errors.push(`${req.referenceNo || id}: ${e?.message || '???'}`);
+          errors.push(`${req.referenceNo || id}: ${e?.message || 'خطأ'}`);
         }
       }
     } finally {
@@ -292,10 +292,10 @@ export const TransferApprovals: React.FC = () => {
 
     await loadData({ silent: true });
     if (errors.length === 0) {
-      toast.success(`تم اعتماد ${ok} ?????.`);
+      toast.success(`تم اعتماد ${ok} طلبات.`);
     } else {
       toast.warning(
-        `تم اعتماد ${ok} ?????، وفشل ${errors.length}. ${errors.slice(0, 3).join(' — ')}${errors.length > 3 ? '…' : ''}`,
+        `تم اعتماد ${ok} طلبات، وفشل ${errors.length}. ${errors.slice(0, 3).join(' — ')}${errors.length > 3 ? '…' : ''}`,
       );
     }
   };
@@ -360,7 +360,7 @@ export const TransferApprovals: React.FC = () => {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-400">لا توجد ????? تحويل في هذا الفلتر.</div>
+          <div className="p-10 text-center text-sm text-slate-400">لا توجد طلبات تحويل في هذا الفلتر.</div>
         ) : (
           <div className="space-y-2.5">
             <div className="md:hidden space-y-2.5 p-3">
@@ -395,7 +395,7 @@ export const TransferApprovals: React.FC = () => {
                       </Button>
                       <Button variant="outline" onClick={() => void printRequest(row)} disabled={rowProcessing}>
                         <span className="material-icons-round text-sm">print</span>
-                        ?????
+                        طباعة
                       </Button>
                     </div>
                   </div>
@@ -476,7 +476,7 @@ export const TransferApprovals: React.FC = () => {
                             disabled={rowProcessing}
                           >
                             <span className="material-icons-round text-sm">print</span>
-                            ?????
+                            طباعة
                           </Button>
                           {row.status === 'pending' && (
                             <>
@@ -484,7 +484,7 @@ export const TransferApprovals: React.FC = () => {
                                 variant="primary"
                                 onClick={() => void handleApprove(row.id)}
                                 disabled={!canApprove || rowProcessing || rowIsSelfProductionEntry}
-                                title={rowIsSelfProductionEntry ? 'لا يمكن اعتماد ??? تم إنشاؤه ?????? نفس المستخدم.' : undefined}
+                                title={rowIsSelfProductionEntry ? 'لا يمكن اعتماد طلب تم إنشاؤه من نفس المستخدم.' : undefined}
                               >
                                 <span className="material-icons-round text-sm">check_circle</span>
                                 اعتماد
@@ -543,7 +543,7 @@ export const TransferApprovals: React.FC = () => {
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
                 <h3 id="transfer-approval-detail-title" className="text-lg font-bold">
-                  {selectedRequest.requestType === 'production_entry' ? 'تفاصيل ??? دخول تم الصنع' : 'تفاصيل ??? التحويل'}
+                  {selectedRequest.requestType === 'production_entry' ? 'تفاصيل طلب دخول تم الصنع' : 'تفاصيل طلب التحويل'}
                 </h3>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">مرجع: {selectedRequest.referenceNo}</p>
               </div>
@@ -607,7 +607,7 @@ export const TransferApprovals: React.FC = () => {
               </Button>
               <Button variant="primary" onClick={() => void printRequest(selectedRequest)}>
                 <span className="material-icons-round text-sm">print</span>
-                ????? ?????
+                طباعة التحويل
               </Button>
             </div>
           </div>

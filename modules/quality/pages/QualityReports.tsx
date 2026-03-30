@@ -53,7 +53,7 @@ export const QualityReports: React.FC = () => {
       return { label: 'مرفوض', className: 'bg-rose-50 text-rose-700' };
     }
     if (normalized === 'not_required') {
-      return { label: 'غير ?????', className: 'bg-[#f0f2f5] text-[var(--color-text)]' };
+      return { label: 'غير مطلوب', className: 'bg-[#f0f2f5] text-[var(--color-text)]' };
     }
     return { label: 'قيد المراجعة', className: 'bg-amber-50 text-amber-700' };
   };
@@ -187,13 +187,13 @@ export const QualityReports: React.FC = () => {
       <div className="erp-page-head">
         <div className="erp-page-title-block">
           <h2 className="page-title">تقارير الجودة</h2>
-          <p className="page-subtitle">ملخص جودة لكل أمر شغل + جاهز ???????</p>
+          <p className="page-subtitle">ملخص جودة لكل أمر شغل + جاهز للطباعة</p>
         </div>
         <div className="erp-page-actions">
           {canPrint && selectedWorkOrder && (
             <button className="btn btn-primary" onClick={() => handlePrint()}>
               <span className="material-icons-round" style={{ fontSize: 16 }}>print</span>
-              ?????
+              طباعة
             </button>
           )}
           {canPrint && selectedWorkOrder?.id && (
@@ -293,13 +293,13 @@ export const QualityReports: React.FC = () => {
               <option value="approved">معتمد</option>
               <option value="rejected">مرفوض</option>
               <option value="pending">قيد المراجعة</option>
-              <option value="not_required">غير ?????</option>
+              <option value="not_required">غير مطلوب</option>
             </select>
           </div>
           {qualityReportRows.length === 0 ? (
-            <p className="text-sm text-slate-500">لا توجد تقارير جودة ?????? بأوامر الشغل حاليًا.</p>
+            <p className="text-sm text-slate-500">لا توجد تقارير جودة مرتبطة بأوامر الشغل حاليًا.</p>
           ) : filteredQualityReportRows.length === 0 ? (
-            <p className="text-sm text-slate-500">لا توجد نتائج ?????? للبحث/التصفية الحالية.</p>
+            <p className="text-sm text-slate-500">لا توجد نتائج مطابقة للبحث/التصفية الحالية.</p>
           ) : (
             <div className="space-y-2.5">
               <div className="md:hidden space-y-2.5">

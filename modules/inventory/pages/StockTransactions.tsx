@@ -233,7 +233,7 @@ export const StockTransactions: React.FC = () => {
     if (tx.movementType !== 'TRANSFER') return;
     const transferNo = tx.referenceNo?.trim();
     if (!transferNo) {
-      toast.warning('لا يمكن ????? التحويلة بدون رقم مرجع.');
+      toast.warning('لا يمكن إلغاء التحويلة بدون رقم مرجع.');
       return;
     }
 
@@ -244,7 +244,7 @@ export const StockTransactions: React.FC = () => {
       const outRows = transferRows.filter((row) => row.transferDirection === 'OUT');
       const rowsForPrint = outRows.length > 0 ? outRows : transferRows;
       if (rowsForPrint.length === 0) {
-        toast.warning('لا توجد بيانات كافية ل????? هذه التحويلة.');
+        toast.warning('لا توجد بيانات كافية لطباعة هذه التحويلة.');
         return;
       }
 
@@ -271,7 +271,7 @@ export const StockTransactions: React.FC = () => {
       handleTransferPrint();
       setTimeout(() => setPrintData(null), 1000);
     } catch (error: any) {
-      toast.error(error?.message || 'تعذر ????? التحويلة.');
+      toast.error(error?.message || 'تعذر إلغاء التحويلة.');
     } finally {
       setProcessing(false);
     }

@@ -33,10 +33,10 @@ const ACTION_LABELS: Partial<Record<ActivityAction, { label: string; icon: strin
   TOGGLE_USER_ACTIVE: { label: 'تبديل حالة مستخدم', icon: 'toggle_on', variant: 'warning' },
   APPROVE_USER: { label: 'موافقة على مستخدم', icon: 'check_circle', variant: 'success' },
   REJECT_USER: { label: 'رفض مستخدم', icon: 'cancel', variant: 'danger' },
-  CREATE_LEAVE_REQUEST: { label: '??? إجازة', icon: 'beach_access', variant: 'info' },
+  CREATE_LEAVE_REQUEST: { label: 'طلب إجازة', icon: 'beach_access', variant: 'info' },
   APPROVE_LEAVE: { label: 'موافقة على إجازة', icon: 'check_circle', variant: 'success' },
   REJECT_LEAVE: { label: 'رفض إجازة', icon: 'cancel', variant: 'danger' },
-  CREATE_LOAN_REQUEST: { label: '??? سلفة', icon: 'payments', variant: 'info' },
+  CREATE_LOAN_REQUEST: { label: 'طلب سلفة', icon: 'payments', variant: 'info' },
   APPROVE_LOAN: { label: 'موافقة على سلفة', icon: 'check_circle', variant: 'success' },
   REJECT_LOAN: { label: 'رفض سلفة', icon: 'cancel', variant: 'danger' },
   PROCESS_INSTALLMENT: { label: 'معالجة قسط', icon: 'receipt', variant: 'warning' },
@@ -198,7 +198,7 @@ export const ActivityLogPage: React.FC = () => {
         recipientEmployeeIds: targetMode === 'single' ? selectedEmployeeIds.slice(0, 1) : selectedEmployeeIds,
         roleIds: selectedRoleIds,
       });
-      setSendResult(sent > 0 ? `تم إرسال ${sent} إشعار.` : 'لا يوجد مستلمين ???????.');
+      setSendResult(sent > 0 ? `تم إرسال ${sent} إشعار.` : 'لا يوجد مستلمون مطابقون.');
       setMessage('');
     } catch (error) {
       console.error('manual send failed', error);
@@ -213,7 +213,7 @@ export const ActivityLogPage: React.FC = () => {
       <div className="erp-page-head">
         <div className="erp-page-title-block">
           <h1 className="page-title">سجل النشاط</h1>
-          <p className="page-subtitle">تتبع جميع ??????? والعمليات في ??????</p>
+          <p className="page-subtitle">تتبع جميع الأحداث والعمليات في النظام</p>
         </div>
         <div className="erp-page-actions">
           <button
@@ -288,7 +288,7 @@ export const ActivityLogPage: React.FC = () => {
                         );
                       })}
                       {filteredEmployeesForMulti.length === 0 && (
-                        <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">لا يوجد نتائج ??????.</p>
+                        <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">لا توجد نتائج مطابقة.</p>
                       )}
                     </div>
                     {selectedEmployeeIds.length > 0 && (
@@ -354,10 +354,10 @@ export const ActivityLogPage: React.FC = () => {
         </Card>
       )}
 
-      <Card title="المستخدمون ??????? الآن">
+      <Card title="المستخدمون المتصلون الآن">
         {activeRows.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
-            لا يوجد مستخدمون ????? حاليًا.
+            لا يوجد مستخدمون متصلون حاليًا.
           </div>
         ) : (
           <div className="space-y-2">
@@ -426,7 +426,7 @@ export const ActivityLogPage: React.FC = () => {
             {visibleLogs.length === 0 && (
               <div className="py-16 text-center text-slate-400">
                 <span className="material-icons-round text-5xl block mb-3">history</span>
-                <p className="font-bold">لا توجد ????? مسجلة</p>
+                <p className="font-bold">لا توجد أحداث مسجلة</p>
               </div>
             )}
           </div>
