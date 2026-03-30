@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { defaultTenantSlug } from '@/lib/tenantPaths';
 
 const FEATURES: { icon: string; title: string; desc: string }[] = [
   {
@@ -43,8 +42,7 @@ const HIGHLIGHTS: { icon: string; label: string; text: string }[] = [
 
 /** Public marketing landing — standalone layout (not the auth two-panel shell). */
 export const LandingPage: React.FC = () => {
-  const tenantSlug = defaultTenantSlug();
-  const loginPath = `/t/${tenantSlug}/login`;
+  const loginPath = '/login';
 
   return (
     <div className="landing-marketing" dir="rtl">

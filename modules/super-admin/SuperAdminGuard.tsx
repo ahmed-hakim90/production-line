@@ -6,9 +6,6 @@ import { AuthBrandedLoadingPage } from '../../components/system-ui/AuthLoadingSt
 import { AccessDeniedPanel } from '../../components/system-ui/AccessDeniedPanel';
 import { tenantHomePath } from '../../lib/tenantPaths';
 
-const defaultTenantLogin = () =>
-  `/t/${import.meta.env.VITE_DEFAULT_TENANT_SLUG || 'default'}/login`;
-
 export const SuperAdminGuard: React.FC = () => {
   const { isAuthenticated, loading } = useAuthUiSlice();
   const isSuperAdmin = useAppStore((s) => Boolean(s.userProfile?.isSuperAdmin));
@@ -18,7 +15,7 @@ export const SuperAdminGuard: React.FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to={defaultTenantLogin()} replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (!isSuperAdmin) {

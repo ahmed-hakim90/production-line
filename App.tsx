@@ -55,6 +55,10 @@ import { AuthBrandedLoadingPage } from './components/system-ui/AuthLoadingState'
 const HomeDashboardRouter = lazyNamed(() => import('./modules/dashboards/pages/HomeDashboardRouter'), 'HomeDashboardRouter');
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
 const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
+const TenantLoginGateway = lazyNamed(
+  () => import('./modules/auth/pages/TenantLoginGateway'),
+  'TenantLoginGateway',
+);
 const CompanyNotApprovedPage = lazyNamed(() => import('./modules/auth/pages/CompanyNotApprovedPage'), 'CompanyNotApprovedPage');
 const SuperAdminShell = lazyNamed(() => import('./modules/super-admin/SuperAdminShell'), 'SuperAdminShell');
 const TenantsApproval = lazyNamed(() => import('./modules/super-admin/pages/TenantsApproval'), 'TenantsApproval');
@@ -807,7 +811,14 @@ const App: React.FC = () => {
               />
             </Route>
           </Route>
-          <Route path="/login" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/login`} replace />} />
+          <Route
+            path="/login"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <TenantLoginGateway />
+              </Suspense>
+            }
+          />
           <Route path="/setup" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/setup`} replace />} />
           <Route path="/pending" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/pending`} replace />} />
           <Route
