@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+/* ── Arabic Fonts: Tajawal (primary), Cairo, Noto Sans Arabic ── */
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700;800&family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,42 +9,46 @@
   /*
    * Single source for ERP surfaces + shadcn HSL tokens.
    * Runtime: applyTenantTheme() syncs both ERP vars and shadcn vars from the tenant preset.
-   * Defaults match resolveTheme() indigo-pro preset.
+   * Defaults match resolveTheme() arabic-pro preset.
    */
   :root {
     /* RGB channels (space-separated) — Tailwind: rgb(var(--color-primary) / <alpha>) */
-    --color-primary: 79 70 229;
-    --color-primary-hover: 67 56 202;
-    --color-secondary: 99 102 241;
+    --color-primary: 27 94 148;
+    --color-primary-hover: 15 65 114;
+    --color-secondary: 245 158 11;
     --color-success: 5 150 105;
     --color-warning: 217 119 6;
     --color-danger: 220 38 38;
 
-    --color-bg: #f8fafc;
-    --color-background: #f8fafc;
+    --color-bg: #F5F7FA;
+    --color-background: #F5F7FA;
     --color-card: #ffffff;
-    --color-border: #e2e8f0;
-    --color-text: #0f172a;
-    --color-text-muted: #64748b;
+    --color-border: #D5E3F0;
+    --color-text: #0D2137;
+    --color-text-muted: #5A7FA0;
 
-    --color-sidebar-bg: #ffffff;
-    --color-sidebar-text: #334155;
-    --color-sidebar-border: #e8e8e8;
+    --color-sidebar-bg: #0F3557;
+    --color-sidebar-text: #B3D4F0;
+    --color-sidebar-border: #1A4A72;
+    --color-sidebar-hover: rgba(255, 255, 255, 0.08);
+    --color-sidebar-active: rgba(255, 255, 255, 0.14);
 
-    --font-family-base: 'Cairo', 'Noto Sans Arabic', sans-serif;
-    --font-size-base: 13px;
-    --font-size-sm: 12px;
-    --font-size-xs: 11px;
-    --font-size-2xs: 10px;
+    /* ── Arabic Typography ── */
+    --font-family-base: 'Tajawal', 'Cairo', 'Noto Sans Arabic', sans-serif;
+    --font-size-base: 14px;
+    --font-size-sm: 13px;
+    --font-size-xs: 12px;
+    --font-size-2xs: 11px;
 
-    --border-radius-sm: 4px;
-    --border-radius-base: 6px;
-    --border-radius-lg: 8px;
-    --border-radius-xl: 12px;
+    /* ── Spacing & Radius (more modern/round for Arabic UX) ── */
+    --border-radius-sm: 6px;
+    --border-radius-base: 8px;
+    --border-radius-lg: 12px;
+    --border-radius-xl: 16px;
 
-    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
-    --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
-    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.14);
+    --shadow-card: 0 2px 8px rgba(15, 53, 87, 0.08), 0 1px 3px rgba(15, 53, 87, 0.05);
+    --shadow-dropdown: 0 6px 20px rgba(15, 53, 87, 0.12), 0 2px 6px rgba(15, 53, 87, 0.07);
+    --shadow-modal: 0 20px 60px rgba(15, 53, 87, 0.16);
     --density-scale: 1;
 
     /* Aliases for erp / slide-over components */
@@ -51,41 +56,41 @@
     --color-card-bg: var(--color-card);
     --color-border-ui: var(--color-border);
     --color-text-1: var(--color-text);
-    --color-text-2: #64748b;
-    --color-text-3: #94a3b8;
-    --color-info: #2563eb;
+    --color-text-2: #5A7FA0;
+    --color-text-3: #8AACCA;
+    --color-info: #0EA5E9;
 
-    /* Chart palette (global dashboards) */
-    --chart-1: #1392ec;
+    /* Chart palette — Arabic warm + cool balance */
+    --chart-1: #1B5E94;
     --chart-2: #10b981;
-    --chart-3: #f59e0b;
-    --chart-4: #ef4444;
-    --chart-5: #8b5cf6;
-    --chart-6: #ec4899;
-    --chart-7: #06b6d4;
-    --chart-8: #84cc16;
+    --chart-3: #F59E0B;
+    --chart-4: #EF4444;
+    --chart-5: #8B5CF6;
+    --chart-6: #EC4899;
+    --chart-7: #0EA5E9;
+    --chart-8: #84CC16;
 
     /* shadcn — hsl(var(--token)) */
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    --background: 213 33% 97%;
+    --foreground: 213 59% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 213 59% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 239 84% 60%;
+    --popover-foreground: 213 59% 14%;
+    --primary: 213 69% 34%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 10%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 42%;
-    --accent: 239 84% 97%;
-    --accent-foreground: 239 84% 30%;
+    --secondary: 42 87% 55%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 213 33% 94%;
+    --muted-foreground: 213 30% 44%;
+    --accent: 213 69% 94%;
+    --accent-foreground: 213 69% 24%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 239 84% 60%;
-    --radius: 0.75rem;
+    --border: 213 40% 85%;
+    --input: 213 40% 85%;
+    --ring: 213 69% 34%;
+    --radius: 0.5rem;
   }
 
   * {
@@ -113,9 +118,12 @@
   box-shadow: inset 0 0 0 2px rgb(var(--color-primary) / 0.35);
 }
 
-/* RTL override for shadcn components */
-[dir="rtl"] .lucide {
-  /* icons don't need flip usually, but chevrons do */
+/* ── RTL / Arabic overrides ── */
+
+/* Flip directional chevron/arrow icons in RTL */
+[dir="rtl"] .lucide-chevron-right,
+[dir="rtl"] .lucide-arrow-right {
+  transform: scaleX(-1);
 }
 
 [dir="rtl"] [data-radix-popper-content-wrapper] {
@@ -127,6 +135,32 @@
 [dir="rtl"] [role="dialog"] {
   direction: rtl;
   text-align: right;
+}
+
+/* Arabic number alignment in tables/inputs */
+[dir="rtl"] td[data-numeric],
+[dir="rtl"] .numeric {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Arabic heading refinement */
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] h5,
+[dir="rtl"] h6 {
+  letter-spacing: 0;
+  word-spacing: 0.05em;
+  line-height: 1.6;
+}
+
+/* Sidebar active indicator on correct side for RTL */
+[dir="rtl"] .sidebar-active-bar {
+  right: auto;
+  left: 0;
+  border-radius: 0 4px 4px 0;
 }
 
 @media print {

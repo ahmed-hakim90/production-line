@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════
-   HAKIM ERP — ERPNext Espresso Design System
+   HAKIM ERP — Arabic Design System
    Global styles applied across ALL pages & components
    ═══════════════════════════════════════════════════════ */
 
 * {
-  font-family: var(--font-family-base, 'Cairo', 'Noto Sans Arabic', sans-serif);
+  font-family: var(--font-family-base, 'Tajawal', 'Cairo', 'Noto Sans Arabic', sans-serif);
   box-sizing: border-box;
 }
 
@@ -52,12 +52,13 @@ table thead tr {
 }
 
 table thead th {
-  padding: 8px 12px !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
   color: var(--color-text-muted) !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
+  /* No uppercase — preserves Arabic text correctly */
+  text-transform: none !important;
+  letter-spacing: 0 !important;
   white-space: nowrap;
 }
 
@@ -72,10 +73,11 @@ table tbody tr:hover {
 }
 
 table tbody td {
-  padding: 9px 12px !important;
-  font-size: 13.5px !important;
+  padding: 10px 12px !important;
+  font-size: 14px !important;
   color: var(--color-text) !important;
   vertical-align: middle;
+  line-height: 1.6;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -161,26 +163,28 @@ input[type="checkbox"] {
 .section-head {
   padding: 10px 16px;
   border-bottom: 1px solid var(--color-border);
-  background: #f8f9fa;
-  font-size: 12px;
-  font-weight: 600;
+  background: var(--color-bg);
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-/* ERPNext-style page title */
+/* Arabic ERP page title */
 .page-title {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   color: var(--color-text);
-  line-height: 1.3;
+  line-height: 1.5;
+  letter-spacing: 0;
 }
 
 .page-subtitle {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-text-muted);
-  margin-top: 2px;
+  margin-top: 3px;
+  line-height: 1.6;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -280,11 +284,12 @@ button {
 }
 
 .erp-field-label {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  /* No uppercase for Arabic labels */
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .erp-field-wrap {
@@ -1299,12 +1304,12 @@ button {
 .form-section-head {
   padding: 10px 16px;
   border-bottom: 1px solid var(--color-border);
-  background: #f8f9fa;
-  font-size: 12px;
-  font-weight: 600;
+  background: var(--color-bg);
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1321,11 +1326,11 @@ button {
 label.erp-label,
 .erp-label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   margin-bottom: 5px;
 }
 
@@ -2077,11 +2082,11 @@ table tbody tr[data-selected="true"] {
 label[class*="text-xs"],
 label[class*="text-[11"],
 label[class*="text-[12"] {
-  font-size: 11.5px !important;
-  font-weight: 600 !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
   color: var(--color-text-muted) !important;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   margin-bottom: 4px !important;
   display: block;
 }
@@ -2345,10 +2350,10 @@ input[type="radio"] {
 /* Standard th cell - matches DataTable exactly */
 .erp-th {
   padding: 10px 12px;       /* py-2.5 px-3 */
-  font-size: 12px;
-  font-weight: 600;          /* font-semibold */
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  font-weight: 700;          /* font-bold */
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--color-text-muted);
   white-space: nowrap;
   text-align: right;

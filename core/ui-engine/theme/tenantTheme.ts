@@ -1,7 +1,7 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
 
-export type TenantThemePreset = 'indigo-pro' | 'light' | 'dark' | 'factory' | 'custom';
+export type TenantThemePreset = 'arabic-pro' | 'gulf' | 'sand' | 'indigo-pro' | 'light' | 'dark' | 'factory' | 'custom';
 
 export interface TenantTheme {
   preset: TenantThemePreset;
@@ -15,6 +15,8 @@ export interface TenantTheme {
   colorText: string;
   colorSidebarBg: string;
   colorSidebarText: string;
+  /** Sidebar nav item hover background — defaults to rgba(255,255,255,0.08) for dark sidebars */
+  colorSidebarHover?: string;
 }
 
 const THEME_STORAGE_KEY = 'tenant_theme_cache_v1';
@@ -194,6 +196,40 @@ function applyShadcnTokensFromTheme(theme: TenantTheme, root: HTMLElement) {
 }
 
 const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
+  /* ── Arabic Professional — نيلي مؤسسي + ذهبي ── */
+  'arabic-pro': {
+    preset: 'arabic-pro',
+    primaryColor: '#1B5E94',
+    colorBg: '#F5F7FA',
+    colorCard: '#ffffff',
+    colorBorder: '#D5E3F0',
+    colorText: '#0D2137',
+    colorSidebarBg: '#0F3557',
+    colorSidebarText: '#B3D4F0',
+  },
+  /* ── Gulf / خليجي — فيروزي داكن ── */
+  gulf: {
+    preset: 'gulf',
+    primaryColor: '#047857',
+    colorBg: '#F0FDF9',
+    colorCard: '#ffffff',
+    colorBorder: '#A7F3D0',
+    colorText: '#064E3B',
+    colorSidebarBg: '#064E3B',
+    colorSidebarText: '#A7F3D0',
+  },
+  /* ── Sand / رملي — دافئ عربي ── */
+  sand: {
+    preset: 'sand',
+    primaryColor: '#B45309',
+    colorBg: '#FFFBF5',
+    colorCard: '#ffffff',
+    colorBorder: '#FDE68A',
+    colorText: '#451A03',
+    colorSidebarBg: '#78350F',
+    colorSidebarText: '#FDE68A',
+  },
+  /* ── Legacy presets ── */
   'indigo-pro': {
     preset: 'indigo-pro',
     primaryColor: '#4F46E5',
@@ -203,6 +239,7 @@ const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
     colorText: '#0f172a',
     colorSidebarBg: '#ffffff',
     colorSidebarText: '#334155',
+    colorSidebarHover: '#f0f2f5',
   },
   light: {
     preset: 'light',
@@ -213,6 +250,7 @@ const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
     colorText: '#0f172a',
     colorSidebarBg: '#ffffff',
     colorSidebarText: '#334155',
+    colorSidebarHover: '#f0f2f5',
   },
   dark: {
     preset: 'dark',
@@ -240,10 +278,10 @@ const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
 
 export function resolveTheme(theme?: Partial<TenantTheme> | null): TenantTheme {
   if (!theme) {
-    return PRESETS['indigo-pro'];
+    return PRESETS['arabic-pro'];
   }
 
-  const preset = theme.preset && theme.preset !== 'custom' ? theme.preset : 'indigo-pro';
+  const preset = theme.preset && theme.preset !== 'custom' ? theme.preset : 'arabic-pro';
   return {
     ...PRESETS[preset],
     ...theme,
@@ -292,6 +330,10 @@ export function applyTenantTheme(theme: TenantTheme) {
   root.style.setProperty('--color-background', theme.colorBg);
   root.style.setProperty('--color-sidebar-bg', theme.colorSidebarBg);
   root.style.setProperty('--color-sidebar-text', theme.colorSidebarText);
+  root.style.setProperty(
+    '--color-sidebar-hover',
+    theme.colorSidebarHover ?? 'rgba(255, 255, 255, 0.08)',
+  );
   root.style.setProperty('--tenant-logo', theme.logo ?? '');
   root.style.setProperty('--tenant-background-style', theme.backgroundStyle ?? '');
   root.style.setProperty('--tenant-sidebar-style', theme.sidebarStyle ?? '');
@@ -302,7 +344,7 @@ export function applyTenantTheme(theme: TenantTheme) {
 
 export async function loadTenantTheme(tenantId?: string | null): Promise<TenantTheme> {
   if (!tenantId || !isConfigured) {
-    return PRESETS['indigo-pro'];
+    return PRESETS['arabic-pro'];
   }
 
   try {
@@ -311,6 +353,6 @@ export async function loadTenantTheme(tenantId?: string | null): Promise<TenantT
     return resolveTheme(snapshot.data() as Partial<TenantTheme> | null);
   } catch (error) {
     console.error('Failed to load tenant theme:', error);
-    return PRESETS['indigo-pro'];
+    return PRESETS['arabic-pro'];
   }
 }

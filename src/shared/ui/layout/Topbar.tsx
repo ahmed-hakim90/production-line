@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
+  ArrowRight,
   Download,
   Home,
   Lock,
@@ -125,7 +125,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Mobile hamburger */}
           <button
             onClick={onMenuToggle}
-            className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
+            className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-muted,#f0f2f5)] transition-colors shrink-0"
             aria-label="فتح القائمة"
           >
             <Menu size={18} />
@@ -134,7 +134,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Desktop sidebar collapse toggle */}
           <button
             onClick={onSidebarCollapseToggle}
-            className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
+            className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-muted,#f0f2f5)] transition-colors shrink-0"
             title={collapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'}
           >
             <Sidebar size={18} className={`transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
@@ -145,11 +145,11 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               type="button"
               onClick={pageBack.onClick}
               disabled={pageBack.disabled}
-              className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0 disabled:opacity-50 disabled:pointer-events-none"
+              className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-muted,#f0f2f5)] transition-colors shrink-0 disabled:opacity-50 disabled:pointer-events-none"
               title={pageBack.label}
               aria-label={pageBack.label}
             >
-              <ArrowLeft size={18} />
+              <ArrowRight size={18} />
             </button>
           )}
 
@@ -207,7 +207,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Mobile search icon */}
           <button
             onClick={() => setCmdOpen(true)}
-            className="md:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors"
+            className="md:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-muted,#f0f2f5)] transition-colors"
             title="بحث"
           >
             <Search size={18} />
@@ -236,7 +236,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors disabled:opacity-50"
+            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-muted,#f0f2f5)] transition-colors disabled:opacity-50"
             title="تحديث"
           >
             <RefreshCw size={18} className={refreshing ? 'animate-spin text-primary' : ''} />
