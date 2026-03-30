@@ -105,7 +105,7 @@ async function escalateRequest(
     ...currentStepData,
     status: 'skipped',
     actionDate: Timestamp.now(),
-    notes: `تم تصعيد الطلب تلقائياً بعد ${request.currentStep} أيام بدون إجراء`,
+    notes: `تم تصعيد الطلب تلقائياً بعد انتهاء المهلة بدون إجراء`,
   };
 
   const nextStep = request.currentStep + 1;

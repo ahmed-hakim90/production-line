@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { hrNotificationService } from '../approval/notifications';
 import { employeeService } from '../employeeService';
 import type { HRNotification } from '../types';
@@ -9,7 +9,7 @@ interface HRNotificationBellProps {
 }
 
 export const HRNotificationBell: React.FC<HRNotificationBellProps> = ({ employeeId }) => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<HRNotification[]>([]);
   const [userId, setUserId] = useState('');

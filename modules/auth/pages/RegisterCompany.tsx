@@ -1,11 +1,53 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { signOut } from '../../../services/firebase';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { tenantService } from '../../../services/tenantService';
+import { useAppStore } from '../../../store/useAppStore';
 
 const defaultSlug = import.meta.env.VITE_DEFAULT_TENANT_SLUG || 'default';
 
+/** Matches `Login.tsx` — left panel + container + mobile brand for auth flow consistency. */
+const AuthShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="erp-auth-page" dir="rtl">
+    <div className="erp-auth-panel">
+      <div className="erp-auth-panel-logo">
+        <span className="material-icons-round" style={{ fontSize: 26, color: '#fff' }}>
+          factory
+        </span>
+      </div>
+      <div className="erp-auth-panel-name">HAKIMO ERP</div>
+      <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
+      <div className="erp-auth-panel-features">
+        {[
+          { icon: 'inventory_2', label: 'إدارة الإنتاج والمخزون' },
+          { icon: 'groups', label: 'إدارة الموظفين والحضور' },
+          { icon: 'bar_chart', label: 'تقارير وتحليلات مفصلة' },
+          { icon: 'admin_panel_settings', label: 'نظام صلاحيات متقدم' },
+        ].map((f) => (
+          <div key={f.icon} className="erp-auth-panel-feature">
+            <span className="material-icons-round">{f.icon}</span>
+            <span>{f.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div className="erp-auth-container">
+      <div className="erp-auth-brand">
+        <div className="erp-auth-logo">
+          <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
+        </div>
+        <div className="erp-auth-app-name">HAKIMO ERP</div>
+        <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
 export const RegisterCompany: React.FC = () => {
+  const navigate = useTenantNavigate();
+  const initializeApp = useAppStore((s) => s.initializeApp);
   const [slug, setSlug] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -15,13 +57,13 @@ export const RegisterCompany: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState(false);
+  const normalizedSlug = slug.trim().toLowerCase();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!slug.trim() || !name.trim() || !adminEmail.trim() || !password || !adminDisplayName.trim()) {
-      setError('يرجى تعبئة الحقول المطلوبة');
+      setError('يرجى تعبئة الحقول المطلوبة.');
       return;
     }
     if (password.length < 6) {
@@ -31,7 +73,7 @@ export const RegisterCompany: React.FC = () => {
     setLoading(true);
     try {
       await tenantService.registerCompany({
-        slug: slug.trim().toLowerCase(),
+        slug: normalizedSlug,
         name: name.trim(),
         phone: phone.trim(),
         address: address.trim(),
@@ -39,8 +81,8 @@ export const RegisterCompany: React.FC = () => {
         adminDisplayName: adminDisplayName.trim(),
         password,
       });
-      await signOut();
-      setDone(true);
+      await initializeApp();
+      navigate(`/t/${normalizedSlug}/pending`, { replace: true });
     } catch (err: any) {
       const code = err?.code ?? '';
       setError(
@@ -53,97 +95,181 @@ export const RegisterCompany: React.FC = () => {
     }
   };
 
-  if (done) {
-    return (
-      <div className="erp-auth-page" dir="rtl">
-        <div className="erp-auth-card" style={{ maxWidth: 440, width: '100%' }}>
-          <div className="erp-auth-card-body text-center">
-            <h2 className="text-lg font-bold mb-2">تم استلام طلبك</h2>
-            <p className="text-sm text-[var(--color-text-muted)] mb-4">
-              سيتم مراجعة طلب تسجيل الشركة قريباً. يمكنك تسجيل الدخول لاحقاً من رابط شركتك بعد الموافقة.
-            </p>
-            <Link className="text-indigo-600 font-semibold text-sm" to={`/t/${slug.trim().toLowerCase() || defaultSlug}/login`}>
-              الانتقال لتسجيل الدخول
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="erp-auth-page" dir="rtl">
-      <div className="erp-auth-card" style={{ maxWidth: 480, width: '100%' }}>
+    <AuthShell>
+      <div className="erp-auth-card">
         <div className="erp-auth-card-body">
-          <h1 className="text-lg font-bold mb-1">تسجيل شركة جديدة</h1>
-          <p className="text-xs text-[var(--color-text-muted)] mb-4">
-            املأ البيانات لإرسال طلب المراجعة من قبل المشرف العام.
-          </p>
-          {error ? <p className="text-rose-600 text-sm mb-3">{error}</p> : null}
-          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold mb-1">معرّف الشركة في الرابط (إنجليزي)</label>
-              <input
-                className="erp-input w-full"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                placeholder="acme-corp"
-                dir="ltr"
-              />
+          <div className="erp-auth-headline">
+            <h3>تسجيل شركة جديدة</h3>
+            <p>املأ البيانات لإرسال طلب المراجعة من قبل المشرف العام.</p>
+          </div>
+
+          {error ? (
+            <div className="erp-alert erp-alert-error" style={{ marginBottom: 14 }}>
+              <span className="material-icons-round text-[17px] shrink-0">error_outline</span>
+              <span>{error}</span>
             </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1">اسم الشركة</label>
-              <input className="erp-input w-full" value={name} onChange={(e) => setName(e.target.value)} />
+          ) : null}
+
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-0" autoComplete="on">
+            <div className="erp-auth-field">
+              <label htmlFor="reg-slug">معرّف الشركة في الرابط (بالإنجليزية)</label>
+              <div className="erp-auth-input-wrap">
+                <span className="erp-auth-input-icon material-icons-round">tag</span>
+                <input
+                  id="reg-slug"
+                  className="erp-auth-input"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="acme-corp"
+                  dir="ltr"
+                  autoComplete="off"
+                  required
+                />
+              </div>
+              <p className="erp-auth-field-hint">
+                رابط الدخول لشركتك: <span dir="ltr">/t/{normalizedSlug || 'your-company'}/login</span>
+              </p>
             </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1">رقم الهاتف</label>
-              <input className="erp-input w-full" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" />
+
+            <div className="erp-auth-grid">
+              <div className="erp-auth-field">
+                <label htmlFor="reg-name">اسم الشركة</label>
+                <div className="erp-auth-input-wrap">
+                  <span className="erp-auth-input-icon material-icons-round">apartment</span>
+                  <input
+                    id="reg-name"
+                    className="erp-auth-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="organization"
+                    placeholder="مثال: مصنع الحكيم للصناعات"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="erp-auth-field">
+                <label htmlFor="reg-phone">رقم الهاتف</label>
+                <div className="erp-auth-input-wrap">
+                  <span className="erp-auth-input-icon material-icons-round">phone</span>
+                  <input
+                    id="reg-phone"
+                    className="erp-auth-input"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    dir="ltr"
+                    inputMode="tel"
+                    placeholder="+20 10 0000 0000"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1">العنوان</label>
-              <input className="erp-input w-full" value={address} onChange={(e) => setAddress(e.target.value)} />
+
+            <div className="erp-auth-field">
+              <label htmlFor="reg-address">العنوان</label>
+              <div className="erp-auth-input-wrap">
+                <span className="erp-auth-input-icon material-icons-round">place</span>
+                <input
+                  id="reg-address"
+                  className="erp-auth-input"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="المدينة - المنطقة الصناعية - الشارع"
+                />
+              </div>
             </div>
-            <hr className="border-[var(--color-border)]" />
-            <div>
-              <label className="block text-xs font-semibold mb-1">اسم مسؤول الحساب</label>
-              <input
-                className="erp-input w-full"
-                value={adminDisplayName}
-                onChange={(e) => setAdminDisplayName(e.target.value)}
-              />
+
+            <hr className="border-[var(--color-border)] my-4" />
+
+            <div className="erp-auth-grid">
+              <div className="erp-auth-field">
+                <label htmlFor="reg-admin-name">اسم مسؤول الحساب</label>
+                <div className="erp-auth-input-wrap">
+                  <span className="erp-auth-input-icon material-icons-round">badge</span>
+                  <input
+                    id="reg-admin-name"
+                    className="erp-auth-input"
+                    value={adminDisplayName}
+                    onChange={(e) => setAdminDisplayName(e.target.value)}
+                    autoComplete="name"
+                    placeholder="الاسم الكامل للمسؤول"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="erp-auth-field">
+                <label htmlFor="reg-admin-email">البريد الإلكتروني</label>
+                <div className="erp-auth-input-wrap">
+                  <span className="erp-auth-input-icon material-icons-round">email</span>
+                  <input
+                    id="reg-admin-email"
+                    type="email"
+                    className="erp-auth-input"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    dir="ltr"
+                    autoComplete="email"
+                    placeholder="admin@company.com"
+                    required
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1">البريد الإلكتروني</label>
-              <input
-                className="erp-input w-full"
-                type="email"
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                dir="ltr"
-              />
+
+            <div className="erp-auth-field">
+              <label htmlFor="reg-pwd">كلمة المرور</label>
+              <div className="erp-auth-input-wrap">
+                <span className="erp-auth-input-icon material-icons-round">lock</span>
+                <input
+                  id="reg-pwd"
+                  type="password"
+                  className="erp-auth-input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  dir="ltr"
+                  autoComplete="new-password"
+                  placeholder="6 أحرف على الأقل"
+                  minLength={6}
+                  required
+                />
+              </div>
+              <p className="erp-auth-field-hint">استخدم كلمة مرور قوية تحتوي أحرفًا وأرقامًا.</p>
             </div>
-            <div>
-              <label className="block text-xs font-semibold mb-1">كلمة المرور</label>
-              <input
-                className="erp-input w-full"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                dir="ltr"
-              />
+
+            <div className="erp-auth-tip register-company-tip">
+              <span className="material-icons-round">verified_user</span>
+              <p>سيتم إرسال طلبك للمراجعة، وبعد الموافقة ستتمكن من تسجيل الدخول مباشرة.</p>
             </div>
-            <button type="submit" className="erp-btn-primary w-full py-2.5 rounded-lg font-semibold" disabled={loading}>
-              {loading ? 'جاري الإرسال...' : 'إرسال الطلب'}
+
+            <button type="submit" className="erp-auth-btn" disabled={loading}>
+              {loading ? (
+                <>
+                  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity=".25" />
+                    <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  جاري الإرسال...
+                </>
+              ) : (
+                <>
+                  <span className="material-icons-round" style={{ fontSize: 17 }}>send</span>
+                  إرسال الطلب
+                </>
+              )}
             </button>
+
+            <div className="erp-auth-footer">
+              لديك حساب؟{' '}
+              <Link to={`/t/${defaultSlug}/login`}>تسجيل الدخول</Link>
+            </div>
           </form>
-          <p className="text-center text-xs text-[var(--color-text-muted)] mt-4">
-            لديك حساب؟{' '}
-            <Link to={`/t/${defaultSlug}/login`} className="text-indigo-600 font-semibold">
-              تسجيل الدخول
-            </Link>
-          </p>
         </div>
       </div>
-    </div>
+    </AuthShell>
   );
 };
+
+
+

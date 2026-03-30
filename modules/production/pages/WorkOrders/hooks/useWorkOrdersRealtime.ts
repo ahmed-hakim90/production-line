@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  collection,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
-  query,
   startAfter,
   where,
   type DocumentData,
@@ -14,6 +12,7 @@ import {
 } from 'firebase/firestore';
 
 import { db, isConfigured } from '../../../../auth/services/firebase';
+import { tenantQuery } from '../../../../../lib/tenantFirestore';
 import type { WorkOrder, WorkOrderStatus } from '../../../../../types';
 
 const COLLECTION_NAME = 'work_orders';
@@ -139,8 +138,9 @@ export function useWorkOrdersRealtime(
     setHasMore(false);
     lastDocRef.current = null;
 
-    const firstPageQuery = query(
-      collection(db, COLLECTION_NAME),
+    const firstPageQuery = tenantQuery(
+      db,
+      COLLECTION_NAME,
       ...baseConstraints,
       limit(safePageSize),
     );
@@ -175,8 +175,9 @@ export function useWorkOrdersRealtime(
     setError(null);
 
     try {
-      const nextQuery = query(
-        collection(db, COLLECTION_NAME),
+      const nextQuery = tenantQuery(
+        db,
+        COLLECTION_NAME,
         ...baseConstraints,
         startAfter(lastDocRef.current),
         limit(safePageSize),

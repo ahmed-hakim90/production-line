@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useManagedPrint } from '@/utils/printManager';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../components/SelectableTable';
 import { ProductionReportPrint, mapReportsToPrintRows, computePrintTotals } from '../components/ProductionReportPrint';
 import type { FirestoreEmployee, ProductionReport } from '../../../types';
-import { getDocs } from 'firebase/firestore';
+import { getDocs, query, where } from 'firebase/firestore';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
 import { formatNumber, calculateWasteRatio, getTodayDateString, getReportWaste } from '../../../utils/calculations';
@@ -119,7 +120,7 @@ const getWorkerDisplayName = (worker: Pick<WorkerRow, 'name' | 'code' | 'id'>): 
 };
 
 export const ProductionWorkers: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -146,7 +147,7 @@ export const ProductionWorkers: React.FC = () => {
   const [statFilter, setStatFilter] = useState<StatFilter>('');
   const [assignmentMapByWorker, setAssignmentMapByWorker] = useState<Map<string, string[]>>(new Map());
   const [hoveredWorker, setHoveredWorker] = useState<string | null>(null);
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [bulkPrintReports, setBulkPrintReports] = useState<ProductionReport[] | null>(null);
   const bulkPrintRef = useRef<HTMLDivElement>(null);
   const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
@@ -160,9 +161,10 @@ export const ProductionWorkers: React.FC = () => {
   const loadRefData = useCallback(async () => {
     setDataLoading(true);
     try {
+      const tid = getCurrentTenantId();
       const [deptSnap, posSnap] = await Promise.all([
-        getDocs(departmentsRef()),
-        getDocs(jobPositionsRef()),
+        getDocs(query(departmentsRef(), where('tenantId', '==', tid))),
+        getDocs(query(jobPositionsRef(), where('tenantId', '==', tid))),
       ]);
       setDepartments(deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)));
       setJobPositions(posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)));
@@ -404,7 +406,7 @@ export const ProductionWorkers: React.FC = () => {
 
   const bulkActions = useMemo<TableBulkAction<WorkerRow>[]>(() => {
     const actions: TableBulkAction<WorkerRow>[] = [
-      { label: 'طباعة تقرير', icon: 'print', action: printSelected, variant: 'default' },
+      { label: 'تقرير العمال', icon: 'print', action: printSelected, variant: 'default' },
     ];
     if (canExportFromPage) {
       actions.unshift({
@@ -489,7 +491,7 @@ export const ProductionWorkers: React.FC = () => {
       ),
     },
     {
-      header: 'الخطوط',
+      header: 'عدد الخطوط',
       headerClassName: 'text-center',
       className: 'text-center',
       render: (w) => (
@@ -706,7 +708,7 @@ export const ProductionWorkers: React.FC = () => {
         </button>
         <button className="text-right" onClick={() => toggleStatFilter('active')}>
           <KPIBox
-            label="العمال النشطين"
+            label="العمال النشطون"
             value={stats.activeWorkers}
             icon="construction"
             unit={`/ ${workers.length}`}
@@ -802,7 +804,7 @@ export const ProductionWorkers: React.FC = () => {
           renderActions={renderActions}
           emptyIcon="construction"
           emptyTitle="لا يوجد عمال إنتاج"
-          emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لا يوجد عمال توزيع مرتبطين بخط إنتاج في تاريخ العرض'}
+          emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لا يوجد عمال مرتبطون بخط إنتاج في تاريخ العرض'}
           pageSize={15}
         />
       </Card>
@@ -821,3 +823,7 @@ export const ProductionWorkers: React.FC = () => {
     </div>
   );
 };
+
+
+
+

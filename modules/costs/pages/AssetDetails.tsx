@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { useShallowStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -7,7 +8,7 @@ import type { Asset, AssetDepreciationMethod } from '../../../types';
 
 export const AssetDetails: React.FC = () => {
   const { id = '' } = useParams();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canEdit = can('assets.edit');
   const canDelete = can('assets.delete');
@@ -51,7 +52,7 @@ export const AssetDetails: React.FC = () => {
   if (!asset) {
     return (
       <div className="space-y-4">
-        <PageHeader title="تفاصيل الأصل" subtitle="لم يتم العثور على الأصل المطلوب" icon="search_off" />
+        <PageHeader title="تفاصيل الأصل" subtitle="لم يتم العثور على الأصل مسجل" icon="search_off" />
         <button className="btn btn-secondary" onClick={() => navigate('/costs/assets')}>
           عودة إلى قائمة الأصول
         </button>
@@ -241,3 +242,6 @@ export const AssetDetails: React.FC = () => {
     </div>
   );
 };
+
+
+

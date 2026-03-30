@@ -1,0 +1,28 @@
+{
+  "appName": "Hakim ERP",
+  "language": {
+    "ar": "Arabic",
+    "en": "English",
+    "switchToAr": "Switch to Arabic",
+    "switchToEn": "Switch to English"
+  },
+  "ui": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close"
+  },
+  "topbar": {
+    "openMenu": "Open menu",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "home": "Home",
+    "search": "Search",
+    "globalSearchPlaceholder": "Search the system…",
+    "install": "Install",
+    "readOnly": "Read only",
+    "refresh": "Refresh",
+    "today": "Today"
+  }
+}
+

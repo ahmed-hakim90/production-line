@@ -37,7 +37,7 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">اسم المصنع</p>
-              <p className="text-xs text-[var(--color-text-muted)]">يظهر في التقارير والواجهة</p>
+              <p className="text-xs text-[var(--color-text-muted)]">???? في التقارير والواجهة</p>
             </div>
           </div>
           <input
@@ -55,7 +55,7 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">شعار المصنع</p>
-              <p className="text-xs text-[var(--color-text-muted)]">PNG أو JPG — يظهر في الواجهة والتقارير</p>
+              <p className="text-xs text-[var(--color-text-muted)]">PNG أو JPG — ???? في الواجهة والتقارير</p>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -104,7 +104,7 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
               <span className="material-icons-round text-primary">schedule</span>
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-[var(--color-text)]">المنطقة الزمنية</p>
+              <p className="text-sm font-bold text-[var(--color-text)]">??????? الزمنية</p>
               <p className="text-xs text-[var(--color-text-muted)]">تحدد توقيت التقارير والعمليات</p>
             </div>
           </div>

@@ -65,7 +65,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [savedPrintData, setSavedPrintData] = useState<StockTransferPrintData | null>(null);
-  /** يغذي مكوّن الطباعة المخفي و بطاقة واتساب */
+  /** يغذي مكوّن المخفي و المشاركة في واتساب */
   const [hiddenPrintData, setHiddenPrintData] = useState<StockTransferPrintData | null>(null);
 
   const transferPrintRef = useRef<HTMLDivElement>(null);
@@ -365,7 +365,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
     <div className="erp-ds-clean space-y-6">
       <PageHeader
         title="تحويل مخزن سريع"
-        subtitle="تسجيل طلب تحويل بين المخازن بسرعة — حفظ، طباعة، وتصدير ومشاركة."
+        subtitle="تسجيل مرجعي تحويل بين المخازن بسرعة — حفظ، مشاركة وتصدير."
         icon="swap_horiz"
       />
 
@@ -652,7 +652,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                                   )
                                 }
                               >
-                                قطعة
+                                ????
                               </button>
                               <button
                                 type="button"
@@ -755,7 +755,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
               onClick={() => void printTransfer(`اذن-تحويل-${savedPrintData?.transferNo ?? 'transfer'}`)}
             >
               <span className="material-icons-round text-lg">print</span>
-              طباعة
+              طباعة المرجع
             </Button>
             <Button variant="secondary" disabled={exporting} onClick={() => void handleExportPDF()} className="w-full sm:w-auto" type="button">
               {exporting ? (
@@ -811,7 +811,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                       <span className="col-span-5">الصنف</span>
                       <span className="col-span-2 text-center">الوحدة</span>
                       <span className="col-span-2 text-center">الكمية</span>
-                      <span className="col-span-3 text-center">قطع</span>
+                      <span className="col-span-3 text-center">بالقطعة</span>
                     </div>
                     {savedPrintData.items.map((row, i) => (
                       <div

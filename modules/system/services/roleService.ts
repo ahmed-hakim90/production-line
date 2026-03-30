@@ -192,6 +192,20 @@ export const roleService = {
     }
   },
 
+  /** Super-admin: roles for an arbitrary tenant (ignores currentTenantId). */
+  async listRolesByTenantId(tenantId: string): Promise<FirestoreRole[]> {
+    if (!isConfigured || !tenantId.trim()) return [];
+    try {
+      const snap = await getDocs(
+        query(collection(db, COLLECTION), where('tenantId', '==', tenantId)),
+      );
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreRole));
+    } catch (error) {
+      console.error('roleService.listRolesByTenantId error:', error);
+      throw error;
+    }
+  },
+
   async getById(id: string): Promise<FirestoreRole | null> {
     if (!isConfigured) return null;
     try {

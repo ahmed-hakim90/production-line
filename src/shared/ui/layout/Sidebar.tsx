@@ -171,7 +171,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               <button
                 onClick={toggleCollapse}
                 title="طي القائمة"
-                className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] transition-colors shrink-0"
+                className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors shrink-0"
               >
                 <PanelLeftClose size={16} />
               </button>
@@ -179,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               {/* Mobile close */}
               <button
                 onClick={onClose}
-                className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
+                className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors shrink-0"
               >
                 <X size={16} />
               </button>
@@ -219,7 +219,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                               'w-full flex justify-center items-center h-9 rounded-[var(--border-radius-sm)] transition-colors',
                               itemActive
                                 ? `${activeBg} ${iconColor}`
-                                : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)]',
+                                : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]',
                             ].join(' ')}
                           >
                             {renderSidebarIcon(item.icon, undefined, 18)}
@@ -253,7 +253,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                           'relative flex items-center gap-2 px-2 py-2 rounded-[var(--border-radius-sm)] text-[13px] transition-colors select-none text-start',
                           itemActive
                             ? `${activeBg} ${iconColor} font-semibold`
-                            : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] font-medium',
+                            : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] font-medium',
                         ].join(' ')}
                       >
                         {itemActive && (
@@ -286,7 +286,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       'w-full flex justify-center items-center h-9 rounded-[var(--border-radius-sm)] transition-colors cursor-pointer',
                       active
                         ? `${activeBg} ${iconColor}`
-                        : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)]',
+                        : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]',
                     ].join(' ')}
                   >
                     {renderSidebarIcon(group.icon, undefined, 18)}
@@ -323,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                     alwaysExpandAccordions ? 'cursor-default' : '',
                     active
                       ? `${iconColor} font-semibold`
-                      : 'text-[var(--color-text)] font-medium hover:bg-[#f0f2f5]',
+                      : 'text-[var(--color-text)] font-medium hover:bg-[var(--color-surface-hover)]',
                   ].join(' ')}
                 >
                   <span className={['shrink-0', active ? iconColor : 'text-[var(--color-text-muted)]'].join(' ')}>
@@ -359,7 +359,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                               'relative flex items-center gap-2 pr-2.5 pl-2 py-1.5 rounded-[var(--border-radius-sm)] text-[12.5px] transition-colors',
                               itemActive
                                 ? `${activeBg} ${iconColor} font-semibold`
-                                : 'text-[var(--color-text-muted)] hover:bg-[#f0f2f5] hover:text-[var(--color-text)] font-medium',
+                                : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] font-medium',
                             ].join(' ')}
                           >
                             {/* Active right-border indicator */}
@@ -413,8 +413,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 className={[
                   'w-full flex items-center gap-2.5 p-2 rounded-[var(--border-radius-base)] transition-colors text-start',
                   profileOpen
-                    ? 'bg-[#f0f2f5]'
-                    : 'hover:bg-[#f0f2f5]',
+                    ? 'bg-[var(--color-surface-hover)]'
+                    : 'hover:bg-[var(--color-surface-hover)]',
                 ].join(' ')}
               >
                 <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
@@ -446,8 +446,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   <div className="p-1">
                     {can('selfService.view') && (
                       <NavLink
-                        to="/self-service"
-                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-medium text-[var(--color-text)] hover:bg-[#f0f2f5] transition-colors"
+                        to={withTenantPath(tenantSlug, '/self-service')}
+                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors"
                       >
                         <UserCircle2 size={16} className="text-[var(--color-text-muted)]" />
                         <span>ملفي الشخصي</span>

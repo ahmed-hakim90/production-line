@@ -23,7 +23,7 @@ import {
   DEFAULT_EXPORT_IMPORT_PAGE_CONTROL,
 } from '../../../utils/dashboardConfig';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { applyTheme, setupAutoThemeListener } from '../../../utils/themeEngine';
+import { applyTenantTheme, resolveTheme } from '../../../core/ui-engine/theme/tenantTheme';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { userService } from '../../../services/userService';
 import type {
@@ -83,7 +83,7 @@ const TIMEZONES = [
   { value: 'Africa/Cairo', label: 'القاهرة (GMT+2)' },
   { value: 'Asia/Dubai', label: 'دبي (GMT+4)' },
   { value: 'Asia/Kuwait', label: 'الكويت (GMT+3)' },
-  { value: 'Asia/Qatar', label: 'قطر (GMT+3)' },
+  { value: 'Asia/Qatar', label: 'الدوحة (GMT+3)' },
   { value: 'Asia/Bahrain', label: 'البحرين (GMT+3)' },
   { value: 'Asia/Muscat', label: 'مسقط (GMT+4)' },
   { value: 'Asia/Amman', label: 'عمّان (GMT+3)' },
@@ -270,6 +270,22 @@ const ALERT_FIELDS: { key: keyof AlertSettings; label: string; icon: string; uni
   { key: 'overProductionThreshold', label: 'حد الإنتاج الزائد', icon: 'trending_up', unit: '%', description: 'نسبة تجاوز الهدف المسموحة — تنبيه عند التجاوز' },
 ];
 
+const mapThemeSettingsToTenantTheme = (theme: ThemeSettings) => {
+  const mode = theme.darkMode === 'auto'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : theme.darkMode;
+  return resolveTheme({
+    preset: mode === 'dark' ? 'dark' : 'custom',
+    primaryColor: theme.primaryColor,
+    colorBg: theme.backgroundColor,
+    colorCard: mode === 'dark' ? '#0f172a' : '#ffffff',
+    colorBorder: mode === 'dark' ? '#1e293b' : '#e2e8f0',
+    colorText: mode === 'dark' ? '#e2e8f0' : (theme.textColor || '#0f172a'),
+    colorSidebarBg: mode === 'dark' ? '#0f172a' : '#ffffff',
+    colorSidebarText: mode === 'dark' ? '#cbd5e1' : '#334155',
+  });
+};
+
 export const Settings: React.FC = () => {
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
   const products = useAppStore((s) => s.products);
@@ -338,11 +354,10 @@ export const Settings: React.FC = () => {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const brandingLogoRef = useRef<HTMLInputElement>(null);
 
-  // Instant theme preview
+  // Instant theme preview through the unified tenant-theme engine.
   useEffect(() => {
     if (activeTab === 'general') {
-      applyTheme(localTheme);
-      setupAutoThemeListener(localTheme);
+      applyTenantTheme(mapThemeSettingsToTenantTheme(localTheme));
     }
   }, [localTheme, activeTab]);
 
@@ -370,12 +385,11 @@ export const Settings: React.FC = () => {
     })();
   }, [isAdmin]);
 
-  // Revert to saved theme when leaving general tab
+  // Revert to persisted theme when leaving settings page.
   useEffect(() => {
     return () => {
       const saved = systemSettings.theme ?? DEFAULT_THEME;
-      applyTheme(saved);
-      setupAutoThemeListener(saved);
+      applyTenantTheme(mapThemeSettingsToTenantTheme(saved));
     };
   }, []);
 
@@ -851,7 +865,7 @@ export const Settings: React.FC = () => {
     <div className="space-y-6 erp-ds-clean">
       <PageHeader
         title="الإعدادات"
-        subtitle="إعدادات النظام وحالة الاتصال والصلاحيات."
+        subtitle="إعدادات المصنع وحالة الاتصال والصلاحيات."
         backAction={false}
         primaryAction={{
           label: 'حفظ جميع الإعدادات',
@@ -863,7 +877,7 @@ export const Settings: React.FC = () => {
       />
 
       {hasUnsavedChanges && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/40">
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-accent text-accent-foreground border border-border">
           <span className="material-icons-round text-base">info</span>
           لديك تعديلات غير محفوظة. احفظ التغييرات قبل مغادرة الصفحة.
         </div>
@@ -877,15 +891,15 @@ export const Settings: React.FC = () => {
             onClick={() => handleTabChange(tab.key)}
             className={`relative flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors shrink-0 border-b-2 ${
               activeTab === tab.key
-                ? 'text-indigo-700 border-indigo-600'
-                : 'text-[var(--color-text-muted)] border-transparent hover:text-indigo-600'
+                ? 'text-primary border-primary'
+                : 'text-[var(--color-text-muted)] border-transparent hover:text-primary'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
             {tab.label}
             {getTabDirty(tab.key) && (
               <span className={`inline-block w-2 h-2 rounded-full ${
-                activeTab === tab.key ? 'bg-indigo-600' : 'bg-amber-500'
+                activeTab === tab.key ? 'bg-primary' : 'bg-muted-foreground'
               }`} />
             )}
           </button>
@@ -896,8 +910,8 @@ export const Settings: React.FC = () => {
       {saveMessage && (
         <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-medium ${
           saveMessage.includes('نجاح')
-            ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
-            : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
+            ? 'bg-accent text-accent-foreground border border-border'
+            : 'bg-destructive/10 text-destructive border border-destructive/25'
         }`}>
           <span className="material-icons-round text-lg">{saveMessage.includes('نجاح') ? 'check_circle' : 'error'}</span>
           {saveMessage}
@@ -962,7 +976,7 @@ export const Settings: React.FC = () => {
           />
 
           {/* ── System Status (for all users) ─────────────────────────────── */}
-          <Card title="حالة النظام" className="bg-white border-slate-200 rounded-xl shadow-none">
+          <Card title="حالة النظام" className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">cloud_done</span>
@@ -990,7 +1004,7 @@ export const Settings: React.FC = () => {
           </Card>
 
           {/* Current Role Info (for all users) */}
-          <Card title="الدور الحالي والصلاحيات" className="bg-white border-slate-200 rounded-xl shadow-none">
+          <Card title="الدور الحالي والصلاحيات" className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                 <span className="material-icons-round text-primary text-2xl">shield</span>

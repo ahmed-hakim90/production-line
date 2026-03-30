@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { Card, Button } from '../../production/components/UI';
 import { usePermission } from '../../../utils/permissions';
@@ -40,7 +41,7 @@ const buildEmptyForm = (type: CategoryType): CategoryForm => ({
 export const Categories: React.FC = () => {
   const { can } = usePermission();
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const canView = can('catalog.categories.view');
   const canCreate = can('catalog.categories.create');
   const canEdit = can('catalog.categories.edit');
@@ -365,3 +366,6 @@ export const Categories: React.FC = () => {
     </div>
   );
 };
+
+
+

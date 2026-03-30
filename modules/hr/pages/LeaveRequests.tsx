@@ -274,7 +274,7 @@ export const LeaveRequests: React.FC = () => {
       );
       if (!approvalResult.success) {
         await leaveRequestService.delete(leaveId);
-        throw new Error(approvalResult.error || 'تعذر إنشاء طلب الموافقة');
+        throw new Error(approvalResult.error || 'تعذر إنشاء سلسلة الموافقة');
       }
       setShowForm(false);
       setFormStartDate('');
@@ -377,7 +377,7 @@ export const LeaveRequests: React.FC = () => {
           </div>
           <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
             <span className="material-icons-round text-amber-500 text-3xl mb-2 block">warning</span>
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">طارئة</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الرصيد</p>
             <p className="text-2xl font-bold text-amber-600">{balance.emergencyBalance}</p>
             <p className="text-xs text-slate-400">يوم</p>
           </div>

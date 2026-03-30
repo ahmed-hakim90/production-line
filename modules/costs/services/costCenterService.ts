@@ -9,6 +9,8 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import { CostCenter } from '../../../types';
 
 const COLLECTION = 'cost_centers';
@@ -17,7 +19,7 @@ export const costCenterService = {
   async getAll(): Promise<CostCenter[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CostCenter));
     } catch (error) {
       console.error('costCenterService.getAll error:', error);
@@ -42,6 +44,7 @@ export const costCenterService = {
     try {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
+        tenantId: getCurrentTenantId(),
         createdAt: serverTimestamp(),
       });
       return ref.id;

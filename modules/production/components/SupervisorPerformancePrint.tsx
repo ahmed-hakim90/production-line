@@ -166,7 +166,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
           >
             <p style={{ margin: 0, fontSize: '8pt', color: palette.mutedText, fontWeight: 800 }}>ملخص التنفيذ الأساسي</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2mm', marginTop: '1.2mm' }}>
-              <MetricLine label="الكمية المطلوبة" value={`${fmtNum(data.requiredQty)} وحدة`} color={palette.text} />
+              <MetricLine label="الكمية ????????" value={`${fmtNum(data.requiredQty)} وحدة`} color={palette.text} />
               <MetricLine label="الكمية المحققة" value={`${fmtNum(data.achievedQty)} وحدة`} color={palette.success} />
               <MetricLine label="نسبة الأداء" value={`${fmtNum(data.performanceRatio)}%`} color={scoreTone.color} />
               <MetricLine label="التكاليف" value={data.costStatusLabel} color={costTone} />
@@ -186,7 +186,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
         </div>
 
         <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
-          <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تفصيل المنتجات (المطلوب مقابل المحقق)</p>
+          <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تفصيل المنتجات (??????? مقابل المحقق)</p>
           {data.productRows.length === 0 ? (
             <div style={{ marginTop: '2mm', border: `1px dashed ${palette.border}`, borderRadius: '2.5mm', padding: '3mm', textAlign: 'center', color: palette.mutedText, fontWeight: 700 }}>
               لا توجد بيانات منتجات في الفترة المختارة
@@ -212,7 +212,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
                       عدد التقارير: {row.reportsCount}
                     </p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.8mm', marginTop: '1.1mm' }}>
-                      <MetricLine compact label="المطلوب" value={fmtNum(row.requiredQty)} color={palette.text} />
+                      <MetricLine compact label="???????" value={fmtNum(row.requiredQty)} color={palette.text} />
                       <MetricLine compact label="المحقق" value={fmtNum(row.achievedQty)} color={palette.success} />
                       <MetricLine compact label="نسبة الأداء" value={`${fmtNum(row.performanceRatio)}%`} color={performanceColor} />
                     </div>
@@ -251,7 +251,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
               ))}
               {data.lineRows.length === 0 && (
                 <tr>
-                  <Td colSpan={7} align="center">لا توجد بيانات خطوط في الفترة المختارة</Td>
+                  <Td colSpan={7} align="center">لا توجد بيانات ???? في الفترة المختارة</Td>
                 </tr>
               )}
             </tbody>
@@ -260,7 +260,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
 
         {data.recommendations.length > 0 && (
           <div style={{ border: `1.5px solid ${palette.border}`, borderRadius: '3mm', padding: isThermal ? '2mm' : '4mm', background: PRINT_COLORS.noteBg }}>
-            <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>ملاحظات وتوصيات</p>
+            <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>??????? وتوصيات</p>
             <ul style={{ margin: '2mm 0 0', paddingInlineStart: '5mm', color: palette.mutedText, fontWeight: 600 }}>
               {data.recommendations.slice(0, 5).map((item, idx) => (
                 <li key={idx} style={{ marginBottom: '1mm' }}>{item}</li>

@@ -2,7 +2,6 @@ import {
   collection,
   getDocs,
   addDoc,
-  query,
   orderBy,
   limit as firestoreLimit,
   startAfter,
@@ -12,6 +11,8 @@ import {
 } from 'firebase/firestore';
 import type { FirebaseError } from 'firebase/app';
 import { auth, db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { ActivityLog, ActivityAction } from '../../../types';
 
 const COLLECTION = 'activity_logs';
@@ -29,15 +30,17 @@ export const activityLogService = {
   ): Promise<PaginatedLogs> {
     if (!isConfigured) return { logs: [], lastDoc: null, hasMore: false };
     try {
-      let q = query(
-        collection(db, COLLECTION),
+      let q = tenantQuery(
+        db,
+        COLLECTION,
         orderBy('timestamp', 'desc'),
         firestoreLimit(pageSize + 1),
       );
 
       if (cursor) {
-        q = query(
-          collection(db, COLLECTION),
+        q = tenantQuery(
+          db,
+          COLLECTION,
           orderBy('timestamp', 'desc'),
           startAfter(cursor),
           firestoreLimit(pageSize + 1),
@@ -62,8 +65,9 @@ export const activityLogService = {
   async getRecent(maxResults: number = 100): Promise<ActivityLog[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         orderBy('timestamp', 'desc'),
         firestoreLimit(maxResults),
       );
@@ -86,6 +90,7 @@ export const activityLogService = {
     const payload = {
       userId,
       userEmail,
+      tenantId: getCurrentTenantId(),
       action,
       description,
       metadata: metadata ?? {},

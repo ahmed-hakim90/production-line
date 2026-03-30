@@ -186,7 +186,7 @@ export interface HRConfigTabMeta {
 }
 
 export const HR_CONFIG_TABS: HRConfigTabMeta[] = [
-  { key: 'general', label: 'عام', icon: 'settings', description: 'الإعدادات العامة للنظام' },
+  { key: 'general', label: 'عام', icon: 'settings', description: 'الإعدادات العامة للموارد البشرية' },
   { key: 'attendance', label: 'الحضور', icon: 'fingerprint', description: 'إعدادات الحضور والانصراف' },
   { key: 'overtime', label: 'الإضافي', icon: 'more_time', description: 'إعدادات العمل الإضافي' },
   { key: 'leave', label: 'الإجازات', icon: 'beach_access', description: 'إعدادات الإجازات والأرصدة' },

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Button, Badge } from '../components/UI';
 import { PageHeader } from '@/components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -27,7 +27,7 @@ function formatMoney(value: number): string {
 }
 
 export const EmployeeFinancialOverview: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const [month, setMonth] = useState(getCurrentMonth());
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -104,7 +104,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="التحليل المالي للموظفين"
-        subtitle="عرض شامل للأجر الأساسي والبدلات والاستقطاعات والمؤثرات والإجازات والصافي"
+        subtitle="عرض شامل للأجر الأساسي والبدلات والخصومات والمؤثرات والإجازات والصافي"
         icon="table_view"
         primaryAction={{
           label: loading ? 'جاري التحميل...' : 'تحميل البيانات',
@@ -151,7 +151,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
         <Card className="!p-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-[var(--color-text-muted)]">
-              الشهر: <strong>{month}</strong> - الموظفون: <strong>{payrollMonth.totalEmployees}</strong>
+              الشهر: <strong>{month}</strong> - موظفون: <strong>{payrollMonth.totalEmployees}</strong>
             </div>
             <Badge variant={payrollMonth.status === 'locked' ? 'danger' : payrollMonth.status === 'finalized' ? 'success' : 'warning'}>
               {payrollMonth.status === 'locked' ? 'مقفل' : payrollMonth.status === 'finalized' ? 'معتمد' : 'مسودة'}
@@ -170,7 +170,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
                   <th className="erp-th">القسم</th>
                   <th className="erp-th">الأجر الأساسي</th>
                   <th className="erp-th">البدلات (تفصيلي)</th>
-                  <th className="erp-th">الاستقطاعات (تفصيلي)</th>
+                  <th className="erp-th">الخصومات (تفصيلي)</th>
                   <th className="erp-th">المؤثرات</th>
                   <th className="erp-th">الإجازات</th>
                   <th className="erp-th">الصافي</th>
@@ -208,7 +208,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
                       <td className="p-3">
                         <div className="font-bold text-rose-700 mb-1">- {formatMoney(r.totalDeductions)}</div>
                         <div className="text-xs text-[var(--color-text-muted)]">
-                          {r.employeeDeductionsBreakdown.map((d) => `${d.name}: ${formatMoney(d.amount)}`).join(' | ') || 'استقطاعات مخصصة: —'}
+                          {r.employeeDeductionsBreakdown.map((d) => `${d.name}: ${formatMoney(d.amount)}`).join(' | ') || 'خصومات مخصصة: —'}
                         </div>
                       </td>
                       <td className="p-3 text-xs">
@@ -237,7 +237,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">receipt_long</span>
             <p className="text-sm font-bold text-[var(--color-text-muted)] mb-4">
-              لا توجد بيانات رواتب للشهر المحدد. قم بإنشاء/تحميل كشف الرواتب أولاً.
+              لا توجد بيانات رواتب للشهر المحدد. قم بإنشاء/تحميل كشف الرواتب أولاظ‹.
             </p>
             <Button variant="outline" onClick={() => navigate('/payroll')}>
               الانتقال إلى كشف الرواتب
@@ -248,3 +248,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
     </div>
   );
 };
+
+
+
+

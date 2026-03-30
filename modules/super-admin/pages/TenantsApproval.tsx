@@ -17,7 +17,7 @@ export const TenantsApproval: React.FC = () => {
       const list = await tenantService.listPendingTenants();
       setItems(list);
     } catch (e: any) {
-      setError(e?.message || 'تعذر تحميل الطلبات');
+      setError(e?.message || 'تعذر تحميل ???????');
     } finally {
       setLoading(false);
     }
@@ -43,12 +43,12 @@ export const TenantsApproval: React.FC = () => {
 
   return (
     <div className="p-6 max-w-4xl mx-auto" dir="rtl">
-      <h1 className="text-xl font-bold mb-4">طلبات تسجيل شركات جديدة</h1>
+      <h1 className="text-xl font-bold mb-4">????? تسجيل شركات جديدة</h1>
       {error ? <p className="text-rose-600 text-sm mb-3">{error}</p> : null}
       {loading ? (
         <p className="text-[var(--color-text-muted)]">جاري التحميل...</p>
       ) : items.length === 0 ? (
-        <p className="text-[var(--color-text-muted)]">لا توجد طلبات معلقة.</p>
+        <p className="text-[var(--color-text-muted)]">لا توجد ????? معلقة.</p>
       ) : (
         <ul className="space-y-3">
           {items.map((row) => (

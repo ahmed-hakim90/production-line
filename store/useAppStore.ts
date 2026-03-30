@@ -47,7 +47,7 @@ import {
   auth,
   runAssetDepreciationCallable,
 } from '../services/firebase';
-import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
+import { getCurrentTenantId, setCurrentTenant } from '../lib/currentTenant';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
@@ -81,7 +81,6 @@ import { assetDepreciationService } from '../modules/costs/services/assetDepreci
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
-import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
 import {
   buildProducts,
   buildProductionLines,
@@ -1088,18 +1087,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         return;
       }
 
-      const slugTenantId = getCurrentTenantIdOrNull();
-      if (!userDoc.isSuperAdmin && slugTenantId && userDoc.tenantId !== slugTenantId) {
-        await signOut();
-        setCurrentTenant(null);
-        set({
-          loading: false,
-          isAuthenticated: false,
-          authError: 'هذا الحساب لا ينتمي لهذه الشركة.',
-        });
-        return;
-      }
-
       setCurrentTenant(userDoc.tenantId);
 
       if (!userDoc.isActive) {
@@ -1284,8 +1271,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       systemSettings: mergedSettings,
     });
 
-    applyTheme(mergedSettings.theme);
-    setupAutoThemeListener(mergedSettings.theme);
 
     const allReports = todayReports;
     const products = buildProducts(rawProducts, allReports, configs);
@@ -3908,8 +3893,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
         set({ systemSettings: merged });
         await get().fetchProducts();
-        applyTheme(merged.theme);
-        setupAutoThemeListener(merged.theme);
       }
     } catch (error) {
       console.error('fetchSystemSettings error:', error);
@@ -3929,8 +3912,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       await systemSettingsService.set(merged);
       set({ systemSettings: merged });
       await get().fetchProducts();
-      applyTheme(merged.theme);
-      setupAutoThemeListener(merged.theme);
     } catch (error) {
       const message = (error as Error).message;
       set({ error: message });

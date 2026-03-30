@@ -191,7 +191,7 @@ const RecordModal: React.FC<{
           <div className="px-6 py-3">
             <h4 className="text-sm font-bold text-rose-600 mb-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-rose-500" />
-              الاستقطاعات
+              الخصومات
             </h4>
             <div className="space-y-2">
               {r.absenceDeduction > 0 && (
@@ -231,7 +231,7 @@ const RecordModal: React.FC<{
                 </div>
               )}
               <div className="flex justify-between text-sm font-bold pt-2 border-t border-rose-200">
-                <span>إجمالي الاستقطاعات</span>
+                <span>إجمالي الخصومات</span>
                 <span className="text-rose-600 font-mono">{formatCurrency(r.totalDeductions)}</span>
               </div>
             </div>
@@ -380,7 +380,7 @@ export const Payroll: React.FC = () => {
         ? payrollEmployees
         : await loadPayrollEmployees();
       if (emps.length === 0) {
-        setError('لا يوجد موظفين نشطين لاحتساب الرواتب');
+        setError('لا يوجد موظفون مؤهلون لاحتساب الرواتب');
         setActionLoading('');
         return;
       }
@@ -482,7 +482,7 @@ export const Payroll: React.FC = () => {
       'اسم الموظف', 'نوع التوظيف', 'الراتب الأساسي', 'ساعات إضافية', 'بدل إضافي',
       'البدلات', 'أيام العمل', 'أيام الحضور', 'أيام الغياب', 'خصم غياب',
       'خصم تأخير', 'قسط سلفة', 'خصم نقل', 'جزاءات أخرى',
-      'إجمالي المستحقات', 'إجمالي الاستقطاعات', 'صافي الراتب',
+      'إجمالي المستحقات', 'إجمالي الخصومات', 'صافي الراتب',
     ];
     const rows = filteredRecords.map((r) => [
       r.employeeName, EMPLOYMENT_TYPE_LABELS[r.employmentType],
@@ -505,7 +505,7 @@ export const Payroll: React.FC = () => {
 
   const handleExportCombinedPayslips = useCallback(() => {
     if (!isLocked || records.length === 0) {
-      setError('تصدير السركيات متاح فقط بعد قفل الشهر.');
+      setError('تصدير الكشوفات PDF متاح فقط بعد قفل الشهر.');
       return;
     }
     printCombinedPayslips({ records, month });
@@ -655,7 +655,7 @@ export const Payroll: React.FC = () => {
             colorClass="bg-emerald-100 text-emerald-600"
           />
           <KPIBox
-            label="إجمالي الاستقطاعات"
+            label="إجمالي الخصومات"
             value={formatCurrency(payrollMonth?.totalDeductions ?? 0)}
             icon="trending_down"
             colorClass="bg-rose-100 text-rose-600"
@@ -723,7 +723,7 @@ export const Payroll: React.FC = () => {
                 <>
                   <Button variant="secondary" onClick={handleExportCombinedPayslips}>
                     <span className="material-icons-round text-sm">picture_as_pdf</span>
-                    تصدير سركيات الموظفين PDF
+                    تصدير كشوفات الموظفين PDF
                   </Button>
                   {canDistributePayroll && (
                     <Button variant="secondary" onClick={handleDistributePayroll} disabled={actionLoading === 'distribute'}>
@@ -789,7 +789,7 @@ export const Payroll: React.FC = () => {
                   <th className="erp-th">الإضافي</th>
                   <th className="erp-th">البدلات</th>
                   <th className="erp-th">المستحقات</th>
-                  <th className="erp-th">الاستقطاعات</th>
+                  <th className="erp-th">الخصومات</th>
                   <th className="erp-th">الصافي</th>
                   <th className="erp-th text-center">الحالة</th>
                   <th className="erp-th text-center"></th>

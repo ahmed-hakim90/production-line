@@ -2,7 +2,6 @@
  * Tenant registry: slugs, active tenants, registration & super-admin approval.
  */
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -14,7 +13,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
 import type { FirestoreTenant, PendingTenant, TenantSlugDoc } from '../types';
 import { setCurrentTenant } from '../lib/currentTenant';
 import { auth, db, isConfigured, resolveTenantSlugCallable } from './firebase';
@@ -114,7 +113,10 @@ export const tenantService = {
     const cred = await createUserWithEmailAndPassword(auth, data.adminEmail, data.password);
     const uid = cred.user.uid;
 
-    const pendingRef = await addDoc(collection(db, PENDING), {
+    const pendingRef = doc(collection(db, PENDING));
+    const userRef = doc(db, USERS, uid);
+    const batch = writeBatch(db);
+    batch.set(pendingRef, {
       slug,
       name: data.name,
       phone: data.phone ?? '',
@@ -125,8 +127,7 @@ export const tenantService = {
       requestedAt: serverTimestamp(),
       status: 'pending',
     } satisfies Omit<PendingTenant, 'id'>);
-
-    await setDoc(doc(db, USERS, uid), {
+    batch.set(userRef, {
       email: data.adminEmail,
       displayName: data.adminDisplayName,
       roleId: '',
@@ -135,6 +136,17 @@ export const tenantService = {
       createdBy: 'register_company',
       createdAt: serverTimestamp(),
     });
+
+    try {
+      await batch.commit();
+    } catch (err) {
+      try {
+        await deleteUser(cred.user);
+      } catch {
+        /* ignore rollback failure */
+      }
+      throw err;
+    }
 
     await cred.user.getIdToken(true);
   },
@@ -170,11 +182,19 @@ export const tenantService = {
     } as FirestoreTenant);
     batch.set(doc(db, TENANT_SLUGS, slug), { tenantId: newTenantId } as TenantSlugDoc);
     batch.update(pendingRef, { status: 'approved' });
-    batch.update(doc(db, USERS, adminUid), {
-      tenantId: newTenantId,
-      isActive: true,
-      roleId: '',
-    });
+    /* set+merge: works if admin user doc was missing (Auth-only after failed register) or exists */
+    batch.set(
+      doc(db, USERS, adminUid),
+      {
+        email: p.adminEmail,
+        displayName: p.adminDisplayName,
+        tenantId: newTenantId,
+        isActive: true,
+        roleId: '',
+        createdBy: 'approve_tenant',
+      },
+      { merge: true },
+    );
     await batch.commit();
 
     setCurrentTenant(newTenantId);

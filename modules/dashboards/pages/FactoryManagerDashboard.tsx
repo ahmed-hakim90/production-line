@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { Card, Badge } from '../components/UI';
@@ -107,7 +107,7 @@ const resolveWorkOrderProducedNow = (
 };
 
 export const FactoryManagerDashboard: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
   const canExport = can('export');
@@ -344,7 +344,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   );
   const monthlyCostMode = Boolean(fullMonthKey && monthlyCostSummary);
 
-  // ── KPI Calculations ────────────────────────────────────────────────────────
+  // â”€â”€ KPI Calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const kpis = useMemo(() => {
     const totalProduction = monthlyCostMode
@@ -408,7 +408,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     };
   }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
-  // ── Chart 1: Production vs Cost Per Unit (daily) ────────────────────────────
+  // â”€â”€ Chart 1: Production vs Cost Per Unit (daily) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const dailyChartData = useMemo(() => {
     const byDate = new Map<string, { production: number; laborCost: number }>();
@@ -443,7 +443,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [reports, hourlyRate, liveCostComputation.reportUnitCost]);
 
-  // ── Chart 3: Top 5 Lines by production ──────────────────────────────────────
+  // â”€â”€ Chart 3: Top 5 Lines by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const topLines = useMemo(() => {
     const lineMap = new Map<string, number>();
@@ -459,7 +459,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       .slice(0, 5);
   }, [reports, _rawLines]);
 
-  // ── Chart 4: Top 5 Products by production ───────────────────────────────────
+  // â”€â”€ Chart 4: Top 5 Products by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const topProducts = useMemo(() => {
     const prodMap = new Map<string, number>();
@@ -476,7 +476,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       .slice(0, 5);
   }, [reports, _rawProducts]);
 
-  // ── Alerts ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
     const result: { type: 'danger' | 'warning' | 'info'; icon: string; message: string }[] = [];
@@ -528,7 +528,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       result.push({
         type: 'warning',
         icon: 'speed',
-        message: `الكفاءة أقل من الحد المطلوب: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
+        message: `الكفاءة أقل من الحد المحدد: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
       });
     }
 
@@ -645,12 +645,12 @@ export const FactoryManagerDashboard: React.FC = () => {
       { key: 'productName', header: 'المنتج', cell: (row) => <span className="font-medium text-[#0F172A]">{row.productName}</span>, sortable: true },
       { key: 'componentName', header: 'المكون', cell: (row) => row.componentName },
       { key: 'shortageQty', header: 'الكمية', align: 'center', cell: (row) => formatNumber(row.shortageQty), sortable: true },
-      { key: 'note', header: 'الملحوظة', cell: (row) => row.note || '—' },
+      { key: 'note', header: 'ملاحظات', cell: (row) => row.note || '—' },
     ],
     []
   );
 
-  // ── Custom Tooltip ──────────────────────────────────────────────────────────
+  // â”€â”€ Custom Tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -683,7 +683,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
   return (
     <div className="erp-dashboard-theme space-y-6">
-      {/* ── Header ─────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <PageHeader
         title="لوحة مدير المصنع"
         subtitle="تحليلات متقدمة للإنتاج والتكاليف"
@@ -697,7 +697,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         }
       />
 
-      {/* ── Period Filter ──────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Period Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <SmartFilterBar
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
@@ -727,7 +727,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         applyLabel="عرض"
         extra={(
           <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
-            {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
+            {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب فوري (fallback)'}
           </div>
         )}
       />
@@ -801,7 +801,7 @@ export const FactoryManagerDashboard: React.FC = () => {
               const mappedColor = paColor === 'good' ? 'green' : paColor === 'warning' ? 'amber' : 'red';
               return (
                 <KPICard
-                  label="تحقيق الخطط"
+                  label="تحقيق الخطة"
                   value={`${kpis.planAchievementRate}%`}
                   iconType="trend"
                   color={mappedColor}
@@ -875,7 +875,7 @@ export const FactoryManagerDashboard: React.FC = () => {
           <Card>
           <div className="flex items-center gap-2 mb-4">
             <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
-            <h3 className="text-lg font-bold">أعلى 5 خطوط إنتاج</h3>
+            <h3 className="text-lg font-bold">أعلى 5 خطط إنتاج</h3>
           </div>
           {topLines.length > 0 ? (
             <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
@@ -1012,7 +1012,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         }}
       />
 
-      {/* ── Active Work Orders ───────────────────────────────────────────────── */}
+      {/* â”€â”€ Active Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {(() => {
         const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
@@ -1025,7 +1025,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-amber-500">assignment</span>
-                <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
+                <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل المرتبطة</h3>
                 <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -1104,7 +1104,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-3 gap-3 text-center">
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المطلوب</p>
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">ملاحظات</p>
                         <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
@@ -1220,7 +1220,7 @@ export const FactoryManagerDashboard: React.FC = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المشرفين المطلوب منهم</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المشرفين النشطين منهم</p>
                 <p className="text-2xl font-medium text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
@@ -1276,7 +1276,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         )}
       </Card>
 
-      {/* ── Active Production Plans ──────────────────────────────────────────── */}
+      {/* â”€â”€ Active Production Plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {(() => {
         const activePlans = productionPlans.filter((p) => p.status === 'in_progress' || p.status === 'planned');
         if (activePlans.length === 0) return null;
@@ -1304,7 +1304,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-indigo-500">event_note</span>
-                <h3 className="text-base font-bold text-[var(--color-text)]">خطط الإنتاج النشطة</h3>
+                <h3 className="text-base font-bold text-[var(--color-text)]">خطط الإنتاج المتأخرة</h3>
                 <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-xs font-bold px-2 py-0.5 rounded-full">{activePlans.length}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -1356,7 +1356,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-3 gap-3 text-center">
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المخطط</p>
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
                         <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(plan.plannedQuantity)}</p>
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
@@ -1434,5 +1434,9 @@ export const FactoryManagerDashboard: React.FC = () => {
     </div>
   );
 };
+
+
+
+
 
 

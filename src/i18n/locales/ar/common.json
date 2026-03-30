@@ -1,0 +1,28 @@
+{
+  "appName": "حكيم ERP",
+  "language": {
+    "ar": "العربية",
+    "en": "English",
+    "switchToAr": "التبديل إلى العربية",
+    "switchToEn": "Switch to English"
+  },
+  "ui": {
+    "loading": "جاري التحميل…",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "close": "إغلاق"
+  },
+  "topbar": {
+    "openMenu": "فتح القائمة",
+    "expandSidebar": "توسيع القائمة الجانبية",
+    "collapseSidebar": "طي القائمة الجانبية",
+    "home": "الرئيسية",
+    "search": "بحث",
+    "globalSearchPlaceholder": "البحث في النظام...",
+    "install": "تثبيت",
+    "readOnly": "قراءة فقط",
+    "refresh": "تحديث",
+    "today": "اليوم"
+  }
+}
+

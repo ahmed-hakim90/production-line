@@ -11,15 +11,23 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import type { LineWorkerAssignment } from '../../../types';
 
 const COLLECTION = 'line_worker_assignments';
+
+const eqTenant = () => where('tenantId', '==', getCurrentTenantId());
 
 export const lineAssignmentService = {
   async getByLineAndDate(lineId: string, date: string): Promise<LineWorkerAssignment[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('lineId', '==', lineId), where('date', '==', date));
+      const q = query(
+        collection(db, COLLECTION),
+        eqTenant(),
+        where('lineId', '==', lineId),
+        where('date', '==', date),
+      );
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineWorkerAssignment));
     } catch (error) {
@@ -31,7 +39,7 @@ export const lineAssignmentService = {
   async getByDate(date: string): Promise<LineWorkerAssignment[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('date', '==', date));
+      const q = query(collection(db, COLLECTION), eqTenant(), where('date', '==', date));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineWorkerAssignment));
     } catch (error) {
@@ -45,6 +53,7 @@ export const lineAssignmentService = {
     try {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
+        tenantId: getCurrentTenantId(),
         assignedAt: serverTimestamp(),
       });
       return ref.id;
@@ -109,6 +118,7 @@ export const lineAssignmentService = {
           employeeCode: String(a.employeeCode || employeeDirectory?.get(a.employeeId)?.code || '').trim(),
           employeeName: String(a.employeeName || employeeDirectory?.get(a.employeeId)?.name || '').trim(),
           date: targetDate,
+          tenantId: getCurrentTenantId(),
           assignedAt: serverTimestamp(),
           assignedBy: assignedBy || '',
         });
@@ -126,7 +136,7 @@ export const lineAssignmentService = {
     try {
       // For line-specific copy, use a simple line query to avoid requiring a composite index.
       if (lineId) {
-        const q = query(collection(db, COLLECTION), where('lineId', '==', lineId));
+        const q = query(collection(db, COLLECTION), eqTenant(), where('lineId', '==', lineId));
         const snap = await getDocs(q);
         let latest: string | null = null;
         snap.docs.forEach((d) => {
@@ -139,6 +149,7 @@ export const lineAssignmentService = {
 
       const q = query(
         collection(db, COLLECTION),
+        eqTenant(),
         where('date', '<', targetDate),
         orderBy('date', 'desc'),
         limit(1),

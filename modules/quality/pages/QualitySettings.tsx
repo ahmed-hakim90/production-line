@@ -25,9 +25,9 @@ const SETTINGS_TABS: { key: QualitySettingsTab; label: string; icon: string }[] 
   { key: 'policies', label: 'السياسات', icon: 'policy' },
   { key: 'reasonCatalog', label: 'كتالوج أسباب العيوب', icon: 'category' },
   { key: 'inspectionTemplates', label: 'قوالب الفحص', icon: 'checklist' },
-  { key: 'samplingPlans', label: 'خطط المعاينة', icon: 'science' },
+  { key: 'samplingPlans', label: '??? المعاينة', icon: 'science' },
   { key: 'reworkPolicies', label: 'سياسات إعادة التشغيل', icon: 'autorenew' },
-  { key: 'printTemplates', label: 'قوالب الطباعة', icon: 'print' },
+  { key: 'printTemplates', label: 'قوالب ???????', icon: 'print' },
 ];
 
 const SEVERITY_OPTIONS: { value: QualityDefectSeverity; label: string }[] = [
@@ -37,7 +37,7 @@ const SEVERITY_OPTIONS: { value: QualityDefectSeverity; label: string }[] = [
   { value: 'critical', label: 'حرج' },
 ];
 
-const categoryOptions = ['تشطيب', 'مقاس', 'لون', 'تجميع', 'مواد خام', 'تعبئة'];
+const categoryOptions = ['?????', 'مقاس', 'لون', 'تجميع', 'مواد خام', 'تعبئة'];
 const splitCsv = (value: string): string[] =>
   value
     .split(',')
@@ -76,7 +76,7 @@ export const QualitySettings: React.FC = () => {
   });
   const [printTemplates, setPrintTemplates] = useState<QualityPrintTemplateSettings>({
     headerText: 'تقرير الجودة',
-    footerText: 'تم الإنشاء بواسطة نظام الإنتاج',
+    footerText: 'تم الإنشاء ?????? ???? الإنتاج',
     showSignatureInspector: true,
     showSignatureSupervisor: true,
     showSignatureQualityManager: true,
@@ -264,7 +264,7 @@ export const QualitySettings: React.FC = () => {
       isActive: true,
     });
     await loadData();
-    setMessage('تم حفظ خطة المعاينة');
+    setMessage('تم حفظ ??? المعاينة');
   };
 
   const saveReworkPolicies = async () => {
@@ -278,7 +278,7 @@ export const QualitySettings: React.FC = () => {
     if (!canManageSettings) return;
     await qualitySettingsService.setSettingsHub({ printTemplates });
     await loadData();
-    setMessage('تم حفظ قوالب الطباعة');
+    setMessage('تم حفظ قوالب ???????');
   };
 
   if (loading) return <LoadingSkeleton type="card" rows={6} />;
@@ -292,7 +292,7 @@ export const QualitySettings: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={policies.closeRequiresQualityApproval ? 'warning' : 'neutral'}>
-            إغلاق أمر الشغل: {policies.closeRequiresQualityApproval ? 'يتطلب اعتماد جودة' : 'مفتوح بدون اعتماد'}
+            إغلاق أمر الشغل: {policies.closeRequiresQualityApproval ? '????? اعتماد جودة' : 'مفتوح بدون اعتماد'}
           </Badge>
           <Badge variant="info">الأسباب الفعالة: {activeReasonsCount}</Badge>
         </div>
@@ -332,7 +332,7 @@ export const QualitySettings: React.FC = () => {
           <div className="space-y-6">
             <div className="flex items-start justify-between gap-4 p-4 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <div>
-                <h3 className="text-sm font-extrabold text-[var(--color-text)]">إغلاق أمر الشغل يتطلب اعتماد الجودة</h3>
+                <h3 className="text-sm font-extrabold text-[var(--color-text)]">إغلاق أمر الشغل ????? اعتماد الجودة</h3>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">
                   عند التفعيل، لن يمكن تحويل أمر الشغل إلى مكتمل إلا إذا كانت حالة الجودة معتمدة.
                 </p>
@@ -384,7 +384,7 @@ export const QualitySettings: React.FC = () => {
                   value={reasonForm.labelAr}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, labelAr: e.target.value }))}
                   className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
-                  placeholder="عيب تشطيب"
+                  placeholder="عيب ?????"
                   disabled={!canManageCatalog || savingReason}
                 />
               </div>
@@ -467,7 +467,7 @@ export const QualitySettings: React.FC = () => {
                       <td className="py-2 px-2">{SEVERITY_OPTIONS.find((item) => item.value === reason.severityDefault)?.label}</td>
                       <td className="py-2 px-2">
                         <Badge variant={reason.isActive ? 'success' : 'neutral'}>
-                          {reason.isActive ? 'نشط' : 'معطل'}
+                          {reason.isActive ? 'نشط' : '????'}
                         </Badge>
                       </td>
                       <td className="py-2 px-2">
@@ -529,7 +529,7 @@ export const QualitySettings: React.FC = () => {
                 className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               >
-                <option value="">كل الخطوط</option>
+                <option value="">كل ??????</option>
                 {rawLines.map((l) => (
                   <option key={l.id} value={l.id}>{l.name}</option>
                 ))}
@@ -598,7 +598,7 @@ export const QualitySettings: React.FC = () => {
 
       {activeTab === 'samplingPlans' && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Card className="xl:col-span-1" title="إضافة/تعديل خطة معاينة">
+          <Card className="xl:col-span-1" title="إضافة/تعديل ??? معاينة">
             <form className="space-y-3" onSubmit={saveSampling}>
               <select
                 value={samplingForm.productId}
@@ -617,7 +617,7 @@ export const QualitySettings: React.FC = () => {
                 className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
                 disabled={!canManageSettings}
               >
-                <option value="">كل الخطوط</option>
+                <option value="">كل ??????</option>
                 {rawLines.map((l) => (
                   <option key={l.id} value={l.id}>{l.name}</option>
                 ))}
@@ -638,17 +638,17 @@ export const QualitySettings: React.FC = () => {
                 disabled={!canManageSettings}
                 placeholder="حجم العينة"
               />
-              <Button type="submit" disabled={!canManageSettings}>حفظ خطة المعاينة</Button>
+              <Button type="submit" disabled={!canManageSettings}>حفظ ??? المعاينة</Button>
             </form>
           </Card>
-          <Card className="xl:col-span-2" title="خطط المعاينة">
+          <Card className="xl:col-span-2" title="??? المعاينة">
             <div className="space-y-2">
               {samplingPlans.map((plan) => (
                 <div key={plan.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-center justify-between gap-3">
                   <div className="text-sm">
                     <p className="font-bold">كل {plan.frequencyMinutes} دقيقة - عينة {plan.sampleSize}</p>
                     <p className="text-xs text-slate-500">
-                      المنتج: {plan.productId ? (productNameById.get(plan.productId) ?? plan.productId) : 'كل المنتجات'} | الخط: {plan.lineId ? (lineNameById.get(plan.lineId) ?? plan.lineId) : 'كل الخطوط'}
+                      المنتج: {plan.productId ? (productNameById.get(plan.productId) ?? plan.productId) : 'كل المنتجات'} | الخط: {plan.lineId ? (lineNameById.get(plan.lineId) ?? plan.lineId) : 'كل ??????'}
                     </p>
                   </div>
                   <div className="flex gap-1">
@@ -680,7 +680,7 @@ export const QualitySettings: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {samplingPlans.length === 0 && <p className="text-sm text-slate-500">لا توجد خطط معاينة.</p>}
+              {samplingPlans.length === 0 && <p className="text-sm text-slate-500">لا توجد ??? معاينة.</p>}
             </div>
           </Card>
         </div>
@@ -724,7 +724,7 @@ export const QualitySettings: React.FC = () => {
       )}
 
       {activeTab === 'printTemplates' && (
-        <Card title="قوالب الطباعة">
+        <Card title="قوالب ???????">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               value={printTemplates.headerText}
@@ -769,7 +769,7 @@ export const QualitySettings: React.FC = () => {
             </label>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button onClick={savePrintTemplates} disabled={!canManageSettings}>حفظ قالب الطباعة</Button>
+            <Button onClick={savePrintTemplates} disabled={!canManageSettings}>حفظ قالب ???????</Button>
           </div>
         </Card>
       )}

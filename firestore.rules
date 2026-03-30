@@ -73,8 +73,12 @@ service cloud.firestore {
     /** During migration, docs may lack tenantId; treat as single-tenant legacy. */
     function sameTenantOrLegacyRead() {
       return isActiveUser()
-        && (!('tenantId' in resource.data)
-          || resource.data.tenantId == currentUserDoc().data.tenantId);
+        && (
+          resource == null
+          || (('tenantId' in resource.data)
+            && resource.data.tenantId == currentUserDoc().data.tenantId)
+          || (isSuperAdmin() && !('tenantId' in resource.data))
+        );
     }
 
     function sameTenantOrLegacyWrite() {
@@ -88,6 +92,14 @@ service cloud.firestore {
           || resource.data.tenantId == currentUserDoc().data.tenantId)
         && request.resource.data.tenantId == currentUserDoc().data.tenantId;
     }
+
+    /**
+     * Gradual hardening (after backfillTenantId / data audit):
+     * 1. Ensure all business docs in production have tenantId set.
+     * 2. Replace sameTenantOrLegacyRead with sameTenant on read for isBusinessCollection.
+     * 3. Replace sameTenantOrLegacyUpdate with sameTenantUpdate where legacy reads are no longer needed.
+     * 4. Keep payroll_* on legacy helpers until those collections are fully migrated.
+     */
 
     function isBusinessCollection(coll) {
       return coll in [
@@ -144,9 +156,11 @@ service cloud.firestore {
         || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
           && (hasPermission('users.manage') || hasPermission('roles.manage')))
       );
-      allow create: if isAuthenticated()
+      allow create: if (isAuthenticated()
         && request.auth.uid == userId
-        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']);
+        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']))
+        || (isSuperAdmin()
+        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']));
       allow update: if isAuthenticated() && (
         (request.auth.uid == userId && resource.data.tenantId == currentUserDoc().data.tenantId)
         || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
@@ -171,8 +185,11 @@ service cloud.firestore {
         isSuperAdmin()
         || (exists(currentUserPath()) && resource.data.tenantId == currentUserDoc().data.tenantId)
       );
-      allow create: if isActiveUser() && hasPermission('roles.manage') && sameTenantWrite();
-      allow update, delete: if isActiveUser() && hasPermission('roles.manage') && sameTenantUpdate();
+      /* Super-admin approves pending companies: seedIfEmpty() creates roles for the NEW tenantId — tenant admins use roles.manage on their own tenant. */
+      allow create: if isSuperAdmin()
+        || (isActiveUser() && hasPermission('roles.manage') && sameTenantWrite());
+      allow update, delete: if isSuperAdmin()
+        || (isActiveUser() && hasPermission('roles.manage') && sameTenantUpdate());
     }
 
     match /dashboardStats/{tenantId}/daily/{dayId} {

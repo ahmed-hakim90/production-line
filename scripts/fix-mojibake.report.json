@@ -1,0 +1,89 @@
+{
+  "mode": "report",
+  "root": "D:\\hakim\\dev\\pro-tech-erp-production-management",
+  "scannedFiles": 546,
+  "files": [
+    {
+      "rel": "scripts/fix-modules-arabic-smart.mjs",
+      "safeMatches": [
+        {
+          "label": "emDash_mojibake",
+          "count": 1
+        },
+        {
+          "label": "enDash_mojibake",
+          "count": 1
+        },
+        {
+          "label": "ellipsis_mojibake",
+          "count": 1
+        }
+      ],
+      "arHits": [
+        {
+          "index": 727,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        }
+      ],
+      "arExamples": [
+        {
+          "index": 727,
+          "snippet": "akePairRe = /(ط[اأإآء-ي]|ظ[اأإآء-ي])/g;\nconst hardBadRe = /(ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|â€”|â€“|â€¦|â€|Ã|Â)/g;\n\nfunction"
+        }
+      ]
+    },
+    {
+      "rel": "scripts/fix-mojibake.report.json",
+      "safeMatches": [],
+      "arHits": [
+        {
+          "index": 274,
+          "match": "ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط"
+        },
+        {
+          "index": 361,
+          "match": "ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط"
+        },
+        {
+          "index": 448,
+          "match": "ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\\\""
+        },
+        {
+          "index": 539,
+          "match": "ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\""
+        },
+        {
+          "index": 629,
+          "match": "ط§ظ„تظ‚ط§ط±يط±/ا"
+        }
+      ],
+      "arExamples": [
+        {
+          "index": 274,
+          "snippet": "s\": [\n        {\n          \"index\": 278,\n          \"match\": \"ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط\"\n        },\n        {\n          \"index\""
+        },
+        {
+          "index": 361,
+          "snippet": "   },\n        {\n          \"index\": 459,\n          \"match\": \"ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط\"\n        },\n        {\n          \"index\""
+        },
+        {
+          "index": 448,
+          "snippet": "   },\n        {\n          \"index\": 701,\n          \"match\": \"ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\\\"\"\n        },\n        {\n          \"in"
+        },
+        {
+          "index": 539,
+          "snippet": "   },\n        {\n          \"index\": 887,\n          \"match\": \"ظ„ط¥ظ†ط´ط§ء/ط±ط¨ط·/فظƒ\"\n        },\n        {\n          \"inde"
+        },
+        {
+          "index": 629,
+          "snippet": "  },\n        {\n          \"index\": 1133,\n          \"match\": \"ط§ظ„تظ‚ط§ط±يط±/ا\"\n        }\n      ],\n      \"arExamples\": [\n "
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "safeEdits": 0,
+    "filesEdited": 0,
+    "filesWithArabicMojibake": 2
+  }
+}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,7 +48,7 @@ import {
   Legend,
 } from 'recharts';
 
-// ─── Performance Score ────────────────────────────────────────────────────────
+// â”€â”€â”€ Performance Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
 
@@ -132,7 +133,7 @@ function computeSupervisorLikePerformanceScore(
   return clamp(Math.round(weightedLineScore), 0, 100);
 }
 
-// ─── Chart Tab type ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Chart Tab type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type ChartTab = 'production' | 'efficiency' | 'hours';
 type DetailTab = 'production' | 'lines' | 'info';
@@ -158,7 +159,7 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getWeekStart(): string {
   const d = new Date();
@@ -170,7 +171,7 @@ function getWeekStart(): string {
 
 export const SupervisorDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -290,7 +291,7 @@ export const SupervisorDetails: React.FC = () => {
   const printRows = useMemo(() => mapReportsToPrintRows(reports, lookups), [reports, lookups]);
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
 
-  // ── Core metrics ────────────────────────────────────────────────────────────
+  // â”€â”€ Core metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const today = getTodayDateString();
   const weekStart = useMemo(() => getWeekStart(), []);
@@ -459,7 +460,7 @@ export const SupervisorDetails: React.FC = () => {
     };
   }, [activeExecutionRows]);
 
-  // ── Alerts ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const wasteThreshold = systemSettings?.alertSettings?.wasteThreshold ?? 5;
 
@@ -479,12 +480,12 @@ export const SupervisorDetails: React.FC = () => {
       result.push({ type: 'warning', icon: 'today', message: 'لا يوجد إنتاج مسجل اليوم' });
     }
     if (result.length === 0) {
-      result.push({ type: 'info', icon: 'check_circle', message: 'المشرف يعمل بشكل طبيعي — لا توجد تنبيهات' });
+      result.push({ type: 'info', icon: 'check_circle', message: 'المشرف يعمل بشكل جيد — لا توجد تنبيهات' });
     }
     return result;
   }, [wasteRatio, wasteThreshold, performanceScore, todayProduced, period, periodReports.length]);
 
-  // ── Chart data ──────────────────────────────────────────────────────────────
+  // â”€â”€ Chart data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const enrichedChartData = useMemo(() => {
     const byDate = new Map<string, { produced: number; waste: number; hours: number; workerHours: number; workers: number; count: number }>();
@@ -515,7 +516,7 @@ export const SupervisorDetails: React.FC = () => {
       .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
   }, [periodReports]);
 
-  // ── Lines breakdown ─────────────────────────────────────────────────────────
+  // â”€â”€ Lines breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const lineStats = useMemo(() => {
     const map = new Map<string, { reports: number; produced: number; waste: number; maxHoursByDate: Map<string, number> }>();
@@ -540,7 +541,7 @@ export const SupervisorDetails: React.FC = () => {
       .sort((a, b) => b.produced - a.produced);
   }, [periodReports, productionLines]);
 
-  // ── Products breakdown ──────────────────────────────────────────────────────
+  // â”€â”€ Products breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const productStats = useMemo(() => {
     const map = new Map<string, { produced: number; waste: number }>();
@@ -559,10 +560,10 @@ export const SupervisorDetails: React.FC = () => {
     if (!employee) return 'تفاصيل المشرف';
     const dept = departments.find((d) => d.id === employee.departmentId)?.name ?? '—';
     const job = jobPositions.find((j) => j.id === employee.jobPositionId)?.title ?? '—';
-    return `${dept} · ${job} · ${lineStats.length} خط إنتاج`;
+    return `${dept} آ· ${job} آ· ${lineStats.length} خط إنتاج`;
   }, [employee, departments, jobPositions, lineStats.length]);
 
-  // ── Chart tooltip ───────────────────────────────────────────────────────────
+  // â”€â”€ Chart tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -585,7 +586,7 @@ export const SupervisorDetails: React.FC = () => {
     return employees.find((e) => e.id === employee.managerId)?.name ?? '—';
   }, [employee, employees]);
 
-  // ── Loading / Not Found ─────────────────────────────────────────────────────
+  // â”€â”€ Loading / Not Found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (loading) {
     return (
@@ -628,7 +629,7 @@ export const SupervisorDetails: React.FC = () => {
       <div className={cn('sticky top-0 z-10 space-y-3 pb-2 pt-0 backdrop-blur-sm', PAGE_BG)}>
         <PageHeader
           title={employee.name}
-          subtitle={`${supervisorPageSubtitle} · متوسط ${avgWorkersPerReport} عامل`}
+          subtitle={`${supervisorPageSubtitle} آ· متوسط ${avgWorkersPerReport} عامل`}
           icon="user"
           backAction={{ to: '/supervisors', label: 'رجوع' }}
           secondaryAction={{ label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/employees/${id}`) }}
@@ -762,7 +763,7 @@ export const SupervisorDetails: React.FC = () => {
       </DetailCollapsibleSection>
 
       <DetailCollapsibleSection title="التقارير والتحليل" defaultOpen>
-      {/* ── Detail Tabs ────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Detail Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex flex-wrap gap-1">
         {DETAIL_TABS.map((tab) => (
           <button
@@ -780,7 +781,7 @@ export const SupervisorDetails: React.FC = () => {
         ))}
       </div>
 
-      {/* ── Tab: Production ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Tab: Production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'production' && (
         <div className="space-y-6">
           <ErpCard title="انضباط تنفيذ أوامر الشغل">
@@ -944,7 +945,7 @@ export const SupervisorDetails: React.FC = () => {
               <h3 className="text-lg font-bold">سجل التقارير</h3>
               {reports.length > 0 && periodReports.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  لا توجد تقارير داخل الفترة الحالية. جرّب تغيير الفترة إلى "كل البيانات".
+                  لا توجد تقارير داخل الفترة الحالية. جرظ‘ب تغيير الفترة إلى "كل البيانات".
                 </p>
               )}
             </div>
@@ -1004,7 +1005,7 @@ export const SupervisorDetails: React.FC = () => {
         </div>
       )}
 
-      {/* ── Tab: Lines ─────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Tab: Lines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'lines' && (
         <div className="space-y-6">
           {lineStats.length === 0 ? (
@@ -1027,7 +1028,7 @@ export const SupervisorDetails: React.FC = () => {
                         </div>
                         <div>
                           <h4 className="font-bold text-[var(--color-text)]">{line.name}</h4>
-                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير · {formatNumber(Math.round(line.hours))} ساعة</span>
+                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير آ· {formatNumber(Math.round(line.hours))} ساعة</span>
                         </div>
                       </div>
                       <button
@@ -1060,7 +1061,7 @@ export const SupervisorDetails: React.FC = () => {
         </div>
       )}
 
-      {/* ── Tab: HR Info ────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Tab: HR Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'info' && (
         <ErpCard title="بيانات الموظف">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1132,3 +1133,6 @@ export const SupervisorDetails: React.FC = () => {
     </div>
   );
 };
+
+
+

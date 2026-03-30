@@ -92,7 +92,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             return (
               <div
                 key={page.key}
-                className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/60/30"
+                className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/60"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                   <div>
@@ -120,7 +120,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                     <select
                       value={control.exportVariant}
                       onChange={(e) => updateExportImportControl(page.key, { exportVariant: e.target.value as 'primary' | 'secondary' | 'outline' })}
-                      className="w-full bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] py-2.5 px-3 text-sm font-bold outline-none"
+                      className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] py-2.5 px-3 text-sm font-bold outline-none"
                     >
                       <option value="primary">شكل رئيسي</option>
                       <option value="secondary">شكل ثانوي</option>
@@ -147,7 +147,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                     <select
                       value={control.importVariant}
                       onChange={(e) => updateExportImportControl(page.key, { importVariant: e.target.value as 'primary' | 'secondary' | 'outline' })}
-                      className="w-full bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] py-2.5 px-3 text-sm font-bold outline-none"
+                      className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] py-2.5 px-3 text-sm font-bold outline-none"
                     >
                       <option value="primary">شكل رئيسي</option>
                       <option value="secondary">شكل ثانوي</option>
@@ -164,24 +164,24 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
       <Card title="التصدير (Excel Export)">
         <div className="space-y-3">
           {[
-            { section: 'تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'description', color: 'text-blue-500', features: ['تصدير التقارير بالتاريخ والخط والمنتج والموظف', 'تكلفة الوحدة (حسب الصلاحية)', 'بيانات أمر الشغل (الكمية والعمالة المخططة)', 'صف إجمالي بالمجاميع والمتوسطات'] },
-            { section: 'أوامر الشغل', page: 'صفحة التقارير / أوامر الشغل', path: '/work-orders', icon: 'assignment', color: 'text-amber-500', features: ['رقم الأمر، المنتج، الخط، المشرف', 'الكمية المطلوبة / المنتجة / المتبقية', 'عدد العمالة، التكلفة المقدرة والفعلية', 'الحالة والملاحظات'] },
+            { section: 'تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'description', color: 'text-blue-500', features: ['تصدير التقارير بالتاريخ والخط والمنتج والتصفية', 'تكلفة الوحدة (حسب الصلاحية)', 'بيانات أمر الشغل (الكمية والعمالة المخططة)', 'صف إجمالي بالمجاميع'] },
+            { section: 'أوامر الشغل', page: 'صفحة التقارير / أوامر الشغل', path: '/work-orders', icon: 'assignment', color: 'text-amber-500', features: ['رقم الأمر، المنتج، الخط، المشرف', 'الكمية المخططة / المنتجة / المتبقية', 'عدد العمالة، التكلفة المقدرة والفعلية', 'الحالة والتفاصيل'] },
             { section: 'المنتجات (تخصيص)', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['الكود والاسم والفئة', 'بيانات المخزون (افتتاحي / إنتاج / هالك / حالي)', 'تكاليف المنتج (صينية، مواد خام، تغليف)', 'تكاليف صناعية (م. وغ.م)', 'سعر البيع وهامش الربح', 'مودال تخصيص الأعمدة قبل التصدير'] },
             { section: 'منتج واحد (تفصيلي)', page: 'صفحة تفاصيل المنتج', path: '/products', icon: 'receipt_long', color: 'text-teal-500', features: ['شيت بيانات المنتج الأساسية', 'شيت تفصيل التكاليف مع سعر البيع وهامش الربح', 'شيت المواد الخام المستخدمة', 'شيت التكلفة حسب خط الإنتاج'] },
-            { section: 'الموظفين', page: 'صفحة الموظفين', path: '/employees', icon: 'groups', color: 'text-purple-500', features: ['الكود والاسم والقسم والوظيفة', 'نوع التوظيف والمستوى والراتب', 'الوردية والبريد والحالة والصلاحيات'] },
+            { section: 'الموظفون', page: 'صفحة الموظفين', path: '/employees', icon: 'groups', color: 'text-purple-500', features: ['الكود والاسم والقسم المعروف', 'نوع التوظيف والمستوى والراتب', 'الوردية والبريد والحالة والصلاحيات'] },
             { section: 'تقارير مشرف', page: 'صفحة تفاصيل المشرف', path: '/supervisors', icon: 'person', color: 'text-orange-500', features: ['تقارير الإنتاج الخاصة بالمشرف', 'تكلفة الوحدة (حسب الصلاحية)', 'صف إجمالي بالمجاميع'] },
             { section: 'ملخص المنتجات', page: 'لوحة تحكم المصنع', path: '/', icon: 'summarize', color: 'text-indigo-500', features: ['اسم المنتج والكود والكمية', 'متوسط تكلفة الوحدة (حسب الصلاحية)'] },
             { section: 'بيانات الموارد البشرية', page: 'وحدة HR', path: '/hr', icon: 'badge', color: 'text-rose-500', features: ['كشوف المرتبات والحضور', 'الإجازات والقروض', 'تصدير عام لأي بيانات HR'] },
           ].map((item) => (
-            <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-all">
+            <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[var(--color-bg)]/60 transition-all">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] flex items-center justify-center shrink-0 mt-0.5">
                   <SettingsIcon name={item.icon} className={item.color} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h4 className="text-sm font-bold text-[var(--color-text)]">{item.section}</h4>
-                    <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-0.5 rounded-full">{item.page}</span>
+                    <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[var(--color-bg)] px-2 py-0.5 rounded-full">{item.page}</span>
                   </div>
                   <ul className="space-y-0.5">
                     {item.features.map((f, i) => (
@@ -201,19 +201,19 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
       <Card title="الاستيراد (Excel Import)">
         <div className="space-y-3">
           {[
-            { section: 'استيراد تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'upload_file', color: 'text-blue-500', features: ['رفع ملف Excel يحتوي على تقارير الإنتاج', 'مطابقة تلقائية للخط والمنتج والموظف (بالاسم أو الكود)', 'كشف التكرار مع التقارير الموجودة', 'معاينة البيانات قبل الحفظ مع عرض الأخطاء', 'تحميل نموذج Excel فارغ مع قوائم الاختيار'] },
+            { section: 'استيراد تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'upload_file', color: 'text-blue-500', features: ['رفع ملف Excel يحتوي على تقارير الإنتاج', 'مطابقة تلقائية للخط والمنتج والتصفية (بالاسم أو الكود)', 'كشف التكرار مع التقارير الموجودة', 'معاينة البيانات قبل الحفظ مع عرض الأخطاء', 'تحميل نموذج Excel فارغ مع قوائم الاختيار'] },
             { section: 'استيراد المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['رفع ملف Excel بأسماء وأكواد المنتجات', 'تكاليف التعبئة والتغليف', 'سعر البيع', 'كشف التكرار بالاسم والكود', 'معاينة وتحقق قبل الحفظ'] },
-            { section: 'استيراد الموظفين', page: 'وحدة HR', path: '/hr/import', icon: 'person_add', color: 'text-purple-500', features: ['رفع بيانات الموظفين من Excel', 'مطابقة الأقسام والوظائف والورديات', 'بيانات الراتب ونوع التوظيف'] },
+            { section: 'استيراد الموظفين', page: 'وحدة HR', path: '/hr/import', icon: 'person_add', color: 'text-purple-500', features: ['رفع بيانات الموظفين من Excel', 'إنشاء الأقسام المعروفة والورديات', 'بيانات الراتب ونوع التوظيف'] },
           ].map((item) => (
-            <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-all">
+            <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[var(--color-bg)]/60 transition-all">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] flex items-center justify-center shrink-0 mt-0.5">
                   <SettingsIcon name={item.icon} className={item.color} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h4 className="text-sm font-bold text-[var(--color-text)]">{item.section}</h4>
-                    <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-0.5 rounded-full">{item.page}</span>
+                    <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[var(--color-bg)] px-2 py-0.5 rounded-full">{item.page}</span>
                   </div>
                   <ul className="space-y-0.5">
                     {item.features.map((f, i) => (
@@ -234,11 +234,11 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
         <p className="text-sm text-[var(--color-text-muted)] mb-4">يمكنك تحميل نماذج Excel فارغة مع أسماء الأعمدة الصحيحة وقوائم الاختيار لتسهيل عملية الاستيراد.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
-            { label: 'قالب تقارير الإنتاج', desc: 'يتضمن أسماء الخطوط والمنتجات والموظفين', icon: 'description', page: 'صفحة التقارير → تحميل قالب' },
+            { label: 'قالب تقارير الإنتاج', desc: 'يتضمن أسماء الخطوط والمنتجات المعروفة', icon: 'description', page: 'صفحة التقارير → تحميل قالب' },
             { label: 'قالب المنتجات', desc: 'يتضمن أعمدة التكلفة وسعر البيع', icon: 'inventory_2', page: 'صفحة المنتجات → تحميل نموذج' },
-            { label: 'قالب الموظفين', desc: 'يتضمن الأقسام والوظائف والورديات', icon: 'person_add', page: 'HR → استيراد الموظفين' },
+            { label: 'قالب الموظفين', desc: 'يتضمن الأقسام المعروفة والورديات', icon: 'person_add', page: 'HR → استيراد الموظفين' },
           ].map((t) => (
-            <div key={t.label} className="p-4 rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] bg-[#f8f9fa]/50/30">
+            <div key={t.label} className="p-4 rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-bg)]/50">
               <div className="flex items-center gap-2 mb-1">
                 <SettingsIcon name={t.icon} className="text-primary text-base" />
                 <h4 className="text-sm font-bold text-[var(--color-text)]">{t.label}</h4>
@@ -250,13 +250,13 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
         </div>
       </Card>
 
-      <div className="p-4 rounded-[var(--border-radius-lg)] bg-amber-50 dark:bg-amber-900/10 border border-amber-200 flex items-start gap-3">
-        <SettingsIcon name="info" className="text-amber-500 mt-0.5" />
-        <div className="text-sm text-amber-700">
+      <div className="p-4 rounded-[var(--border-radius-lg)] bg-accent border border-border flex items-start gap-3">
+        <SettingsIcon name="info" className="text-accent-foreground mt-0.5" />
+        <div className="text-sm text-accent-foreground">
           <p className="font-bold mb-1">ملاحظات هامة</p>
-          <ul className="space-y-1 text-xs text-amber-600">
+          <ul className="space-y-1 text-xs text-accent-foreground/90">
             <li>• التكاليف تظهر في التصدير فقط للمستخدمين الذين لديهم صلاحية عرض التكاليف</li>
-            <li>• عمليات الاستيراد تعرض معاينة للبيانات قبل الحفظ مع إظهار الأخطاء والتحذيرات</li>
+            <li>• عمليات الاستيراد تعرض معاينة للبيانات قبل الحفظ مع الأخطاء والتحذيرات</li>
             <li>• يتم كشف البيانات المكررة تلقائياً عند الاستيراد</li>
             <li>• سعر البيع وهامش الربح متاحين في تصدير المنتجات وتصدير المنتج الواحد</li>
           </ul>

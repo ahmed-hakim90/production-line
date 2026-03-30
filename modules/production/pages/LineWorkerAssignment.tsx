@@ -163,7 +163,7 @@ export const LineWorkerAssignment: React.FC = () => {
     }
 
     if (employee.isActive === false) {
-      showFeedback('error', `${employee.name} — موظف غير نشط`);
+      showFeedback('error', `${employee.name} — ???? غير نشط`);
       setScanInput('');
       inputRef.current?.focus();
       return;
@@ -203,7 +203,7 @@ export const LineWorkerAssignment: React.FC = () => {
       setScanInput('');
       await loadAssignments();
     } catch {
-      showFeedback('error', 'حدث خطأ أثناء الحفظ');
+      showFeedback('error', 'حدث ??? أثناء الحفظ');
     }
     inputRef.current?.focus();
   }, [selectedLineId, selectedDate, _rawEmployees, allDayAssignments, uid, loadAssignments]);
@@ -244,7 +244,7 @@ export const LineWorkerAssignment: React.FC = () => {
       await lineAssignmentService.delete(id);
       await loadAssignments();
     } catch {
-      showFeedback('error', 'حدث خطأ أثناء الحذف');
+      showFeedback('error', 'حدث ??? أثناء الحذف');
     }
   };
 
@@ -295,7 +295,7 @@ export const LineWorkerAssignment: React.FC = () => {
       }
       await loadAssignments();
     } catch {
-      showFeedback('error', 'حدث خطأ أثناء النسخ');
+      showFeedback('error', 'حدث ??? أثناء النسخ');
     } finally {
       setCopying(false);
     }
@@ -383,8 +383,8 @@ export const LineWorkerAssignment: React.FC = () => {
       {/* Header */}
       <div className="erp-page-head">
         <div>
-          <h2 className="page-title">ربط العمالة بخطوط الإنتاج</h2>
-          <p className="page-subtitle">تسجيل العمالة اليومية على خطوط الإنتاج بالباركود أو يدوياً</p>
+          <h2 className="page-title">ربط العمالة ????? الإنتاج</h2>
+          <p className="page-subtitle">تسجيل العمالة اليومية على ???? الإنتاج بالباركود أو يدوياً</p>
         </div>
       </div>
 
@@ -404,10 +404,10 @@ export const LineWorkerAssignment: React.FC = () => {
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</label>
             <Select value={selectedLineId || 'all'} onValueChange={(value) => setSelectedLineId(value === 'all' ? '' : value)}>
               <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm">
-                <SelectValue placeholder="— كل الخطوط —" />
+                <SelectValue placeholder="— كل ال???? —" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">— كل الخطوط —</SelectItem>
+                <SelectItem value="all">— كل ال???? —</SelectItem>
                 {visibleLines.map((l) => (
                   <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
                 ))}
@@ -436,7 +436,7 @@ export const LineWorkerAssignment: React.FC = () => {
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <span className="material-icons-round text-primary text-xl">qr_code_scanner</span>
-              <h3 className="font-bold text-base">اسم / إدخال كود الموظف</h3>
+              <h3 className="font-bold text-base">اسم / إدخال كود ال????</h3>
             </div>
             <div className="flex gap-2">
               <div className="flex-1 relative">
@@ -549,7 +549,7 @@ export const LineWorkerAssignment: React.FC = () => {
             <div className="text-center py-10">
               <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">person_add</span>
               <p className="page-subtitle">لم يتم تسجيل عمالة على هذا الخط بعد</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">امسح باركود الموظف أو اكتب الكود يدوياً</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">امسح باركود ال???? أو اكتب الكود يدوياً</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -623,7 +623,7 @@ export const LineWorkerAssignment: React.FC = () => {
               </div>
               <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] p-3 text-center">
                 <p className="text-2xl font-bold text-emerald-600">{lineGroups.length}</p>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold">خطوط نشطة</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold">???? ????</p>
               </div>
               {lineGroups.slice(0, 2).map((g) => (
                 <div key={g.lineId} className="bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] p-3 text-center">

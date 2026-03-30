@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
@@ -61,7 +62,7 @@ function getWeekStart(): string {
 
 export const ProductionWorkerDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const employees = useAppStore((s) => s.employees);
@@ -565,7 +566,7 @@ export const ProductionWorkerDetails: React.FC = () => {
             <Card>
               <div className="text-center py-12 text-slate-400">
                 <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
-                <p className="font-bold">لا توجد خطوط إنتاج مرتبطة</p>
+                <p className="font-bold">لا توجد خطوط إنتاج مطابقة</p>
               </div>
             </Card>
           ) : (
@@ -581,7 +582,7 @@ export const ProductionWorkerDetails: React.FC = () => {
                         </div>
                         <div>
                           <h4 className="font-bold text-[var(--color-text)]">{line.name}</h4>
-                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير · {formatNumber(Math.round(line.hours))} ساعة</span>
+                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير آ· {formatNumber(Math.round(line.hours))} ساعة</span>
                         </div>
                       </div>
                       <button
@@ -683,3 +684,6 @@ export const ProductionWorkerDetails: React.FC = () => {
     </div>
   );
 };
+
+
+

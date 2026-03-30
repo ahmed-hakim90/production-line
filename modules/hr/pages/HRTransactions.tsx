@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button, SearchableSelect, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -57,13 +57,13 @@ const TYPE_COLORS: Record<HRTransaction['type'], string> = {
 };
 
 const STATUS_MAP: Record<string, { label: string; color: HRTransaction['statusColor'] }> = {
-  approved: { label: 'ŘŞŮŘŞ Ř§ŮŮŮŘ§ŮŮŘŠ', color: 'green' },
-  pending: { label: 'ŮŮŘŻ Ř§ŮŘ§ŮŘŞŘ¸Ř§Řą', color: 'yellow' },
-  rejected: { label: 'ŮŘąŮŮŘś', color: 'red' },
-  active: { label: 'ŮŘ´Řˇ', color: 'green' },
+  approved: { label: 'إکإ‍إ®آ…إکإ‍ إکآ§إ®آ„إ®آ…إ®آˆإکآ§Ůإ®آ‚إکإ ', color: 'green' },
+  pending: { label: 'إ®آ‚ŮŘŻ إکآ§إ®آ„إکآ§إ®آ†إکإ‍إکآ¸إکآ§إکؤ…', color: 'yellow' },
+  rejected: { label: 'إ®آ…إکؤ…Ůإ®آˆإکإ›', color: 'red' },
+  active: { label: 'إ®آ†إکآ´إکث‡', color: 'green' },
   closed: { label: '8&788', color: 'gray' },
-  stopped: { label: 'ŮŘŞŮŮŮ', color: 'red' },
-  disbursed: { label: 'ŘŞŮ Ř§ŮŘľŘąŮ', color: 'blue' },
+  stopped: { label: 'إ®آ…إکإ‍إ®آˆإ®آ‚Ů', color: 'red' },
+  disbursed: { label: 'إکإ‍إ®آ… إکآ§إ®آ„Řľإکؤ…Ů', color: 'blue' },
 };
 
 function toDate(val: any): Date {
@@ -74,7 +74,7 @@ function toDate(val: any): Date {
 }
 
 export const HRTransactions: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const permissions = useAppStore((s) => s.userPermissions);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
@@ -139,7 +139,7 @@ export const HRTransactions: React.FC = () => {
     () =>
       employees
         .filter((e) => e.isActive !== false)
-        .map((e) => ({ value: e.id!, label: `${e.code || ''} â ${e.name}` })),
+        .map((e) => ({ value: e.id!, label: `${e.code || ''} أ¢آ€آ” ${e.name}` })),
     [employees],
   );
 
@@ -178,9 +178,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: l.id!,
         type: 'leave',
-        typeLabel: `ŘĽŘŹŘ§Ř˛ŘŠ ${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`,
+        typeLabel: `إکؤ½ŘŹإکآ§إکث›إکإ  ${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`,
         employeeId: l.employeeId,
-        description: `${l.totalDays} ŮŮŮ â ${l.startDate} â ${l.endDate}${l.reason ? ` (${l.reason})` : ''}`,
+        description: `${l.totalDays} Ůإ®آˆإ®آ… أ¢آ€آ” ${l.startDate} أ¢آ†آ’ ${l.endDate}${l.reason ? ` (${l.reason})` : ''}`,
         amount: null,
         status: l.finalStatus || l.status,
         statusColor: STATUS_MAP[l.finalStatus || l.status]?.color || 'gray',
@@ -202,9 +202,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: l.id!,
         type: 'loan',
-        typeLabel: LOAN_TYPE_LABELS[l.loanType] || 'ŘłŮŮŘŠ',
+        typeLabel: LOAN_TYPE_LABELS[l.loanType] || 'إکإ‚إ®آ„Ůإکإ ',
         employeeId: l.employeeId,
-        description: `${formatCurrency(l.loanAmount)}${l.loanType === 'installment' ? ` â ${l.totalInstallments} ŮŘłŘˇ (${formatCurrency(l.installmentAmount)}/Ř´ŮŘą) â ŮŘŞŘ¨ŮŮ ${l.remainingInstallments}` : ''}${l.reason ? ` (${l.reason})` : ''}`,
+        description: `${formatCurrency(l.loanAmount)}${l.loanType === 'installment' ? ` أ¢آ€آ” ${l.totalInstallments} إ®آ‚إکإ‚إکث‡ (${formatCurrency(l.installmentAmount)}/إکآ´إ®آ‡إکؤ…) أ¢آ€آ” إ®آ…إکإ‍إکآ¨إ®آ‚Ů ${l.remainingInstallments}` : ''}${l.reason ? ` (${l.reason})` : ''}`,
         amount: l.loanAmount,
         status,
         statusColor: STATUS_MAP[status]?.color || 'gray',
@@ -224,9 +224,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: a.id!,
         type: 'allowance',
-        typeLabel: `Ř¨ŘŻŮ: ${a.allowanceTypeName}`,
+        typeLabel: `إکآ¨ŘŻإ®آ„: ${a.allowanceTypeName}`,
         employeeId: a.employeeId,
-        description: `${formatCurrency(a.amount)} â ${a.isRecurring ? 'Ř´ŮŘąŮ ŮŘŞŮŘąŘą' : 'ŮŘąŘŠ ŮŘ§Ř­ŘŻŘŠ'} â ŮŮ ${a.startMonth}${a.endMonth ? ` ŘĽŮŮ ${a.endMonth}` : ''}`,
+        description: `${formatCurrency(a.amount)} أ¢آ€آ” ${a.isRecurring ? 'إکآ´إ®آ‡إکؤ…Ů إ®آ…إکإ‍إ®آƒإکؤ…إکؤ…' : 'إ®آ…إکؤ…إکإ  إ®آˆإکآ§إکآ­ŘŻإکإ '} أ¢آ€آ” إ®آ…إ®آ† ${a.startMonth}${a.endMonth ? ` إکؤ½إ®آ„إ®آ‰ ${a.endMonth}` : ''}`,
         amount: a.amount,
         status: a.status,
         statusColor: a.status === 'active' ? 'green' : 'red',
@@ -243,9 +243,9 @@ export const HRTransactions: React.FC = () => {
       items.push({
         id: d.id!,
         type: 'deduction',
-        typeLabel: `Ř§ŘłŘŞŮŘˇŘ§Řš: ${d.deductionTypeName || d.category}`,
+        typeLabel: `إکآ§إکإ‚إکإ‍إ®آ‚إکث‡إکآ§إکإ،: ${d.deductionTypeName || d.category}`,
         employeeId: d.employeeId,
-        description: `${formatCurrency(d.amount)} â ${d.isRecurring ? 'Ř´ŮŘąŮ ŮŘŞŮŘąŘą' : 'ŮŘąŘŠ ŮŘ§Ř­ŘŻŘŠ'} â ${d.reason || ''}`,
+        description: `${formatCurrency(d.amount)} أ¢آ€آ” ${d.isRecurring ? 'إکآ´إ®آ‡إکؤ…Ů إ®آ…إکإ‍إ®آƒإکؤ…إکؤ…' : 'إ®آ…إکؤ…إکإ  إ®آˆإکآ§إکآ­ŘŻإکإ '} أ¢آ€آ” ${d.reason || ''}`,
         amount: d.amount,
         status: d.status,
         statusColor: d.status === 'active' ? 'green' : 'red',
@@ -308,7 +308,7 @@ export const HRTransactions: React.FC = () => {
   }, [filtered]);
 
   const handleCancel = async (txn: HRTransaction) => {
-    if (!confirm('ŮŮ ŘŞŘąŮŘŻ ŘĽŮŘşŘ§ŘĄ ŮŘ°Ř§ Ř§ŮŘĽŘŹŘąŘ§ŘĄŘ')) return;
+    if (!confirm('إ®آ‡إ®آ„ إکإ‍إکؤ…ŮŘŻ إکؤ½إ®آ„إکإںإکآ§إکؤ„ إ®آ‡إکآ°إکآ§ إکآ§إ®آ„إکؤ½ŘŹإکؤ…إکآ§إکؤ„إکآں')) return;
     setActionLoading(true);
     try {
       switch (txn.type) {
@@ -334,7 +334,7 @@ export const HRTransactions: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Cancel failed', err);
-      alert('ŮŘ´Ů ŮŮ Ř§ŮŘĽŮŘşŘ§ŘĄ');
+      alert('Ůإکآ´إ®آ„ ŮŮ إکآ§إ®آ„إکؤ½إ®آ„إکإںإکآ§إکؤ„');
     } finally {
       setActionLoading(false);
     }
@@ -361,7 +361,7 @@ export const HRTransactions: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Delete failed', err);
-      alert('ŮŘ´Ů ŮŮ Ř§ŮŘ­Ř°Ů');
+      alert('Ůإکآ´إ®آ„ ŮŮ إکآ§إ®آ„إکآ­إکآ°Ů');
     } finally {
       setActionLoading(false);
     }
@@ -383,7 +383,7 @@ export const HRTransactions: React.FC = () => {
     try {
       const amt = parseFloat(editAmount);
       if (isNaN(amt) || amt <= 0) {
-        alert('ŘŁŘŻŘŽŮ ŮŘ¨ŮŘş ŘľŘ­ŮŘ­');
+        alert('إکإپŘŻŘŽإ®آ„ إ®آ…إکآ¨إ®آ„إکإں ŘľŘ­Ůإکآ­');
         setActionLoading(false);
         return;
       }
@@ -399,7 +399,7 @@ export const HRTransactions: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Edit failed', err);
-      alert('ŮŘ´Ů ŮŮ Ř§ŮŘŞŘšŘŻŮŮ');
+      alert('Ůإکآ´إ®آ„ ŮŮ إکآ§إ®آ„إکإ‍إکإ،ŘŻŮإ®آ„');
     } finally {
       setActionLoading(false);
     }
@@ -407,15 +407,15 @@ export const HRTransactions: React.FC = () => {
 
   const handleExport = () => {
     const rows = filtered.map((t) => ({
-      'Ř§ŮŮŮŘš': t.typeLabel,
-      'Ř§ŮŮŮŘ¸Ů': getEmpName(t.employeeId),
-      'ŮŮŘŻ Ř§ŮŮŮŘ¸Ů': getEmpCode(t.employeeId),
-      'Ř§ŮŮŘľŮ': t.description,
-      'Ř§ŮŮŘ¨ŮŘş': t.amount ?? '',
-      'Ř§ŮŘ­Ř§ŮŘŠ': STATUS_MAP[t.status]?.label || t.status,
-      'Ř§ŮŘŞŘ§ŘąŮŘŽ': t.dateLabel,
+      'إکآ§إ®آ„إ®آ†إ®آˆإکإ،': t.typeLabel,
+      'إکآ§إ®آ„إ®آ…إ®آˆإکآ¸Ů': getEmpName(t.employeeId),
+      'إ®آƒإ®آˆŘŻ إکآ§إ®آ„إ®آ…إ®آˆإکآ¸Ů': getEmpCode(t.employeeId),
+      'إکآ§إ®آ„إ®آˆŘľŮ': t.description,
+      'إکآ§إ®آ„إ®آ…إکآ¨إ®آ„إکإں': t.amount ?? '',
+      'إکآ§إ®آ„إکآ­إکآ§إ®آ„إکإ ': STATUS_MAP[t.status]?.label || t.status,
+      'إکآ§إ®آ„إکإ‍إکآ§إکؤ…ŮŘŽ': t.dateLabel,
     }));
-    exportHRData(rows, 'Ř­ŘąŮŘ§ŘŞ', 'ŘłŘŹŮ_Ř­ŘąŮŘ§ŘŞ_Ř§ŮŮŮŘ§ŘąŘŻ_Ř§ŮŘ¨Ř´ŘąŮŘŠ');
+    exportHRData(rows, 'إکآ­إکؤ…إ®آƒإکآ§إکإ‍', 'إکإ‚ŘŹإ®آ„_إکآ­إکؤ…إ®آƒإکآ§إکإ‍_إکآ§إ®آ„إ®آ…إ®آˆإکآ§إکؤ…ŘŻ_إکآ§إ®آ„إکآ¨إکآ´إکؤ…Ůإکإ ');
   };
 
   const uniqueStatuses = useMemo(() => {
@@ -438,14 +438,14 @@ export const HRTransactions: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="ŘłŘŹŮ Ř­ŘąŮŘ§ŘŞ Ř§ŮŮŮŘ§ŘąŘŻ Ř§ŮŘ¨Ř´ŘąŮŘŠ"
-        subtitle="ŘŹŮŮŘš Ř§ŮŘĽŘŹŘ§Ř˛Ř§ŘŞ ŮŘ§ŮŘłŮŮ ŮŘ§ŮŘ¨ŘŻŮŘ§ŘŞ ŮŘ§ŮŘ§ŘłŘŞŮŘˇŘ§ŘšŘ§ŘŞ ŮŮ ŮŮŘ§Ů ŮŘ§Ř­ŘŻ"
+        title="إکإ‚ŘŹإ®آ„ إکآ­إکؤ…إ®آƒإکآ§إکإ‍ إکآ§إ®آ„إ®آ…إ®آˆإکآ§إکؤ…ŘŻ إکآ§إ®آ„إکآ¨إکآ´إکؤ…Ůإکإ "
+        subtitle="ŘŹإ®آ…Ůإکإ، إکآ§إ®آ„إکؤ½ŘŹإکآ§إکث›إکآ§إکإ‍ إ®آˆإکآ§إ®آ„إکإ‚إ®آ„Ů إ®آˆإکآ§إ®آ„إکآ¨ŘŻإ®آ„إکآ§إکإ‍ إ®آˆإکآ§إ®آ„إکآ§إکإ‚إکإ‍إ®آ‚إکث‡إکآ§إکإ،إکآ§إکإ‍ ŮŮ إ®آ…إ®آƒإکآ§إ®آ† إ®آˆإکآ§إکآ­ŘŻ"
         icon="receipt_long"
         moreActions={[
           {
-            label: 'ŘŞŘľŘŻŮŘą Excel',
+            label: 'إکإ‍ŘľŘŻŮإکؤ… Excel',
             icon: 'download',
-            group: 'ŘŞŘľŘŻŮŘą',
+            group: 'إکإ‍ŘľŘŻŮإکؤ…',
             hidden: !canExportFromPage,
             onClick: handleExport,
           },
@@ -459,9 +459,9 @@ export const HRTransactions: React.FC = () => {
           className={`rounded-[var(--border-radius-lg)] p-3 text-center transition-all border-2 ${filterType === 'all' ? 'border-primary bg-primary/5' : 'border-transparent bg-[var(--color-card)]'}`}
         >
           <div className="text-2xl font-bold text-[var(--color-text)]">{stats.total}</div>
-          <div className="text-xs text-slate-500">Ř§ŮŮŮ</div>
+          <div className="text-xs text-slate-500">إکآ§إ®آ„إ®آƒإ®آ„</div>
         </button>
-        {([['leave', 'ŘĽŘŹŘ§Ř˛Ř§ŘŞ', 'beach_access'], ['loan', 'ŘłŮŮŮ', 'payments'], ['allowance', 'Ř¨ŘŻŮŘ§ŘŞ', 'trending_up'], ['deduction', 'Ř§ŘłŘŞŮŘˇŘ§ŘšŘ§ŘŞ', 'trending_down']] as const).map(([key, label, icon]) => (
+        {([['leave', 'إکؤ½ŘŹإکآ§إکث›إکآ§إکإ‍', 'beach_access'], ['loan', 'إکإ‚إ®آڈإ®آ„Ů', 'payments'], ['allowance', 'إکآ¨ŘŻإ®آ„إکآ§إکإ‍', 'trending_up'], ['deduction', 'إکآ§إکإ‚إکإ‍إ®آ‚إکث‡إکآ§إکإ،إکآ§إکإ‍', 'trending_down']] as const).map(([key, label, icon]) => (
           <button
             key={key}
             onClick={() => setFilterType(key)}
@@ -484,35 +484,35 @@ export const HRTransactions: React.FC = () => {
             <input
               type="text"
               className="input input-sm w-full"
-              placeholder="Ř§ŘłŮ / ŮŮŘŻ / ŮŘľŮ..."
+              placeholder="إکآ§إکإ‚إ®آ… / إ®آƒإ®آˆŘŻ / إ®آˆŘľŮ..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŮŮŘ¸Ů</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکآ§إ®آ„إ®آ…إ®آˆإکآ¸Ů</label>
             <SearchableSelect
               options={empOptions}
               value={filterEmployee}
               onChange={setFilterEmployee}
-              placeholder="ŮŮ Ř§ŮŮŮŘ¸ŮŮŮ"
+              placeholder="إ®آƒإ®آ„ إکآ§إ®آ„إ®آ…إ®آˆإکآ¸ŮŮإ®آ†"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŘ­Ř§ŮŘŠ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکآ§إ®آ„إکآ­إکآ§إ®آ„إکإ </label>
             <select
               className="input input-sm w-full"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
             >
-              <option value="">Ř§ŮŮŮ</option>
+              <option value="">إکآ§إ®آ„إ®آƒإ®آ„</option>
               {uniqueStatuses.map((s) => (
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ŮŮ ŘŞŘ§ŘąŮŘŽ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إ®آ…إ®آ† إکإ‍إکآ§إکؤ…ŮŘŽ</label>
             <input
               type="date"
               className="input input-sm w-full"
@@ -521,7 +521,7 @@ export const HRTransactions: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ŘĽŮŮ ŘŞŘ§ŘąŮŘŽ</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکؤ½إ®آ„إ®آ‰ إکإ‍إکآ§إکؤ…ŮŘŽ</label>
             <input
               type="date"
               className="input input-sm w-full"
@@ -533,7 +533,7 @@ export const HRTransactions: React.FC = () => {
         {(filterType !== 'all' || filterEmployee || filterStatus || filterFrom || filterTo || search) && (
           <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
             <span className="material-icons-round text-sm">filter_list</span>
-            ŘšŘąŘś {filtered.length} ŮŮ {transactions.length} Ř­ŘąŮŘŠ
+            إکإ،إکؤ…إکإ› {filtered.length} إ®آ…إ®آ† {transactions.length} إکآ­إکؤ…إ®آƒإکإ 
             <button
               className="text-primary hover:underline"
               onClick={() => {
@@ -545,7 +545,7 @@ export const HRTransactions: React.FC = () => {
                 setSearch('');
               }}
             >
-              ŮŘłŘ­ Ř§ŮŮŮŘŞŘą
+              إ®آ…إکإ‚إکآ­ إکآ§إ®آ„Ůإ®آ„إکإ‍إکؤ…
             </button>
           </div>
         )}
@@ -556,21 +556,21 @@ export const HRTransactions: React.FC = () => {
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-5xl mb-2">inbox</span>
-            <p className="font-bold">ŮŘ§ ŘŞŮŘŹŘŻ Ř­ŘąŮŘ§ŘŞ</p>
+            <p className="font-bold">إ®آ„إکآ§ إکإ‍إ®آˆŘŹŘŻ إکآ­إکؤ…إ®آƒإکآ§إکإ‍</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="erp-thead">
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs">
-                  <th className="erp-th">Ř§ŮŮŮŘš</th>
-                  <th className="erp-th">Ř§ŮŮŮŘ¸Ů</th>
-                  <th className="erp-th">Ř§ŮŘŞŮŘ§ŘľŮŮ</th>
-                  <th className="erp-th">Ř§ŮŮŘ¨ŮŘş</th>
-                  <th className="erp-th">Ř§ŮŘ­Ř§ŮŘŠ</th>
-                  <th className="erp-th">Ř§ŮŘŞŘ§ŘąŮŘŽ</th>
+                  <th className="erp-th">إکآ§إ®آ„إ®آ†إ®آˆإکإ،</th>
+                  <th className="erp-th">إکآ§إ®آ„إ®آ…إ®آˆإکآ¸Ů</th>
+                  <th className="erp-th">إکآ§إ®آ„إکإ‍Ůإکآ§ŘľŮإ®آ„</th>
+                  <th className="erp-th">إکآ§إ®آ„إ®آ…إکآ¨إ®آ„إکإں</th>
+                  <th className="erp-th">إکآ§إ®آ„إکآ­إکآ§إ®آ„إکإ </th>
+                  <th className="erp-th">إکآ§إ®آ„إکإ‍إکآ§إکؤ…ŮŘŽ</th>
                   {canManage && (
-                    <th className="erp-th text-center">ŘĽŘŹŘąŘ§ŘĄŘ§ŘŞ</th>
+                    <th className="erp-th text-center">إکؤ½ŘŹإکؤ…إکآ§إکؤ„إکآ§إکإ‍</th>
                   )}
                 </tr>
               </thead>
@@ -610,7 +610,7 @@ export const HRTransactions: React.FC = () => {
                       {txn.description}
                     </td>
                     <td className="py-3 px-2 font-bold text-[var(--color-text)] whitespace-nowrap">
-                      {txn.amount !== null ? formatCurrency(txn.amount) : 'â'}
+                      {txn.amount !== null ? formatCurrency(txn.amount) : 'أ¢آ€آ”'}
                     </td>
                     <td className="py-3 px-2">
                       <Badge color={txn.statusColor}>
@@ -627,7 +627,7 @@ export const HRTransactions: React.FC = () => {
                             <button
                               onClick={() => openEdit(txn)}
                               className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-500 transition-colors"
-                              title="ŘŞŘšŘŻŮŮ"
+                              title="إکإ‍إکإ،ŘŻŮإ®آ„"
                               disabled={actionLoading}
                             >
                               <span className="material-icons-round text-lg">edit</span>
@@ -637,7 +637,7 @@ export const HRTransactions: React.FC = () => {
                             <button
                               onClick={() => handleCancel(txn)}
                               className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-500 transition-colors"
-                              title="ŘĽŮŘşŘ§ŘĄ"
+                              title="إکؤ½إ®آ„إکإںإکآ§إکؤ„"
                               disabled={actionLoading}
                             >
                               <span className="material-icons-round text-lg">block</span>
@@ -647,7 +647,7 @@ export const HRTransactions: React.FC = () => {
                             <button
                               onClick={() => setConfirmDelete(txn)}
                               className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors"
-                              title="Ř­Ř°Ů"
+                              title="إکآ­إکآ°Ů"
                               disabled={actionLoading}
                             >
                               <span className="material-icons-round text-lg">delete</span>
@@ -670,14 +670,14 @@ export const HRTransactions: React.FC = () => {
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
               <span className="material-icons-round text-primary">edit</span>
-              ŘŞŘšŘŻŮŮ {editModal.typeLabel}
+              إکإ‍إکإ،ŘŻŮإ®آ„ {editModal.typeLabel}
             </h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-4">
-              {getEmpName(editModal.employeeId)} â {editModal.typeLabel}
+              {getEmpName(editModal.employeeId)} أ¢آ€آ” {editModal.typeLabel}
             </p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŮŘ¨ŮŘş</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکآ§إ®آ„إ®آ…إکآ¨إ®آ„إکإں</label>
                 <input
                   type="number"
                   className="input w-full"
@@ -688,7 +688,7 @@ export const HRTransactions: React.FC = () => {
               </div>
               {editModal.type === 'deduction' && (
                 <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř§ŮŘłŘ¨Ř¨</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکآ§إ®آ„إکإ‚إکآ¨إکآ¨</label>
                   <input
                     type="text"
                     className="input w-full"
@@ -700,10 +700,10 @@ export const HRTransactions: React.FC = () => {
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <Button variant="secondary" size="sm" onClick={() => setEditModal(null)} disabled={actionLoading}>
-                ŘĽŮŘşŘ§ŘĄ
+                إکؤ½إ®آ„إکإںإکآ§إکؤ„
               </Button>
               <Button size="sm" onClick={handleEditSave} disabled={actionLoading}>
-                {actionLoading ? 'ŘŹŘ§ŘąŮ Ř§ŮŘ­ŮŘ¸...' : 'Ř­ŮŘ¸'}
+                {actionLoading ? 'ŘŹإکآ§إکؤ…Ů إکآ§إ®آ„إکآ­Ůإکآ¸...' : 'إکآ­Ůإکآ¸'}
               </Button>
             </div>
           </div>
@@ -717,18 +717,18 @@ export const HRTransactions: React.FC = () => {
             <div className="text-center">
               <span className="material-icons-round text-5xl text-red-500 mb-2">warning</span>
               <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">
-                ŘŞŘŁŮŮŘŻ Ř§ŮŘ­Ř°Ů
+                إکإ‍إکإپإ®آƒŮŘŻ إکآ§إ®آ„إکآ­إکآ°Ů
               </h3>
               <p className="text-sm text-[var(--color-text-muted)] mb-1">
-                ŮŮ ŘŞŘąŮŘŻ Ř­Ř°Ů ŮŘ°Ř§ Ř§ŮŘĽŘŹŘąŘ§ŘĄ ŮŮŘ§ŘŚŮŘ§ŮŘ
+                إ®آ‡إ®آ„ إکإ‍إکؤ…ŮŘŻ إکآ­إکآ°Ů إ®آ‡إکآ°إکآ§ إکآ§إ®آ„إکؤ½ŘŹإکؤ…إکآ§إکؤ„ إ®آ†إ®آ‡إکآ§إکإڑŮإکآ§إ®آ‹إکآں
               </p>
               <p className="text-xs text-[var(--color-text-muted)] mb-4">
-                {confirmDelete.typeLabel} â {getEmpName(confirmDelete.employeeId)}
+                {confirmDelete.typeLabel} أ¢آ€آ” {getEmpName(confirmDelete.employeeId)}
               </p>
             </div>
             <div className="flex justify-center gap-2">
               <Button variant="secondary" size="sm" onClick={() => setConfirmDelete(null)} disabled={actionLoading}>
-                ŘŞŘąŘ§ŘŹŘš
+                إکإ‍إکؤ…إکآ§ŘŹإکإ،
               </Button>
               <Button
                 size="sm"
@@ -736,7 +736,7 @@ export const HRTransactions: React.FC = () => {
                 disabled={actionLoading}
                 className="!bg-red-600 hover:!bg-red-700"
               >
-                {actionLoading ? 'ŘŹŘ§ŘąŮ Ř§ŮŘ­Ř°Ů...' : 'Ř­Ř°Ů ŮŮŘ§ŘŚŮ'}
+                {actionLoading ? 'ŘŹإکآ§إکؤ…Ů إکآ§إ®آ„إکآ­إکآ°Ů...' : 'إکآ­إکآ°Ů إ®آ†إ®آ‡إکآ§إکإڑŮ'}
               </Button>
             </div>
           </div>
@@ -745,4 +745,8 @@ export const HRTransactions: React.FC = () => {
     </div>
   );
 };
+
+
+
+
 

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card } from '../components/UI';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../production/components/ProductionReportPrint';
@@ -65,7 +65,7 @@ function getDateRange(period: Period): { start: string; end: string } {
   return { start: `${y}-${m}-01`, end };
 }
 
-// ─── Period Filter ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Period Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'daily', label: 'يومي' },
@@ -74,10 +74,10 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
-// ─── Employee Dashboard ────────────────────────────────────────────────────
+// â”€â”€â”€ Employee Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const EmployeeDashboard: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const {
     uid,
     _rawEmployees,
@@ -257,7 +257,7 @@ export const EmployeeDashboard: React.FC = () => {
     return () => { cancelled = true; };
   }, [can, transferApprovalPermission, todayReports, monthlyReports]);
 
-  // ── KPIs ──────────────────────────────────────────────────────────────────
+  // â”€â”€ KPIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const kpis = useMemo(() => {
     const totalProduction = periodReports.reduce(
@@ -313,7 +313,7 @@ export const EmployeeDashboard: React.FC = () => {
     };
   }, [periodReports, productionPlans, planReports, todayReports]);
 
-  // ── Active Plan Card ──────────────────────────────────────────────────────
+  // â”€â”€ Active Plan Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const activePlan = useMemo(() => {
     if (!employee?.id) return null;
@@ -368,7 +368,7 @@ export const EmployeeDashboard: React.FC = () => {
     };
   }, [employee?.id, productionPlans, planReports, todayReports, monthlyReports, periodReports, _rawProducts, _rawLines]);
 
-  // ── Personal Performance ──────────────────────────────────────────────────
+  // â”€â”€ Personal Performance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const performance = useMemo(() => {
     const totalHours = periodReports.reduce(
@@ -393,7 +393,7 @@ export const EmployeeDashboard: React.FC = () => {
       .reduce((sum, r) => sum + (r.workHours || 0), 0);
   }, [employee?.id, todayReports]);
 
-  // ── Alerts ────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
     const result: { type: 'warning' | 'danger'; message: string; icon: string }[] = [];
@@ -401,7 +401,7 @@ export const EmployeeDashboard: React.FC = () => {
     if (activePlan && activePlan.progress < 50 && activePlan.globalRemaining > 0) {
       result.push({
         type: 'warning',
-        message: `الخطة متأخرة — تم إنجاز ${activePlan.progress}% فقط. المتبقي: ${formatNumber(activePlan.globalRemaining)} وحدة`,
+        message: `خطة متأخرة — تم إنجاز ${activePlan.progress}% فقط. المتبقي: ${formatNumber(activePlan.globalRemaining)} وحدة`,
         icon: 'schedule',
       });
     }
@@ -448,7 +448,7 @@ export const EmployeeDashboard: React.FC = () => {
     []
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (loading) {
     return (
@@ -487,7 +487,7 @@ export const EmployeeDashboard: React.FC = () => {
         applyLabel="عرض"
       />
 
-      {/* ── ROW 2: Quick Actions ── */}
+      {/* â”€â”€ ROW 2: Quick Actions â”€â”€ */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0 sm:flex-wrap">
         {can('quickAction.view') && (
           <PrimaryButton
@@ -531,7 +531,7 @@ export const EmployeeDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* ── Alerts ── */}
+      {/* â”€â”€ Alerts â”€â”€ */}
       {alerts.length > 0 && (
         <div className="space-y-2">
           {alerts.map((alert, i) => (
@@ -586,7 +586,7 @@ export const EmployeeDashboard: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* ── ROW 3: KPI Strip — all KPIs in one unified row ── */}
+          {/* â”€â”€ ROW 3: KPI Strip — all KPIs in one unified row â”€â”€ */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <KPICard label="ساعات الإنتاج" value={todayProductionHours} unit="ساعة" iconType="metric" color="green" />
             <KPICard label="متوسط/ساعة" value={formatNumber(performance.avgPerHour)} unit="وحدة/ساعة" iconType="trend" color="indigo" />
@@ -614,10 +614,10 @@ export const EmployeeDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* ── ROW 4: Main Content — Active Plan + Work Orders ── */}
+          {/* â”€â”€ ROW 4: Main Content — Active Plan + Work Orders â”€â”€ */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
 
-            {/* الخطة النشطة — RIGHT column (col 1 in RTL) */}
+            {/* الملخص والخطة — RIGHT column (col 1 in RTL) */}
             {activePlan ? (
               <Card>
                 <div className="flex items-center gap-3 mb-5">
@@ -625,7 +625,7 @@ export const EmployeeDashboard: React.FC = () => {
                     <span className="material-icons-round text-primary">event_note</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-medium text-[var(--color-text)]">الخطة النشطة الحالية</h3>
+                  <h3 className="text-base font-medium text-[var(--color-text)]">ملخص الخطة الحالية</h3>
                     <p className="text-[11px] text-slate-400">{activePlan.productName} — {activePlan.lineName ?? ''}</p>
                   </div>
                 <StatusBadge label={activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'} />
@@ -655,8 +655,8 @@ export const EmployeeDashboard: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'المخطط', value: formatNumber(activePlan.plannedQuantity), color: 'text-[var(--color-text)]' },
-                    { label: `منتَج (${periodLabel})`, value: formatNumber(activePlan.periodProduced), color: 'text-blue-600' },
-                    { label: 'إجمالي منتَج', value: formatNumber(activePlan.globalProduced), color: 'text-emerald-600' },
+                    { label: `منتظژج (${periodLabel})`, value: formatNumber(activePlan.periodProduced), color: 'text-blue-600' },
+                    { label: 'إجمالي منتظژج', value: formatNumber(activePlan.globalProduced), color: 'text-emerald-600' },
                     { label: 'المتبقي', value: formatNumber(activePlan.globalRemaining), color: 'text-amber-600' },
                   ].map((stat) => (
                     <div key={stat.label} className="bg-[#f8f9fa]/60 rounded-[var(--border-radius-lg)] p-3 text-center">
@@ -670,8 +670,8 @@ export const EmployeeDashboard: React.FC = () => {
               <Card>
                 <div className="text-center py-8 text-slate-400">
                   <span className="material-icons-round text-5xl mb-3 block opacity-20">event_note</span>
-                  <p className="font-bold text-sm">لا توجد خطة إنتاج نشطة حالياً</p>
-                  <p className="text-xs mt-1 opacity-70">تواصل مع موظف الصالة لإنشاء خطة جديدة</p>
+                  <p className="font-bold text-sm">لا توجد خطط إنتاج نشطة حالياً</p>
+                  <p className="text-xs mt-1 opacity-70">تواصل مع مشرف الصالة لإنشاء خطة جديدة</p>
                 </div>
               </Card>
             )}
@@ -754,14 +754,14 @@ export const EmployeeDashboard: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
                               <p className="text-xs font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
-                              <span className="text-[var(--color-text-muted)] dark:text-slate-600">·</span>
+                              <span className="text-[var(--color-text-muted)] dark:text-slate-600">آ·</span>
                               <span className="material-icons-round text-[var(--color-text-muted)] text-sm">precision_manufacturing</span>
                               <span className="text-xs font-bold text-slate-500">{line?.name ?? '—'}</span>
                             </div>
 
                             <div className="grid grid-cols-3 gap-3 text-center">
                               <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
-                                <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">المطلوب</p>
+                                <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">ملاحظات</p>
                                 <p className="text-sm font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
                               </div>
                               <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
@@ -798,13 +798,13 @@ export const EmployeeDashboard: React.FC = () => {
                                   <div className="flex items-center gap-1">
                                     <span className="material-icons-round text-sm text-emerald-500">payments</span>
                                     <span className="font-bold text-emerald-600">
-                                      مقدرة: {metrics.estimatedUnitCost !== null ? `${formatCurrency(metrics.estimatedUnitCost)} /قطعة` : '—'}
+                                      مقدرة: {metrics.estimatedUnitCost !== null ? `${formatCurrency(metrics.estimatedUnitCost)} /وحدة` : '—'}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <span className="material-icons-round text-sm text-primary">calculate</span>
                                     <span className="font-bold text-primary">
-                                      فعلية: {metrics.actualUnitCostToDate !== null ? `${formatCurrency(metrics.actualUnitCostToDate)} /قطعة` : '—'}
+                                      فعلية: {metrics.actualUnitCostToDate !== null ? `${formatCurrency(metrics.actualUnitCostToDate)} /وحدة` : '—'}
                                     </span>
                                   </div>
                                 </div>
@@ -859,3 +859,7 @@ export const EmployeeDashboard: React.FC = () => {
     </div>
   );
 };
+
+
+
+

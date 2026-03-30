@@ -3,7 +3,6 @@ import {
   doc,
   getDocs,
   orderBy,
-  query,
   runTransaction,
   where,
   limit,
@@ -14,6 +13,8 @@ import {
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type {
   CreateStockMovementInput,
   InventoryItemType,
@@ -62,7 +63,7 @@ export const stockService = {
     const constraints: any[] = [orderBy('updatedAt', 'desc'), limit(pageSize)];
     if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
-    const q = query(collection(db, BALANCES_COLLECTION), ...constraints);
+    const q = tenantQuery(db, BALANCES_COLLECTION, ...constraints);
     const snap = await getDocs(q);
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockItemBalance));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
@@ -85,7 +86,7 @@ export const stockService = {
     if (params?.startDate) constraints.unshift(where('createdAt', '>=', params.startDate));
     if (params?.endDate) constraints.unshift(where('createdAt', '<=', params.endDate));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
-    const q = query(collection(db, TRANSACTIONS_COLLECTION), ...constraints);
+    const q = tenantQuery(db, TRANSACTIONS_COLLECTION, ...constraints);
     const snap = await getDocs(q);
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
@@ -94,7 +95,7 @@ export const stockService = {
 
   async getNextInvReferenceNo(): Promise<string> {
     if (!isConfigured) return formatInvReference(1);
-    const q = query(collection(db, TRANSACTIONS_COLLECTION), orderBy('createdAt', 'desc'), limit(500));
+    const q = tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500));
     const snap = await getDocs(q);
     const maxInv = snap.docs.reduce((max, d) => {
       const ref = String((d.data() as any)?.referenceNo || '').trim();
@@ -121,18 +122,24 @@ export const stockService = {
 
   async getTransactions(warehouseId?: string): Promise<StockTransaction[]> {
     if (!isConfigured) return [];
-    const base = collection(db, TRANSACTIONS_COLLECTION);
     const q = warehouseId
-      ? query(base, where('warehouseId', '==', warehouseId), orderBy('createdAt', 'desc'), limit(500))
-      : query(base, orderBy('createdAt', 'desc'), limit(500));
+      ? tenantQuery(
+        db,
+        TRANSACTIONS_COLLECTION,
+        where('warehouseId', '==', warehouseId),
+        orderBy('createdAt', 'desc'),
+        limit(500),
+      )
+      : tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
   },
 
   async getTransactionsByReferenceNo(referenceNo: string): Promise<StockTransaction[]> {
     if (!isConfigured || !referenceNo.trim()) return [];
-    const q = query(
-      collection(db, TRANSACTIONS_COLLECTION),
+    const q = tenantQuery(
+      db,
+      TRANSACTIONS_COLLECTION,
       where('referenceNo', '==', referenceNo.trim()),
     );
     const snap = await getDocs(q);
@@ -141,8 +148,9 @@ export const stockService = {
 
   async getTransactionsByNote(note: string): Promise<StockTransaction[]> {
     if (!isConfigured || !note.trim()) return [];
-    const q = query(
-      collection(db, TRANSACTIONS_COLLECTION),
+    const q = tenantQuery(
+      db,
+      TRANSACTIONS_COLLECTION,
       where('note', '==', note.trim()),
     );
     const snap = await getDocs(q);
@@ -157,6 +165,7 @@ export const stockService = {
       throw new Error('الكمية يجب أن تكون أكبر من صفر.');
     }
 
+    const tenantId = getCurrentTenantId();
     const txRef = doc(collection(db, TRANSACTIONS_COLLECTION));
     const resolvedReferenceNo = input.referenceNo?.trim() || await this.getNextInvReferenceNo();
 
@@ -217,8 +226,8 @@ export const stockService = {
           transferDirection: 'IN',
         };
 
-        t.set(txRef, stripUndefined(outPayload));
-        t.set(linkedRef, stripUndefined(inPayload));
+        t.set(txRef, stripUndefined({ ...outPayload, tenantId }));
+        t.set(linkedRef, stripUndefined({ ...inPayload, tenantId }));
 
         t.set(sourceBalanceRef, {
           warehouseId: input.warehouseId,
@@ -229,6 +238,7 @@ export const stockService = {
           minStock: input.minStock ?? 0,
           quantity: nextSource,
           updatedAt: now,
+          tenantId,
         }, { merge: true });
 
         t.set(targetBalanceRef, {
@@ -240,6 +250,7 @@ export const stockService = {
           minStock: input.minStock ?? 0,
           quantity: nextTarget,
           updatedAt: now,
+          tenantId,
         }, { merge: true });
       });
       return txRef.id;
@@ -273,7 +284,7 @@ export const stockService = {
         createdAt: now,
       };
 
-      t.set(txRef, stripUndefined(payload));
+      t.set(txRef, stripUndefined({ ...payload, tenantId }));
       t.set(
         balRef,
         {
@@ -285,6 +296,7 @@ export const stockService = {
           minStock: input.minStock ?? 0,
           quantity: nextQty,
           updatedAt: now,
+          tenantId,
         },
         { merge: true },
       );
@@ -317,6 +329,7 @@ export const stockService = {
           : typedQty;
 
     await runTransaction(db, async (t) => {
+      const tenantId = getCurrentTenantId();
       const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(tx.warehouseId, tx.itemType, tx.itemId));
       const txRef = doc(db, TRANSACTIONS_COLLECTION, tx.id!);
       const balSnap = await t.get(balRef);
@@ -339,6 +352,7 @@ export const stockService = {
           minStock: 0,
           quantity: nextQty,
           updatedAt: now,
+          tenantId,
         },
         { merge: true },
       );
@@ -361,6 +375,7 @@ export const stockService = {
     }
 
     await runTransaction(db, async (t) => {
+      const tenantId = getCurrentTenantId();
       const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(tx.warehouseId, tx.itemType, tx.itemId));
       const balSnap = await t.get(balRef);
       const currentQty = balSnap.exists() ? Number(balSnap.data().quantity || 0) : 0;
@@ -381,6 +396,7 @@ export const stockService = {
           minStock: 0,
           quantity: nextQty,
           updatedAt: toIsoNow(),
+          tenantId,
         },
         { merge: true },
       );
@@ -390,8 +406,10 @@ export const stockService = {
 
   async deleteTransferByReference(referenceNo: string): Promise<void> {
     if (!isConfigured || !referenceNo.trim()) return;
-    const base = query(
-      collection(db, TRANSACTIONS_COLLECTION),
+    const tenantId = getCurrentTenantId();
+    const base = tenantQuery(
+      db,
+      TRANSACTIONS_COLLECTION,
       where('movementType', '==', 'TRANSFER'),
       where('referenceNo', '==', referenceNo.trim()),
     );
@@ -433,6 +451,7 @@ export const stockService = {
             minStock: 0,
             quantity: nextSource,
             updatedAt: toIsoNow(),
+            tenantId,
           },
           { merge: true },
         );
@@ -447,6 +466,7 @@ export const stockService = {
             minStock: 0,
             quantity: nextTarget,
             updatedAt: toIsoNow(),
+            tenantId,
           },
           { merge: true },
         );
@@ -482,8 +502,8 @@ export const stockService = {
   async purgeAllMovements(): Promise<void> {
     if (!isConfigured) return;
     const [txSnap, balancesSnap] = await Promise.all([
-      getDocs(collection(db, TRANSACTIONS_COLLECTION)),
-      getDocs(collection(db, BALANCES_COLLECTION)),
+      getDocs(tenantQuery(db, TRANSACTIONS_COLLECTION)),
+      getDocs(tenantQuery(db, BALANCES_COLLECTION)),
     ]);
 
     const docsToDelete = [...txSnap.docs, ...balancesSnap.docs];
@@ -516,14 +536,15 @@ export const stockService = {
       lines: payload.lines,
       createdBy: payload.createdBy,
       createdAt: toIsoNow(),
-    };
+      tenantId: getCurrentTenantId(),
+    } as StockCountSession;
     await setDoc(ref, session);
     return ref.id;
   },
 
   async getCountSessions(): Promise<StockCountSession[]> {
     if (!isConfigured) return [];
-    const q = query(collection(db, COUNTS_COLLECTION), orderBy('createdAt', 'desc'), limit(200));
+    const q = tenantQuery(db, COUNTS_COLLECTION, orderBy('createdAt', 'desc'), limit(200));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockCountSession));
   },

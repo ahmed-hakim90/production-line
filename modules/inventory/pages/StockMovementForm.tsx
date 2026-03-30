@@ -887,7 +887,7 @@ export const StockMovementForm: React.FC = () => {
             <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 18 }}>preview</span>
-                <span className="text-[14px] font-semibold">معاينة طباعة التحويلة</span>
+                <span className="text-[14px] font-semibold">معاينة المرجع التحويلة</span>
               </div>
               <button
                 onClick={() => setShowPrintPreview(false)}

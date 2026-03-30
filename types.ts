@@ -983,7 +983,11 @@ export interface FirestoreUser {
     workOrderAlerts?: boolean;
     stockAlerts?: boolean;
   };
-  uiPreferences?: Record<string, unknown>;
+  uiPreferences?: {
+    /** UI language preference stored per user. */
+    language?: 'ar' | 'en';
+    [key: string]: unknown;
+  };
   createdAt?: any;
   createdBy?: string;
 }

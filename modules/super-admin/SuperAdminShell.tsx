@@ -14,7 +14,7 @@ export const SuperAdminShell: React.FC = () => (
       <span className="font-bold text-[var(--color-text)]">مشرف المنصة</span>
       <nav className="flex flex-wrap gap-1">
         <NavLink to="/super-admin/tenants" className={linkClass} end={false}>
-          طلبات تسجيل الشركات
+          ????? تسجيل الشركات
         </NavLink>
         <NavLink to="/super-admin/insights" className={linkClass}>
           إحصائيات الشركات واستخدام Firestore

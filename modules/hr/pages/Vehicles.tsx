@@ -129,7 +129,7 @@ export const Vehicles: React.FC = () => {
           'التكلفة الشهرية': v.dailyRate * v.workingDaysPerMonth,
           'السائق': v.driverName,
           'هاتف السائق': v.driverPhone,
-          'الحالة': v.isActive ? 'نشطة' : 'متوقفة',
+          'الحالة': v.isActive ? 'نشط' : 'متوقفة',
           'كود الموظف': '',
           'اسم الموظف': '',
           'تكلفة الموظف/شهر': '',
@@ -148,7 +148,7 @@ export const Vehicles: React.FC = () => {
             'التكلفة الشهرية': v.dailyRate * v.workingDaysPerMonth,
             'السائق': v.driverName,
             'هاتف السائق': v.driverPhone,
-            'الحالة': v.isActive ? 'نشطة' : 'متوقفة',
+            'الحالة': v.isActive ? 'نشط' : 'متوقفة',
             'كود الموظف': getEmpCode(empId),
             'اسم الموظف': getEmpName(empId),
             'تكلفة الموظف/شهر': costPerEmp.toFixed(2),
@@ -156,7 +156,7 @@ export const Vehicles: React.FC = () => {
         });
       }
     });
-    exportHRData(rows, 'المركبات', 'مركبات-وموظفين');
+    exportHRData(rows, 'المركبات', 'مركبات-تصدير');
   };
 
   if (loading) {
@@ -200,9 +200,9 @@ export const Vehicles: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
           { label: 'إجمالي المركبات', value: stats.total, icon: 'directions_bus', color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' },
-          { label: 'نشطة', value: stats.active, icon: 'check_circle', color: 'bg-emerald-100 text-emerald-600' },
+          { label: 'نشط', value: stats.active, icon: 'check_circle', color: 'bg-emerald-100 text-emerald-600' },
           { label: 'إجمالي السعة', value: stats.totalCapacity, icon: 'groups', color: 'bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400' },
-          { label: 'موظفين مربوطين', value: stats.totalAssigned, icon: 'person_pin', color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400' },
+          { label: 'موظفون معيّنون', value: stats.totalAssigned, icon: 'person_pin', color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400' },
           { label: 'تكلفة شهرية', value: formatCurrency(stats.totalMonthlyCost), icon: 'payments', color: 'bg-amber-100 text-amber-600' },
         ].map((kpi) => (
           <div key={kpi.label} className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] flex items-center gap-3">
@@ -235,7 +235,7 @@ export const Vehicles: React.FC = () => {
         <Card>
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">directions_bus</span>
-            <p className="text-sm font-bold text-slate-500">لا توجد مركبات{searchQuery ? ' مطابقة للبحث' : ''}</p>
+            <p className="text-sm font-bold text-slate-500">لا توجد مركبات{searchQuery ? ' تطابق البحث' : ''}</p>
           </div>
         </Card>
       ) : (
@@ -268,7 +268,7 @@ export const Vehicles: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Badge variant={v.isActive ? 'success' : 'danger'}>{v.isActive ? 'نشطة' : 'متوقفة'}</Badge>
+                    <Badge variant={v.isActive ? 'success' : 'danger'}>{v.isActive ? 'نشط' : 'متوقفة'}</Badge>
                     <button onClick={() => openEdit(v)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary transition-colors rounded-[var(--border-radius-base)] hover:bg-[#f0f2f5]">
                       <span className="material-icons-round text-lg">edit</span>
                     </button>
@@ -286,7 +286,7 @@ export const Vehicles: React.FC = () => {
                   </div>
                   <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
                     <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{assignedEmployeeIds.length}</p>
-                    <p className="text-[10px] text-[var(--color-text-muted)] font-medium">مربوطين</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] font-medium">مرتبطون</p>
                   </div>
                   <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
                     <p className="text-lg font-bold text-emerald-600">{formatNumber(v.dailyRate)}</p>
@@ -349,7 +349,7 @@ export const Vehicles: React.FC = () => {
                   {isExpanded && (
                     <div className="mt-2 space-y-1">
                       {assignedEmployeeIds.length === 0 ? (
-                        <p className="text-xs text-slate-400">لا يوجد موظفين مربوطين</p>
+                        <p className="text-xs text-slate-400">لا يوجد موظفون معيّنون</p>
                       ) : (
                         assignedEmployeeIds.map((empId) => (
                           <div key={empId} className="flex items-center gap-2 py-1.5 px-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)] text-sm">

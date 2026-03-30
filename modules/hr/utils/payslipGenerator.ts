@@ -240,7 +240,7 @@ export function generatePayslipHTML(data: PayslipData): string {
 
     ${deductionRows.length > 0 ? `
     <div class="section deductions">
-      <div class="section-title"><span class="dot"></span> الاستقطاعات</div>
+      <div class="section-title"><span class="dot"></span> الخصومات</div>
       <table>
         ${deductionRows.map((row) => `
         <tr>
@@ -248,7 +248,7 @@ export function generatePayslipHTML(data: PayslipData): string {
           <td>${formatCurrency(row.amount)}</td>
         </tr>`).join('')}
         <tr style="border-top: 2px solid #ef4444; font-weight: 800;">
-          <td>إجمالي الاستقطاعات</td>
+          <td>إجمالي الخصومات</td>
           <td style="color: #ef4444;">${formatCurrency(r.totalDeductions)}</td>
         </tr>
       </table>
@@ -260,7 +260,7 @@ export function generatePayslipHTML(data: PayslipData): string {
         <div class="value" style="color: #10b981;">${formatCurrency(r.grossSalary)}</div>
       </div>
       <div class="summary-box">
-        <div class="label">إجمالي الاستقطاعات</div>
+        <div class="label">إجمالي الخصومات</div>
         <div class="value" style="color: #ef4444;">${formatCurrency(r.totalDeductions)}</div>
       </div>
       <div class="summary-box net">
@@ -340,7 +340,7 @@ export function generateCombinedPayslipHTML(data: CombinedPayslipData): string {
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>سركيات الموظفين - ${month}</title>
+  <title>كشوفات الموظفين - ${month}</title>
   <style>
     ${baseStyle}
     body {

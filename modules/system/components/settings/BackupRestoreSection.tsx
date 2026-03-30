@@ -179,14 +179,14 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 <p>Reads: {sparkDaily.reads.toLocaleString('ar-EG')} / اليوم</p>
                 <p>Writes: {sparkDaily.writes.toLocaleString('ar-EG')} / اليوم</p>
                 <p>Deletes: {sparkDaily.deletes.toLocaleString('ar-EG')} / اليوم</p>
-                <p className="pt-1">مهم: العدادات اليومية الفعلية (Reads/Writes/Deletes) لا يتيحها Firebase Web SDK مباشرة، تظهر بدقة من Firebase Console.</p>
+                <p className="pt-1">مهم: العدادات اليومية الفعلية (Reads/Writes/Deletes) لا يتيحها Firebase Web SDK مباشرة، ???? بدقة من Firebase Console.</p>
               </div>
             </>
           )}
         </div>
       </Card>
 
-      <Card title="تصدير نسخة احتياطية">
+      <Card title="تصدير نسخة ????????">
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -194,8 +194,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 <span className="material-icons-round text-primary text-xl">cloud_download</span>
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-bold text-[var(--color-text)]">نسخة احتياطية كاملة</p>
-                <p className="text-xs text-slate-400">تصدير جميع البيانات — المنتجات، الخطوط، التقارير، أوامر الشغل، الإشعارات، التكاليف، الخامات، تعيينات العمال، الموارد البشرية، المركبات، والإعدادات</p>
+                <p className="text-sm font-bold text-[var(--color-text)]">نسخة ???????? كاملة</p>
+                <p className="text-xs text-slate-400">تصدير جميع البيانات — المنتجات، ??????? التقارير، أوامر الشغل، الإشعارات، التكاليف، الخامات، تعيينات العمال، الموارد البشرية، المركبات، والإعدادات</p>
               </div>
             </div>
             <Button onClick={handleExportFull} disabled={backupLoading}>
@@ -237,7 +237,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">الإعدادات فقط</p>
-                <p className="text-xs text-slate-400">تصدير إعدادات النظام، الأدوار، إعدادات العمالة، خامات المنتجات، وإعدادات الموارد البشرية</p>
+                <p className="text-xs text-slate-400">تصدير إعدادات ??????? الأدوار، إعدادات العمالة، خامات المنتجات، وإعدادات الموارد البشرية</p>
               </div>
             </div>
             <Button onClick={handleExportSettings} disabled={backupLoading}>
@@ -252,15 +252,15 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
       <Card title="المجموعات المشمولة في النسخة الكاملة">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
-            { title: 'الإنتاج', icon: 'factory', color: 'text-primary', items: ['المنتجات', 'خطوط الإنتاج', 'تقارير الإنتاج', 'خطط الإنتاج', 'حالة الخطوط', 'إعدادات خط المنتج'] },
-            { title: 'أوامر الشغل والإشعارات', icon: 'assignment', color: 'text-amber-600', items: ['أوامر الشغل', 'الإشعارات', 'تعيينات العمال على الخطوط', 'أحداث المسح'] },
-            { title: 'المخزون والمستودعات', icon: 'inventory_2', color: 'text-cyan-600', items: ['المستودعات', 'الخامات', 'أرصدة المخزون', 'حركات المخزون', 'جرد المخزون', 'طلبات تحويل المخزون'] },
+            { title: 'الإنتاج', icon: 'factory', color: 'text-primary', items: ['المنتجات', '???? الإنتاج', 'تقارير الإنتاج', '??? الإنتاج', 'حالة ال????', 'إعدادات خط المنتج'] },
+            { title: 'أوامر الشغل والإشعارات', icon: 'assignment', color: 'text-amber-600', items: ['أوامر الشغل', 'الإشعارات', 'تعيينات العمال على ال????', 'أحداث المسح'] },
+            { title: 'المخزون والمستودعات', icon: 'inventory_2', color: 'text-cyan-600', items: ['المستودعات', 'الخامات', 'أرصدة المخزون', 'حركات المخزون', 'جرد المخزون', '????? تحويل المخزون'] },
             { title: 'التكاليف والخامات', icon: 'payments', color: 'text-emerald-600', items: ['خامات المنتجات', 'تكاليف الإنتاج الشهرية', 'مراكز التكلفة', 'قيم مراكز التكلفة', 'توزيعات التكلفة', 'إعدادات العمالة'] },
-            { title: 'النظام', icon: 'settings', color: 'text-blue-600', items: ['إعدادات النظام', 'الأدوار والصلاحيات', 'المستخدمين', 'سجل النشاط'] },
-            { title: 'الموارد البشرية', icon: 'groups', color: 'text-violet-600', items: ['الموظفين', 'الأقسام', 'المسميات الوظيفية', 'الورديات', 'إعدادات HR', 'الحضور والانصراف', 'الإجازات', 'القروض', 'البدلات', 'الاستقطاعات', 'المركبات', 'قواعد الجزاءات', 'قواعد التأخير', 'أنواع البدلات'] },
-            { title: 'الرواتب والموافقات', icon: 'account_balance', color: 'text-rose-600', items: ['أشهر الرواتب', 'سجلات الرواتب', 'تدقيق الرواتب', 'ملخص تكلفة الرواتب', 'طلبات الموافقة', 'إعدادات الموافقة', 'التفويضات', 'تدقيق الموافقات'] },
-            { title: 'الجودة', icon: 'verified', color: 'text-fuchsia-600', items: ['إعدادات الجودة', 'قاموس أسباب الجودة', 'تعيينات الجودة', 'فحوصات الجودة', 'عيوب الجودة', 'أوامر إعادة العمل', 'إجراءات CAPA', 'سجلات طباعة الجودة'] },
-            { title: 'التدقيق', icon: 'history', color: 'text-slate-600', items: ['سجل تدقيق النظام'] },
+            { title: '??????', icon: 'settings', color: 'text-blue-600', items: ['إعدادات ??????', 'الأدوار والصلاحيات', 'المستخدمين', 'سجل النشاط'] },
+            { title: 'الموارد البشرية', icon: 'groups', color: 'text-violet-600', items: ['????????', 'الأقسام', 'المسميات ????????', 'الورديات', 'إعدادات HR', 'الحضور والانصراف', 'الإجازات', 'القروض', 'البدلات', '???????????', 'المركبات', 'قواعد الجزاءات', 'قواعد التأخير', 'أنواع البدلات'] },
+            { title: 'الرواتب والموافقات', icon: 'account_balance', color: 'text-rose-600', items: ['أشهر الرواتب', 'سجلات الرواتب', 'تدقيق الرواتب', 'ملخص تكلفة الرواتب', '????? الموافقة', 'إعدادات الموافقة', 'التفويضات', 'تدقيق الموافقات'] },
+            { title: 'الجودة', icon: 'verified', color: 'text-fuchsia-600', items: ['إعدادات الجودة', 'قاموس أسباب الجودة', 'تعيينات الجودة', 'فحوصات الجودة', 'عيوب الجودة', 'أوامر إعادة العمل', 'إجراءات CAPA', 'سجلات ????? الجودة'] },
+            { title: 'التدقيق', icon: 'history', color: 'text-slate-600', items: ['سجل تدقيق ??????'] },
           ].map((group) => (
             <div key={group.title} className="p-3 bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
               <div className="flex items-center gap-2 mb-2">
@@ -278,7 +278,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
         </div>
       </Card>
 
-      <Card title="استعادة من نسخة احتياطية">
+      <Card title="استعادة من نسخة ????????">
         <div className="space-y-6">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
@@ -288,9 +288,9 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[var(--color-text)]">
-                    {importFileName || 'اختر ملف النسخة الاحتياطية'}
+                    {importFileName || 'اختر ملف النسخة ال????????'}
                   </p>
-                  <p className="text-xs text-slate-400">ملف JSON تم تصديره من النظام</p>
+                  <p className="text-xs text-slate-400">ملف JSON تم تصديره من ??????</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -427,8 +427,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 }`}>
                   <span className="material-icons-round text-lg">warning</span>
                   {restoreMode === 'full_reset'
-                    ? 'تحذير: سيتم حذف جميع البيانات الحالية واستبدالها. سيتم إنشاء نسخة احتياطية تلقائية أولاً.'
-                    : 'تحذير: سيتم استبدال المجموعات المشمولة. سيتم إنشاء نسخة احتياطية تلقائية أولاً.'}
+                    ? 'تحذير: سيتم حذف جميع البيانات الحالية واستبدالها. سيتم إنشاء نسخة ???????? تلقائية أولاً.'
+                    : 'تحذير: سيتم استبدال المجموعات المشمولة. سيتم إنشاء نسخة ???????? تلقائية أولاً.'}
                 </div>
               )}
 
@@ -454,7 +454,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               <span className="material-icons-round text-emerald-600">shield</span>
               <span className="text-sm font-bold text-emerald-700">نسخ تلقائي</span>
             </div>
-            <p className="text-xs text-emerald-600/80">يتم إنشاء نسخة احتياطية كاملة تلقائياً قبل أي عملية استعادة</p>
+            <p className="text-xs text-emerald-600/80">يتم إنشاء نسخة ???????? كاملة تلقائياً قبل أي عملية استعادة</p>
           </div>
           <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] border border-blue-200 dark:border-blue-800">
             <div className="flex items-center gap-2 mb-2">
@@ -473,7 +473,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
         </div>
       </Card>
 
-      <Card title="سجل النسخ الاحتياطي">
+      <Card title="سجل النسخ ?????????">
         {historyLoading ? (
           <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
             <span className="material-icons-round animate-spin">refresh</span>
@@ -482,7 +482,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
         ) : backupHistory.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-slate-400">
             <span className="material-icons-round text-4xl mb-2 opacity-30">inventory_2</span>
-            <p className="text-sm font-bold">لا يوجد سجل نسخ احتياطي بعد</p>
+            <p className="text-sm font-bold">لا يوجد سجل نسخ ??????? بعد</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -554,13 +554,13 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 تأكيد الاستعادة
               </h3>
               <p className="text-sm text-[var(--color-text-muted)] mb-4">
-                {restoreMode === 'merge' && 'سيتم دمج البيانات من النسخة الاحتياطية مع البيانات الحالية.'}
-                {restoreMode === 'replace' && 'سيتم استبدال المجموعات المشمولة في النسخة الاحتياطية. البيانات الحالية في هذه المجموعات ستُحذف.'}
-                {restoreMode === 'full_reset' && 'سيتم حذف جميع البيانات الحالية واستبدالها بالنسخة الاحتياطية. هذه العملية لا يمكن التراجع عنها.'}
+                {restoreMode === 'merge' && 'سيتم دمج البيانات من النسخة ال???????? مع البيانات الحالية.'}
+                {restoreMode === 'replace' && 'سيتم استبدال المجموعات المشمولة في النسخة ال????????. البيانات الحالية في هذه المجموعات ستُحذف.'}
+                {restoreMode === 'full_reset' && 'سيتم حذف جميع البيانات الحالية واستبدالها بالنسخة ال????????. هذه العملية لا يمكن التراجع عنها.'}
               </p>
               <p className="text-xs text-[var(--color-text-muted)] mb-6 flex items-center justify-center gap-1">
                 <span className="material-icons-round text-xs">info</span>
-                سيتم إنشاء نسخة احتياطية تلقائية قبل البدء
+                سيتم إنشاء نسخة ???????? تلقائية قبل البدء
               </p>
               <div className="flex items-center gap-3 justify-center">
                 <button

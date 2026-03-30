@@ -57,7 +57,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
     <>
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold">الإجراءات السريعة — لوحة مدير النظام</h3>
+          <h3 className="text-lg font-bold">الإجراءات السريعة — لوحة مدير ??????</h3>
           <p className="page-subtitle">أنشئ أزرار تنقل أو تصدير بسرعة، وخصص الاسم والأيقونة واللون.</p>
         </div>
         <Button onClick={onSave} disabled={saving}>
@@ -67,7 +67,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
         </Button>
       </div>
 
-      <Card title="قائمة الأزرار السريعة" subtitle="الترتيب هنا هو نفس ترتيب الظهور في لوحة مدير النظام">
+      <Card title="قائمة الأزرار السريعة" subtitle="الترتيب هنا هو نفس ترتيب ?????? في لوحة مدير ??????">
         <div className="space-y-3">
           {localQuickActions.length === 0 && (
             <div className="text-center py-10 bg-[#f8f9fa]/50 border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)]">

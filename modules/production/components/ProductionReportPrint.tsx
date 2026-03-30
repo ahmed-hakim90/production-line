@@ -229,7 +229,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               background: palette.tableRowAltBg,
             }}
           >
-            <span>تاريخ الطباعة: {now}</span>
+            <span>تاريخ ???????: {now}</span>
             <span>عدد السجلات: {rows.length}</span>
           </div>
         </div>
@@ -266,7 +266,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               <Th wrap>المنتج</Th>
               {showEmployee && <Th>المشرف</Th>}
               {showWO       && <Th>أمر شغل</Th>}
-              {showNotes    && <Th wrap>ملاحظة</Th>}
+              {showNotes    && <Th wrap>??????</Th>}
               <Th align="center">الكمية المنتجة</Th>
               {showWaste    && <Th align="center">الهالك</Th>}
               <Th align="center">عدد العمال</Th>
@@ -489,7 +489,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
           supervisorName: data.supervisorName || '—',
         }}
         kpis={[
-          { label: 'الكمية المطلوبة', value: Number(data.quantity || 0), unit: 'وحدة', color: 'indigo' },
+          { label: 'الكمية ????????', value: Number(data.quantity || 0), unit: 'وحدة', color: 'indigo' },
           { label: 'الكمية المنتجة', value: Number(data.producedQuantity || 0), unit: 'وحدة', color: 'green' },
           { label: 'المتبقي', value: remaining, unit: 'وحدة', color: remaining > 0 ? 'red' : 'default' },
           { label: 'نسبة الإنجاز', value: progress.toFixed(dp), unit: '%', color: progress >= 100 ? 'green' : 'default' },
@@ -513,7 +513,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
               ...(showCosts && data.actualCost != null && data.actualCost > 0
                 ? [{ label: 'التكلفة الفعلية', value: `${fmtNum(data.actualCost, 2)} ج.م` }]
                 : []),
-              ...(data.notes ? [{ label: 'ملاحظات', value: data.notes }] : []),
+              ...(data.notes ? [{ label: '???????', value: data.notes }] : []),
             ],
           },
         ]}

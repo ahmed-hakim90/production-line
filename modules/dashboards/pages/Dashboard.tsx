@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
 import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
@@ -143,7 +143,7 @@ export const Dashboard: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
@@ -163,7 +163,7 @@ export const Dashboard: React.FC = () => {
   const [costProductIds, setCostProductIds] = useState<string[]>([]);
   const [costProductCandidate, setCostProductCandidate] = useState('');
 
-  // ── Daily Production vs Cost Chart ──
+  // â”€â”€ Daily Production vs Cost Chart â”€â”€
   const [chartProductId, setChartProductId] = useState('');
   const [chartLineId, setChartLineId] = useState('');
   const [chartMonth, setChartMonth] = useState(getCurrentMonth);
@@ -219,7 +219,7 @@ export const Dashboard: React.FC = () => {
   const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
   const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
 
-  // ── Set Target Modal ──
+  // â”€â”€ Set Target Modal â”€â”€
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);
   const [targetForm, setTargetForm] = useState({ currentProductId: '', targetTodayQty: 0 });
   const [targetSaving, setTargetSaving] = useState(false);
@@ -561,7 +561,7 @@ export const Dashboard: React.FC = () => {
     <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
       {/* <div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
-        <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
+        <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">لوحة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
       </div> */}
 
       <OrderedDashboardWidgets
@@ -997,7 +997,7 @@ export const Dashboard: React.FC = () => {
               );
             case 'smart_planning':
               return (
-          <Card className="lg:sticky lg:top-24 border-primary/20 shadow-primary/5" title="التخطيط الذكي">
+          <Card className="lg:sticky lg:top-24 border-primary/20 shadow-primary/5" title="الملخص الذكي">
             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المنتج</label>
@@ -1015,7 +1015,7 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المطلوبة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المخططة</label>
                 <input 
                   className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" 
                   placeholder="أدخل الكمية..." 
@@ -1034,11 +1034,11 @@ export const Dashboard: React.FC = () => {
                       <span className="text-sm font-bold text-primary">{planResults.avgAssemblyTime} دقيقة/وحدة</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">الطاقة اليومية لكل خط</span>
+                      <span className="text-xs font-bold text-slate-500">الأهداف اليومية لكل خط</span>
                       <span className="text-sm font-bold text-primary">{formatNumber(planResults.dailyCapacityPerLine)} وحدة</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">إجمالي الطاقة اليومية</span>
+                      <span className="text-xs font-bold text-slate-500">إجمالي الأهداف اليومية</span>
                       <span className="text-sm font-bold text-primary">
                         {formatNumber(planResults.totalDailyCapacity)} وحدة ({planResults.activeLinesCount} خط)
                       </span>
@@ -1075,7 +1075,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => navigate(`/production-plans?productId=${selectedProductId}&quantity=${planQuantity}`)}
                 >
                   <DashboardIcon name="add_task" className="text-sm" />
-                  إنشاء خطة رسمية
+                  إنشاء خطط رسمية
                 </Button>
               </div>
             )}
@@ -1106,7 +1106,7 @@ export const Dashboard: React.FC = () => {
             )}
 
             <div className="mt-8 pt-6 border-t border-[var(--color-border)]">
-              <h4 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.2em] mb-4">أهم تنبيهات النظام</h4>
+              <h4 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.2em] mb-4">أهم تنبيهات اليوم</h4>
               {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length > 0 ? (
                 <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-[var(--border-radius-base)] border border-amber-100 dark:border-amber-900/20">
                   <DashboardIcon name="info" className="text-amber-500 text-sm mt-0.5" />
@@ -1138,7 +1138,7 @@ export const Dashboard: React.FC = () => {
         }}
       />
 
-      {/* ── Set Target Modal ── */}
+      {/* â”€â”€ Set Target Modal â”€â”€ */}
 
       {targetModal && can("lineStatus.edit") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
@@ -1209,3 +1209,7 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+
+
+

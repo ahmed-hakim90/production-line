@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Badge, Button, Card, KPIBox } from '../components/UI';
 import { useShallowStore } from '../../../store/useAppStore';
 import { scanEventService } from '../services/scanEventService';
@@ -42,7 +43,7 @@ const toDayTimeMs = (baseMs: number, hm: string) => {
 
 export const WorkOrderScanner: React.FC = () => {
   const { id: workOrderId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const {
     workOrders,
     _rawProducts,
@@ -248,7 +249,7 @@ export const WorkOrderScanner: React.FC = () => {
   const handleToggleManualPause = useCallback(async () => {
     if (!workOrder || !workOrderId || workOrder.status === 'completed') return;
     if (!hasActiveManualPause && openSessionsCount === 0) {
-      setScanError('لا يمكن إيقاف الزمن بدون قطع قيد التشغيل');
+      setScanError('لا يمكن إيقاف الزمن بدون جلسات قيد التشغيل');
       return;
     }
     setScanMsg(null);
@@ -315,7 +316,7 @@ export const WorkOrderScanner: React.FC = () => {
       }
       const latest = await scanEventService.buildWorkOrderSummary(workOrderId);
       if (latest.openSessions.length > 0) {
-        setScanError(`لا يمكن إنهاء أمر الشغل لوجود ${latest.openSessions.length} قطعة قيد التشغيل بدون تسجيل خروج`);
+        setScanError(`لا يمكن إنهاء أمر الشغل لوجود ${latest.openSessions.length} جلسة قيد التشغيل بدون تسجيل خروج`);
         playFeedbackTone('error');
         return;
       }
@@ -484,7 +485,7 @@ export const WorkOrderScanner: React.FC = () => {
         {workOrder.status !== 'completed' ? (
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
             <div className="flex-1">
-              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">باركود القطعة (Serial)</label>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">باركود الوحدة (Serial)</label>
               <input
                 ref={inputRef}
                 type="text"
@@ -667,4 +668,7 @@ export const WorkOrderScanner: React.FC = () => {
     </div>
   );
 };
+
+
+
 

@@ -524,7 +524,7 @@ export const WorkOrders: React.FC = () => {
     <div className={`erp-ds-clean ${styles.page}`}>
       <PageHeader
         title="أوامر الشغل"
-        subtitle="نسخة مضغوطة مع تفاصيل في درج جانبي وتحديث لحظي"
+        subtitle="نسخة محسّنة مع تفاصيل في درج جانبي وتحديث مباشر"
         icon="assignment"
         primaryAction={canCreateWorkOrder ? {
           label: 'أمر شغل جديد',

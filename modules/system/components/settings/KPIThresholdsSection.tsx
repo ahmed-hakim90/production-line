@@ -80,7 +80,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                   </div>
                 </div>
                 <p className="text-xs font-bold text-[var(--color-text-muted)]">
-                  {kpi.invertedScale ? `خطر إذا > ${threshold.warning}${kpi.unit}` : `خطر إذا < ${threshold.warning}${kpi.unit}`}
+                  {kpi.invertedScale ? `??? إذا > ${threshold.warning}${kpi.unit}` : `??? إذا < ${threshold.warning}${kpi.unit}`}
                 </p>
               </div>
             );
@@ -100,7 +100,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                   <span className="text-amber-600">تحذير</span>
                 </th>
                 <th className="erp-th text-center">
-                  <span className="text-rose-600">خطر</span>
+                  <span className="text-rose-600">???</span>
                 </th>
               </tr>
             </thead>

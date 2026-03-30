@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
@@ -33,7 +33,7 @@ import {
 import { Search, Filter, SlidersHorizontal, Zap, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ─── Performance Score ────────────────────────────────────────────────────────
+// Performance Score
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
 
@@ -43,7 +43,7 @@ function getScoreBadge(score: number): { variant: 'success' | 'warning' | 'dange
   return { variant: 'danger', label: 'ضعيف' };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 function getWeekStart(): string {
   const d = new Date();
@@ -91,7 +91,7 @@ function daysBetweenInclusive(start: string, end: string): number {
   return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
 }
 
-// ─── SupervisorRow type ───────────────────────────────────────────────────────
+// SupervisorRow type
 
 interface SupervisorRow extends FirestoreEmployee {
   reports: ProductionReport[];
@@ -118,7 +118,7 @@ interface SupervisorRow extends FirestoreEmployee {
   lastActivity: string;
 }
 
-// ─── Active filter for stat cards ─────────────────────────────────────────────
+// Active filter for stat cards
 
 type StatFilter = '' | 'today' | 'week' | 'highScrap' | 'lowScore' | 'active';
 type ReportsViewMode = 'today' | 'range';
@@ -131,7 +131,7 @@ const toDateInputValue = (date: Date): string => {
 };
 
 export const Supervisors: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -458,7 +458,7 @@ export const Supervisors: React.FC = () => {
     void loadAssignmentsForDate(rangeEnd);
   }, [rangeStart, rangeEnd, loadReportsRange, loadAssignmentsForDate]);
 
-  // ── Filtering ───────────────────────────────────────────────────────────────
+  // Filtering
 
   const filtered = useMemo(() => {
     let list = supervisors;
@@ -480,7 +480,7 @@ export const Supervisors: React.FC = () => {
     return list;
   }, [supervisors, search, filterLine, statFilter]);
 
-  // ── Summary KPIs ────────────────────────────────────────────────────────────
+  // Summary KPIs
 
   const stats = useMemo(() => {
     const activeSupervisors = supervisors.filter((s) => s.isActive !== false).length;
@@ -519,7 +519,7 @@ export const Supervisors: React.FC = () => {
     return { activeSupervisors, todayTotal, weekTotal, overallScrapRate, avgScore, todayChange, weekChange };
   }, [supervisors, allReports, lastWeek, resolveSupervisorIdForReport]);
 
-  // ── Hover card ──────────────────────────────────────────────────────────────
+  // Hover card
 
   const handleMouseEnter = (id: string) => {
     clearTimeout(hoverTimeout.current);
@@ -530,7 +530,7 @@ export const Supervisors: React.FC = () => {
     setHoveredSupervisor(null);
   };
 
-  // ── Bulk actions ────────────────────────────────────────────────────────────
+  // Bulk actions
 
   const exportSelectedCSV = useCallback((items: SupervisorRow[]) => {
     const rows = items.map((s) => ({
@@ -630,14 +630,14 @@ export const Supervisors: React.FC = () => {
         title: 'شكر وتقدير على الأداء المتميز',
         body: `نتقدم بالشكر للمشرف ${sup.name} على الحفاظ على أداء مرتفع وانضباط تشغيلي واضح خلال الفترة الحالية.`,
         recommendations: [
-          'الاستمرار على نفس وتيرة المتابعة اليومية للخطوط.',
+          'الاستمرار على نفس وتيرة المتابعة اليومية الحالية.',
           'مشاركة أفضل ممارسات التشغيل مع باقي المشرفين.',
         ],
       };
     }
     if (sup.performanceScore >= 75) {
       return {
-        title: 'أداء جيد مع فرص تطوير',
+        title: 'أداء جيد مع فرص تحسن',
         body: `نشكر المشرف ${sup.name} على الأداء الجيد، مع وجود فرصة لرفع الكفاءة وتقليل الهالك على بعض الخطوط.`,
         recommendations: [
           'تركيز المتابعة على الخطوط ذات الهالك الأعلى.',
@@ -647,12 +647,12 @@ export const Supervisors: React.FC = () => {
       };
     }
     return {
-      title: 'خطة تحسين أداء مطلوبة',
+      title: 'خطة تحسين أداء المشرف',
       body: `نقدّر مجهود المشرف ${sup.name}، ويوصى بتنفيذ خطة تحسين قصيرة المدى لرفع الإنتاجية وضبط الجودة.`,
       recommendations: [
         'وضع هدف أسبوعي واضح لرفع درجة الأداء تدريجيًا.',
         'تحليل أسباب التوقف والهالك يوميًا على مستوى كل خط.',
-        'تطبيق متابعة دورية مع فريق الخط والجودة.',
+        'إنشاء متابعة دورية مع فريق الخط والجودة.',
       ],
     };
   }, []);
@@ -668,7 +668,7 @@ export const Supervisors: React.FC = () => {
       ? Number(((achievedQty / requiredQty) * 100).toFixed(1))
       : Number(sup.performanceScore.toFixed(1));
     const costStatusHigh = sup.scrapRate > 5;
-    const costStatusLabel = costStatusHigh ? 'مرتفعة' : 'طبيعية';
+    const costStatusLabel = costStatusHigh ? 'مرتفعة' : 'منضبطة';
     const lineUtilizationRatio = Number(((sup.activeDays / Math.max(sup.totalDaysInRange, 1)) * 100).toFixed(1));
     const lineUtilizationHigh = lineUtilizationRatio >= 70;
 
@@ -724,22 +724,22 @@ export const Supervisors: React.FC = () => {
     const periodLabel = viewMode === 'today' ? `اليوم (${today})` : `${startDate} إلى ${endDate}`;
 
     const summarySheet = [
-      { البند: 'اسم المشرف', القيمة: sup.name },
-      { البند: 'الكود', القيمة: sup.code ?? '—' },
-      { البند: 'القسم', القيمة: getDepartmentName(sup.departmentId ?? '') },
-      { البند: 'الوظيفة', القيمة: getJobPositionTitle(sup.jobPositionId ?? '') },
-      { البند: 'الفترة', القيمة: periodLabel },
-      { البند: 'درجة الأداء', القيمة: sup.performanceScore },
-      { البند: 'إجمالي الإنتاج', القيمة: sup.totalProduced },
-      { البند: 'إجمالي الهالك', القيمة: sup.totalWaste },
-      { البند: 'نسبة الهالك %', القيمة: sup.scrapRate },
-      { البند: 'إنتاج اليوم', القيمة: sup.todayProduced },
-      { البند: 'إنتاج الأسبوع', القيمة: sup.weekProduced },
-      { البند: 'عدد التقارير', القيمة: sup.reportCount },
-      { البند: 'عدد الخطوط', القيمة: sup.assignedLines.length },
-      { البند: 'متوسط العمالة', القيمة: sup.totalWorkers },
-      { البند: 'رسالة التقدير', القيمة: appreciation.title },
-      { البند: 'ملخص التقييم', القيمة: appreciation.body },
+      { 'البند': 'اسم المشرف', 'القيمة': sup.name },
+      { 'البند': 'الكود', 'القيمة': sup.code ?? '—' },
+      { 'البند': 'القسم', 'القيمة': getDepartmentName(sup.departmentId ?? '') },
+      { 'البند': 'المنصب', 'القيمة': getJobPositionTitle(sup.jobPositionId ?? '') },
+      { 'البند': 'الفترة', 'القيمة': periodLabel },
+      { 'البند': 'درجة الأداء', 'القيمة': sup.performanceScore },
+      { 'البند': 'إجمالي الإنتاج', 'القيمة': sup.totalProduced },
+      { 'البند': 'إجمالي الهالك', 'القيمة': sup.totalWaste },
+      { 'البند': 'نسبة الهالك %', 'القيمة': sup.scrapRate },
+      { 'البند': 'إنتاج اليوم', 'القيمة': sup.todayProduced },
+      { 'البند': 'إنتاج الأسبوع', 'القيمة': sup.weekProduced },
+      { 'البند': 'عدد التقارير', 'القيمة': sup.reportCount },
+      { 'البند': 'عدد الخطوط', 'القيمة': sup.assignedLines.length },
+      { 'البند': 'متوسط العمالة', 'القيمة': sup.totalWorkers },
+      { 'البند': 'رسالة التقدير', 'القيمة': appreciation.title },
+      { 'البند': 'ملخص التقييم', 'القيمة': appreciation.body },
     ];
     const lineSheet = lineRows.map((r) => ({
       'خط الإنتاج': r.lineName,
@@ -753,7 +753,7 @@ export const Supervisors: React.FC = () => {
     const productSheet = productRows.map((r) => ({
       'المنتج': r.productName,
       'عدد التقارير': r.reportsCount,
-      'الكمية المطلوبة': r.requiredQty,
+      'الكمية المستهدفة': r.requiredQty,
       'الكمية المحققة': r.achievedQty,
       'نسبة الأداء %': r.performanceRatio,
     }));
@@ -794,7 +794,7 @@ export const Supervisors: React.FC = () => {
     return actions;
   }, [exportSelectedCSV, printSelected, canExportFromPage, pageControl.exportVariant]);
 
-  // ── Table columns ───────────────────────────────────────────────────────────
+  // Table columns
 
   const columns = useMemo<TableColumn<SupervisorRow>[]>(() => [
     {
@@ -1011,7 +1011,7 @@ export const Supervisors: React.FC = () => {
     },
   ], [departments, jobPositions, hoveredSupervisor, productionLines]);
 
-  // ── Row actions ─────────────────────────────────────────────────────────────
+  // Row actions
 
   const renderActions = useCallback((sup: SupervisorRow) => (
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
@@ -1051,7 +1051,7 @@ export const Supervisors: React.FC = () => {
     </div>
   ), [can, canExportFromPage, exportSupervisorPerformance, navigate, printSupervisorPerformance]);
 
-  // ── Unique values for filters ───────────────────────────────────────────────
+  // Unique values for filters
 
   const uniqueLines = useMemo(() => {
     const set = new Set<string>();
@@ -1073,7 +1073,7 @@ export const Supervisors: React.FC = () => {
     return 'week';
   }, [viewMode, startDate, endDate, today]);
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
+  // Loading
 
   if (dataLoading) {
     return <div className="erp-ds-clean space-y-6"><LoadingSkeleton type="detail" /></div>;
@@ -1095,7 +1095,7 @@ export const Supervisors: React.FC = () => {
         } : undefined}
       />
 
-      {/* ── Stat Cards (clickable) ──────────────────────────────────────────── */}
+      {/* Stat Cards (clickable) */}
       <div className="erpnext-kpi-grid grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('today')}>
           <KPIBox
@@ -1144,7 +1144,7 @@ export const Supervisors: React.FC = () => {
         </button>
       </div>
 
-      {/* ── Advanced Filters ────────────────────────────────────────────────── */}
+      {/* Advanced Filters */}
       <Card className="erpnext-filter-card">
         <div className="erpnext-filter-head mb-4">
           <p className="erpnext-filter-title">فلترة المشرفين</p>
@@ -1211,7 +1211,7 @@ export const Supervisors: React.FC = () => {
           )}
         </div>
 
-        {/* ── Table ─────────────────────────────────────────────────────────── */}
+        {/* Table */}
         <SelectableTable<SupervisorRow>
           data={filtered}
           columns={columns}
@@ -1348,7 +1348,7 @@ export const Supervisors: React.FC = () => {
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 space-y-2">
                   <p className="text-xs font-bold text-[var(--color-text-muted)]">الأداء حسب الخط</p>
                   {linePreview.length === 0 ? (
-                    <p className="text-xs text-[var(--color-text-muted)]">لا توجد بيانات خطوط في هذه الفترة.</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">لا توجد بيانات للخطوط في هذه الفترة.</p>
                   ) : (
                     <ul className="space-y-2">
                       {linePreview.map((line) => {
@@ -1427,3 +1427,7 @@ export const Supervisors: React.FC = () => {
     </div>
   );
 };
+
+
+
+

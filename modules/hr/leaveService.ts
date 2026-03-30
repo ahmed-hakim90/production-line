@@ -229,7 +229,7 @@ export async function syncLeaveApprovalDecision(params: {
 
   const leaveReq = await leaveRequestService.getById(leaveRequestId);
   if (!leaveReq) {
-    return { success: false, error: 'طلب الإجازة المرتبط غير موجود' };
+    return { success: false, error: 'سجل الإجازة المرتبط غير موجود' };
   }
 
   if ((leaveReq as any).balanceImpactApplied) {

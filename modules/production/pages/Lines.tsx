@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber, getTodayDateString } from '../../../utils/calculations';
@@ -52,7 +52,7 @@ export const Lines: React.FC = () => {
   const updateLineStatus = useAppStore((s) => s.updateLineStatus);
 
   const { can } = usePermission();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
 
   const [todayAssignments, setTodayAssignments] = useState<LineWorkerAssignment[]>([]);
   const [supervisorNameByLineId, setSupervisorNameByLineId] = useState<Record<string, string>>({});
@@ -98,14 +98,14 @@ export const Lines: React.FC = () => {
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // ── Set Target Modal ──
+  // â”€â”€ Set Target Modal â”€â”€
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);
   const [targetForm, setTargetForm] = useState({ currentProductId: '', targetTodayQty: 0, isInjectionLine: false });
   const [targetSaving, setTargetSaving] = useState(false);
 
   const normalizeLineCode = (value: string) => value.trim().toUpperCase();
   const normalizeArabicDigits = (value: string) =>
-    value.replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    value.replace(/[٠-٩]/g, (digit) => String('ظ ١٢٣٤٥٦٧٨٩'.indexOf(digit)));
   const buildCodeFromLineName = (name: string) => {
     const normalizedName = normalizeArabicDigits(name);
     const numberMatches = normalizedName.match(/\d+/g);
@@ -194,7 +194,7 @@ export const Lines: React.FC = () => {
   const handleSave = async () => {
     const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? ''));
     if (!form.name || !normalizedCode) {
-      setSaveMsg({ type: 'error', text: 'اسم الخط مطلوب. أضف كود الخط أو اكتب رقمًا داخل اسم الخط (مثال: خط إنتاج 7).' });
+      setSaveMsg({ type: 'error', text: 'اسم الخط مطلوب. أضف كود الخط أو اكتب رقمظ‹ا داخل اسم الخط (مثال: خط إنتاج 7).' });
       return;
     }
 
@@ -204,7 +204,7 @@ export const Lines: React.FC = () => {
         normalizeLineCode(line.code ?? '') === normalizedCode
     );
     if (isDuplicateCode) {
-      setSaveMsg({ type: 'error', text: 'كود الخط مستخدم بالفعل. استخدم كودًا مختلفًا.' });
+      setSaveMsg({ type: 'error', text: 'كود الخط مستخدم بالفعل. استخدم كودظ‹ا مختلفًا.' });
       return;
     }
 
@@ -394,13 +394,13 @@ export const Lines: React.FC = () => {
             <div className="empty-state border-t border-[var(--color-border)]">
               <span className="material-icons-round">search_off</span>
               <p className="empty-state-title">لا توجد نتائج مطابقة</p>
-              <p className="empty-state-sub">جرّب تغيير البحث أو فلتر الحالة</p>
+              <p className="empty-state-sub">جرظ‘ب تغيير البحث أو فلتر الحالة</p>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Add / Edit Modal ── */}
+      {/* â”€â”€ Add / Edit Modal â”€â”€ */}
       {showModal && (can("lines.create") || can("lines.edit")) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
@@ -493,7 +493,7 @@ export const Lines: React.FC = () => {
         </div>
       )}
 
-      {/* ── Delete Confirmation ── */}
+      {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && can("lines.delete") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -509,14 +509,14 @@ export const Lines: React.FC = () => {
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
                 <span className="material-icons-round text-sm">delete</span>
-                نعم، احذف
+                نعمطŒ احذف
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Set Target Modal ── */}
+      {/* â”€â”€ Set Target Modal â”€â”€ */}
       {targetModal && can("lineStatus.edit") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
@@ -594,3 +594,7 @@ export const Lines: React.FC = () => {
     </div>
   );
 };
+
+
+
+

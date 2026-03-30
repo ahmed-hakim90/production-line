@@ -5,12 +5,13 @@ import {
   doc,
   getDoc,
   getDocs,
-  query,
   serverTimestamp,
   updateDoc,
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { Asset, AssetDepreciationMethod } from '../../../types';
 
 const COLLECTION = 'assets';
@@ -91,7 +92,7 @@ export const assetService = {
   async getAll(): Promise<Asset[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Asset));
     } catch (error) {
       console.error('assetService.getAll error:', error);
@@ -114,7 +115,7 @@ export const assetService = {
   async getActive(): Promise<Asset[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('status', '==', 'active'));
+      const q = tenantQuery(db, COLLECTION, where('status', '==', 'active'));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Asset));
     } catch (error) {
@@ -129,6 +130,7 @@ export const assetService = {
       const payload = normalizeAssetPayload(data);
       const ref = await addDoc(collection(db, COLLECTION), {
         ...payload,
+        tenantId: getCurrentTenantId(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button, KPIBox } from '../components/UI';
 import { useShallowStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -19,20 +19,74 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { PageHeader } from '../../../components/PageHeader';
+import { toast } from '../../../components/Toast';
 
 type ExtraColumnKey = 'materialsAndPackaging' | 'sellingPrice' | 'profit';
+type MonthlyCostBaseColumnKey =
+  | 'rowIndex'
+  | 'productCode'
+  | 'productName'
+  | 'month'
+  | 'qty'
+  | 'producedCartons'
+  | 'totalCost'
+  | 'directIndirect'
+  | 'avgUnit'
+  | 'prevMonthAvgClosed'
+  | 'prevDeviation'
+  | 'status';
+
+type PrevMonthProductInfo = { avg: number; closed: boolean };
+
 const EXTRA_COLUMNS_PREF_KEY = 'monthly_costs_extra_columns_v1';
 const CENTER_COLUMNS_PREF_KEY = 'monthly_costs_center_columns_v1';
+const BASE_COLUMNS_PREF_KEY = 'monthly_costs_base_columns_v1';
 const DEFAULT_EXTRA_COLUMNS: Record<ExtraColumnKey, boolean> = {
   materialsAndPackaging: true,
   sellingPrice: true,
   profit: true,
 };
+const DEFAULT_BASE_COLUMNS: Record<MonthlyCostBaseColumnKey, boolean> = {
+  rowIndex: true,
+  productCode: true,
+  productName: true,
+  month: true,
+  qty: true,
+  producedCartons: true,
+  totalCost: true,
+  directIndirect: true,
+  avgUnit: true,
+  prevMonthAvgClosed: true,
+  prevDeviation: true,
+  status: true,
+};
+
+const BASE_COLUMN_MODAL_OPTIONS: { key: MonthlyCostBaseColumnKey; label: string; icon: string }[] = [
+  { key: 'rowIndex', label: 'رقم الصف (#)', icon: 'tag' },
+  { key: 'productCode', label: 'كود المنتج', icon: 'qr_code' },
+  { key: 'productName', label: 'اسم المنتج', icon: 'inventory_2' },
+  { key: 'month', label: 'الشهر', icon: 'event' },
+  { key: 'qty', label: 'الكمية المنتجة', icon: 'straighten' },
+  { key: 'producedCartons', label: 'إنتاج بالكرتونات (كمية ÷ وحدات/كرتونة)', icon: 'inventory' },
+  { key: 'totalCost', label: 'إجمالي التكلفة', icon: 'payments' },
+  { key: 'directIndirect', label: 'مباشر / غير مباشر (والوحدة)', icon: 'account_balance_wallet' },
+  { key: 'avgUnit', label: 'متوسط تكلفة الوحدة', icon: 'price_check' },
+  { key: 'prevMonthAvgClosed', label: 'متوسط الشهر السابق (معتمد بعد الإغلاق)', icon: 'history' },
+  { key: 'prevDeviation', label: 'الانحراف عن الشهر السابق (والنسبة)', icon: 'trending_flat' },
+  { key: 'status', label: 'الحالة (مفتوح/مغلق)', icon: 'lock_open' },
+];
 
 const shortProductName = (name: string): string => {
   const parts = name.trim().split(/\s+/);
   if (parts.length <= 2) return name;
   return `${parts[0]} ${parts[1]}`;
+};
+
+/** كم كرتونة = إجمالي الوحدات المنتجة ÷ وحدات لكل كرتونة (من بطاقة المنتج). */
+const cartonsFromProducedQty = (producedQty: number, unitsPerCarton: number): number | null => {
+  const u = Number(unitsPerCarton || 0);
+  if (u <= 0 || !Number.isFinite(producedQty)) return null;
+  return Number((producedQty / u).toFixed(2));
 };
 
 const formatEta = (seconds: number): string => {
@@ -64,7 +118,7 @@ const buildMonthDateRange = (month: string) => {
 };
 
 export const MonthlyProductionCosts: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const {
     products,
     _rawProducts,
@@ -128,6 +182,16 @@ export const MonthlyProductionCosts: React.FC = () => {
       return DEFAULT_EXTRA_COLUMNS;
     }
   });
+  const [baseColumns, setBaseColumns] = useState<Record<MonthlyCostBaseColumnKey, boolean>>(() => {
+    if (typeof window === 'undefined') return DEFAULT_BASE_COLUMNS;
+    try {
+      const raw = window.localStorage.getItem(BASE_COLUMNS_PREF_KEY);
+      if (!raw) return DEFAULT_BASE_COLUMNS;
+      return { ...DEFAULT_BASE_COLUMNS, ...(JSON.parse(raw) as Partial<Record<MonthlyCostBaseColumnKey, boolean>>) };
+    } catch {
+      return DEFAULT_BASE_COLUMNS;
+    }
+  });
   const [centerColumnsVisibility, setCenterColumnsVisibility] = useState<Record<string, boolean>>(() => {
     if (typeof window === 'undefined') return {};
     try {
@@ -139,7 +203,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     }
   });
   const [materialsTotalMap, setMaterialsTotalMap] = useState<Record<string, number>>({});
-  const [prevMonthAvgMap, setPrevMonthAvgMap] = useState<Record<string, number>>({});
+  const [prevMonthInfoMap, setPrevMonthInfoMap] = useState<Record<string, PrevMonthProductInfo>>({});
   const mountedRef = useRef(true);
   const fetchRequestRef = useRef(0);
   const materialTotalCacheRef = useRef<Record<string, number>>({});
@@ -314,9 +378,12 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       if (mountedRef.current) {
         setRecords(data);
-        setPrevMonthAvgMap(
-          previousMonthData.reduce<Record<string, number>>((acc, row) => {
-            acc[row.productId] = row.averageUnitCost || 0;
+        setPrevMonthInfoMap(
+          previousMonthData.reduce<Record<string, PrevMonthProductInfo>>((acc, row) => {
+            acc[row.productId] = {
+              avg: Number(row.averageUnitCost || 0),
+              closed: !!row.isClosed,
+            };
             return acc;
           }, {})
         );
@@ -382,6 +449,19 @@ export const MonthlyProductionCosts: React.FC = () => {
       window.localStorage.setItem(EXTRA_COLUMNS_PREF_KEY, JSON.stringify(next));
     }
   };
+  const toggleBaseColumn = (key: MonthlyCostBaseColumnKey, checked: boolean) => {
+    const next = { ...baseColumns, [key]: checked };
+    setBaseColumns(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(BASE_COLUMNS_PREF_KEY, JSON.stringify(next));
+    }
+  };
+  const showAllBaseColumns = useCallback(() => {
+    setBaseColumns(DEFAULT_BASE_COLUMNS);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(BASE_COLUMNS_PREF_KEY, JSON.stringify(DEFAULT_BASE_COLUMNS));
+    }
+  }, []);
   const persistCenterColumnsVisibility = (next: Record<string, boolean>) => {
     setCenterColumnsVisibility(next);
     if (typeof window !== 'undefined') {
@@ -514,6 +594,15 @@ export const MonthlyProductionCosts: React.FC = () => {
 
   const totalQty = displayRecords.reduce((s, r) => s + r.totalProducedQty, 0);
   const totalCost = displayRecords.reduce((s, r) => s + r.totalProductionCost, 0);
+  const totalCartonsEquivalent = useMemo(
+    () =>
+      displayRecords.reduce((s, r) => {
+        const u = Number(rawProductMap.get(r.productId)?.unitsPerCarton || 0);
+        if (u <= 0) return s;
+        return s + r.totalProducedQty / u;
+      }, 0),
+    [displayRecords, rawProductMap],
+  );
   const centerColumns = useMemo(() => {
     const ids = new Set<string>();
     displayRecords.forEach((record) => {
@@ -532,6 +621,11 @@ export const MonthlyProductionCosts: React.FC = () => {
   const visibleCenterColumns = useMemo(
     () => centerColumns.filter((center) => centerColumnsVisibility[center.id] !== false),
     [centerColumns, centerColumnsVisibility]
+  );
+  const leadingBaseColumnKeys: MonthlyCostBaseColumnKey[] = ['rowIndex', 'productCode', 'productName', 'month'];
+  const leadingBaseColumnCount = useMemo(
+    () => leadingBaseColumnKeys.filter((k) => baseColumns[k]).length,
+    [baseColumns],
   );
   const toggleCenterColumn = useCallback((centerId: string, checked: boolean) => {
     const next = { ...centerColumnsVisibility, [centerId]: checked };
@@ -606,14 +700,21 @@ export const MonthlyProductionCosts: React.FC = () => {
   }, [calculating, calculateStartedAt, calculateProgress.done, calculateProgress.total]);
 
   const handleExport = () => {
-    const rows = displayRecords.map((r) => {
+    if (!baseColumns.productCode && !baseColumns.productName) {
+      toast.warning('فعّل كود المنتج أو اسم المنتج على الأقل للتصدير.');
+    }
+    const rows = displayRecords.map((r, rowIdx) => {
       const normalized = getNormalizedBreakdown(r);
       const directCost = normalized.directCost;
       const indirectCost = normalized.indirectCost;
       const qty = r.totalProducedQty;
-      const prevAvg = prevMonthAvgMap[r.productId] ?? 0;
-      const deviationAmount = r.averageUnitCost - prevAvg;
-      const deviationPercent = prevAvg > 0 ? (deviationAmount / prevAvg) * 100 : 0;
+      const prevInfo = prevMonthInfoMap[r.productId];
+      const closedPrevAvg =
+        prevInfo?.closed && (prevInfo.avg || 0) > 0 ? prevInfo.avg : null;
+      const deviationAmount =
+        closedPrevAvg != null ? r.averageUnitCost - closedPrevAvg : 0;
+      const deviationPercent =
+        closedPrevAvg != null && closedPrevAvg > 0 ? (deviationAmount / closedPrevAvg) * 100 : 0;
       const raw = rawProductMap.get(r.productId);
       const chinese = raw?.chineseUnitCost ?? 0;
       const inner = raw?.innerBoxCost ?? 0;
@@ -623,30 +724,47 @@ export const MonthlyProductionCosts: React.FC = () => {
       const materialsAndPackaging = chinese + (materialsTotalMap[r.productId] ?? 0) + inner + cartonShare;
       const sellingPrice = raw?.sellingPrice ?? 0;
       const unitProfit = sellingPrice > 0 ? sellingPrice - r.averageUnitCost : 0;
-      const row: Record<string, any> = {
-      'كود المنتج': productCodeMap.get(r.productId) || '',
-      'اسم المنتج': productNameMap.get(r.productId) || r.productId,
-      'الشهر': r.month,
-      'الكمية المنتجة': qty,
-      'إجمالي التكلفة': r.totalProductionCost,
-      'مباشر': directCost,
-      'مباشر / قطعة': qty > 0 ? directCost / qty : 0,
-      'غير مباشر': indirectCost,
-      'غير مباشر / قطعة': qty > 0 ? indirectCost / qty : 0,
-      'متوسط تكلفة الوحدة': r.averageUnitCost,
-      'متوسط تكلفة الشهر السابق': prevAvg,
-      'الانحراف عن الشهر السابق (ج.م/وحدة)': deviationAmount,
-      'الانحراف عن الشهر السابق (%)': prevAvg > 0 ? deviationPercent : '—',
-      'الحالة': r.isClosed ? 'مغلق' : 'مفتوح',
-      };
+      const row: Record<string, unknown> = {};
+      if (baseColumns.rowIndex) row['#'] = rowIdx + 1;
+      if (baseColumns.productCode) row['كود المنتج'] = productCodeMap.get(r.productId) || '';
+      if (baseColumns.productName) row['اسم المنتج'] = productNameMap.get(r.productId) || r.productId;
+      if (baseColumns.month) row['الشهر'] = r.month;
+      if (baseColumns.qty) row['الكمية المنتجة'] = qty;
+      if (baseColumns.producedCartons) {
+        const cartons = cartonsFromProducedQty(qty, raw?.unitsPerCarton ?? 0);
+        row['إنتاج بالكرتونة'] = cartons != null ? cartons : '—';
+      }
+      if (baseColumns.totalCost) row['إجمالي التكلفة'] = r.totalProductionCost;
+      if (baseColumns.directIndirect) {
+        row['مباشر'] = directCost;
+        row['مباشر / وحدة'] = qty > 0 ? directCost / qty : 0;
+        row['غير مباشر'] = indirectCost;
+        row['غير مباشر / وحدة'] = qty > 0 ? indirectCost / qty : 0;
+      }
       visibleCenterColumns.forEach((center) => {
         const centerTotal = getCenterCostForRecord(r.productId, center.id);
         row[`${center.name} - إجمالي`] = centerTotal;
-        row[`${center.name} - للقطعة`] = qty > 0 ? centerTotal / qty : 0;
+        row[`${center.name} - وحدة`] = qty > 0 ? centerTotal / qty : 0;
       });
+      if (baseColumns.avgUnit) row['متوسط تكلفة الوحدة'] = r.averageUnitCost;
+      if (baseColumns.prevMonthAvgClosed) {
+        row['متوسط تكلفة الشهر السابق (معتمد)'] =
+          closedPrevAvg != null ? closedPrevAvg : '—';
+      }
+      if (baseColumns.prevDeviation) {
+        if (!baseColumns.prevMonthAvgClosed) {
+          row['متوسط تكلفة الشهر السابق'] =
+            closedPrevAvg != null ? closedPrevAvg : '—';
+        }
+        row['الانحراف عن الشهر السابق (ج.م/وحدة)'] =
+          closedPrevAvg != null ? deviationAmount : '—';
+        row['الانحراف عن الشهر السابق (%)'] =
+          closedPrevAvg != null && closedPrevAvg > 0 ? deviationPercent : '—';
+      }
       if (extraColumns.materialsAndPackaging) row['إجمالي تكلفة المواد والتغليف (ج.م/وحدة)'] = materialsAndPackaging;
       if (extraColumns.sellingPrice) row['سعر البيع (ج.م/وحدة)'] = sellingPrice;
-      if (extraColumns.profit) row['ربح القطعة (ج.م/وحدة)'] = sellingPrice > 0 ? unitProfit : '—';
+      if (extraColumns.profit) row['ربح الوحدة (ج.م/وحدة)'] = sellingPrice > 0 ? unitProfit : '—';
+      if (baseColumns.status) row['الحالة'] = r.isClosed ? 'مغلق' : 'مفتوح';
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -785,7 +903,7 @@ export const MonthlyProductionCosts: React.FC = () => {
           <p className="text-xs text-blue-700/90">
             {currentCalculatingProductName
               ? `المنتج الحالي: ${shortProductName(currentCalculatingProductName)}`
-              : 'جاري بدء الحساب...'}
+              : 'جاري بد، الحساب...'}
             {calculateEtaText ? ` - الوقت المتبقي التقريبي: ${calculateEtaText}` : ''}
           </p>
         </div>
@@ -840,25 +958,40 @@ export const MonthlyProductionCosts: React.FC = () => {
             <div className="text-center py-16 text-slate-400">
               <span className="material-icons-round text-5xl mb-3 block">price_check</span>
               <p className="font-semibold text-lg">لا توجد نتائج مطابقة للفلاتر الحالية</p>
-              <p className="text-sm mt-1">جرّب تغيير البحث أو الفئة</p>
+              <p className="text-sm mt-1">جرظ‘ب تغيير البحث أو الفئة</p>
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead className="erp-thead">
                 <tr className="bg-[#f8f9fa]/50 text-[var(--color-text-muted)]">
-                  <th className="erp-th">#</th>
-                  <th className="erp-th">كود المنتج</th>
-                  <th className="erp-th">اسم المنتج</th>
-                  <th className="erp-th">الكمية المنتجة</th>
-                  <th className="erp-th">إجمالي التكلفة</th>
-                  <th className="erp-th">مباشر / غير مباشر</th>
+                  {baseColumns.rowIndex && <th className="erp-th">#</th>}
+                  {baseColumns.productCode && <th className="erp-th">كود المنتج</th>}
+                  {baseColumns.productName && <th className="erp-th">اسم المنتج</th>}
+                  {baseColumns.month && <th className="erp-th">الشهر</th>}
+                  {baseColumns.qty && <th className="erp-th">الكمية المنتجة</th>}
+                  {baseColumns.producedCartons && (
+                    <th className="erp-th min-w-[120px]">
+                      إنتاج بالكرتونة
+                      <span className="block text-[10px] font-normal opacity-80">كمية ÷ وحدات/كرتونة</span>
+                    </th>
+                  )}
+                  {baseColumns.totalCost && <th className="erp-th">إجمالي التكلفة</th>}
+                  {baseColumns.directIndirect && <th className="erp-th">مباشر / غير مباشر</th>}
                   {visibleCenterColumns.map((center) => (
                     <th key={center.id} className="erp-th min-w-[180px]">
                       {center.name}
                     </th>
                   ))}
-                  <th className="erp-th">متوسط تكلفة الوحدة</th>
-                  <th className="erp-th">الانحراف عن {previousMonthLabel}</th>
+                  {baseColumns.avgUnit && <th className="erp-th">متوسط تكلفة الوحدة</th>}
+                  {baseColumns.prevMonthAvgClosed && (
+                    <th className="erp-th min-w-[140px]">
+                      متوسط الوحدة ({previousMonthLabel})
+                      <span className="block text-[10px] font-normal opacity-80">بعد إغلاق الشهر</span>
+                    </th>
+                  )}
+                  {baseColumns.prevDeviation && (
+                    <th className="erp-th">الانحراف عن {previousMonthLabel}</th>
+                  )}
                   {extraColumns.materialsAndPackaging && (
                     <th className="erp-th">إجمالي تكلفة المواد والتغليف</th>
                   )}
@@ -866,9 +999,9 @@ export const MonthlyProductionCosts: React.FC = () => {
                     <th className="erp-th">سعر البيع</th>
                   )}
                   {extraColumns.profit && (
-                    <th className="erp-th">ربح القطعة</th>
+                    <th className="erp-th">ربح الوحدة</th>
                   )}
-                  <th className="erp-th text-center">الحالة</th>
+                  {baseColumns.status && <th className="erp-th text-center">الحالة</th>}
                 </tr>
               </thead>
               <tbody>
@@ -878,38 +1011,78 @@ export const MonthlyProductionCosts: React.FC = () => {
                     className="border-t border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors cursor-pointer"
                     onClick={() => navigate(`/products/${r.productId}`)}
                   >
-                    <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono">{i + 1}</td>
-                    <td className="py-3 px-4 font-mono text-xs text-slate-500">{productCodeMap.get(r.productId) || '—'}</td>
-                    <td className="py-3 px-4 font-semibold text-[var(--color-text)]">
-                      <span title={productNameMap.get(r.productId) || r.productId}>
-                        {shortProductName(productNameMap.get(r.productId) || r.productId)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-mono">{formatCost(r.totalProducedQty)}</td>
-                    <td className="py-3 px-4 font-mono font-semibold text-amber-700">
-                      {formatCost(r.totalProductionCost)}
-                    </td>
-                    <td className="py-3 px-4">
-                      {(() => {
-                        const normalized = getNormalizedBreakdown(r);
-                        const direct = normalized.directCost;
-                        const indirect = normalized.indirectCost;
-                        const directPerPiece = r.totalProducedQty > 0 ? direct / r.totalProducedQty : 0;
-                        const indirectPerPiece = r.totalProducedQty > 0 ? indirect / r.totalProducedQty : 0;
-                        return (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
-                              {formatCost(direct)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
-                              <span className="text-[10px] font-medium opacity-70"> — {formatCost(directPerPiece)} / قطعة</span>
+                    {baseColumns.rowIndex && (
+                      <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono">{i + 1}</td>
+                    )}
+                    {baseColumns.productCode && (
+                      <td className="py-3 px-4 font-mono text-xs text-slate-500">{productCodeMap.get(r.productId) || '—'}</td>
+                    )}
+                    {baseColumns.productName && (
+                      <td className="py-3 px-4 font-semibold text-[var(--color-text)]">
+                        <span title={productNameMap.get(r.productId) || r.productId}>
+                          {shortProductName(productNameMap.get(r.productId) || r.productId)}
+                        </span>
+                      </td>
+                    )}
+                    {baseColumns.month && (
+                      <td className="py-3 px-4 font-mono text-xs text-[var(--color-text-muted)]">{r.month}</td>
+                    )}
+                    {baseColumns.qty && (
+                      <td className="py-3 px-4 font-mono">{formatCost(r.totalProducedQty)}</td>
+                    )}
+                    {baseColumns.producedCartons && (
+                      <td
+                        className="py-3 px-4 font-mono text-[var(--color-text)]"
+                        title={(() => {
+                          const u = Number(rawProductMap.get(r.productId)?.unitsPerCarton || 0);
+                          return u > 0
+                            ? `وحدات لكل كرتونة: ${u} — الحساب: ${formatCost(r.totalProducedQty)} ÷ ${u}`
+                            : 'لم يُضبط عدد الوحدات لكل كرتونة في بطاقة المنتج';
+                        })()}
+                      >
+                        {(() => {
+                          const raw = rawProductMap.get(r.productId);
+                          const cartons = cartonsFromProducedQty(r.totalProducedQty, raw?.unitsPerCarton ?? 0);
+                          if (cartons == null) {
+                            return <span className="text-[var(--color-text-muted)]">—</span>;
+                          }
+                          return (
+                            <span>
+                              {formatCost(cartons)}
+                              <span className="text-[10px] font-normal text-[var(--color-text-muted)] mr-1"> كرتونة</span>
                             </span>
-                            <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold leading-5">
-                              {formatCost(indirect)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span>
-                              <span className="text-[10px] font-medium opacity-70"> — {formatCost(indirectPerPiece)} / قطعة</span>
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </td>
+                          );
+                        })()}
+                      </td>
+                    )}
+                    {baseColumns.totalCost && (
+                      <td className="py-3 px-4 font-mono font-semibold text-amber-700">
+                        {formatCost(r.totalProductionCost)}
+                      </td>
+                    )}
+                    {baseColumns.directIndirect && (
+                      <td className="py-3 px-4">
+                        {(() => {
+                          const normalized = getNormalizedBreakdown(r);
+                          const direct = normalized.directCost;
+                          const indirect = normalized.indirectCost;
+                          const directPerPiece = r.totalProducedQty > 0 ? direct / r.totalProducedQty : 0;
+                          const indirectPerPiece = r.totalProducedQty > 0 ? indirect / r.totalProducedQty : 0;
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
+                                {formatCost(direct)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
+                                <span className="text-[10px] font-medium opacity-70"> — {formatCost(directPerPiece)} / وحدة</span>
+                              </span>
+                              <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold leading-5">
+                                {formatCost(indirect)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span>
+                                <span className="text-[10px] font-medium opacity-70"> — {formatCost(indirectPerPiece)} / وحدة</span>
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </td>
+                    )}
                     {visibleCenterColumns.map((center) => {
                       const centerTotal = getCenterCostForRecord(r.productId, center.id);
                       const centerPerPiece = r.totalProducedQty > 0 ? centerTotal / r.totalProducedQty : 0;
@@ -920,27 +1093,51 @@ export const MonthlyProductionCosts: React.FC = () => {
                               {formatCost(centerTotal)} <span className="text-[10px] font-normal opacity-70">إجمالي</span>
                             </span>
                             <span className="text-xs tabular-nums font-medium text-[var(--color-text-muted)] leading-5">
-                              {formatCost(centerPerPiece)} <span className="text-[10px] font-normal opacity-70">/ قطعة</span>
+                              {formatCost(centerPerPiece)} <span className="text-[10px] font-normal opacity-70">/ وحدة</span>
                             </span>
                           </div>
                         </td>
                       );
                     })}
-                    <td className="py-3 px-4 font-mono font-bold text-primary">
-                      {formatCost(r.averageUnitCost)}
-                    </td>
-                    <td className="py-3 px-4 font-mono font-bold">
-                      {(() => {
-                        const prevAvg = prevMonthAvgMap[r.productId] ?? 0;
-                        if (prevAvg <= 0) return <span className="text-[var(--color-text-muted)]">—</span>;
-                        const diff = r.averageUnitCost - prevAvg;
-                        return (
-                          <span className={diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}>
-                            {diff >= 0 ? '+' : ''}{formatCost(diff)}
-                          </span>
-                        );
-                      })()}
-                    </td>
+                    {baseColumns.avgUnit && (
+                      <td className="py-3 px-4 font-mono font-bold text-primary">
+                        {formatCost(r.averageUnitCost)}
+                      </td>
+                    )}
+                    {baseColumns.prevMonthAvgClosed && (
+                      <td
+                        className="py-3 px-4 font-mono font-semibold text-[var(--color-text)]"
+                        title={
+                          !prevMonthInfoMap[r.productId]?.closed
+                            ? 'الشهر السابق غير مُغلق لهذا المنتج — لا يوجد متوسط معتمد'
+                            : undefined
+                        }
+                      >
+                        {(() => {
+                          const info = prevMonthInfoMap[r.productId];
+                          if (!info?.closed || (info.avg || 0) <= 0) {
+                            return <span className="text-[var(--color-text-muted)]">—</span>;
+                          }
+                          return formatCost(info.avg);
+                        })()}
+                      </td>
+                    )}
+                    {baseColumns.prevDeviation && (
+                      <td className="py-3 px-4 font-mono font-bold">
+                        {(() => {
+                          const info = prevMonthInfoMap[r.productId];
+                          const prevAvg =
+                            info?.closed && (info.avg || 0) > 0 ? info.avg : null;
+                          if (prevAvg == null) return <span className="text-[var(--color-text-muted)]">—</span>;
+                          const diff = r.averageUnitCost - prevAvg;
+                          return (
+                            <span className={diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                              {diff >= 0 ? '+' : ''}{formatCost(diff)}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    )}
                     {extraColumns.materialsAndPackaging && (
                       <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">
                         {(() => {
@@ -974,30 +1171,46 @@ export const MonthlyProductionCosts: React.FC = () => {
                         })()}
                       </td>
                     )}
-                    <td className="py-3 px-4 text-center">
-                      <Badge variant={r.isClosed ? 'success' : 'warning'}>
-                        {r.isClosed ? 'مغلق' : 'مفتوح'}
-                      </Badge>
-                    </td>
+                    {baseColumns.status && (
+                      <td className="py-3 px-4 text-center">
+                        <Badge variant={r.isClosed ? 'success' : 'warning'}>
+                          {r.isClosed ? 'مغلق' : 'مفتوح'}
+                        </Badge>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {/* Totals row */}
                 <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50 font-bold">
-                  <td className="py-3 px-4" colSpan={3}>الإجمالي</td>
-                  <td className="py-3 px-4 font-mono">{formatCost(totalQty)}</td>
-                  <td className="py-3 px-4 font-mono text-amber-700">{formatCost(totalCost)}</td>
-                  <td className="py-3 px-4">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
-                        {formatCost(totalDirect)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
-                        <span className="text-[10px] font-medium opacity-70"> — {formatCost(totalQty > 0 ? totalDirect / totalQty : 0)} / قطعة</span>
-                      </span>
-                      <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold leading-5">
-                        {formatCost(totalIndirect)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span>
-                        <span className="text-[10px] font-medium opacity-70"> — {formatCost(totalQty > 0 ? totalIndirect / totalQty : 0)} / قطعة</span>
-                      </span>
-                    </div>
-                  </td>
+                  <td className="py-3 px-4" colSpan={Math.max(1, leadingBaseColumnCount)}>الإجمالي</td>
+                  {baseColumns.qty && (
+                    <td className="py-3 px-4 font-mono">{formatCost(totalQty)}</td>
+                  )}
+                  {baseColumns.producedCartons && (
+                    <td
+                      className="py-3 px-4 font-mono text-[var(--color-text-muted)]"
+                      title="مجموع (كمية كل صنف ÷ وحداته لكل كرتونة)"
+                    >
+                      {totalCartonsEquivalent > 0 ? formatCost(Number(totalCartonsEquivalent.toFixed(2))) : '—'}
+                    </td>
+                  )}
+                  {baseColumns.totalCost && (
+                    <td className="py-3 px-4 font-mono text-amber-700">{formatCost(totalCost)}</td>
+                  )}
+                  {baseColumns.directIndirect && (
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
+                          {formatCost(totalDirect)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
+                          <span className="text-[10px] font-medium opacity-70"> — {formatCost(totalQty > 0 ? totalDirect / totalQty : 0)} / وحدة</span>
+                        </span>
+                        <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold leading-5">
+                          {formatCost(totalIndirect)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span>
+                          <span className="text-[10px] font-medium opacity-70"> — {formatCost(totalQty > 0 ? totalIndirect / totalQty : 0)} / وحدة</span>
+                        </span>
+                      </div>
+                    </td>
+                  )}
                   {visibleCenterColumns.map((center) => {
                     const centerTotal = displayRecords.reduce(
                       (sum, record) => sum + getCenterCostForRecord(record.productId, center.id),
@@ -1010,14 +1223,21 @@ export const MonthlyProductionCosts: React.FC = () => {
                             {formatCost(centerTotal)} <span className="text-[10px] font-normal opacity-70">إجمالي</span>
                           </span>
                           <span className="text-xs tabular-nums font-medium text-[var(--color-text-muted)] leading-5">
-                            {formatCost(totalQty > 0 ? centerTotal / totalQty : 0)} <span className="text-[10px] font-normal opacity-70">/ قطعة</span>
+                            {formatCost(totalQty > 0 ? centerTotal / totalQty : 0)} <span className="text-[10px] font-normal opacity-70">/ وحدة</span>
                           </span>
                         </div>
                       </td>
                     );
                   })}
-                  <td className="py-3 px-4 font-mono text-primary">{formatCost(overallAvg)}</td>
-                  <td className="py-3 px-4 font-mono text-[var(--color-text-muted)]">—</td>
+                  {baseColumns.avgUnit && (
+                    <td className="py-3 px-4 font-mono text-primary">{formatCost(overallAvg)}</td>
+                  )}
+                  {baseColumns.prevMonthAvgClosed && (
+                    <td className="py-3 px-4 font-mono text-[var(--color-text-muted)]">—</td>
+                  )}
+                  {baseColumns.prevDeviation && (
+                    <td className="py-3 px-4 font-mono text-[var(--color-text-muted)]">—</td>
+                  )}
                   {extraColumns.materialsAndPackaging && (
                     <td className="py-3 px-4 font-mono text-[var(--color-text)]">
                       {formatCost(displayRecords.reduce((s, r) => {
@@ -1058,7 +1278,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                       })()}
                     </td>
                   )}
-                  <td className="py-3 px-4" />
+                  {baseColumns.status && <td className="py-3 px-4" />}
                 </tr>
               </tbody>
             </table>
@@ -1093,7 +1313,7 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       {showColumnsModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="erp-page-actions">
                 <span className="material-icons-round text-primary">tune</span>
@@ -1104,10 +1324,40 @@ export const MonthlyProductionCosts: React.FC = () => {
               </button>
             </div>
             <div className="p-6 space-y-3 overflow-y-auto flex-1 min-h-0">
+              <div className="flex items-center justify-between pb-1">
+                <p className="text-sm font-bold text-[var(--color-text)]">أعمدة أساسية</p>
+                <Button variant="outline" onClick={showAllBaseColumns}>
+                  إظهار الكل
+                </Button>
+              </div>
+              {BASE_COLUMN_MODAL_OPTIONS.map((opt) => (
+                <label
+                  key={opt.key}
+                  className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
+                    baseColumns[opt.key]
+                      ? 'border-primary/30 bg-primary/5'
+                      : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={baseColumns[opt.key]}
+                    onChange={(e) => toggleBaseColumn(opt.key, e.target.checked)}
+                    className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
+                  />
+                  <span className={`material-icons-round text-lg ${baseColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`}>{opt.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-[var(--color-text)]">{opt.label}</p>
+                  </div>
+                </label>
+              ))}
+              <div className="pt-3 mt-2 border-t border-[var(--color-border)]">
+                <p className="text-sm font-bold text-[var(--color-text)] mb-2">أعمدة إضافية</p>
+              </div>
               {[
                 { key: 'materialsAndPackaging' as const, label: 'إجمالي تكلفة المواد والتغليف', icon: 'inventory_2' },
                 { key: 'sellingPrice' as const, label: 'سعر البيع', icon: 'sell' },
-                { key: 'profit' as const, label: 'ربح القطعة', icon: 'trending_up' },
+                { key: 'profit' as const, label: 'ربح الوحدة', icon: 'trending_up' },
               ].map((opt) => (
                 <label
                   key={opt.key}
@@ -1173,3 +1423,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     </div>
   );
 };
+
+
+
+

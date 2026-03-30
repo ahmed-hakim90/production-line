@@ -82,7 +82,7 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
             {ps.headerText}
           </h1>
           <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
-            نظام إدارة الجودة - تقارير الجودة
+            ???? إدارة الجودة - تقارير الجودة
           </p>
         </div>
 
@@ -90,7 +90,7 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
           <h2 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '10pt' : '16pt', fontWeight: 800, color: palette.text }}>{title}</h2>
           {subtitle && <p style={{ margin: '1mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: palette.mutedText }}>{subtitle}</p>}
           <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '6pt' : '9pt', color: palette.mutedText }}>
-            تاريخ الطباعة: {now}
+            تاريخ ???????: {now}
           </p>
         </div>
 
@@ -259,7 +259,7 @@ export const SingleIPQCPrint = React.forwardRef<HTMLDivElement, SingleIPQCPrintP
             {data.serialBarcode && <DetailRow label="Serial" value={data.serialBarcode} />}
             {data.reasonLabel && <DetailRow label="سبب العيب" value={data.reasonLabel} even />}
             <DetailRow label="عدد الصور" value={String(data.photosCount ?? 0)} />
-            {data.notes?.trim() && <DetailRow label="ملاحظات" value={data.notes} even />}
+            {data.notes?.trim() && <DetailRow label="???????" value={data.notes} even />}
           </tbody>
         </table>
 
@@ -375,7 +375,7 @@ export const SingleFinalInspectionPrint = React.forwardRef<HTMLDivElement, Singl
             />
             {data.reasonLabel && <DetailRow label="سبب العيب" value={data.reasonLabel} />}
             <DetailRow label="عدد الصور" value={String(data.photosCount ?? 0)} even />
-            {data.notes?.trim() && <DetailRow label="ملاحظات" value={data.notes} />}
+            {data.notes?.trim() && <DetailRow label="???????" value={data.notes} />}
           </tbody>
         </table>
 

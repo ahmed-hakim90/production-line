@@ -2,12 +2,13 @@ import {
   collection,
   doc,
   getDocs,
-  query,
   serverTimestamp,
   setDoc,
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { AssetDepreciation } from '../../../types';
 
 const COLLECTION = 'asset_depreciations';
@@ -20,7 +21,7 @@ export const assetDepreciationService = {
   async getByPeriod(period: string): Promise<AssetDepreciation[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('period', '==', period));
+      const q = tenantQuery(db, COLLECTION, where('period', '==', period));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AssetDepreciation));
     } catch (error) {
@@ -32,7 +33,7 @@ export const assetDepreciationService = {
   async getByAsset(assetId: string): Promise<AssetDepreciation[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('assetId', '==', assetId));
+      const q = tenantQuery(db, COLLECTION, where('assetId', '==', assetId));
       const snap = await getDocs(q);
       return snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as AssetDepreciation))
@@ -48,8 +49,9 @@ export const assetDepreciationService = {
     try {
       const start = `${year}-01`;
       const end = `${year}-12`;
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('period', '>=', start),
         where('period', '<=', end),
       );
@@ -67,6 +69,7 @@ export const assetDepreciationService = {
       const docId = buildDocId(entry.assetId, entry.period);
       await setDoc(doc(db, COLLECTION, docId), {
         ...entry,
+        tenantId: getCurrentTenantId(),
         createdAt: serverTimestamp(),
       }, { merge: true });
     } catch (error) {

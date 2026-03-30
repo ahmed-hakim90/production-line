@@ -14,7 +14,7 @@ export const PendingApproval: React.FC = () => {
     setChecking(true);
     setCheckedMsg('');
     const approved = await checkApprovalStatus();
-    if (!approved) setCheckedMsg('حسابك لا يزال قيد المراجعة. يرجى الانتظار.');
+    if (!approved) setCheckedMsg('حسابك لا يزال قيد المراجعة. يرجى المحاولة لاحقًا.');
     setChecking(false);
   };
 
@@ -130,7 +130,7 @@ export const PendingApproval: React.FC = () => {
           className="mt-4 rounded-[var(--border-radius-lg)] border p-4"
           style={{ background: 'var(--color-card)', borderColor: 'var(--color-border)' }}
         >
-          <p className="text-[11.5px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide mb-3">خطوات التفعيل</p>
+          <p className="text-[11.5px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide mb-3">مراحل التفعيل</p>
           {[
             { icon: 'check_circle', label: 'تم إنشاء الحساب بنجاح', done: true },
             { icon: 'pending', label: 'مراجعة الطلب من المسؤول', done: false },

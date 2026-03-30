@@ -54,7 +54,7 @@ export const presenceService = {
       currentModule: payload.currentModule || '',
       lastHeartbeatAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    }, { merge: true }).catch(() => {});
   },
 
   async setLastAction(userId: string, lastAction: string): Promise<void> {
@@ -65,7 +65,7 @@ export const presenceService = {
       lastAction,
       lastActionAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    }, { merge: true }).catch(() => {});
   },
 
   async markOffline(userId: string): Promise<void> {

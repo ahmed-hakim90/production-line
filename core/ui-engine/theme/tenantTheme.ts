@@ -193,6 +193,11 @@ function applyShadcnTokensFromTheme(theme: TenantTheme, root: HTMLElement) {
   }
 }
 
+/**
+ * Default tenant appearance presets. To change the app-wide default before login / without DB:
+ * adjust `:root` in `src/index.css` (ERP + shadcn tokens) and keep `indigo-pro` here aligned, or
+ * point `loadTenantTheme` / Firestore `tenants/{id}.theme` at a preset or custom partial theme.
+ */
 const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
   'indigo-pro': {
     preset: 'indigo-pro',
@@ -295,6 +300,11 @@ export function applyTenantTheme(theme: TenantTheme) {
   root.style.setProperty('--tenant-logo', theme.logo ?? '');
   root.style.setProperty('--tenant-background-style', theme.backgroundStyle ?? '');
   root.style.setProperty('--tenant-sidebar-style', theme.sidebarStyle ?? '');
+
+  root.style.setProperty(
+    '--color-surface-hover',
+    theme.preset === 'dark' ? '#334155' : '#f0f2f5',
+  );
 
   root.classList.toggle('dark', theme.preset === 'dark');
   applyShadcnTokensFromTheme(theme, root);

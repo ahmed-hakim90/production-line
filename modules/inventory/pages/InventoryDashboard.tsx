@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
 import type { StockItemBalance, StockTransaction, Warehouse } from '../types';
@@ -10,8 +10,10 @@ import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { withTenantPath } from '@/lib/tenantPaths';
 
 export const InventoryDashboard: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -53,10 +55,10 @@ export const InventoryDashboard: React.FC = () => {
         subtitle="متابعة فورية للأرصدة والحركات والجرد."
         actions={(
           <div className="flex flex-wrap gap-2">
-            <Link to="/inventory/movements">
+            <Link to={withTenantPath(tenantSlug, '/inventory/movements')}>
               <PrimaryButton>حركة مخزون</PrimaryButton>
             </Link>
-            <Link to="/inventory/counts">
+            <Link to={withTenantPath(tenantSlug, '/inventory/counts')}>
               <GhostButton>الجرد</GhostButton>
             </Link>
           </div>
@@ -65,7 +67,7 @@ export const InventoryDashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <KPICard label="عدد المخازن" value={warehouses.length} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="أصناف نشطة بالمخزون" value={balances.length} iconType="trend" color="gray" loading={loading} />
+        <KPICard label="أصناف ???? بالمخزون" value={balances.length} iconType="trend" color="gray" loading={loading} />
         <KPICard label="إجمالي الكمية" value={formatNumber(totalQty)} iconType="metric" color="green" loading={loading} />
         <KPICard label="أصناف منخفضة" value={lowItems.length} iconType="money" color="amber" loading={loading} />
       </div>

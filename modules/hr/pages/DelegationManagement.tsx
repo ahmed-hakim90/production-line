@@ -197,7 +197,7 @@ export const DelegationManagement: React.FC = () => {
                   onChange={(e) => setToEmployeeId(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
-                  <option value="">اختر الموظف...</option>
+                  <option value="">اختر موظفاً...</option>
                   {eligibleDelegatees.map((emp: FirestoreEmployee) => (
                     <option key={emp.id} value={emp.id!}>{emp.name}</option>
                   ))}

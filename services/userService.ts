@@ -48,6 +48,20 @@ export const userService = {
     }
   },
 
+  /** Super-admin / cross-tenant: users belonging to a specific tenant (doc id = Firebase Auth uid). */
+  async listByTenantId(tenantId: string): Promise<FirestoreUser[]> {
+    if (!isConfigured || !tenantId.trim()) return [];
+    try {
+      const snap = await getDocs(
+        query(collection(db, COLLECTION), where('tenantId', '==', tenantId)),
+      );
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreUser));
+    } catch (error) {
+      console.error('userService.listByTenantId error:', error);
+      throw error;
+    }
+  },
+
   /** Create or overwrite a user document (uses uid as doc id) */
   async set(uid: string, data: Omit<FirestoreUser, 'id'>): Promise<void> {
     if (!isConfigured) return;

@@ -52,7 +52,7 @@ export const UsersManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'not_created'>('all');
   const statusTabs: Array<{ key: 'all' | 'active' | 'pending' | 'not_created'; label: string }> = [
     { key: 'all', label: 'الكل' },
-    { key: 'pending', label: 'بانتظار الموافقة' },
+    { key: 'pending', label: 'انتظار الموافقة' },
     { key: 'not_created', label: 'حسابات لم تُنشأ' },
     { key: 'active', label: 'مفعل' },
   ];
@@ -158,7 +158,7 @@ export const UsersManagement: React.FC = () => {
   const handleUpdateRole = async (row: UserManagementRow, roleTargetId: string) => {
     if (!row?.user.id || !roleTargetId) return;
     if (roleTargetId === row.user.roleId) {
-      setSuccess('الدور الحالي مطابق، لا يوجد تغيير.');
+      setSuccess('الدور الحالي مطابق — لا يوجد تغيير.');
       return;
     }
     await withBusy(async () => {
@@ -188,7 +188,7 @@ export const UsersManagement: React.FC = () => {
 
   const handleLinkEmployee = async (row: UserManagementRow, employeeTargetId: string) => {
     if (!row?.user.id || !employeeTargetId) {
-      setError('اختر موظفًا للربط.');
+      setError('اختر موظفاً للربط.');
       return;
     }
     await withBusy(async () => {
@@ -244,7 +244,7 @@ export const UsersManagement: React.FC = () => {
     'البريد الإلكتروني': row.user.email || '—',
     'الدور': row.role?.name || roleById.get(row.user.roleId)?.name || '—',
     'الموظف المرتبط': row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط',
-    'الحالة': row.user.isActive ? 'مفعل' : 'بانتظار الموافقة',
+    'الحالة': row.user.isActive ? 'مفعل' : 'انتظار الموافقة',
   }));
   const activeFilterCount = [query.trim(), statusFilter !== 'all' ? statusFilter : ''].filter(Boolean).length;
 
@@ -276,7 +276,7 @@ export const UsersManagement: React.FC = () => {
           grantedSystemAccess: true,
         },
       );
-      setSuccess('تمت الموافقة على المستخدم وتفعيل صلاحية الدخول للنظام.');
+      setSuccess('تمت الموافقة على المستخدم وتفعيل صلاحية الدخول بالكامل.');
     });
   };
 
@@ -347,7 +347,7 @@ export const UsersManagement: React.FC = () => {
     <div className="space-y-4 erp-ds-clean">
       <PageHeader
         title="إدارة المستخدمين"
-        subtitle="إنشاء المستخدمين وربطهم بالموظفين والتحكم في التفعيل والحذف النهائي"
+        subtitle="إنشاء المستخدمين يدوياً وربطهم بالموظفين والتحكم في التفعيل والحذف النهائي"
         backAction={false}
         extra={(
           <>
@@ -400,7 +400,7 @@ export const UsersManagement: React.FC = () => {
               <p className="text-2xl font-bold text-[var(--color-text)]">{rows.length}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مرتبطون بموظف</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مرتبطون بالموظف</p>
               <p className="text-2xl font-bold text-primary">{linkedCount}</p>
             </Card>
             <Card className="p-4">
@@ -408,7 +408,7 @@ export const UsersManagement: React.FC = () => {
               <p className="text-2xl font-bold text-emerald-600">{activeCount}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بانتظار الموافقة</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">انتظار الموافقة</p>
               <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
             </Card>
           </>
@@ -417,7 +417,7 @@ export const UsersManagement: React.FC = () => {
 
       <Card title="قائمة المستخدمين">
         <SmartFilterBar
-          searchPlaceholder="بحث بالبريد أو الاسم أو الموظف"
+          searchPlaceholder="بحث بالبريد أو الاسم أو كود الموظف"
           searchValue={query}
           onSearchChange={setQuery}
           quickFilters={[
@@ -476,7 +476,7 @@ export const UsersManagement: React.FC = () => {
                       <td className="py-2.5 px-3">{row.role?.name || roleById.get(row.user.roleId)?.name || '—'}</td>
                       <td className="py-2.5 px-3">{row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط'}</td>
                       <td className="py-2.5 px-3">
-                        <StatusBadge label={row.user.isActive ? 'مفعل' : 'بانتظار الموافقة'} type={row.user.isActive ? 'success' : 'warning'} dot />
+                        <StatusBadge label={row.user.isActive ? 'مفعل' : 'انتظار الموافقة'} type={row.user.isActive ? 'success' : 'warning'} dot />
                       </td>
                       <td className="py-2.5 px-3">
                         <button

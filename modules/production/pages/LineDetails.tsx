@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -57,7 +58,7 @@ import {
   Legend,
 } from 'recharts';
 
-// ── Status display config ────────────────────────────────────────────────────
+// â”€â”€ Status display config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'neutral' }> = {
   [ProductionLineStatus.ACTIVE]: { label: 'نشط', variant: 'success' },
@@ -68,13 +69,13 @@ const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warni
 };
 
 const HEALTH_STATUS_CONFIG = {
-  on_track: { label: 'في الموعد', variant: 'success' as const, color: 'text-emerald-500', desc: 'سير العمل طبيعي' },
+  on_track: { label: 'في الموعد', variant: 'success' as const, color: 'text-emerald-500', desc: 'سير العمل ضمن المسار' },
   at_risk: { label: 'معرض للخطر', variant: 'warning' as const, color: 'text-amber-500', desc: 'يحتاج متابعة' },
   delayed: { label: 'متأخر', variant: 'danger' as const, color: 'text-rose-500', desc: 'يحتاج تدخل' },
   critical: { label: 'حرج', variant: 'danger' as const, color: 'text-rose-600', desc: 'يحتاج تدخل فوري' },
 };
 
-// ── Chart tab types ──────────────────────────────────────────────────────────
+// â”€â”€ Chart tab types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type ChartTab = 'production' | 'cost' | 'efficiency' | 'hours';
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
@@ -93,11 +94,11 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
-// ── Main Component ───────────────────────────────────────────────────────────
+// â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const LineDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
 
@@ -229,7 +230,7 @@ export const LineDetails: React.FC = () => {
     return () => { cancelled = true; };
   }, [id]);
 
-  // ── Active plan for this line ────────────────────────────────────────────
+  // â”€â”€ Active plan for this line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const activePlan = useMemo(
     () => productionPlans.find((p) => p.lineId === id && (p.status === 'in_progress' || p.status === 'planned')),
@@ -250,13 +251,13 @@ export const LineDetails: React.FC = () => {
 
   const linePageSubtitle = useMemo(() => {
     const parts: string[] = [];
-    if (line?.employeeName) parts.push(`الموظف: ${line.employeeName}`);
-    if (rawLine) parts.push(`${rawLine.dailyWorkingHours} ساعة · ${rawLine.maxWorkers} عامل`);
-    if (activePlanProduct) parts.push(`الخطة: ${activePlanProduct}`);
-    return parts.length > 0 ? parts.join(' · ') : 'تفاصيل خط الإنتاج';
+    if (line?.employeeName) parts.push(`المشرف: ${line.employeeName}`);
+    if (rawLine) parts.push(`${rawLine.dailyWorkingHours} ساعة آ· ${rawLine.maxWorkers} عامل`);
+    if (activePlanProduct) parts.push(`المنتج: ${activePlanProduct}`);
+    return parts.length > 0 ? parts.join(' آ· ') : 'تفاصيل خط الإنتاج';
   }, [line?.employeeName, rawLine, activePlanProduct]);
 
-  // ── Core metrics ──────────────────────────────────────────────────────────
+  // â”€â”€ Core metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const totalProduced = useMemo(
     () => periodReports.reduce((sum, r) => sum + (r.quantityProduced || 0), 0),
@@ -408,7 +409,7 @@ export const LineDetails: React.FC = () => {
 
         return {
           date,
-          supervisorsText: supervisorNames.length > 0 ? Array.from(new Set(supervisorNames)).join('، ') : '—',
+          supervisorsText: supervisorNames.length > 0 ? Array.from(new Set(supervisorNames)).join('طŒ ') : '—',
           totalHours: Number(totalHours.toFixed(2)),
           totalCost,
           produced: data.totalProduced,
@@ -418,7 +419,7 @@ export const LineDetails: React.FC = () => {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [periodReports, employeeHourlyRates, hourlyRate, employees]);
 
-  // ── Cost per unit ──────────────────────────────────────────────────────────
+  // â”€â”€ Cost per unit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const costPerUnit = useMemo(() => {
     if (totalProduced === 0 || !id) return 0;
@@ -453,7 +454,7 @@ export const LineDetails: React.FC = () => {
     return (totalLaborCost + totalIndirect + totalSupervisorIndirect) / totalProduced;
   }, [periodReports, hourlyRate, id, costCenters, costCenterValues, costAllocations, totalProduced, employeeHourlyRates]);
 
-  // ── Capacity metrics ───────────────────────────────────────────────────────
+  // â”€â”€ Capacity metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const dailyCapacity = useMemo(
     () => calculateDailyCapacity(rawLine?.maxWorkers ?? 0, rawLine?.dailyWorkingHours ?? 0, avgAssemblyTime),
@@ -473,7 +474,7 @@ export const LineDetails: React.FC = () => {
     [activePlan, remainingQty, dailyCapacity]
   );
 
-  // ── Planned end date (estimated) ───────────────────────────────────────────
+  // â”€â”€ Planned end date (estimated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const plannedEndDate = useMemo(() => {
     if (!activePlan || dailyCapacity <= 0) return null;
@@ -483,7 +484,7 @@ export const LineDetails: React.FC = () => {
     return start.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
   }, [activePlan, dailyCapacity]);
 
-  // ── Plan Health ────────────────────────────────────────────────────────────
+  // â”€â”€ Plan Health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const planHealth = useMemo(() => {
     if (!activePlan) return null;
@@ -522,7 +523,7 @@ export const LineDetails: React.FC = () => {
     };
   }, [activePlan, dailyCapacity, planActualProduced]);
 
-  // ── Chart data (all metrics per date) ──────────────────────────────────────
+  // â”€â”€ Chart data (all metrics per date) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const enrichedChartData = useMemo(() => {
     const byDate = new Map<string, { produced: number; waste: number; hours: number; workerHours: number }>();
@@ -574,14 +575,14 @@ export const LineDetails: React.FC = () => {
       .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
   }, [periodReports, id, hourlyRate, costCenters, costCenterValues, costAllocations, standardTime, employeeHourlyRates]);
 
-  // ── Visible chart tabs ─────────────────────────────────────────────────────
+  // â”€â”€ Visible chart tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const visibleChartTabs = useMemo(
     () => CHART_TABS.filter((tab) => tab.key !== 'cost' || canViewCosts),
     [canViewCosts]
   );
 
-  // ── Alerts ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
     const result: { type: 'danger' | 'warning' | 'info'; icon: string; message: string }[] = [];
@@ -604,7 +605,7 @@ export const LineDetails: React.FC = () => {
       result.push({
         type: 'warning',
         icon: 'speed',
-        message: `الكفاءة أقل من الحد المطلوب: ${efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
+        message: `الكفاءة أقل من الحد المحدد: ${efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
       });
     }
 
@@ -629,7 +630,7 @@ export const LineDetails: React.FC = () => {
     return result;
   }, [wasteRatio, efficiency, planHealth, alertCfg]);
 
-  // ── Chart tooltip ──────────────────────────────────────────────────────────
+  // â”€â”€ Chart tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -647,7 +648,7 @@ export const LineDetails: React.FC = () => {
     );
   }, []);
 
-  // ── Loading / Not Found ────────────────────────────────────────────────────
+  // â”€â”€ Loading / Not Found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (loading) {
     return (
@@ -887,7 +888,7 @@ export const LineDetails: React.FC = () => {
               <h3 className="text-lg font-bold">تكلفة المشرف اليومية</h3>
             </div>
             <span className="text-xs text-[var(--color-text-muted)] font-bold">
-              المعادلة: ساعات المشرف × أجر الساعة
+              المعادلة: ساعات المشرف أ— أجر الساعة
             </span>
           </div>
 
@@ -929,7 +930,7 @@ export const LineDetails: React.FC = () => {
         </DetailCollapsibleSection>
       )}
 
-      {/* ── Plan Health Block ──────────────────────────────────────────────── */}
+      {/* â”€â”€ Plan Health Block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activePlan && planHealth && healthCfg && (
         <DetailCollapsibleSection title="صحة الخطة" defaultOpen>
         <ErpCard>
@@ -992,7 +993,7 @@ export const LineDetails: React.FC = () => {
         </DetailCollapsibleSection>
       )}
 
-      {/* ── Charts with Tab Switcher ──────────────────────────────────────── */}
+      {/* â”€â”€ Charts with Tab Switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <DetailCollapsibleSection title="تحليل الأداء" defaultOpen>
       <ErpCard>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
@@ -1082,16 +1083,16 @@ export const LineDetails: React.FC = () => {
       </ErpCard>
       </DetailCollapsibleSection>
 
-      {/* ── Capacity Section ──────────────────────────────────────────────── */}
-      <DetailCollapsibleSection title="الطاقة الإنتاجية" defaultOpen>
+      {/* â”€â”€ Capacity Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <DetailCollapsibleSection title="مؤشرات الإنتاجية" defaultOpen>
       <ErpCard>
         <div className="flex items-center gap-2 mb-5">
           <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
-          <h3 className="text-lg font-bold">الطاقة الإنتاجية</h3>
+          <h3 className="text-lg font-bold">مؤشرات الإنتاجية</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           <div className="text-center">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الطاقة اليومية</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الإنتاج اليومي</p>
             <p className="text-2xl font-bold text-primary">
               {dailyCapacity > 0 ? formatNumber(dailyCapacity) : '—'}
             </p>
@@ -1146,7 +1147,7 @@ export const LineDetails: React.FC = () => {
       </ErpCard>
       </DetailCollapsibleSection>
 
-      {/* ── Alerts Section ────────────────────────────────────────────────── */}
+      {/* â”€â”€ Alerts Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <DetailCollapsibleSection title="التنبيهات" defaultOpen>
       <ErpCard>
         <div className="flex items-center gap-2 mb-4">
@@ -1173,13 +1174,13 @@ export const LineDetails: React.FC = () => {
       </ErpCard>
       </DetailCollapsibleSection>
 
-      {/* ── Active Work Orders ──────────────────────────────────────────── */}
+      {/* â”€â”€ Active Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {can('workOrders.view') && lineWorkOrders.length > 0 && (
-        <DetailCollapsibleSection title="أوامر الشغل النشطة" defaultOpen>
+        <DetailCollapsibleSection title="أوامر الشغل المرتبطة" defaultOpen>
         <ErpCard className="!p-0 border-none overflow-hidden " title="">
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
             <span className="material-icons-round text-primary">assignment</span>
-            <h3 className="text-lg font-bold">أوامر الشغل النشطة</h3>
+            <h3 className="text-lg font-bold">أوامر الشغل المرتبطة</h3>
             <Badge variant="info">{lineWorkOrders.length}</Badge>
           </div>
           <div className="divide-y divide-[var(--color-border)]">
@@ -1197,7 +1198,7 @@ export const LineDetails: React.FC = () => {
                       </Badge>
                     </div>
                     <p className="text-sm font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
-                    <p className="text-xs text-slate-500">المشرف: {supervisor?.name ?? '—'} · الحد الأقصى: {wo.maxWorkers} عامل · التسليم: {wo.targetDate}</p>
+                    <p className="text-xs text-slate-500">المشرف: {supervisor?.name ?? '—'} آ· الحد الأقصى: {wo.maxWorkers} عامل آ· التسليم: {wo.targetDate}</p>
                   </div>
                   <div className="sm:w-48 space-y-1">
                     <div className="flex justify-between text-xs font-bold">
@@ -1223,7 +1224,7 @@ export const LineDetails: React.FC = () => {
         </DetailCollapsibleSection>
       )}
 
-      {/* ── Reports Table ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Reports Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <DetailCollapsibleSection title="سجل التقارير" defaultOpen>
       <ErpCard className="!p-0 border-none overflow-hidden " title="">
         <div className="px-6 py-4 border-b border-[var(--color-border)]">
@@ -1340,3 +1341,6 @@ export const LineDetails: React.FC = () => {
     </div>
   );
 };
+
+
+

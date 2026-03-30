@@ -1,7 +1,6 @@
 import React from 'react';
 import { Loader2, Save } from 'lucide-react';
-import { Card } from '../UI';
-import { Button } from '@/components/UI';
+import { Card, Button } from '../UI';
 
 const BUILD_VERSION = __APP_VERSION__;
 
@@ -45,10 +44,10 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h3 className="text-lg font-bold">إصدار تطبيق الويب</h3>
+          <h3 className="text-lg font-bold">إصدار ????? الويب</h3>
           <p className="page-subtitle text-[var(--color-text-muted)] text-sm">
             فرض تحديث للمستخدمين ذوي الإصدار الأقدم من الحد المحدد (بعد نشر build جديد على الاستضافة). من يملك صلاحية{' '}
-            <span className="font-medium text-[var(--color-text)]">إدارة الأدوار</span> لا تظهر له شاشة التحديث الإجباري ويمكنه
+            <span className="font-medium text-[var(--color-text)]">إدارة الأدوار</span> لا ???? له شاشة التحديث الإجباري ويمكنه
             تصحيح الإعداد من هنا إن لزم.
           </p>
         </div>
@@ -59,16 +58,16 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
         </Button>
       </div>
 
-      <Card className="bg-white border-slate-200 rounded-xl shadow-none">
+      <Card className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
             <span className="material-icons-round text-primary text-xl">cloud</span>
             آخر نسخة مسجّلة في Firebase
           </div>
           <p className="text-xs text-[var(--color-text-muted)] -mt-1">
-            من مستند <span className="font-mono dir-ltr inline-block">system_settings / global</span> — القيم المحفوظة حالياً على الخادم (ليست مسودة التحرير).
+            من مستند <span className="font-mono dir-ltr inline-block">system_settings / global</span> — القيم ???????? حالياً على الخادم (ليست مسودة التحرير).
           </p>
-          <div className="rounded-lg border border-indigo-200/80 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/30 px-4 py-3 space-y-2 text-sm">
+          <div className="rounded-lg border border-border bg-accent px-4 py-3 space-y-2 text-sm">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span className="text-[var(--color-text-muted)] shrink-0">أقل إصدار مسموح:</span>
               <span className="font-mono font-bold text-[var(--color-text)] dir-ltr">
@@ -77,13 +76,13 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-[var(--color-text-muted)]">التحديث الإجباري:</span>
-              <span className={savedForce ? 'font-semibold text-emerald-700 dark:text-emerald-400' : 'text-[var(--color-text-muted)]'}>
+              <span className={savedForce ? 'font-semibold text-primary' : 'text-[var(--color-text-muted)]'}>
                 {savedForce ? 'مفعّل' : 'غير مفعّل'}
               </span>
             </div>
             {savedMsgTrimmed ? (
-              <div className="pt-1 border-t border-indigo-200/60 dark:border-indigo-800/40">
-                <span className="text-xs text-[var(--color-text-muted)] block mb-1">الرسالة المحفوظة</span>
+              <div className="pt-1 border-t border-border/70">
+                <span className="text-xs text-[var(--color-text-muted)] block mb-1">الرسالة ????????</span>
                 <p className="text-sm text-[var(--color-text)] leading-relaxed whitespace-pre-wrap">{savedMsgTrimmed}</p>
               </div>
             ) : null}
@@ -91,7 +90,7 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
         </div>
       </Card>
 
-      <Card className="bg-white border-slate-200 rounded-xl shadow-none">
+      <Card className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
         <div className="space-y-4">
           <div className="rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] px-4 py-3 text-sm">
             <span className="text-[var(--color-text-muted)]">إصدار البناء الحالي (من آخر نشر): </span>
@@ -109,7 +108,7 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
               onChange={(e) => setLocalMinimumClientVersion(e.target.value)}
             />
             <span className="text-xs text-[var(--color-text-muted)]">
-              يجب أن يطابق صيغة الإصدار في package.json بعد النشر.
+              يجب أن ????? صيغة الإصدار في package.json بعد النشر.
             </span>
           </label>
 
@@ -133,7 +132,7 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
             />
           </label>
 
-          <p className="text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 bg-amber-50 dark:bg-amber-900/20">
+          <p className="text-xs text-accent-foreground border border-border rounded-lg px-3 py-2 bg-accent">
             تنبيه: ارفع الحد الأدنى فقط بعد نشر build يحمل نفس الرقم أو أعلى، وإلا سيُحتجز المستخدمون في حلقة تحديث.
           </p>
         </div>

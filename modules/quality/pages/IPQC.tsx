@@ -68,7 +68,7 @@ export const IPQC: React.FC = () => {
   const saveDisabledReason = useMemo(() => {
     if (!canInspect) return 'لا تملك صلاحية تنفيذ فحص IPQC.';
     if (!workOrderId) return 'اختر أمر شغل أولاً.';
-    if (!inspectorId) return 'هذا المستخدم غير مرتبط بموظف. راجع بيانات الموظفين/المستخدمين.';
+    if (!inspectorId) return 'هذا المستخدم غير مرتبط ?????. راجع بيانات ????????/المستخدمين.';
     if (busy) return 'جاري الحفظ...';
     return '';
   }, [canInspect, workOrderId, inspectorId, busy]);
@@ -116,7 +116,7 @@ export const IPQC: React.FC = () => {
     });
     const requiresReason = status === 'failed' || status === 'rework';
     if (requiresReason && !reasonCode) {
-      setMessage({ type: 'error', text: 'سبب العيب مطلوب عند الفشل أو إعادة التشغيل.' });
+      setMessage({ type: 'error', text: 'سبب العيب ????? عند الفشل أو إعادة التشغيل.' });
       return;
     }
 
@@ -288,7 +288,7 @@ export const IPQC: React.FC = () => {
       setUploadProgress(0);
       setMessage({
         type: 'success',
-        text: printAfterSave ? 'تم حفظ تقرير IPQC وإرسال أمر الطباعة.' : 'تم حفظ تقرير IPQC بنجاح.',
+        text: printAfterSave ? 'تم حفظ تقرير IPQC وإرسال أمر ???????.' : 'تم حفظ تقرير IPQC بنجاح.',
       });
       actionTrackerService.succeedOperation(trackedOperation, {
         metadata: {
@@ -323,7 +323,7 @@ export const IPQC: React.FC = () => {
           <p className="page-subtitle">فحص أثناء التشغيل بعينة أو سيريال محدد</p>
         </div>
         <div className="erp-page-actions">
-          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>طباعة التقرير</Button>
+          <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>????? التقرير</Button>
           <Button
             variant="outline"
             onClick={async () => {
@@ -414,7 +414,7 @@ export const IPQC: React.FC = () => {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             disabled={!canInspect}
-            placeholder="ملاحظات"
+            placeholder="???????"
             className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm min-h-[90px]"
           />
           <div className="md:col-span-2 space-y-2">
@@ -481,7 +481,7 @@ export const IPQC: React.FC = () => {
         </div>
         <div className="mt-4 flex justify-end gap-2 flex-wrap">
           <Button variant="outline" disabled={Boolean(saveDisabledReason) || !canPrint} onClick={() => onSubmit(true)}>
-            حفظ وطباعة
+            حفظ و?????
           </Button>
           <Button variant="primary" disabled={Boolean(saveDisabledReason)} onClick={() => onSubmit(false)}>
             حفظ تقرير IPQC

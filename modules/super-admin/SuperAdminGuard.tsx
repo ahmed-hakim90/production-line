@@ -2,6 +2,9 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthUiSlice } from '../../store/selectors';
+import { AuthBrandedLoadingPage } from '../../components/system-ui/AuthLoadingState';
+import { AccessDeniedPanel } from '../../components/system-ui/AccessDeniedPanel';
+import { tenantHomePath } from '../../lib/tenantPaths';
 
 const defaultTenantLogin = () =>
   `/t/${import.meta.env.VITE_DEFAULT_TENANT_SLUG || 'default'}/login`;
@@ -11,11 +14,7 @@ export const SuperAdminGuard: React.FC = () => {
   const isSuperAdmin = useAppStore((s) => Boolean(s.userProfile?.isSuperAdmin));
 
   if (loading) {
-    return (
-      <div className="erp-auth-page" dir="rtl">
-        <p className="text-center text-[var(--color-text-muted)]">جاري التحميل...</p>
-      </div>
-    );
+    return <AuthBrandedLoadingPage subtitle="جاري التحقق من الصلاحيات..." />;
   }
 
   if (!isAuthenticated) {
@@ -24,11 +23,11 @@ export const SuperAdminGuard: React.FC = () => {
 
   if (!isSuperAdmin) {
     return (
-      <div className="erp-auth-page" dir="rtl">
-        <div className="erp-auth-card" style={{ maxWidth: 440, margin: '2rem auto' }}>
-          <p className="text-center text-rose-600 font-semibold">ليس لديك صلاحية الوصول إلى لوحة المشرف العام.</p>
-        </div>
-      </div>
+      <AccessDeniedPanel
+        title="ليس لديك صلاحية الوصول"
+        description="لوحة المشرف العام مخصصة لحسابات المشرفين على المنصة فقط. يمكنك العودة إلى لوحة تحكم شركتك."
+        homeHref={tenantHomePath()}
+      />
     );
   }
 

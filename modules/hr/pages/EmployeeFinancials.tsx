@@ -28,7 +28,7 @@ type ActiveTab = 'allowances' | 'deductions' | 'loans' | 'leaves' | 'penalties';
 
 const TAB_CONFIG: { key: ActiveTab; label: string; icon: string }[] = [
   { key: 'allowances', label: 'البدلات', icon: 'card_giftcard' },
-  { key: 'deductions', label: 'الاستقطاعات', icon: 'remove_circle' },
+  { key: 'deductions', label: 'الخصومات', icon: 'remove_circle' },
   { key: 'loans', label: 'السُلف', icon: 'payments' },
   { key: 'leaves', label: 'الإجازات', icon: 'beach_access' },
   { key: 'penalties', label: 'الجزاءات', icon: 'gavel' },
@@ -37,7 +37,7 @@ const TAB_CONFIG: { key: ActiveTab; label: string; icon: string }[] = [
 const DEDUCTION_CATEGORIES: Record<DeductionCategory, string> = {
   manual: 'يدوي',
   disciplinary: 'تأديبي',
-  transport: '8 88',
+  transport: 'نقل',
   override: 'استثنائي',
   other: 'أخرى',
 };
@@ -452,12 +452,12 @@ export const EmployeeFinancials: React.FC = () => {
     await fetchData();
   };
   const handleStopDeduction = async (id: string) => {
-    if (!confirm('إيقاف هذا الاستقطاع؟')) return;
+    if (!confirm('إيقاف هذا الخصم؟')) return;
     await employeeDeductionService.stop(id);
     await fetchData();
   };
   const handleDeleteDeduction = async (id: string) => {
-    if (!confirm('حذف هذا الاستقطاع نهائيًا؟')) return;
+    if (!confirm('حذف هذا الخصم نهائيًا؟')) return;
     await employeeDeductionService.delete(id);
     await fetchData();
   };
@@ -473,11 +473,11 @@ export const EmployeeFinancials: React.FC = () => {
       exportHRData(rows, 'بدلات الموظفين', `بدلات-${filterMonth}`);
     } else if (activeTab === 'deductions' || activeTab === 'penalties') {
       const rows = filteredDeductions.map((d) => ({
-        'الموظف': getEmpName(d.employeeId), 'الاستقطاع': d.deductionTypeName, 'المبلغ': d.amount,
+        'الموظف': getEmpName(d.employeeId), 'نوع الخصم': d.deductionTypeName, 'المبلغ': d.amount,
         'الفئة': DEDUCTION_CATEGORIES[d.category] || d.category, 'السبب': d.reason,
         'متكرر': d.isRecurring ? 'نعم' : 'لا', 'من شهر': d.startMonth, 'الحالة': d.status === 'active' ? 'نشط' : 'متوقف',
       }));
-      exportHRData(rows, activeTab === 'penalties' ? 'جزاءات' : 'استقطاعات', `${activeTab}-${filterMonth}`);
+      exportHRData(rows, activeTab === 'penalties' ? 'جزاءات' : 'خصومات', `${activeTab}-${filterMonth}`);
     } else if (activeTab === 'loans') {
       const rows = filteredLoans.map((l) => ({
         'الموظف': getEmpName(l.employeeId), 'المبلغ': l.loanAmount, 'القسط': l.installmentAmount,
@@ -516,10 +516,10 @@ export const EmployeeFinancials: React.FC = () => {
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] flex items-center gap-2">
             <span className="material-icons-round text-primary">account_balance_wallet</span>
-            بدلات واستقطاعات الموظفين
+            بدلات وخصومات الموظفين
           </h2>
           <p className="page-subtitle">
-            إدارة البدلات والاستقطاعات والسلف والإجازات والجزاءات — شهر {filterMonth}
+            إدارة البدلات والخصومات والسلف والإجازات والجزاءات — شهر {filterMonth}
           </p>
         </div>
         <div className="flex gap-2">
@@ -597,7 +597,7 @@ export const EmployeeFinancials: React.FC = () => {
                   }}>
                     <option value="">— اختر —</option>
                     {allowanceTypes.map((a) => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.calculationType === 'fixed' ? `${a.value} ط¬.ظ…` : `${a.value}%`})</option>
+                      <option key={a.id} value={a.id}>{a.name} ({a.calculationType === 'fixed' ? `${a.value} ج.م` : `${a.value}%`})</option>
                     ))}
                   </select>
                 </div>
@@ -617,7 +617,7 @@ export const EmployeeFinancials: React.FC = () => {
             {activeTab === 'deductions' && (
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
-                  <label className={labelCls}>اسم الاستقطاع *</label>
+                  <label className={labelCls}>اسم الخصم *</label>
                   <input className={inputCls} value={bDedName} onChange={(e) => setBDedName(e.target.value)} placeholder="مثال: خصم سكن" />
                 </div>
                 <div>
@@ -813,7 +813,7 @@ export const EmployeeFinancials: React.FC = () => {
                     <th className="erp-th">نوع البدل</th>
                     <th className="erp-th">المبلغ</th>
                     <th className="erp-th">النوع</th>
-                    <th className="erp-th">8&8 </th>
+                    <th className="erp-th">من شهر</th>
                     <th className="erp-th">إجراء</th>
                   </tr>
                 </thead>
@@ -846,7 +846,7 @@ export const EmployeeFinancials: React.FC = () => {
           {filteredDeductions.length === 0 ? (
             <div className="text-center py-12">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">money_off</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد استقطاعات</p>
+              <p className="text-sm font-bold text-slate-500">لا توجد خصومات</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -854,7 +854,7 @@ export const EmployeeFinancials: React.FC = () => {
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الموظف</th>
-                    <th className="erp-th">الاستقطاع</th>
+                    <th className="erp-th">نوع الخصم</th>
                     <th className="erp-th">المبلغ</th>
                     <th className="erp-th">الفئة</th>
                     <th className="erp-th">النوع</th>
@@ -920,7 +920,7 @@ export const EmployeeFinancials: React.FC = () => {
                       <td className="py-3 px-3 font-mono text-xs">{l.month || l.startMonth}</td>
                       <td className="py-3 px-3">
                         <Badge variant={l.status === 'active' ? 'success' : l.status === 'pending' ? 'warning' : 'neutral'}>
-                          {l.status === 'active' ? 'نشطة' : l.status === 'pending' ? 'قيد المراجعة' : 'مغلقة'}
+                          {l.status === 'active' ? 'نشط' : l.status === 'pending' ? 'قيد المراجعة' : 'مغلقة'}
                         </Badge>
                       </td>
                       <td className="py-3 px-3">
@@ -950,7 +950,7 @@ export const EmployeeFinancials: React.FC = () => {
                   <tr>
                     <th className="erp-th">الموظف</th>
                     <th className="erp-th">النوع</th>
-                    <th className="erp-th">8&8 </th>
+                    <th className="erp-th">من</th>
                     <th className="erp-th">إلى</th>
                     <th className="erp-th">الأيام</th>
                     <th className="erp-th">الحالة</th>

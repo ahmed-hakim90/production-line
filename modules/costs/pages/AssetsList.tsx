@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, Eye, Pencil, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { Button } from '../../../components/UI';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -39,7 +39,7 @@ const currentMonthValue = (): string => {
 };
 
 export const AssetsList: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canCreate = can('assets.create');
   const canRun = can('assets.depreciation.run');
@@ -293,7 +293,7 @@ export const AssetsList: React.FC = () => {
         extra={
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={() => navigate(-1)}>
-              <span>← رجوع</span>
+              <span>â†گ رجوع</span>
             </Button>
             {canRun && (
               <>
@@ -430,7 +430,7 @@ export const AssetsList: React.FC = () => {
           columns={columns}
           data={filtered}
           isLoading={assetsLoading}
-          emptyMessage="لا توجد أصول مطابقة"
+          emptyMessage="لا توجد أصول مسجلة"
           getRowActions={getRowActions}
         />
       </div>
@@ -443,3 +443,7 @@ export const AssetsList: React.FC = () => {
     </div>
   );
 };
+
+
+
+

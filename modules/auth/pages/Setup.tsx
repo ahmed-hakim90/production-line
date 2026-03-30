@@ -3,7 +3,8 @@
  * Only accessible when zero users exist in the system.
  */
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { createUserWithEmail, signOut, isConfigured } from '../../../services/firebase';
 import { userService } from '../../../services/userService';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -12,7 +13,7 @@ import { roleService } from '../../system/services/roleService';
 type Step = 'name' | 'email' | 'password';
 
 export const Setup: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const [checking, setChecking] = useState(true);
@@ -69,7 +70,7 @@ export const Setup: React.FC = () => {
       const code = err?.code ?? '';
       setError(
         code === 'auth/email-already-in-use' ? 'البريد الإلكتروني مستخدم بالفعل' :
-        code === 'auth/weak-password'         ? 'كلمة المرور ضعيفة جداً' :
+        code === 'auth/weak-password'         ? 'كلمة المرور ضعيفة جداظ‹' :
         code === 'auth/invalid-email'         ? 'البريد الإلكتروني غير صالح' :
         'فشل إنشاء الحساب',
       );
@@ -77,7 +78,7 @@ export const Setup: React.FC = () => {
     }
   };
 
-  /* ── Loading ── */
+  /* â”€â”€ Loading â”€â”€ */
   if (checking) {
     return (
       <div className="erp-auth-page">
@@ -91,7 +92,7 @@ export const Setup: React.FC = () => {
     );
   }
 
-  /* ── Firebase not configured ── */
+  /* â”€â”€ Firebase not configured â”€â”€ */
   if (!isConfigured) {
     return (
       <div className="erp-auth-page">
@@ -126,7 +127,7 @@ export const Setup: React.FC = () => {
 
         <div className="erp-auth-card">
           {success ? (
-            /* ── Success state ── */
+            /* â”€â”€ Success state â”€â”€ */
             <div className="erp-auth-card-body text-center py-10">
               <div
                 className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
@@ -149,7 +150,7 @@ export const Setup: React.FC = () => {
                   style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' }}
                 >
                   <span className="material-icons-round text-[14px]">star</span>
-                  إعداد أولي — أول مدير للنظام
+                  إعداد أولي — أول مدير نظام
                 </span>
               </div>
 
@@ -264,7 +265,7 @@ export const Setup: React.FC = () => {
                   ) : (
                     <>
                       <span className="material-icons-round" style={{ fontSize: 18 }}>rocket_launch</span>
-                      إنشاء الحساب وبدء النظام
+                      إنشاء الحساب وبدء الإعداد
                     </>
                   )}
                 </button>
@@ -281,9 +282,12 @@ export const Setup: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM
+          آ© {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM
         </p>
       </div>
     </div>
   );
 };
+
+
+

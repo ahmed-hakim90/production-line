@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   BarChart3,
@@ -67,11 +67,11 @@ const arDecimal = (value: number, fractionDigits = 2) =>
   value.toLocaleString("ar-EG", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
 const parseMoneyValue = (value?: string) => {
   if (!value) return 0;
-  const westernizedDigits = value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+  const westernizedDigits = value.replace(/[٠-٩]/g, (digit) => String("ظ ١٢٣٤٥٦٧٨٩".indexOf(digit)));
   const normalizedSeparators = westernizedDigits
-    .replace(/٬/g, "") // Arabic thousands separator
-    .replace(/٫/g, ".") // Arabic decimal separator
-    .replace(/،/g, ",");
+    .replace(/ظ¬/g, "") // Arabic thousands separator
+    .replace(/ظ«/g, ".") // Arabic decimal separator
+    .replace(/طŒ/g, ",");
   const cleaned = normalizedSeparators.replace(/,/g, "");
   const match = cleaned.match(/-?\d+(?:\.\d+)?/);
   const parsed = Number(match?.[0] ?? "");
@@ -168,7 +168,7 @@ const resolveIndirectIconType = (label: string): IndirectCostItem["iconType"] =>
 
 const ProductDetailsContent: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const canManageMaterials = can("costs.manage") || can("products.edit");
@@ -444,7 +444,7 @@ const ProductDetailsContent: React.FC = () => {
 
   const handleDeleteMaterial = useCallback(async (row: ProductMaterial) => {
     if (!canManageMaterials || !row.id) return;
-    const ok = window.confirm(`هل تريد حذف المادة الخام "${row.materialName}"؟`);
+    const ok = window.confirm(`هل تريد حذف المادة الخام "${row.materialName}"طں`);
     if (!ok) return;
     try {
       await productMaterialService.delete(row.id);
@@ -516,7 +516,7 @@ const ProductDetailsContent: React.FC = () => {
             <table>
               <thead>
                 <tr>
-                  <th>التاريخ</th><th>خط الإنتاج</th><th>الموظف</th><th>الكمية</th><th>الهالك</th><th>عمال</th><th>ساعات</th>
+                  <th>التاريخ</th><th>خط الإنتاج</th><th>المشرف</th><th>الكمية</th><th>الهالك</th><th>عمال</th><th>ساعات</th>
                 </tr>
               </thead>
               <tbody>${rowsHtml || `<tr><td colspan="7">لا توجد بيانات بعد الفلترة</td></tr>`}</tbody>
@@ -537,7 +537,7 @@ const ProductDetailsContent: React.FC = () => {
     if (!data) return;
     downloadExcel(
       [
-        ["التاريخ", "خط الإنتاج", "الموظف", "الكمية", "الهالك", "عمال", "ساعات"],
+        ["التاريخ", "خط الإنتاج", "المشرف", "الكمية", "الهالك", "عمال", "ساعات"],
         ...filteredReports.map((row) => [
           row.date,
           row.line,
@@ -620,7 +620,7 @@ const ProductDetailsContent: React.FC = () => {
         ) : (
           <PageHeader
             title={data.header.name}
-            subtitle={`${data.header.breadcrumb} · الكود: ${data.header.code} · الفئة: ${data.header.category}`}
+            subtitle={`${data.header.breadcrumb} آ· الكود: ${data.header.code} آ· الفئة: ${data.header.category}`}
             icon="package"
             backAction={{ to: "/products", label: "رجوع" }}
             primaryAction={{ label: "تعديل المنتج", icon: "edit", onClick: onEditProduct }}
@@ -826,7 +826,7 @@ const ProductDetailsContent: React.FC = () => {
                 <p className="text-sm font-medium text-primary">إجمالي التكلفة المحسوبة (/قطعة)</p>
                 <p className="text-xl font-medium text-primary">{displayGrandTotal} ج.م</p>
                 <p className="mt-1 text-xs text-primary/90">
-                  المعادلة: تكلفة الوحدة الصينية + المواد الخام + العلبة الداخلية + نصيب الكرتونة + التكاليف الصناعية المباشرة + التكاليف الصناعية غير المباشرة (بدون سطر اليوان).
+                  المعادلة: تكلفة الوحدة الصينية + المواد الخام + العلبة الداخلية + نصيب الكرتونة + التكاليف الصناعية المباشرة + التكاليف الصناعية غير المباشرة (بدون تحويل سعر اليوان).
                 </p>
               </div>
             </div>
@@ -1141,7 +1141,7 @@ const ProductDetailsContent: React.FC = () => {
                     <tr className="border-b border-border bg-muted/50">
                       <th className="px-3 py-2 text-xs font-medium text-muted-foreground">التاريخ</th>
                       <th className="px-3 py-2 text-xs font-medium text-muted-foreground">خط الإنتاج</th>
-                      <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الموظف</th>
+                      <th className="px-3 py-2 text-xs font-medium text-muted-foreground">المشرف</th>
                       <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الكمية</th>
                       <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الهالك</th>
                       <th className="px-3 py-2 text-xs font-medium text-muted-foreground">عمال</th>
@@ -1208,3 +1208,6 @@ export const ProductDetails: React.FC = () => {
     </QueryClientProvider>
   );
 };
+
+
+

@@ -5,10 +5,11 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  query,
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import { CostCenterValue } from '../../../types';
 
 const COLLECTION = 'cost_center_values';
@@ -17,7 +18,7 @@ export const costCenterValueService = {
   async getAll(): Promise<CostCenterValue[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CostCenterValue));
     } catch (error) {
       console.error('costCenterValueService.getAll error:', error);
@@ -28,7 +29,7 @@ export const costCenterValueService = {
   async getByCostCenter(costCenterId: string): Promise<CostCenterValue[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('costCenterId', '==', costCenterId));
+      const q = tenantQuery(db, COLLECTION, where('costCenterId', '==', costCenterId));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CostCenterValue));
     } catch (error) {
@@ -40,7 +41,10 @@ export const costCenterValueService = {
   async create(data: Omit<CostCenterValue, 'id'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
-      const ref = await addDoc(collection(db, COLLECTION), data);
+      const ref = await addDoc(collection(db, COLLECTION), {
+        ...data,
+        tenantId: getCurrentTenantId(),
+      });
       return ref.id;
     } catch (error) {
       console.error('costCenterValueService.create error:', error);

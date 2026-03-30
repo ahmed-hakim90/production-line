@@ -12,6 +12,8 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { LineStatus } from '../../../types';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 
 const COLLECTION = 'line_status';
 
@@ -19,7 +21,7 @@ export const lineStatusService = {
   async getAll(): Promise<LineStatus[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineStatus));
     } catch (error) {
       console.error('lineStatusService.getAll error:', error);
@@ -43,7 +45,8 @@ export const lineStatusService = {
     if (!isConfigured) return null;
     try {
       const ref = await addDoc(collection(db, COLLECTION), {
-        ...data,
+        ...(data as Record<string, unknown>),
+        tenantId: getCurrentTenantId(),
         updatedAt: serverTimestamp(),
       });
       return ref.id;
@@ -79,9 +82,16 @@ export const lineStatusService = {
 
   subscribeAll(onData: (statuses: LineStatus[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    return onSnapshot(collection(db, COLLECTION), (snap) => {
-      const statuses = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineStatus));
-      onData(statuses);
-    });
+    return onSnapshot(
+      tenantQuery(db, COLLECTION),
+      (snap) => {
+        const statuses = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineStatus));
+        onData(statuses);
+      },
+      (err) => {
+        console.error('lineStatusService.subscribeAll error:', err);
+        onData([]);
+      },
+    );
   },
 };

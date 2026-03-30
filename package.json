@@ -1,7 +1,7 @@
 {
   "name": "hakimo-erp-production-management",
   "private": true,
-  "version": "4.0.78",
+  "version": "4.0.79",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,9 @@
     "preview": "vite preview",
     "version:auto": "node scripts/auto-version.mjs",
     "changelog:auto": "node scripts/auto-changelog.mjs",
+    "text:mojibake:report": "node scripts/fix-mojibake.mjs",
+    "text:mojibake:apply": "node scripts/fix-mojibake.mjs --apply",
+    "text:arabic:apply": "node scripts/fix-mojibake.mjs --apply-arabic",
     "push": "git push"
   },
   "dependencies": {
@@ -35,6 +38,9 @@
     "firebase": "^12.9.0",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
+    "i18next": "^26.0.1",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "iconv-lite": "^0.7.2",
     "jspdf": "^4.1.0",
     "lucide-react": "^0.577.0",
     "next-themes": "^0.4.6",
@@ -42,6 +48,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-grid-layout": "^2.2.2",
+    "react-i18next": "^17.0.1",
     "react-resizable": "^3.1.3",
     "react-router-dom": "^7.13.0",
     "react-to-print": "^3.2.0",

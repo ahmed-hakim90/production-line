@@ -152,7 +152,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
             className="flex-1 bg-transparent text-[13.5px] text-[var(--color-text)] placeholder-[var(--color-text-muted)] outline-none"
             dir="rtl"
           />
-          <kbd className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono text-[var(--color-text-muted)] bg-[#f0f2f5] border border-[var(--color-border)]">
+          <kbd className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
             Esc
           </kbd>
         </div>
@@ -173,13 +173,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
                 onMouseEnter={() => setActiveIdx(idx)}
                 className={[
                   'w-full flex items-center gap-3 px-3.5 py-2.5 transition-colors text-start',
-                  idx === activeIdx ? 'bg-primary/5' : 'hover:bg-[#f0f2f5]',
+                  idx === activeIdx ? 'bg-primary/5' : 'hover:bg-[var(--color-surface-hover)]',
                 ].join(' ')}
               >
                 {/* Item icon */}
                 <span className={[
                   'w-8 h-8 rounded-[var(--border-radius-sm)] flex items-center justify-center shrink-0',
-                  idx === activeIdx ? 'bg-primary/10 text-primary' : 'bg-[#f0f2f5] text-[var(--color-text-muted)]',
+                  idx === activeIdx ? 'bg-primary/10 text-primary' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]',
                 ].join(' ')}>
                   {renderPaletteIcon(item.icon, undefined, 16)}
                 </span>
@@ -193,7 +193,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
                   </p>
                 </div>
                 {idx === activeIdx && (
-                  <kbd className="px-1.5 py-0.5 rounded text-[10px] font-mono text-[var(--color-text-muted)] bg-[#f0f2f5] border border-[var(--color-border)] shrink-0">
+                  <kbd className="px-1.5 py-0.5 rounded text-[10px] font-mono text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] shrink-0">
                     Enter ↵
                   </kbd>
                 )}
@@ -204,11 +204,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
 
         {/* Footer hint */}
         <div className="border-t border-[var(--color-border)] px-3.5 py-2 flex items-center gap-3 text-[10.5px] text-[var(--color-text-muted)]">
-          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[#f0f2f5] border border-[var(--color-border)] font-mono">↑↓</kbd> تنقل</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[#f0f2f5] border border-[var(--color-border)] font-mono">↵</kbd> فتح</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[#f0f2f5] border border-[var(--color-border)] font-mono">Esc</kbd> إغلاق</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">↑↓</kbd> تنقل</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">↵</kbd> فتح</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">Esc</kbd> إغلاق</span>
           <span className="mr-auto flex items-center gap-1 opacity-70">
-            <kbd className="px-1 py-0.5 rounded bg-[#f0f2f5] border border-[var(--color-border)] font-mono">Ctrl K</kbd> فتح سريع
+            <kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">Ctrl K</kbd> فتح سريع
           </span>
         </div>
       </div>

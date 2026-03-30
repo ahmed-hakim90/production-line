@@ -20,7 +20,7 @@ const DEMO_SINGLE_ROW: ReportPrintRow = {
   date: '2026-03-28',
   lineName: 'خط إنتاج 11',
   productName: 'راديو RX-606-607-608',
-  employeeName: 'يوسف شريف عبد العاطي أحمد',
+  employeeName: 'يوسف شريف عبد ?????? أحمد',
   quantityProduced: 1,
   wasteQuantity: 0,
   workersCount: 1,
@@ -52,7 +52,7 @@ const DEMO_TRANSFER: StockTransferPrintData = {
     {
       itemName: 'ملحق تغليف',
       itemCode: 'PKG-01',
-      unitLabel: 'قطعة',
+      unitLabel: '????',
       quantity: 0,
       quantityPieces: 12,
     },
@@ -117,13 +117,13 @@ export const ImageExportShowcase: React.FC = () => {
         backAction={{ to: '/settings' }}
       />
 
-      <Card title="ملاحظات المنصة">
+      <Card title="??????? المنصة">
         <ul className="text-sm text-[var(--color-text-muted)] space-y-2 list-disc pr-5">
           <li>
-            على الهاتف: غالباً تظهر نافذة المشاركة مع إرفاق الصورة مباشرة عند اختيار واتساب.
+            على الهاتف: غالباً ???? نافذة المشاركة مع إرفاق الصورة مباشرة عند اختيار واتساب.
           </li>
           <li>
-            على الكمبيوتر: واتساب ويب لا يقبل إرفاق ملف من المتصفح تلقائياً؛ يتم تحميل PNG ونسخها للحافظة
+            على الكمبيوتر: واتساب ويب لا يقبل إرفاق ملف من المتصفح تلقائياً؛ يتم تحميل PNG ونسخها ???????
             (عند الدعم) ثم فتح واتساب ويب للصق بالاختصار Ctrl+V.
           </li>
         </ul>
@@ -181,7 +181,7 @@ export const ImageExportShowcase: React.FC = () => {
         </div>
       </Card>
 
-      <Card title="3) تقرير إنتاج مجمّع (جدول الطباعة الكامل)">
+      <Card title="3) تقرير إنتاج مجمّع (جدول ??????? الكامل)">
         <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-slate-50 p-2 mb-4">
           <ProductionReportPrint
             ref={bulkRef}

@@ -33,7 +33,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
@@ -68,6 +68,7 @@ import {
 } from '@/components/ui/select';
 import { useManagedPrint } from '../../../utils/printManager';
 import { shareToWhatsApp } from '../../../utils/reportExport';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -206,7 +207,7 @@ export const Products: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
   const canImportFromPage = can('import') && pageControl.importEnabled;
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -549,7 +550,7 @@ export const Products: React.FC = () => {
     setDeleteConfirmId(null);
   };
 
-  // ── Import from Excel ──────────────────────────────────────────────────
+  // â”€â”€ Import from Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const fallbackCategoryOptions = useMemo(() => {
     const unique = new Set<string>();
@@ -722,7 +723,7 @@ export const Products: React.FC = () => {
       const breakdown = calculateProductCostBreakdown(raw, materials, productCosts[p.id]?.costPerUnit ?? 0);
       const rawMaterialsDetails = materials.length > 0
         ? materials
-          .map((m) => `${m.materialName} (${m.quantityUsed} × ${formatCost(m.unitCost)} = ${formatCost((m.quantityUsed || 0) * (m.unitCost || 0))})`)
+          .map((m) => `${m.materialName} (${m.quantityUsed} أ— ${formatCost(m.unitCost)} = ${formatCost((m.quantityUsed || 0) * (m.unitCost || 0))})`)
           .join(' | ')
         : '—';
 
@@ -797,7 +798,7 @@ export const Products: React.FC = () => {
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileSelect} />
 
-      {/* ── Page Header ── */}
+      {/* â”€â”€ Page Header â”€â”€ */}
       <PageHeader
         title="إدارة المنتجات"
         subtitle="قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج"
@@ -851,7 +852,7 @@ export const Products: React.FC = () => {
         ]}
       />
 
-      {/* ── Search & Filters ── */}
+      {/* â”€â”€ Search & Filters â”€â”€ */}
       <SmartFilterBar
         searchPlaceholder="ابحث بالاسم أو الكود..."
         searchValue={search}
@@ -1162,7 +1163,7 @@ export const Products: React.FC = () => {
           </div>
           {totalPages > 1 && (
             <div className="flex items-center gap-1">
-              <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>«</button>
+              <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>آ«</button>
               <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>‹</button>
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
@@ -1172,7 +1173,7 @@ export const Products: React.FC = () => {
                 ) : null;
               })}
               <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>›</button>
-              <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>»</button>
+              <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>آ»</button>
             </div>
           )}
         </div>
@@ -1207,7 +1208,7 @@ export const Products: React.FC = () => {
               <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-start justify-between gap-2 shrink-0">
                 <div className="min-w-0">
                   <h3 className="font-black text-[var(--color-text)] text-sm leading-snug">{p.name}</h3>
-                  <p className="text-xs text-[var(--color-text-muted)] mt-1 font-mono">{p.code}{p.category ? ` · ${p.category}` : ''}</p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1 font-mono">{p.code}{p.category ? ` آ· ${p.category}` : ''}</p>
                   <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">الشهر الحالي: {monthKey}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -1272,7 +1273,7 @@ export const Products: React.FC = () => {
                       </div>
                     </div>
                     <div className="pt-2 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-muted)]">
-                      رصيد مخزن «تم الصنع» في الجدول:{' '}
+                      رصيد مخزن آ«تم الصنعآ» في الجدول:{' '}
                       <span className="font-bold text-[var(--color-text)] tabular-nums">{formatNumber(finishedWhBal)}</span>
                     </div>
                   </div>
@@ -1371,7 +1372,7 @@ export const Products: React.FC = () => {
         );
       })()}
 
-      {/* ── Add / Edit Modal ── */}
+      {/* â”€â”€ Add / Edit Modal â”€â”€ */}
       {showModal && (can("products.create") || can("products.edit")) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -1450,7 +1451,7 @@ export const Products: React.FC = () => {
                 </label>
               </div>
 
-              {/* ── Cost Breakdown Fields ── */}
+              {/* â”€â”€ Cost Breakdown Fields â”€â”€ */}
               {canViewCosts && (
                 <>
                   <div className="border-t border-[var(--color-border)] pt-4">
@@ -1519,7 +1520,7 @@ export const Products: React.FC = () => {
         </div>
       )}
 
-      {/* ── Delete Confirmation ── */}
+      {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && can("products.delete") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1542,7 +1543,7 @@ export const Products: React.FC = () => {
         </div>
       )}
 
-      {/* ── Import Excel Modal ── */}
+      {/* â”€â”€ Import Excel Modal â”€â”€ */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -1700,7 +1701,7 @@ export const Products: React.FC = () => {
         </div>
       )}
 
-      {/* ── Export Warehouse Selector Modal ── */}
+      {/* â”€â”€ Export Warehouse Selector Modal â”€â”€ */}
       {showWarehouseExportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
@@ -1747,7 +1748,7 @@ export const Products: React.FC = () => {
         </div>
       )}
 
-      {/* ── Column Control Modal ── */}
+      {/* â”€â”€ Column Control Modal â”€â”€ */}
       {showColumnsModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -1818,3 +1819,6 @@ export const Products: React.FC = () => {
     </div>
   );
 };
+
+
+

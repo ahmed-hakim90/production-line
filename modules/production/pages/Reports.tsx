@@ -54,7 +54,8 @@ import {
 import { downloadReportsTemplate, ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import {
   ProductionReportPrint,
   SingleReportPrint,
@@ -82,6 +83,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const emptyForm = {
   reportType: 'finished_product' as 'finished_product' | 'component_injection',
@@ -223,10 +232,34 @@ const toDateInputValue = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
+const getMonthInputValueFromDate = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+};
+
+/** First/last day in range for a calendar month (YYYY-MM); null if invalid or month is entirely in the future. */
+const getDateRangeForCalendarMonth = (ym: string): { startStr: string; endStr: string } | null => {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(ym || '').trim());
+  if (!m) return null;
+  const year = Number(m[1]);
+  const monthNum = Number(m[2]);
+  if (monthNum < 1 || monthNum > 12) return null;
+  const monthIndex = monthNum - 1;
+  const start = new Date(year, monthIndex, 1);
+  const startStr = toDateInputValue(start);
+  const todayStr = toDateInputValue(new Date());
+  if (startStr > todayStr) return null;
+  const lastDayOfMonth = new Date(year, monthIndex + 1, 0);
+  const lastStr = toDateInputValue(lastDayOfMonth);
+  const endStr = lastStr < todayStr ? lastStr : todayStr;
+  return { startStr, endStr };
+};
+
 export const Reports: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const todayReports = useAppStore((s) => s.todayReports);
   const productionReports = useAppStore((s) => s.productionReports);
@@ -376,6 +409,10 @@ export const Reports: React.FC = () => {
   const [rangeHasMore, setRangeHasMore] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [generalMonthlyDialogOpen, setGeneralMonthlyDialogOpen] = useState(false);
+  const [generalMonthlyPickerValue, setGeneralMonthlyPickerValue] = useState(() =>
+    getMonthInputValueFromDate(new Date()),
+  );
   const [factorySearch, setFactorySearch] = useState('');
   const [factorySortKey, setFactorySortKey] = useState<FactoryGeneralSortKey>('totalProducedQty');
   const [factorySortDirection, setFactorySortDirection] = useState<'asc' | 'desc'>('desc');
@@ -766,7 +803,7 @@ export const Reports: React.FC = () => {
     return map;
   }, [stockBalances, warehouseBuckets]);
 
-  // ── Template lookups (for dynamic Excel template) ──────────────────────────
+  // â”€â”€ Template lookups (for dynamic Excel template) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const templateLookups = useMemo<ReportsTemplateLookups>(() => ({
     lines: _rawLines.map((l) => ({ name: l.name })),
@@ -774,7 +811,7 @@ export const Reports: React.FC = () => {
     employees: employees.filter((e) => e.level === 2).map((e) => ({ name: e.name, code: e.code ?? '' })),
   }), [_rawLines, _rawProducts, employees]);
 
-  // ── Lookups ────────────────────────────────────────────────────────────────
+  // â”€â”€ Lookups â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const getProductName = useCallback(
     (pid: string, reportType?: ProductionReport['reportType']) => {
@@ -915,7 +952,7 @@ export const Reports: React.FC = () => {
         'الصنف المحقق': Number(row.totalProducedQty.toFixed(2)),
         'عمال الإنتاج': Number(row.productionWorkers.toFixed(2)),
         'متوسط العمال/تقرير': Number(row.avgWorkersPerReport.toFixed(2)),
-        'تكلفة القطعة': canViewCosts ? Number(row.unitCost.toFixed(2)) : '—',
+        'تكلفة الوحدة': canViewCosts ? Number(row.unitCost.toFixed(2)) : '—',
         'إجمالي التكلفة': canViewCosts ? Number(row.totalCost.toFixed(2)) : '—',
         'إجمالي الأيام': row.totalDays,
         'عدد التقارير': row.reportsCount,
@@ -957,7 +994,7 @@ export const Reports: React.FC = () => {
     [getLineName, getProductName, getEmployeeName, getWorkOrder]
   );
 
-  // ── Bulk print data ────────────────────────────────────────────────────────
+  // â”€â”€ Bulk print data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const printRows = useMemo(
     () => mapReportsToPrintRows(bulkPrintSource ?? displayedReports, lookups, canViewCosts ? reportCosts : undefined),
@@ -965,7 +1002,7 @@ export const Reports: React.FC = () => {
   );
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
 
-  // ── Print handlers ─────────────────────────────────────────────────────────
+  // â”€â”€ Print handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
   const handleSinglePrint = useManagedPrint({ contentRef: singlePrintRef, printSettings: printTemplate });
@@ -1082,7 +1119,7 @@ export const Reports: React.FC = () => {
     [buildReportRow, showShareFeedback]
   );
 
-  // ── CRUD handlers ──────────────────────────────────────────────────────────
+  // â”€â”€ CRUD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleFetchRange = async () => {
     if (startDate && endDate) {
@@ -1135,19 +1172,42 @@ export const Reports: React.FC = () => {
     setViewMode('range');
   };
 
-  const handleShowGeneralMonthly = async () => {
-    const end = new Date();
-    const start = new Date(end.getFullYear(), end.getMonth(), 1);
-    const startStr = toDateInputValue(start);
-    const endStr = toDateInputValue(end);
-    setFilterLineId('');
-    setFilterProductCategory('');
-    setFilterEmployeeId('');
-    setStartDate(startStr);
-    setEndDate(endStr);
-    await fetchReports(startStr, endStr);
-    setViewMode('general');
-  };
+  const openGeneralMonthlyDialog = useCallback(() => {
+    const defaultYm =
+      viewMode === 'general' && startDate.length >= 7
+        ? startDate.slice(0, 7)
+        : getMonthInputValueFromDate(new Date());
+    setGeneralMonthlyPickerValue(defaultYm);
+    setGeneralMonthlyDialogOpen(true);
+  }, [viewMode, startDate]);
+
+  const applyGeneralMonthlyForMonth = useCallback(
+    async (ym: string) => {
+      const range = getDateRangeForCalendarMonth(ym);
+      if (!range) {
+        toast.error('لا يمكن اختيار شهر مستقبلي.');
+        return;
+      }
+      setFilterLineId('');
+      setFilterProductCategory('');
+      setFilterEmployeeId('');
+      setStartDate(range.startStr);
+      setEndDate(range.endStr);
+      await fetchReports(range.startStr, range.endStr);
+      setViewMode('general');
+      setGeneralMonthlyPickerValue(ym);
+      setGeneralMonthlyDialogOpen(false);
+    },
+    [fetchReports],
+  );
+
+  const prevViewModeRef = useRef(viewMode);
+  useEffect(() => {
+    const enteredGeneral = prevViewModeRef.current !== 'general' && viewMode === 'general';
+    prevViewModeRef.current = viewMode;
+    if (!enteredGeneral || startDate.length < 7) return;
+    setGeneralMonthlyPickerValue(startDate.slice(0, 7));
+  }, [viewMode, startDate]);
 
   const handleBackToReports = () => {
     setViewMode('range');
@@ -1660,7 +1720,7 @@ export const Reports: React.FC = () => {
   const handleBackfillUnlinkedReports = useCallback(async () => {
     if (backfillingUnlinkedReports) return;
     const confirmed = window.confirm(
-      `سيتم ربط التقارير غير المرتبطة بأوامر الشغل خلال الفترة:\n${startDate} إلى ${endDate}\n\nهل تريد المتابعة؟`,
+      `سيتم ربط التقارير غير المربوطة بأوامر الشغل خلال الفترة:\n${startDate} إلى ${endDate}\n\nهل تريد المتابعة؟`,
     );
     if (!confirmed) return;
 
@@ -1670,7 +1730,7 @@ export const Reports: React.FC = () => {
       totalRows: 1,
       startedBy: userDisplayName || 'Current User',
     });
-    startJob(jobId, 'جاري فحص التقارير غير المرتبطة...');
+    startJob(jobId, 'جاري فحص التقارير غير المربوطة...');
 
     setBackfillingUnlinkedReports(true);
     try {
@@ -1680,7 +1740,7 @@ export const Reports: React.FC = () => {
             processedRows: 0,
             totalRows: Math.max(1, totalCandidates),
             statusText: totalCandidates === 0
-              ? 'لا توجد تقارير غير مرتبطة في الفترة المحددة.'
+              ? 'لا توجد تقارير غير مربوطة في الفترة المحددة.'
               : `تم العثور على ${totalCandidates} تقرير غير مرتبط.`,
             status: 'processing',
           });
@@ -1689,7 +1749,7 @@ export const Reports: React.FC = () => {
           setJobProgress(jobId, {
             processedRows: processed,
             totalRows: Math.max(1, total),
-            statusText: `جارٍ الربط... ربط: ${linked} | تخطي: ${skipped} | فشل: ${failed}`,
+            statusText: `جاري الربط... ربط: ${linked} | تخطي: ${skipped} | فشل: ${failed}`,
             status: 'processing',
           });
         },
@@ -1699,7 +1759,7 @@ export const Reports: React.FC = () => {
         completeJob(jobId, {
           addedRows: 0,
           failedRows: 0,
-          statusText: 'لا توجد تقارير غير مرتبطة.',
+          statusText: 'لا توجد تقارير غير مربوطة.',
         });
       } else if (summary.linked === 0 && summary.failed > 0) {
         failJob(jobId, 'تعذر ربط كل التقارير المرشحة.', 'Failed');
@@ -1769,7 +1829,7 @@ export const Reports: React.FC = () => {
           setJobProgress(jobId, {
             processedRows: processed,
             totalRows: Math.max(1, total),
-            statusText: `جارٍ فك الربط... مفكوك: ${unlinked} | تخطي: ${skipped} | فشل: ${failed}`,
+            statusText: `جاري فك الربط... مفكوك: ${unlinked} | تخطي: ${skipped} | فشل: ${failed}`,
             status: 'processing',
           });
         },
@@ -1817,7 +1877,7 @@ export const Reports: React.FC = () => {
     userDisplayName,
   ]);
 
-  // ── Import from Excel ────────────────────────────────────────────────────
+  // â”€â”€ Import from Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function resetImportState() {
     setImportResult(null);
@@ -1969,7 +2029,7 @@ export const Reports: React.FC = () => {
     setImportSaving(false);
   };
 
-  // ── SelectableTable config ──────────────────────────────────────────────────
+  // â”€â”€ SelectableTable config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const reportColumns = useMemo<TableColumn<ProductionReport>[]>(() => {
     const getNoteRowKey = (r: ProductionReport) =>
@@ -2027,7 +2087,7 @@ export const Reports: React.FC = () => {
         },
       },
       {
-        header: 'الموظف',
+        header: 'المشرف',
         render: (r) => {
           const employeeName = getEmployeeName(r.employeeId);
           return (
@@ -2055,7 +2115,7 @@ export const Reports: React.FC = () => {
       },
       {
         id: 'notes',
-        header: 'الملحوظة',
+        header: 'ملاحظات',
         hideable: true,
         render: (r) => {
           const note = r.notes?.trim() || '';
@@ -2406,7 +2466,7 @@ export const Reports: React.FC = () => {
         onChange={handleFileSelect}
       />
 
-      {/* ── Page Header ────────────────────────────────────── */}
+      {/* â”€â”€ Page Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <PageHeader
         title="تقارير الإنتاج"
         subtitle="إنشاء ومراجعة تقارير الإنتاج اليومية"
@@ -2414,7 +2474,8 @@ export const Reports: React.FC = () => {
         secondaryAction={can('reports.edit') ? {
           label: 'عرض التقرير العام الشهري',
           icon: 'insights',
-          onClick: () => { void handleShowGeneralMonthly(); },
+          onClick: () => { openGeneralMonthlyDialog(); },
+          disabled: rangeLoading,
         } : undefined}
         primaryAction={canCreateFinishedReports ? {
           label: 'إنشاء تقرير',
@@ -2522,6 +2583,46 @@ export const Reports: React.FC = () => {
         ]}
       />
 
+      <Dialog open={generalMonthlyDialogOpen} onOpenChange={setGeneralMonthlyDialogOpen}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>التقرير العام الشهري</DialogTitle>
+            <DialogDescription>
+              اختر الشهر لعرض إجمالي إنتاج المصنع في تلك الفترة.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-1">
+            <label htmlFor="general-monthly-picker" className="text-sm font-medium text-[var(--color-text)]">
+              الشهر
+            </label>
+            <input
+              id="general-monthly-picker"
+              type="month"
+              className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)] text-[var(--color-text)]"
+              value={generalMonthlyPickerValue}
+              max={getMonthInputValueFromDate(new Date())}
+              onChange={(e) => setGeneralMonthlyPickerValue(e.target.value)}
+            />
+          </div>
+          <DialogFooter className="flex flex-row-reverse gap-2 sm:space-x-0">
+            <Button
+              type="button"
+              onClick={() => void applyGeneralMonthlyForMonth(generalMonthlyPickerValue)}
+              disabled={rangeLoading}
+            >
+              {rangeLoading ? 'جاري التحميل...' : 'عرض'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setGeneralMonthlyDialogOpen(false)}
+              disabled={rangeLoading}
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* WhatsApp Share Feedback */}
       {shareToast && (
@@ -2548,6 +2649,28 @@ export const Reports: React.FC = () => {
               <ReportIcon name="arrow_forward" className="text-sm" />
               رجوع إلى التقارير
             </Button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <label htmlFor="general-month-inline-month" className="text-xs font-bold text-[var(--color-text-muted)] whitespace-nowrap">
+                الشهر
+              </label>
+              <input
+                id="general-month-inline-month"
+                type="month"
+                className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 text-sm bg-[var(--color-card)] min-w-[10rem]"
+                value={generalMonthlyPickerValue}
+                max={getMonthInputValueFromDate(new Date())}
+                onChange={(e) => setGeneralMonthlyPickerValue(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 text-xs"
+                onClick={() => void applyGeneralMonthlyForMonth(generalMonthlyPickerValue)}
+                disabled={rangeLoading}
+              >
+                {rangeLoading ? 'جاري التحميل...' : 'تطبيق'}
+              </Button>
+            </div>
             <input
               className="w-full md:max-w-md rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)]"
               value={factorySearch}
@@ -2560,7 +2683,7 @@ export const Reports: React.FC = () => {
           </div>
           {factoryGeneralSortedRows.length === 0 ? (
             <div className="py-16 text-center text-[var(--color-text-muted)]">
-              لا توجد بيانات مطابقة للتقرير العام في هذه الفترة.
+              لا توجد بيانات كافية للتقرير العام في هذه الفترة.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -2573,7 +2696,7 @@ export const Reports: React.FC = () => {
                     <th className="erp-th text-center">{renderFactorySortHeader('الصنف المحقق', 'totalProducedQty', true)}</th>
                     <th className="erp-th text-center">{renderFactorySortHeader('عمال الإنتاج', 'productionWorkers', true)}</th>
                     <th className="erp-th text-center">{renderFactorySortHeader('متوسط العمال/تقرير', 'avgWorkersPerReport', true)}</th>
-                    <th className="erp-th text-center">{renderFactorySortHeader('تكلفة القطعة', 'unitCost', true)}</th>
+                    <th className="erp-th text-center">{renderFactorySortHeader('تكلفة الوحدة', 'unitCost', true)}</th>
                     <th className="erp-th text-center">{renderFactorySortHeader('إجمالي الأيام', 'totalDays', true)}</th>
                     <th className="erp-th text-center">{renderFactorySortHeader('عدد التقارير', 'reportsCount', true)}</th>
                     <th className="erp-th text-center">{renderFactorySortHeader('رصيد المفكك', 'decomposedBalance', true)}</th>
@@ -2697,7 +2820,7 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-      {/* ══ Hidden print components (off-screen, only rendered for print) ══ */}
+      {/* Hidden print components (off-screen, only rendered for print) */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl' }}>
         {sharePrintRow && (
           <SingleReportPrint ref={sharePrintRef} report={sharePrintRow} printSettings={printTemplate} />
@@ -2723,7 +2846,7 @@ export const Reports: React.FC = () => {
         ))}
       </div>
 
-      {/* ══ Report Drawer ══ */}
+      {/* Report Drawer */}
       {selectedReportDrawer && (() => {
         const row = selectedReportDrawer;
         const unitCost = row.id ? Number(reportCosts.get(row.id) || 0) : 0;
@@ -2778,7 +2901,7 @@ export const Reports: React.FC = () => {
                   {([
                     { label: 'summary', text: 'الملخص' },
                     { label: 'cost', text: 'التكلفة' },
-                    { label: 'notes', text: 'الملاحظات' },
+                    { label: 'notes', text: 'ملاحظات' },
                   ] as const).map((tab) => (
                     <button
                       key={tab.label}
@@ -2903,7 +3026,7 @@ export const Reports: React.FC = () => {
         );
       })()}
 
-      {/* ══ Create / Edit Report Modal ══ */}
+      {/* Create / Edit Report Modal */}
       {showModal && (canCreateFinishedReports || can("reports.edit") || canManageComponentInjectionReports) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div
@@ -3253,13 +3376,13 @@ export const Reports: React.FC = () => {
                 </>
               )}
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">ملحوظة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">ملاحظات</label>
                 <textarea
                   rows={3}
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all resize-y"
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  placeholder="اكتب أي ملاحظة إضافية للتقرير..."
+                  placeholder="اكتب أي ملاحظات إضافية للتقرير..."
                 />
               </div>
             </div>
@@ -3304,7 +3427,7 @@ export const Reports: React.FC = () => {
                     <div className="mx-4 sm:mx-6 mb-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
                       <ReportIcon name="event_available" className="text-emerald-600 text-lg" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-emerald-700">خطة مرتبطة</p>
+                        <p className="text-xs font-bold text-emerald-700">خطة إنتاج نشطة</p>
                         <p className="text-[11px] text-emerald-600 dark:text-emerald-500">
                           {formatNumber(linked.producedQuantity ?? 0)} / {formatNumber(linked.plannedQuantity)} —
                           {' '}{Math.min(Math.round(((linked.producedQuantity ?? 0) / linked.plannedQuantity) * 100), 100)}%
@@ -3366,7 +3489,7 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-      {/* ══ Delete Confirmation ══ */}
+      {/* Delete Confirmation */}
       {deleteConfirmId && can("reports.delete") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -3400,7 +3523,7 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-      {/* ══ Bulk Delete Confirmation ══ */}
+      {/* Bulk Delete Confirmation */}
       {bulkDeleteItems && can("reports.delete") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -3434,7 +3557,7 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-      {/* ══ Import from Excel Modal ══ */}
+      {/* Import from Excel Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -3454,12 +3577,12 @@ export const Reports: React.FC = () => {
                   </div>
                   {importMode === 'create' && importResult && (
                     <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                      {importResult.totalRows} صف — {importResult.validCount} صالح — {importResult.errorCount} خطأ
+                      {importResult.totalRows} صف — {importResult.validCount} صالح — {importResult.errorCount} أخطاء
                     </p>
                   )}
                   {importMode === 'updateDate' && importDateUpdateResult && (
                     <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                      وضع تحديث الحقول: {importDateUpdateResult.totalRows} صف — {importDateUpdateResult.validCount} صالح — {importDateUpdateResult.errorCount} خطأ
+                      وضع تحديث الحقول: {importDateUpdateResult.totalRows} صف — {importDateUpdateResult.validCount} صالح — {importDateUpdateResult.errorCount} أخطاء
                     </p>
                   )}
                 </div>
@@ -3509,7 +3632,7 @@ export const Reports: React.FC = () => {
                     {importDateUpdateResult.errorCount > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
                         <ReportIcon name="error" className="text-sm" />
-                        {importDateUpdateResult.errorCount} خطأ
+                        {importDateUpdateResult.errorCount} أخطاء
                       </div>
                     )}
                   </div>
@@ -3610,7 +3733,7 @@ export const Reports: React.FC = () => {
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importDateUpdateResult.rows.filter((r) => r.errors.length > 0).map((row) => (
                           <p key={row.rowIndex} className="text-xs text-rose-600">
-                            صف {row.rowIndex}: {row.errors.join(' · ')}
+                            صف {row.rowIndex}: {row.errors.join(' ؛ ')}
                           </p>
                         ))}
                       </div>
@@ -3632,7 +3755,7 @@ export const Reports: React.FC = () => {
                     {importResult.errorCount > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
                         <ReportIcon name="error" className="text-sm" />
-                        {importResult.errorCount} خطأ
+                        {importResult.errorCount} أخطاء
                       </div>
                     )}
                     {importResult.warningCount > 0 && (
@@ -3784,7 +3907,7 @@ export const Reports: React.FC = () => {
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importResult.rows.filter((r) => r.errors.length > 0).map((row) => (
                           <p key={row.rowIndex} className="text-xs text-rose-600">
-                            صف {row.rowIndex}: {row.errors.join(' · ')}
+                            صف {row.rowIndex}: {row.errors.join(' ؛ ')}
                           </p>
                         ))}
                       </div>
@@ -3801,7 +3924,7 @@ export const Reports: React.FC = () => {
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importResult.rows.filter((r) => r.warnings.length > 0).map((row) => (
                           <p key={row.rowIndex} className="text-xs text-amber-600">
-                            صف {row.rowIndex}: {row.warnings.join(' · ')}
+                            صف {row.rowIndex}: {row.warnings.join(' ؛ ')}
                           </p>
                         ))}
                       </div>
@@ -3841,7 +3964,7 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-      {/* ══ Work Order Detail Modal ══ */}
+      {/* Work Order Detail Modal */}
       {viewWOReport && (() => {
         const wo = woMap.get(viewWOReport.workOrderId!);
         if (!wo) return null;
@@ -3918,7 +4041,7 @@ export const Reports: React.FC = () => {
         );
       })()}
 
-      {/* ══ Quality Report Modal (from production report code) ══ */}
+      {/* Quality Report Modal (from production report code) */}
       {viewQualityReport && (() => {
         const wo = viewQualityReport.workOrderId ? woMap.get(viewQualityReport.workOrderId) : null;
         const qualityCode = getQualityReportCode(wo ?? undefined, viewQualityReport.reportCode);
@@ -3997,7 +4120,7 @@ export const Reports: React.FC = () => {
                   </>
                 ) : (
                   <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:border-amber-900/40 px-3 py-2 text-sm font-semibold text-amber-700">
-                    تم حفظ حالة تقرير الجودة، وسيظهر الملخص التفصيلي بعد اكتمال مزامنة البيانات/الـ indexes.
+                    تم حفظ حالة تقرير الجودة، سيظهر الملخص التفصيلي بعد اكتمال مزامنة البيانات/الفهارس.
                   </div>
                 )}
               </div>
@@ -4018,7 +4141,7 @@ export const Reports: React.FC = () => {
         );
       })()}
 
-      {/* ══ View Workers Modal ══ */}
+      {/* View Workers Modal */}
       {viewWorkersData && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md max-h-[80vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -4141,3 +4264,6 @@ export const Reports: React.FC = () => {
     </div>
   );
 };
+
+
+

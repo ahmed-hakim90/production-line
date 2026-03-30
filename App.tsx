@@ -6,6 +6,7 @@ import {
   Routes,
   Route,
   Navigate,
+  Link,
   Outlet,
   useLocation,
   useNavigate,
@@ -28,7 +29,7 @@ import type { AppRouteDef } from './modules/shared/routes';
 import type { PublicRouteDef } from './modules/shared/routes/types';
 import { useAppStore } from './store/useAppStore';
 import { useAuthUiSlice } from './store/selectors';
-import { onAuthChange } from './services/firebase';
+import { auth, onAuthChange } from './services/firebase';
 import { eventBus, registerSystemEventListeners, SystemEvents } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
@@ -40,11 +41,11 @@ import { presenceService } from './services/presenceService';
 import { pushService } from './services/pushService';
 import { sessionTrackerService } from './modules/system/audit';
 import { userService } from './services/userService';
-import { BarChart3, Boxes, Factory, Hammer, Users, type LucideIcon } from 'lucide-react';
 import { ForcedClientUpdateGate } from './components/ForcedClientUpdateGate';
 import { setCurrentTenant } from './lib/currentTenant';
-import { defaultTenantSlug, tenantHomePath, withTenantPath } from './lib/tenantPaths';
+import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
 import { tenantService } from './services/tenantService';
+import { setAppLanguage, type SupportedLanguage } from './src/i18n';
 import { RegisterCompany } from './modules/auth/pages/RegisterCompany';
 import { CompanyNotApprovedPage } from './modules/auth/pages/CompanyNotApprovedPage';
 import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
@@ -53,6 +54,7 @@ import { SuperAdminGuard } from './modules/super-admin/SuperAdminGuard';
 import { SuperAdminShell } from './modules/super-admin/SuperAdminShell';
 import { TenantsApproval } from './modules/super-admin/pages/TenantsApproval';
 import { TenantInsightsPage } from './modules/super-admin/pages/TenantInsightsPage';
+import { AuthBrandedLoadingPage } from './components/system-ui/AuthLoadingState';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
@@ -87,19 +89,6 @@ const getTodayYmd = (): string => {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-};
-
-const AUTH_ICON_MAP: Record<string, LucideIcon> = {
-  factory: Factory,
-  precision_manufacturing: Hammer,
-  inventory_2: Boxes,
-  groups: Users,
-  bar_chart: BarChart3,
-};
-
-const renderAuthIcon = (name: string, className?: string, size = 20) => {
-  const Icon = AUTH_ICON_MAP[name] ?? Factory;
-  return <Icon size={size} className={className} />;
 };
 
 const playNotificationTone = () => {
@@ -156,6 +145,68 @@ const LoginRedirect: React.FC = () => {
 /** Unified home: content by role permissions */
 const HomeRedirect: React.FC = () => <HomeDashboardRouter />;
 
+const LandingPage: React.FC = () => {
+  return (
+    <div className="erp-auth-page" dir="rtl">
+      <div className="erp-auth-card p-8 max-w-3xl mx-auto mt-12">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold mb-2">Hakimo ERP</h1>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            منصة موحدة لإدارة الإنتاج والمخزون والموارد البشرية. اختر الإجراء المناسب للمتابعة.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Link
+            to={`/t/${DEFAULT_TENANT_SLUG}/login`}
+            className="rounded-xl border border-[var(--color-border)] bg-white p-4 hover:bg-[var(--color-surface-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-icons-round text-[var(--color-primary)]">login</span>
+              <span className="font-semibold text-[var(--color-text)]">تسجيل الدخول</span>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">الدخول إلى لوحة الشركة للحسابات المعتمدة.</p>
+          </Link>
+          <Link
+            to="/register-company"
+            className="rounded-xl border border-[var(--color-border)] bg-white p-4 hover:bg-[var(--color-surface-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-icons-round text-[var(--color-primary)]">add_business</span>
+              <span className="font-semibold text-[var(--color-text)]">تسجيل شركة جديدة</span>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">إرسال طلب إنشاء شركة جديدة ببيانات المدير.</p>
+          </Link>
+          <a
+            href="mailto:support@hakimoerp.com"
+            className="rounded-xl border border-[var(--color-border)] bg-white p-4 hover:bg-[var(--color-surface-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-icons-round text-[var(--color-primary)]">support_agent</span>
+              <span className="font-semibold text-[var(--color-text)]">الدعم الفني</span>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">التواصل مع فريق الدعم في حال وجود مشكلة دخول أو تفعيل.</p>
+          </a>
+        </div>
+
+        <div className="mt-5 text-center">
+          <p className="text-xs text-[var(--color-text-muted)]">
+            إذا وصلت إلى هذه الصفحة من رابط شركة غير صحيح، يمكنك بدء جلسة جديدة من هنا.
+          </p>
+          <div className="mt-3">
+            <Link
+              to={`/t/${DEFAULT_TENANT_SLUG}/login`}
+              className="inline-flex items-center justify-center rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            >
+              ابدأ الآن
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PROTECTED_ROUTES: AppRouteDef[] = [
   ...DASHBOARD_ROUTES,
   ...CATALOG_ROUTES,
@@ -186,12 +237,57 @@ const TenantPathRedirect: React.FC<{ redirectTo: string }> = ({ redirectTo }) =>
   return <Navigate to={target} replace />;
 };
 
+const WrongCompanyLinkScreen: React.FC<{ forceLogout?: boolean }> = ({ forceLogout = false }) => {
+  const navigate = useNavigate();
+  const logout = useAppStore((s) => s.logout);
+
+  useEffect(() => {
+    if (forceLogout) {
+      void logout().catch(() => {});
+    }
+  }, [forceLogout, logout]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      navigate('/', { replace: true });
+    }, 2800);
+    return () => window.clearTimeout(timer);
+  }, [navigate]);
+
+  return (
+    <div className="erp-auth-page" dir="rtl">
+      <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
+        <span className="material-icons-round text-5xl text-rose-500 mb-3 block">link_off</span>
+        <h2 className="text-lg font-bold mb-2 text-rose-600">رابط الشركة غير صحيح</h2>
+        <p className="text-sm text-[var(--color-text-muted)] mb-4">
+          هذا الحساب تابع لشركة مختلفة. سيتم تحويلك للصفحة الرئيسية.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate('/', { replace: true })}
+          className="inline-flex items-center justify-center rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+        >
+          العودة للصفحة الرئيسية
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
   isAuthenticated,
   isPendingApproval,
 }) => {
   const location = useLocation();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const authError = useAppStore((s) => s.authError);
+
+  const wrongCompanyLink =
+    !isAuthenticated && String(authError || '').includes('لا ينتمي لهذه الشركة');
+
+  if (wrongCompanyLink) {
+    return <WrongCompanyLinkScreen />;
+  }
 
   if (!isAuthenticated) {
     savePostLoginRedirect(buildCurrentPath(location));
@@ -231,7 +327,8 @@ const LegacyHashRedirect: React.FC = () => {
   useLayoutEffect(() => {
     const { hash } = window.location;
     if (!hash.startsWith('#/')) return;
-    navigate(hash.slice(1), { replace: true });
+    const currentSlug = tenantSlugFromPathname(window.location.pathname);
+    navigate(resolveTenantNavigationTarget(currentSlug, hash.slice(1)), { replace: true });
   }, [navigate]);
   return null;
 };
@@ -243,7 +340,8 @@ const ServiceWorkerNavigateBridge: React.FC = () => {
       if (event?.data?.type !== 'notification-click') return;
       const targetUrl = String(event.data.targetUrl || '/');
       if (targetUrl.startsWith('/')) {
-        navigate(targetUrl, { replace: true });
+        const currentSlug = tenantSlugFromPathname(window.location.pathname);
+        navigate(resolveTenantNavigationTarget(currentSlug, targetUrl), { replace: true });
       }
     };
     navigator.serviceWorker?.addEventListener('message', onWorkerMessage);
@@ -285,10 +383,16 @@ const PresenceHeartbeatBridge: React.FC = () => {
       return first || 'dashboard';
     };
 
+    /** Must match Firestore rules `request.auth.uid == userId` — store `uid` can lag after auth switches (e.g. register-company). */
+    const presenceUid = auth?.currentUser?.uid;
+    if (!presenceUid || presenceUid !== uid) return;
+
     const emitHeartbeat = () => {
       const route = getRoute();
+      const writer = auth?.currentUser?.uid;
+      if (!writer || writer !== presenceUid) return;
       void presenceService.heartbeat({
-        userId: uid,
+        userId: writer,
         employeeId: currentEmployeeId || '',
         userEmail: userEmail || '',
         displayName: userDisplayName || '',
@@ -304,14 +408,16 @@ const PresenceHeartbeatBridge: React.FC = () => {
       if (document.visibilityState === 'visible') emitHeartbeat();
     };
     const onBeforeUnload = () => {
-      void presenceService.markOffline(uid);
+      const w = auth?.currentUser?.uid;
+      if (w) void presenceService.markOffline(w);
     };
 
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('beforeunload', onBeforeUnload);
     const unsubActions = eventBus.on(SystemEvents.USER_ACTION, (payload) => {
       const action = String(payload.action || payload.description || 'user.action');
-      void presenceService.setLastAction(uid, action);
+      const w = auth?.currentUser?.uid;
+      if (w && w === presenceUid) void presenceService.setLastAction(w, action);
     });
 
     return () => {
@@ -319,7 +425,8 @@ const PresenceHeartbeatBridge: React.FC = () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('beforeunload', onBeforeUnload);
       unsubActions();
-      void presenceService.markOffline(uid);
+      const w = auth?.currentUser?.uid;
+      if (w && w === presenceUid) void presenceService.markOffline(w);
     };
   }, [
     isAuthenticated,
@@ -361,7 +468,7 @@ const ModalWorkspaceMigration: React.FC = () => {
   return null;
 };
 
-type TenantGate = 'loading' | 'ready' | 'missing' | 'suspended' | 'inactive';
+type TenantGate = 'loading' | 'ready' | 'missing' | 'suspended' | 'inactive' | 'forbidden_slug';
 
 const DEFAULT_TENANT_SLUG = defaultTenantSlug();
 
@@ -385,12 +492,17 @@ const TenantLayout: React.FC = () => {
   const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
   const [gate, setGate] = useState<TenantGate>('loading');
   const [tenantResolve, setTenantResolve] = useState<TenantSlugResolveValue>(defaultTenantResolve);
+  const [forbiddenRequiresLogout, setForbiddenRequiresLogout] = useState(false);
+  const [forbiddenRedirectPath, setForbiddenRedirectPath] = useState<string | null>(null);
+  const { isAuthenticated } = useAuthUiSlice();
+  const userProfile = useAppStore((s) => s.userProfile);
 
   useEffect(() => {
     let alive = true;
     setGate('loading');
     setTenantResolve(defaultTenantResolve);
-    setCurrentTenant(null);
+    setForbiddenRequiresLogout(false);
+    setForbiddenRedirectPath(null);
     void (async () => {
       try {
         const r = await tenantService.resolveSlug(tenantSlug);
@@ -399,6 +511,35 @@ const TenantLayout: React.FC = () => {
           setGate('missing');
           return;
         }
+
+        const loggedInTenantId = String(userProfile?.tenantId || '');
+        const isSuperAdmin = Boolean(userProfile?.isSuperAdmin);
+        if (isAuthenticated && !isSuperAdmin && (!loggedInTenantId || loggedInTenantId !== r.tenantId)) {
+          // Keep current tenant during slug correction redirect to avoid breaking services
+          // that synchronously read getCurrentTenantId().
+          if (!loggedInTenantId) {
+            setForbiddenRequiresLogout(true);
+            setForbiddenRedirectPath('/');
+          } else {
+            try {
+              const ownTenant = await tenantService.getById(loggedInTenantId);
+              const ownSlug = String(ownTenant?.slug || '').trim();
+              if (ownSlug) {
+                setForbiddenRequiresLogout(false);
+                setForbiddenRedirectPath(`/t/${encodeURIComponent(ownSlug)}/`);
+              } else {
+                setForbiddenRequiresLogout(true);
+                setForbiddenRedirectPath('/');
+              }
+            } catch {
+              setForbiddenRequiresLogout(true);
+              setForbiddenRedirectPath('/');
+            }
+          }
+          setGate('forbidden_slug');
+          return;
+        }
+
         setCurrentTenant(r.tenantId);
         if (r.pendingRegistration) {
           setTenantResolve({
@@ -432,29 +573,22 @@ const TenantLayout: React.FC = () => {
     })();
     return () => {
       alive = false;
-      setCurrentTenant(null);
     };
-  }, [tenantSlug]);
+  }, [tenantSlug, isAuthenticated, userProfile?.tenantId, userProfile?.isSuperAdmin]);
 
   if (gate === 'loading') {
-    return (
-      <div className="erp-auth-page has-panel" dir="rtl">
-        <div className="erp-auth-container erp-auth-loading-wrap">
-          <p className="text-[13px] text-[var(--color-text-muted)] font-semibold">جاري تحميل بيانات الشركة...</p>
-        </div>
-      </div>
-    );
+    return <AuthBrandedLoadingPage subtitle="جاري تحميل بيانات الشركة..." />;
   }
 
   if (gate === 'missing') {
-    return (
-      <div className="erp-auth-page" dir="rtl">
-        <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
-          <h2 className="text-lg font-bold mb-2">شركة غير موجودة</h2>
-          <p className="text-sm text-[var(--color-text-muted)]">تأكد من رابط تسجيل الدخول أو معرّف الشركة.</p>
-        </div>
-      </div>
-    );
+    return <Navigate to="/" replace />;
+  }
+
+  if (gate === 'forbidden_slug') {
+    if (forbiddenRedirectPath) {
+      return <Navigate to={forbiddenRedirectPath} replace />;
+    }
+    return <WrongCompanyLinkScreen forceLogout={forbiddenRequiresLogout} />;
   }
 
   if (gate === 'suspended') {
@@ -477,6 +611,10 @@ const TenantLayout: React.FC = () => {
       <Outlet />
     </TenantSlugResolveProvider>
   );
+};
+
+const RootFallbackRedirect: React.FC = () => {
+  return <Navigate to="/" replace />;
 };
 
 const DailyWelcomeLauncher: React.FC = () => {
@@ -521,9 +659,16 @@ const App: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const addRealtimeNotification = useAppStore((s) => s.addRealtimeNotification);
   const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id || '');
+  const userLanguage = useAppStore((s) => (s.userProfile?.uiPreferences?.language as SupportedLanguage | undefined));
   const activeSessionUidRef = useRef<string | null>(null);
   const cleanupSubsRef = useRef<(() => void) | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
+
+  useEffect(() => {
+    if (!authResolved) return;
+    const lang = userLanguage ?? 'ar';
+    void setAppLanguage(lang);
+  }, [authResolved, userLanguage]);
 
   useEffect(() => {
     const clearSubscriptions = () => {
@@ -669,61 +814,7 @@ const App: React.FC = () => {
   }, []);
 
   if (!authResolved) {
-    return (
-      <div className="erp-auth-page has-panel" dir="rtl">
-        {/* Brand Panel — desktop left side */}
-        <div className="erp-auth-panel">
-          {/* decorative circles handled by ::before / ::after */}
-          <div className="erp-auth-panel-logo">
-            {renderAuthIcon('factory', undefined, 26)}
-          </div>
-          <h1 className="erp-auth-panel-name">Hakimo ERP</h1>
-          <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
-          <div className="erp-auth-panel-features">
-            {[
-              { icon: 'precision_manufacturing', text: 'إدارة خطوط وخطط الإنتاج' },
-              { icon: 'inventory_2',             text: 'متابعة المخزون والمواد الخام' },
-              { icon: 'groups',                  text: 'إدارة الموارد البشرية والحضور' },
-              { icon: 'bar_chart',               text: 'تقارير وتحليلات متقدمة' },
-            ].map(({ icon, text }) => (
-              <div key={icon} className="erp-auth-panel-feature">
-                {renderAuthIcon(icon, undefined, 20)}
-                <span>{text}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Loading Content */}
-        <div className="erp-auth-container erp-auth-loading-wrap">
-          <div className="erp-auth-loading-content">
-            {/* App icon with spinning ring */}
-            <div className="erp-auth-loading-icon-shell">
-              <div className="erp-auth-loading-icon">
-                {renderAuthIcon('factory', undefined, 20)}
-              </div>
-              {/* spinning ring around icon */}
-              <div className="erp-auth-loading-ring" />
-            </div>
-
-            <h2 className="erp-auth-loading-title">Hakimo ERP</h2>
-            <p className="erp-auth-loading-subtitle">جاري تهيئة النظام...</p>
-
-            {/* Animated dots */}
-            <div className="erp-loading-dots erp-auth-loading-dots">
-              <span />
-              <span />
-              <span />
-            </div>
-
-            {/* Thin progress bar */}
-            <div className="erp-auth-loading-progress">
-              <div className="erp-auth-loading-progress-bar" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <AuthBrandedLoadingPage subtitle="جاري تهيئة النظام..." />;
   }
 
   return (
@@ -747,7 +838,7 @@ const App: React.FC = () => {
           <Route path="/login" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/login`} replace />} />
           <Route path="/setup" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/setup`} replace />} />
           <Route path="/pending" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/pending`} replace />} />
-          <Route path="/" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/login`} replace />} />
+          <Route path="/" element={<LandingPage />} />
           <Route path="/t/:tenantSlug" element={<TenantLayout />}>
             {AUTH_PUBLIC_ROUTES.map((r) => (
               <Route
@@ -794,6 +885,7 @@ const App: React.FC = () => {
               <Route path="*" element={<TenantCatchAll />} />
             </Route>
           </Route>
+          <Route path="*" element={<RootFallbackRedirect />} />
         </Routes>
         {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
         <ForcedClientUpdateGate />

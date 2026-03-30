@@ -32,8 +32,8 @@ export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySec
     <Card title="إعدادات لوحة التحكم">
       <div className="space-y-4">
         {([
-          { key: 'showCostWidgets' as keyof DashboardDisplaySettings, label: 'عرض عناصر التكاليف', icon: 'account_balance', desc: 'إظهار عناصر التكلفة والتحليل المالي في لوحات التحكم' },
-          { key: 'showAlertsWidget' as keyof DashboardDisplaySettings, label: 'عرض عنصر التنبيهات', icon: 'notifications_active', desc: 'إظهار قسم التنبيهات النشطة في لوحات التحكم' },
+          { key: 'showCostWidgets' as keyof DashboardDisplaySettings, label: 'عرض عناصر التكاليف', icon: 'account_balance', desc: '????? عناصر التكلفة والتحليل المالي في لوحات التحكم' },
+          { key: 'showAlertsWidget' as keyof DashboardDisplaySettings, label: 'عرض عنصر التنبيهات', icon: 'notifications_active', desc: '????? قسم التنبيهات ?????? في لوحات التحكم' },
           { key: 'enableDragReorder' as keyof DashboardDisplaySettings, label: 'تفعيل السحب لإعادة الترتيب', icon: 'drag_indicator', desc: 'السماح بإعادة ترتيب العناصر في لوحات التحكم بالسحب والإفلات' },
         ]).map((setting) => (
           <div key={setting.key} className="flex items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">

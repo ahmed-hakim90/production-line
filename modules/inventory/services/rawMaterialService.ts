@@ -1,5 +1,6 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
 import type { RawMaterial } from '../types';
 
 const COLLECTION = 'raw_materials';
@@ -21,15 +22,20 @@ const formatRawMaterialCode = (seq: number) => `RM-${String(Math.max(1, Math.flo
 export const rawMaterialService = {
   async getAll(): Promise<RawMaterial[]> {
     if (!isConfigured) return [];
-    const q = query(collection(db, COLLECTION), orderBy('name', 'asc'));
+    const tenantId = getCurrentTenantId();
+    const q = query(collection(db, COLLECTION), where('tenantId', '==', tenantId));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RawMaterial));
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as RawMaterial))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
   },
 
   async create(payload: Omit<RawMaterial, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
+    const tenantId = getCurrentTenantId();
     const ref = await addDoc(collection(db, COLLECTION), {
       ...payload,
+      tenantId,
       createdAt: new Date().toISOString(),
     });
     return ref.id;
@@ -48,10 +54,11 @@ export const rawMaterialService = {
 
   async syncFromProductMaterials(): Promise<{ created: number; linked: number; skipped: number }> {
     if (!isConfigured) return { created: 0, linked: 0, skipped: 0 };
+    const tenantId = getCurrentTenantId();
 
     const [rawSnap, productMaterialsSnap] = await Promise.all([
-      getDocs(query(collection(db, COLLECTION), orderBy('name', 'asc'))),
-      getDocs(collection(db, PRODUCT_MATERIALS_COLLECTION)),
+      getDocs(query(collection(db, COLLECTION), where('tenantId', '==', tenantId))),
+      getDocs(query(collection(db, PRODUCT_MATERIALS_COLLECTION), where('tenantId', '==', tenantId))),
     ]);
 
     const rawMaterials = rawSnap.docs.map((d) => ({ id: d.id, ...d.data() } as RawMaterial));
@@ -100,6 +107,7 @@ export const rawMaterialService = {
           unit: 'unit',
           minStock: 0,
           isActive: true,
+          tenantId,
           createdAt: new Date().toISOString(),
         });
 

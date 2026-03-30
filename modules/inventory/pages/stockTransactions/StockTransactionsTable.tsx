@@ -70,7 +70,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
               type="checkbox"
               checked={allFilteredSelected}
               onChange={toggleSelectAllFiltered}
-              aria-label="تحديد كل الصفوف الظاهرة"
+              aria-label="تحديد كل الصفوف ???????"
             />
           </th>
           <th className="erp-th">التاريخ</th>
@@ -94,7 +94,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
         {!loading && combinedRows.length === 0 && (
           <tr>
             <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-              لا توجد حركات مطابقة.
+              لا توجد حركات ??????.
             </td>
           </tr>
         )}
@@ -155,8 +155,8 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                           type="button"
                           onClick={() => void onPrintTransfer(tx)}
                           disabled={processing}
-                          title="طباعة"
-                          aria-label={`طباعة تحويلة ${tx.referenceNo ?? ''}`}
+                          title="?????"
+                          aria-label={`????? تحويلة ${tx.referenceNo ?? ''}`}
                           className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <span className="material-icons-round text-sm">print</span>
@@ -256,8 +256,8 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                           type="button"
                           onClick={() => void onPrintTransfer(group.lines[0])}
                           disabled={processing}
-                          title="طباعة"
-                          aria-label={`طباعة التحويلة ${group.referenceNo}`}
+                          title="?????"
+                          aria-label={`????? التحويلة ${group.referenceNo}`}
                           className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <span className="material-icons-round text-sm">print</span>
@@ -354,8 +354,8 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                       type="button"
                       onClick={() => void onPrintPending(row)}
                       disabled={processing}
-                      title="طباعة"
-                      aria-label={`طباعة تحويلة معلقة ${row.referenceNo}`}
+                      title="?????"
+                      aria-label={`????? تحويلة معلقة ${row.referenceNo}`}
                       className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className="material-icons-round text-sm">print</span>

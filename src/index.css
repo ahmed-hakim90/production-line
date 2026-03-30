@@ -8,7 +8,8 @@
   /*
    * Single source for ERP surfaces + shadcn HSL tokens.
    * Runtime: applyTenantTheme() syncs both ERP vars and shadcn vars from the tenant preset.
-   * Defaults match resolveTheme() indigo-pro preset.
+   * Defaults match resolveTheme() indigo-pro preset in core/ui-engine/theme/tenantTheme.ts.
+   * Per-tenant colors: Firestore tenants/{tenantId}.theme merged via loadTenantTheme().
    */
   :root {
     /* RGB channels (space-separated) — Tailwind: rgb(var(--color-primary) / <alpha>) */
@@ -25,6 +26,8 @@
     --color-border: #e2e8f0;
     --color-text: #0f172a;
     --color-text-muted: #64748b;
+    /* Hover / subtle fill for chrome (topbar, sidebar, kbd chips) — synced in applyTenantTheme */
+    --color-surface-hover: #f0f2f5;
 
     --color-sidebar-bg: #ffffff;
     --color-sidebar-text: #334155;
