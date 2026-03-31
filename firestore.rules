@@ -106,6 +106,7 @@ service cloud.firestore {
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
         'work_orders', 'notifications', 'scan_events', 'product_materials', 'monthly_production_costs',
+        'cost_deviation_analysis',
         'line_worker_assignments', 'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
         'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',
         'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations', 'system_settings',

@@ -766,33 +766,6 @@ const App: React.FC = () => {
   }
 
   return (
-    <ErrorBoundary>
-      <GlobalModalManagerProvider>
-        <AuthUiStateGuard />
-        <DailyWelcomeLauncher />
-        <HashRouter>
-          <Routes>
-            {AUTH_PUBLIC_ROUTES.map((r) => (
-              <React.Fragment key={r.path}>
-                <Route
-                  path={r.path}
-                  element={r.resolveElement({
-                    isAuthenticated,
-                    isPendingApproval,
-                    loginRedirectElement: <LoginRedirect />,
-                  })}
-                />
-              </React.Fragment>
-            ))}
-
-            {/* Protected: All app routes inside Layout */}
-            <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
-          </Routes>
-          {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
-          <ToastContainer />
-        </HashRouter>
-      </GlobalModalManagerProvider>
-    </ErrorBoundary>
     <GlobalModalManagerProvider>
       <UiDensityBootstrap />
       <AuthUiStateGuard />

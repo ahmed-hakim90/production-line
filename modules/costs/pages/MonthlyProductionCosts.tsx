@@ -14,7 +14,7 @@ import {
   buildSupervisorIndirectShareMap,
 } from '../../../utils/costCalculations';
 import { productMaterialService } from '../../production/services/productMaterialService';
-import type { MonthlyProductionCost } from '../../../types';
+import type { MonthlyProductionCost, ProductionReport } from '../../../types';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -22,6 +22,16 @@ import { PageHeader } from '../../../components/PageHeader';
 import { Card as UiCard, CardContent } from '@/components/ui/card';
 import { DetailPageShell, DetailPageStickyHeader, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
 import { toast } from '../../../components/Toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useDeviationAnalysis } from '../hooks/useDeviationAnalysis';
 
 type ExtraColumnKey = 'materialsAndPackaging' | 'sellingPrice' | 'profit';
 type MonthlyCostBaseColumnKey =
@@ -123,6 +133,7 @@ export const MonthlyProductionCosts: React.FC = () => {
   const navigate = useTenantNavigate();
   const {
     products,
+    productionLines,
     _rawProducts,
     _rawEmployees,
     costCenters,
@@ -135,6 +146,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     fetchDepreciationReport,
   } = useShallowStore((s) => ({
     products: s.products,
+    productionLines: s.productionLines,
     _rawProducts: s._rawProducts,
     _rawEmployees: s._rawEmployees,
     costCenters: s.costCenters,
@@ -206,6 +218,11 @@ export const MonthlyProductionCosts: React.FC = () => {
   });
   const [materialsTotalMap, setMaterialsTotalMap] = useState<Record<string, number>>({});
   const [prevMonthInfoMap, setPrevMonthInfoMap] = useState<Record<string, PrevMonthProductInfo>>({});
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisProductId, setAnalysisProductId] = useState<string | null>(null);
+  const [analysisReports, setAnalysisReports] = useState<ProductionReport[]>([]);
+  const [analysisReportsLoading, setAnalysisReportsLoading] = useState(false);
+  const [analysisToolbarSelect, setAnalysisToolbarSelect] = useState('');
   const mountedRef = useRef(true);
   const fetchRequestRef = useRef(0);
   const materialTotalCacheRef = useRef<Record<string, number>>({});
@@ -420,6 +437,28 @@ export const MonthlyProductionCosts: React.FC = () => {
     void fetchDepreciationReport(month);
   }, [month, fetchDepreciationReport]);
 
+  useEffect(() => {
+    if (!analysisOpen || !analysisProductId) {
+      setAnalysisReports([]);
+      return;
+    }
+    const { startDate, endDate } = buildMonthDateRange(month);
+    let cancelled = false;
+    setAnalysisReportsLoading(true);
+    void reportService
+      .getByDateRange(startDate, endDate)
+      .then((rows) => {
+        if (cancelled) return;
+        setAnalysisReports(rows.filter((row) => row.productId === analysisProductId));
+      })
+      .finally(() => {
+        if (!cancelled) setAnalysisReportsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisOpen, analysisProductId, month]);
+
   const productNameMap = useMemo(
     () => new Map(products.map((p) => [p.id, p.name])),
     [products],
@@ -439,6 +478,14 @@ export const MonthlyProductionCosts: React.FC = () => {
         .map((center) => [String(center.id), center.name]),
     ),
     [costCenters],
+  );
+  const lineNameMap = useMemo(
+    () => new Map(productionLines.map((l) => [l.id, l.name])),
+    [productionLines],
+  );
+  const employeeNameMap = useMemo(
+    () => new Map(_rawEmployees.map((e) => [String(e.id || ''), e.name])),
+    [_rawEmployees],
   );
   const rawProductMap = useMemo(() => {
     return new Map(_rawProducts.map((p) => [p.id || '', p]));
@@ -594,6 +641,17 @@ export const MonthlyProductionCosts: React.FC = () => {
     });
   }, [tableRecords, searchTerm, categoryFilter, productNameMap, productCodeMap, productCategoryMap]);
 
+  const monthLabel = useMemo(() => {
+    const [y, m] = month.split('-').map(Number);
+    return new Date(y, m - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
+  }, [month]);
+
+  const previousMonthLabel = useMemo(() => {
+    const prev = getPreviousMonth(month);
+    const [y, m] = prev.split('-').map(Number);
+    return new Date(y, m - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
+  }, [month]);
+
   const totalQty = displayRecords.reduce((s, r) => s + r.totalProducedQty, 0);
   const totalCost = displayRecords.reduce((s, r) => s + r.totalProductionCost, 0);
   const totalCartonsEquivalent = useMemo(
@@ -686,6 +744,157 @@ export const MonthlyProductionCosts: React.FC = () => {
   const stalePreview = useMemo(() => {
     return staleProducts.slice(0, 8);
   }, [staleProducts]);
+
+  const openCostAnalysis = useCallback((productId: string) => {
+    setAnalysisProductId(productId);
+    setAnalysisOpen(true);
+  }, []);
+
+  const closeCostAnalysis = useCallback(() => {
+    setAnalysisOpen(false);
+    setAnalysisProductId(null);
+    setAnalysisReports([]);
+  }, []);
+
+  const analysisRecord = useMemo(() => {
+    if (!analysisProductId) return null;
+    return tableRecords.find((row) => row.productId === analysisProductId) ?? null;
+  }, [tableRecords, analysisProductId]);
+
+  const analysisHeuristics = useMemo(() => {
+    if (!analysisRecord) return [] as string[];
+    const lines: string[] = [];
+    const prev = prevMonthInfoMap[analysisRecord.productId];
+    if (!prev?.closed || (prev.avg || 0) <= 0) {
+      lines.push(
+        'الشهر السابق غير معتمد بالكامل لهذا المنتج (غير مغلق أو بلا متوسط مخزّن)؛ مقارنة الانحراف عن الشهر السابق قد تظهر «—» في الجدول.',
+      );
+    }
+    if (staleProducts.some((s) => s.productId === analysisRecord.productId)) {
+      lines.push(
+        'القيم المخزّنة لهذا المنتج قد لا تطابق آخر حساب؛ يُنصح بإعادة «حساب الكل» قبل الاعتماد على التحليل.',
+      );
+    }
+    const norm = getNormalizedBreakdown(analysisRecord);
+    const tot = (norm.directCost || 0) + (norm.indirectCost || 0);
+    if (tot > 0) {
+      const indRatio = (norm.indirectCost || 0) / tot;
+      if (indRatio > 0.35) {
+        lines.push(
+          'نسبة التكاليف غير المباشرة مرتفعة نسبيًا؛ تغيّر حجم الإنتاج أو قيم/توزيع المراكز قد يحرّك تكلفة الوحدة بقوة.',
+        );
+      }
+    }
+    return lines;
+  }, [analysisRecord, prevMonthInfoMap, staleProducts, getNormalizedBreakdown]);
+
+  const analysisNoteTexts = useMemo(
+    () =>
+      analysisReports
+        .filter((r) => (r.notes || '').trim().length > 0)
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        .map((r) => (r.notes || '').trim()),
+    [analysisReports],
+  );
+
+  const analysisIsStale = useMemo(
+    () =>
+      !!analysisProductId && staleProducts.some((s) => s.productId === analysisProductId),
+    [analysisProductId, staleProducts],
+  );
+
+  const deviationAnalysis = useDeviationAnalysis({
+    enabled: analysisOpen && !!analysisProductId && !!analysisRecord,
+    productId: analysisProductId,
+    month,
+    currentRecord: analysisRecord,
+    getNormalizedBreakdown,
+    prevMonthInfo: analysisProductId ? prevMonthInfoMap[analysisProductId] : undefined,
+    isStale: analysisIsStale,
+    noteTexts: analysisNoteTexts,
+  });
+
+  const analysisCenterTop = useMemo(() => {
+    if (!analysisRecord) return [] as { name: string; total: number; perUnit: number }[];
+    const byId = centerBreakdownMap[analysisRecord.productId] || {};
+    const qty = Math.max(0, analysisRecord.totalProducedQty || 0);
+    return Object.entries(byId)
+      .map(([id, total]) => ({
+        name: costCenterNameMap.get(id) || id,
+        total: Number(total || 0),
+        perUnit: qty > 0 ? Number(total || 0) / qty : 0,
+      }))
+      .filter((x) => x.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
+  }, [analysisRecord, centerBreakdownMap, costCenterNameMap]);
+
+  const handleCopyAnalysisContext = useCallback(async () => {
+    if (!analysisRecord || !analysisProductId) return;
+    const code = productCodeMap.get(analysisProductId) || '';
+    const name = productNameMap.get(analysisProductId) || analysisProductId;
+    const prev = prevMonthInfoMap[analysisProductId];
+    const closedPrev =
+      prev?.closed && (prev.avg || 0) > 0 ? Number(prev.avg) : null;
+    const norm = getNormalizedBreakdown(analysisRecord);
+    const qty = Math.max(0, analysisRecord.totalProducedQty || 0);
+    const diff =
+      closedPrev != null ? analysisRecord.averageUnitCost - closedPrev : null;
+    const pct =
+      closedPrev != null && closedPrev > 0 && diff != null
+        ? (diff / closedPrev) * 100
+        : null;
+    const notesLines = analysisReports
+      .filter((r) => (r.notes || '').trim().length > 0)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      .map((r) => {
+        const line = lineNameMap.get(r.lineId) || r.lineId;
+        const who = employeeNameMap.get(String(r.employeeId || '')) || r.employeeId;
+        return `- ${r.date} | خط: ${line} | ${who}: ${(r.notes || '').trim()}`;
+      });
+    const staleLine = staleProducts.some((s) => s.productId === analysisProductId)
+      ? 'تحذير: بيانات قديمة — يُنصح بإعادة حساب الكل.\n'
+      : '';
+    const text = [
+      `تكلفة الإنتاج — ${monthLabel}`,
+      `المنتج: ${code ? `${code} — ` : ''}${name}`,
+      `الكمية: ${formatCost(qty)} | إجمالي التكلفة: ${formatCost(analysisRecord.totalProductionCost)} ج.م`,
+      `متوسط تكلفة الوحدة: ${formatCost(analysisRecord.averageUnitCost)} ج.م`,
+      `مباشر: ${formatCost(norm.directCost)} ج.م (${qty > 0 ? formatCost(norm.directCost / qty) : '0'} / وحدة)`,
+      `غير مباشر: ${formatCost(norm.indirectCost)} ج.م (${qty > 0 ? formatCost(norm.indirectCost / qty) : '0'} / وحدة)`,
+      closedPrev != null
+        ? `الشهر السابق (${previousMonthLabel}) معتمد: ${formatCost(closedPrev)} ج.م/وحدة | انحراف: ${diff != null ? `${diff >= 0 ? '+' : ''}${formatCost(diff)} ج.م` : '—'}${pct != null ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)` : ''}`
+        : `مقارنة الشهر السابق (${previousMonthLabel}): غير متاحة (الشهر غير مغلق أو بلا متوسط معتمد).`,
+      `سعر الساعة (إعدادات العمالة): ${formatCost(laborSettings?.hourlyRate ?? 0)} ج.م`,
+      staleLine,
+      analysisHeuristics.length > 0 ? `ملاحظات آلية:\n${analysisHeuristics.map((l) => `- ${l}`).join('\n')}` : '',
+      notesLines.length > 0 ? `ملاحظات تقارير الإنتاج:\n${notesLines.join('\n')}` : 'لا توجد ملاحظات نصية في تقارير هذا الشهر لهذا المنتج.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('تم نسخ السياق');
+    } catch {
+      toast.error('تعذر النسخ من المتصفح');
+    }
+  }, [
+    analysisRecord,
+    analysisProductId,
+    analysisReports,
+    analysisHeuristics,
+    employeeNameMap,
+    lineNameMap,
+    laborSettings?.hourlyRate,
+    monthLabel,
+    previousMonthLabel,
+    prevMonthInfoMap,
+    productCodeMap,
+    productNameMap,
+    staleProducts,
+    getNormalizedBreakdown,
+  ]);
+
   const calculateProgressPercent = calculateProgress.total > 0
     ? Math.min(100, Math.round((calculateProgress.done / calculateProgress.total) * 100))
     : 0;
@@ -775,16 +984,6 @@ export const MonthlyProductionCosts: React.FC = () => {
     const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
     saveAs(new Blob([buf]), `تكلفة-الإنتاج-${month}.xlsx`);
   };
-
-  const monthLabel = (() => {
-    const [y, m] = month.split('-').map(Number);
-    return new Date(y, m - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
-  })();
-  const previousMonthLabel = (() => {
-    const prev = getPreviousMonth(month);
-    const [y, m] = prev.split('-').map(Number);
-    return new Date(y, m - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
-  })();
 
   return (
     <DetailPageShell className="space-y-6">
@@ -944,6 +1143,24 @@ export const MonthlyProductionCosts: React.FC = () => {
                   <span className="material-icons-round text-[18px] ml-1">view_column</span>
                   الأعمدة
                 </Button>
+                <select
+                  aria-label="فتح تحليل انحراف التكلفة لمنتج"
+                  value={analysisToolbarSelect}
+                  onChange={(e) => {
+                    const pid = e.target.value;
+                    if (pid) openCostAnalysis(pid);
+                    setAnalysisToolbarSelect('');
+                  }}
+                  className="h-10 min-w-[10rem] max-w-[14rem] rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  <option value="">تحليل منتج…</option>
+                  {displayRecords.map((row) => (
+                    <option key={row.productId} value={row.productId}>
+                      {(productCodeMap.get(row.productId) ? `${productCodeMap.get(row.productId)} — ` : '') +
+                        shortProductName(productNameMap.get(row.productId) || row.productId)}
+                    </option>
+                  ))}
+                </select>
                 {canExportFromPage && (
                   <Button variant={pageControl.exportVariant} onClick={handleExport}>
                     <span className="material-icons-round text-[18px] ml-1">file_download</span>
@@ -963,7 +1180,7 @@ export const MonthlyProductionCosts: React.FC = () => {
             <div className="text-center py-16 text-slate-400">
               <span className="material-icons-round text-5xl mb-3 block">price_check</span>
               <p className="font-semibold text-lg">لا توجد نتائج مطابقة للفلاتر الحالية</p>
-              <p className="text-sm mt-1">جرظ‘ب تغيير البحث أو الفئة</p>
+              <p className="text-sm mt-1">جرّب تغيير البحث أو الفئة</p>
             </div>
           ) : (
             <table className="erp-table w-full text-sm">
@@ -1017,16 +1234,46 @@ export const MonthlyProductionCosts: React.FC = () => {
                     onClick={() => navigate(`/products/${r.productId}`)}
                   >
                     {baseColumns.rowIndex && (
-                      <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono">{i + 1}</td>
+                      <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono">
+                        <div className="flex items-center gap-1">
+                          <span>{i + 1}</span>
+                          {!baseColumns.productName && (
+                            <button
+                              type="button"
+                              className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-card)] text-primary hover:bg-primary/5"
+                              title="تحليل انحراف التكلفة والملاحظات"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openCostAnalysis(r.productId);
+                              }}
+                            >
+                              <span className="material-icons-round text-[18px]">insights</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     )}
                     {baseColumns.productCode && (
                       <td className="py-3 px-4 font-mono text-xs text-slate-500">{productCodeMap.get(r.productId) || '—'}</td>
                     )}
                     {baseColumns.productName && (
                       <td className="py-3 px-4 font-semibold text-[var(--color-text)]">
-                        <span title={productNameMap.get(r.productId) || r.productId}>
-                          {shortProductName(productNameMap.get(r.productId) || r.productId)}
-                        </span>
+                        <div className="flex items-center gap-2 justify-between min-w-0">
+                          <span className="min-w-0 flex-1 truncate" title={productNameMap.get(r.productId) || r.productId}>
+                            {shortProductName(productNameMap.get(r.productId) || r.productId)}
+                          </span>
+                          <button
+                            type="button"
+                            className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-card)] text-primary hover:bg-primary/5"
+                            title="تحليل انحراف التكلفة والملاحظات"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCostAnalysis(r.productId);
+                            }}
+                          >
+                            <span className="material-icons-round text-[20px]">insights</span>
+                          </button>
+                        </div>
                       </td>
                     )}
                     {baseColumns.month && (
@@ -1425,6 +1672,241 @@ export const MonthlyProductionCosts: React.FC = () => {
           </div>
         </div>
       )}
+
+      <Dialog open={analysisOpen} onOpenChange={(open) => { if (!open) closeCostAnalysis(); }}>
+        <DialogContent className="max-w-2xl w-[min(100vw-1.5rem,42rem)] max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-right">
+              {analysisRecord
+                ? `تحليل التكلفة — ${shortProductName(productNameMap.get(analysisRecord.productId) || analysisRecord.productId)}`
+                : 'تحليل التكلفة'}
+            </DialogTitle>
+            <DialogDescription className="text-right text-[var(--color-text-muted)]">
+              {monthLabel}
+              {analysisRecord && productCodeMap.get(analysisRecord.productId)
+                ? ` · ${productCodeMap.get(analysisRecord.productId)}`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {!analysisRecord && analysisProductId && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3">
+              لا يوجد هذا المنتج في الجدول الحالي (قد يكون مُستثنى بالفلتر أو بلا كمية لهذا الشهر).
+            </p>
+          )}
+          {analysisRecord && (
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40">
+                <div>
+                  <span className="text-[var(--color-text-muted)] text-xs block">الكمية المنتجة</span>
+                  <span className="font-mono font-bold">{formatCost(analysisRecord.totalProducedQty)}</span>
+                </div>
+                <div>
+                  <span className="text-[var(--color-text-muted)] text-xs block">متوسط تكلفة الوحدة</span>
+                  <span className="font-mono font-bold text-primary">{formatCost(analysisRecord.averageUnitCost)} ج.م</span>
+                </div>
+                <div>
+                  <span className="text-[var(--color-text-muted)] text-xs block">إجمالي التكلفة</span>
+                  <span className="font-mono font-semibold">{formatCost(analysisRecord.totalProductionCost)} ج.م</span>
+                </div>
+                <div>
+                  <span className="text-[var(--color-text-muted)] text-xs block">الانحراف عن {previousMonthLabel}</span>
+                  {(() => {
+                    const info = prevMonthInfoMap[analysisRecord.productId];
+                    const prevAvg =
+                      info?.closed && (info.avg || 0) > 0 ? info.avg : null;
+                    if (prevAvg == null) {
+                      return <span className="text-[var(--color-text-muted)]">— (لا يوجد معيار معتمد)</span>;
+                    }
+                    const diff = analysisRecord.averageUnitCost - prevAvg;
+                    const pct = prevAvg > 0 ? (diff / prevAvg) * 100 : 0;
+                    return (
+                      <span className={`font-mono font-bold ${diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {diff >= 0 ? '+' : ''}{formatCost(diff)} ج.م ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)
+                        <span className="block text-[10px] font-normal text-[var(--color-text-muted)]">
+                          مقابل {formatCost(prevAvg)} ج.م/وحدة معتمدة
+                        </span>
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--color-border)] p-3 space-y-3 bg-white/60">
+                <p className="text-xs font-bold text-[var(--color-text-muted)]">تحليل انحراف التكلفة (ذكاء)</p>
+                {deviationAnalysis.loading && (
+                  <p className="text-xs text-[var(--color-text-muted)]">جاري تحليل الانحراف والاتجاه…</p>
+                )}
+                {!deviationAnalysis.loading && deviationAnalysis.alert && (
+                  <Alert className="border-amber-300/80 bg-amber-50/90 text-amber-950 text-right [&>svg]:right-4 [&>svg]:left-auto [&>svg+div]:pr-7 [&>svg+div]:pl-0">
+                    <AlertTitle className="text-sm font-bold">تنبيه اتجاه</AlertTitle>
+                    <AlertDescription>{deviationAnalysis.alert}</AlertDescription>
+                  </Alert>
+                )}
+                {!deviationAnalysis.loading && deviationAnalysis.analysis && !deviationAnalysis.analysis.valid && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+                    {deviationAnalysis.analysis.message || deviationAnalysis.analysis.summary}
+                  </p>
+                )}
+                {!deviationAnalysis.loading &&
+                  deviationAnalysis.analysis?.valid &&
+                  deviationAnalysis.analysis.deviationPercent !== undefined && (
+                    <div className="space-y-2 text-right">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="text-xs text-[var(--color-text-muted)]">انحراف عن الشهر السابق (المحرّك)</span>
+                        <span
+                          className={`font-mono font-bold ${
+                            (deviationAnalysis.analysis.deviation ?? 0) >= 0 ? 'text-rose-600' : 'text-emerald-600'
+                          }`}
+                        >
+                          {(deviationAnalysis.analysis.deviationPercent ?? 0) >= 0 ? '+' : ''}
+                          {((deviationAnalysis.analysis.deviationPercent ?? 0) * 100).toFixed(1)}٪
+                          <span className="text-[10px] font-normal text-[var(--color-text-muted)] mr-1">
+                            ({(deviationAnalysis.analysis.deviation ?? 0) >= 0 ? '+' : ''}
+                            {formatCost(deviationAnalysis.analysis.deviation ?? 0)} ج.م/وحدة)
+                          </span>
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--color-text)]">{deviationAnalysis.analysis.summary}</p>
+                      {deviationAnalysis.analysis.topReason && (
+                        <p className="text-xs">
+                          <span className="text-[var(--color-text-muted)]">السبب الأبرز: </span>
+                          <span className="font-semibold">{deviationAnalysis.analysis.topReason.title}</span>
+                          {deviationAnalysis.analysis.topReason.supportedByNotes ? (
+                            <span className="text-emerald-700 mr-1">(مدعوم بملاحظات)</span>
+                          ) : null}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-[var(--color-text-muted)]">
+                        ثقة النموذج: {deviationAnalysis.analysis.confidence}%
+                      </p>
+                      {deviationAnalysis.analysis.reasons.length > 0 && (
+                        <ul className="list-disc list-inside space-y-1 text-[11px] text-[var(--color-text)] max-h-32 overflow-y-auto">
+                          {deviationAnalysis.analysis.reasons.slice(0, 8).map((r) => (
+                            <li key={r.id}>
+                              <span className="font-medium">{r.title}</span>
+                              {r.evidence?.length ? (
+                                <span className="text-[var(--color-text-muted)]"> — {r.evidence[0]}</span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                {!deviationAnalysis.loading && deviationAnalysis.history.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">آخر لقطات (حتى 6 أشهر)</p>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      {[...deviationAnalysis.history]
+                        .sort((a, b) => b.month.localeCompare(a.month))
+                        .map((h) => {
+                          const [y, m] = h.month.split('-').map(Number);
+                          const label =
+                            y && m
+                              ? new Date(y, m - 1).toLocaleDateString('ar-EG', {
+                                  year: '2-digit',
+                                  month: 'short',
+                                })
+                              : h.month;
+                          const pct = h.deviationPercent * 100;
+                          return (
+                            <div
+                              key={h.month}
+                              className="rounded-md border border-[var(--color-border)] bg-[#f8f9fa] px-2 py-1 text-[10px] font-mono text-right min-w-[5.5rem]"
+                            >
+                              <div className="text-[var(--color-text-muted)]">{label}</div>
+                              <div className={pct >= 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                                {pct >= 0 ? '+' : ''}
+                                {pct.toFixed(1)}٪
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {(() => {
+                const norm = getNormalizedBreakdown(analysisRecord);
+                const q = Math.max(0, analysisRecord.totalProducedQty || 0);
+                return (
+                  <div className="rounded-lg border border-[var(--color-border)] p-3 space-y-1">
+                    <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2">مباشر / غير مباشر (حسب آخر تفكيك)</p>
+                    <p className="font-mono text-blue-700">
+                      مباشر: {formatCost(norm.directCost)} ج.م
+                      {q > 0 ? ` — ${formatCost(norm.directCost / q)} / وحدة` : ''}
+                    </p>
+                    <p className="font-mono text-slate-600">
+                      غير مباشر: {formatCost(norm.indirectCost)} ج.م
+                      {q > 0 ? ` — ${formatCost(norm.indirectCost / q)} / وحدة` : ''}
+                    </p>
+                  </div>
+                );
+              })()}
+              {analysisCenterTop.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2">أعلى مراكز تكلفة (حسب الإجمالي)</p>
+                  <ul className="space-y-1 border border-[var(--color-border)] rounded-lg p-3 max-h-40 overflow-y-auto">
+                    {analysisCenterTop.map((c) => (
+                      <li key={c.name} className="flex justify-between gap-2 text-xs font-mono">
+                        <span className="truncate">{c.name}</span>
+                        <span className="text-[var(--color-text-muted)] shrink-0">
+                          {formatCost(c.total)} ج.م · {formatCost(c.perUnit)}/وحدة
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {analysisHeuristics.length > 0 && (
+                <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 space-y-2">
+                  <p className="text-xs font-bold text-sky-800">ملاحظات آلية</p>
+                  <ul className="list-disc list-inside space-y-1 text-sky-900 text-xs">
+                    {analysisHeuristics.map((line, idx) => (
+                      <li key={idx}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2">ملاحظات تقارير الإنتاج (نص حر)</p>
+                {analysisReportsLoading ? (
+                  <p className="text-xs text-[var(--color-text-muted)]">جاري تحميل التقارير...</p>
+                ) : (
+                  <ul className="space-y-2 max-h-48 overflow-y-auto border border-[var(--color-border)] rounded-lg p-3">
+                    {analysisReports
+                      .filter((rep) => (rep.notes || '').trim().length > 0)
+                      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+                      .map((rep) => (
+                        <li key={rep.id || `${rep.date}-${rep.lineId}`} className="text-xs border-b border-[var(--color-border)]/60 pb-2 last:border-0">
+                          <span className="font-mono text-[var(--color-text-muted)]">{rep.date}</span>
+                          {' · '}
+                          <span>{lineNameMap.get(rep.lineId) || rep.lineId}</span>
+                          {rep.notes?.trim() ? (
+                            <p className="mt-1 text-[var(--color-text)] whitespace-pre-wrap">{rep.notes.trim()}</p>
+                          ) : null}
+                        </li>
+                      ))}
+                    {analysisReports.filter((rep) => (rep.notes || '').trim().length > 0).length === 0 && (
+                      <li className="text-[var(--color-text-muted)] text-xs">لا توجد ملاحظات في التقارير لهذا المنتج في هذا الشهر.</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between sm:space-x-0">
+            <Button type="button" variant="outline" onClick={closeCostAnalysis}>
+              إغلاق
+            </Button>
+            {analysisRecord && (
+              <Button type="button" onClick={() => void handleCopyAnalysisContext()}>
+                <span className="material-icons-round text-[18px] ml-1">content_copy</span>
+                نسخ السياق للتحليل
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DetailPageShell>
   );
 };
