@@ -93,7 +93,7 @@ input[type="time"],
 input[type="datetime-local"],
 textarea,
 select {
-  background-color: var(--color-card) !important;
+  /* background-color: var(--color-card) !important; */
   border: 1px solid var(--color-border) !important;
   border-radius: var(--border-radius-base) !important;
   font-size: 14px !important;
@@ -115,7 +115,7 @@ input[type="datetime-local"]:focus,
 textarea:focus,
 select:focus {
   outline: none !important;
-  background-color: var(--color-card) !important;
+  /* background-color: var(--color-card) !important; */
   border-color: rgb(var(--color-primary)) !important;
   box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.12) !important;
 }
@@ -142,7 +142,7 @@ input[type="checkbox"] {
 .erp-card,
 [class*="rounded-xl"][class*="bg-white"],
 [class*="rounded-2xl"][class*="bg-white"] {
-  background-color: var(--color-card) !important;
+  /* background-color: var(--color-card) !important; */
   border-color: var(--color-border) !important;
   box-shadow: var(--shadow-card) !important;
 }
@@ -690,7 +690,7 @@ button {
   font-size: 13px;
   border: 1px solid var(--color-border) !important;
   border-radius: var(--border-radius-base) !important;
-  background: var(--color-card) !important;
+  /* background: var(--color-card) !important; */
   color: var(--color-text) !important;
   transition: all 150ms !important;
   font-family: var(--font-family-base) !important;
@@ -1021,7 +1021,7 @@ button {
 .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: var(--color-text-muted) !important; }
 .recharts-legend-item-text { font-size: 12px !important; color: var(--color-text-muted) !important; }
 .recharts-tooltip-wrapper .recharts-default-tooltip {
-  background: var(--color-card) !important;
+  /* background: var(--color-card) !important; */
   border: 1px solid var(--color-border) !important;
   border-radius: var(--border-radius-base) !important;
   box-shadow: var(--shadow-dropdown) !important;
@@ -1472,7 +1472,7 @@ html.dark [class*="text-slate-500"] {
 .erp-modal-panel,
 [class*="fixed"][class*="inset-0"] > [class*="bg-[var(--color-card)]"],
 [class*="fixed"][class*="inset-0"] > [class*="rounded-"][class*="border"] {
-  background: var(--color-card) !important;
+  /* background: var(--color-card) !important; */
   border: 1px solid var(--color-border) !important;
   border-radius: var(--border-radius-xl) !important;
   box-shadow: var(--shadow-modal) !important;
@@ -1643,7 +1643,7 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 [role="menu"],
 [role="listbox"] {
   opacity: 1 !important;
-  background-color: var(--color-card) !important;
+  /* background-color: var(--color-card) !important; */
 }
 
 /* Unified hover/highlight behavior for dropdown options */
@@ -2469,8 +2469,59 @@ input[type="radio"] {
 @media print {
   .no-print { display: none !important; }
   body { background: white !important; }
+  [data-sonner-toaster] { display: none !important; }
   table { font-size: 11px; }
   table th, table td { padding: 5px 8px !important; }
+  @page { size: A4; margin: 10mm; }
+  .min-h-screen > aside,
+  .min-h-screen > .flex-1 > header,
+  .min-h-screen > .flex-1 > footer,
+  .min-h-screen > .flex-1 > [class*="offline"] {
+    display: none !important;
+  }
+  .min-h-screen > .flex-1 {
+    margin-right: 0 !important;
+  }
+  .min-h-screen > .flex-1 > main {
+    padding-top: 0 !important;
+  }
+  .min-h-screen > .flex-1 > main > div {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .repair-invoice-page {
+    background: #fff !important;
+  }
+  .repair-invoice-print-sheet {
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+  .repair-invoice-print-sheet .repair-invoice-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .repair-invoice-print-sheet .repair-invoice-table th,
+  .repair-invoice-print-sheet .repair-invoice-table td {
+    border: 1px solid #d1d5db !important;
+    text-align: right !important;
+  }
+  .repair-job-print-sheet {
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+  .repair-job-print-sheet .repair-job-print-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .repair-job-print-sheet .repair-job-print-table th,
+  .repair-job-print-sheet .repair-job-print-table td {
+    border: 1px solid #d1d5db !important;
+    text-align: right !important;
+  }
 }
 
 /* Production/Inventory DS normalization wrapper */

@@ -182,6 +182,22 @@ export const MENU_CONFIG: MenuGroup[] = [
     ],
   },
   {
+    key: 'repair',
+    label: 'الصيانة',
+    icon: 'build_circle',
+    children: [
+      { key: 'repair-dashboard', label: 'لوحة الصيانة', icon: 'dashboard', path: '/repair', permission: 'repair.dashboard.view' },
+      { key: 'repair-admin-dashboard', label: 'لوحة الأدمن', icon: 'admin_panel_settings', path: '/repair/admin-dashboard', permission: 'repair.adminDashboard.view' },
+      { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
+      { key: 'repair-new', label: 'جهاز جديد', icon: 'add_circle', path: '/repair/jobs/new', permission: 'repair.jobs.create' },
+      { key: 'repair-parts', label: 'قطع الغيار', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
+      { key: 'repair-branches', label: 'الفروع', icon: 'store', path: '/repair/branches', permission: 'repair.branches.manage' },
+      { key: 'repair-kpis', label: 'أداء الفنيين', icon: 'leaderboard', path: '/repair/technician-kpis', permission: 'repair.technician.view' },
+      { key: 'repair-treasury', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/treasury', permission: 'repair.treasury.view' },
+      { key: 'repair-sales-invoice', label: 'فاتورة بيع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },
+    ],
+  },
+  {
     key: 'system',
     label: 'النظام',
     icon: 'tune',

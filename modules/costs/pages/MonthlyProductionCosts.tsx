@@ -22,6 +22,16 @@ import { PageHeader } from '../../../components/PageHeader';
 import { Card as UiCard, CardContent } from '@/components/ui/card';
 import { DetailPageShell, DetailPageStickyHeader, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
 import { toast } from '../../../components/Toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { useDeviationAnalysis } from '../hooks/useDeviationAnalysis';
+import { analyzeDeviation } from '../analysis/deviationEngine';
 
 type ExtraColumnKey = 'materialsAndPackaging' | 'sellingPrice' | 'profit';
 type MonthlyCostBaseColumnKey =
@@ -171,6 +181,8 @@ export const MonthlyProductionCosts: React.FC = () => {
   const [calculateStartedAt, setCalculateStartedAt] = useState<number | null>(null);
   const [closingMonth, setClosingMonth] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisProductId, setAnalysisProductId] = useState<string | null>(null);
   const [showColumnsModal, setShowColumnsModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -686,6 +698,31 @@ export const MonthlyProductionCosts: React.FC = () => {
   const stalePreview = useMemo(() => {
     return staleProducts.slice(0, 8);
   }, [staleProducts]);
+  const openCostAnalysis = useCallback((productId: string) => {
+    setAnalysisProductId(productId);
+    setAnalysisOpen(true);
+  }, []);
+  const closeCostAnalysis = useCallback(() => {
+    setAnalysisOpen(false);
+    setAnalysisProductId(null);
+  }, []);
+  const analysisRecord = useMemo(() => {
+    if (!analysisProductId) return null;
+    return tableRecords.find((row) => row.productId === analysisProductId) ?? null;
+  }, [tableRecords, analysisProductId]);
+  const analysisIsStale = useMemo(
+    () => !!analysisProductId && staleProducts.some((item) => item.productId === analysisProductId),
+    [analysisProductId, staleProducts],
+  );
+  const deviationAnalysis = useDeviationAnalysis({
+    enabled: analysisOpen && !!analysisProductId && !!analysisRecord,
+    productId: analysisProductId,
+    month,
+    currentRecord: analysisRecord,
+    getNormalizedBreakdown,
+    prevMonthInfo: analysisProductId ? prevMonthInfoMap[analysisProductId] : undefined,
+    isStale: analysisIsStale,
+  });
   const calculateProgressPercent = calculateProgress.total > 0
     ? Math.min(100, Math.round((calculateProgress.done / calculateProgress.total) * 100))
     : 0;
@@ -726,6 +763,25 @@ export const MonthlyProductionCosts: React.FC = () => {
       const materialsAndPackaging = chinese + (materialsTotalMap[r.productId] ?? 0) + inner + cartonShare;
       const sellingPrice = raw?.sellingPrice ?? 0;
       const unitProfit = sellingPrice > 0 ? sellingPrice - r.averageUnitCost : 0;
+      const isStale = staleProducts.some((item) => item.productId === r.productId);
+      const prevSlice = {
+        closed: Boolean(prevInfo?.closed),
+        avg: Number(prevInfo?.avg || 0),
+        qty: 0,
+        directPU: 0,
+        indirectPU: 0,
+      };
+      const smartAnalysis = analyzeDeviation({
+        current: {
+          avg: Number(r.averageUnitCost || 0),
+          qty,
+          directPU: qty > 0 ? directCost / qty : 0,
+          indirectPU: qty > 0 ? indirectCost / qty : 0,
+        },
+        previous: prevSlice,
+        notes: [],
+        isStale,
+      });
       const row: Record<string, unknown> = {};
       if (baseColumns.rowIndex) row['#'] = rowIdx + 1;
       if (baseColumns.productCode) row['كود المنتج'] = productCodeMap.get(r.productId) || '';
@@ -767,6 +823,13 @@ export const MonthlyProductionCosts: React.FC = () => {
       if (extraColumns.sellingPrice) row['سعر البيع (ج.م/وحدة)'] = sellingPrice;
       if (extraColumns.profit) row['ربح الوحدة (ج.م/وحدة)'] = sellingPrice > 0 ? unitProfit : '—';
       if (baseColumns.status) row['الحالة'] = r.isClosed ? 'مغلق' : 'مفتوح';
+      row['تحليل ذكي - صالح'] = smartAnalysis.valid ? 'نعم' : 'لا';
+      row['تحليل ذكي - الانحراف (%)'] = smartAnalysis.valid && smartAnalysis.deviationPercent !== undefined
+        ? Number((smartAnalysis.deviationPercent * 100).toFixed(2))
+        : '—';
+      row['تحليل ذكي - السبب الأبرز'] = smartAnalysis.topReason?.title || '—';
+      row['تحليل ذكي - الثقة (%)'] = smartAnalysis.confidence ?? 0;
+      row['تحليل ذكي - الملخص'] = smartAnalysis.message || smartAnalysis.summary || '—';
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -1007,6 +1070,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                     <th className="erp-th">ربح الوحدة</th>
                   )}
                   {baseColumns.status && <th className="erp-th text-center">الحالة</th>}
+                  <th className="erp-th text-center">تحليل ذكي</th>
                 </tr>
               </thead>
               <tbody>
@@ -1183,6 +1247,19 @@ export const MonthlyProductionCosts: React.FC = () => {
                         </Badge>
                       </td>
                     )}
+                    <td className="py-3 px-4 text-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCostAnalysis(r.productId);
+                        }}
+                      >
+                        <span className="material-icons-round text-[18px] ml-1">psychology</span>
+                        تحليل
+                      </Button>
+                    </td>
                   </tr>
                 ))}
                 {/* Totals row */}
@@ -1284,6 +1361,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                     </td>
                   )}
                   {baseColumns.status && <td className="py-3 px-4" />}
+                  <td className="py-3 px-4" />
                 </tr>
               </tbody>
             </table>
@@ -1315,6 +1393,160 @@ export const MonthlyProductionCosts: React.FC = () => {
           )}
         </div>
       )}
+
+      <Dialog
+        open={analysisOpen}
+        onOpenChange={(open) => {
+          if (!open) closeCostAnalysis();
+        }}
+      >
+        <DialogContent className="max-w-3xl w-[min(100vw-1.5rem,52rem)] max-h-[88vh] overflow-y-auto sm:max-w-3xl border-0 p-0 rounded-2xl">
+          <div className="bg-gradient-to-br from-slate-50 via-white to-blue-50">
+          <DialogHeader className="px-6 py-5 border-b border-slate-200/80 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+            <DialogTitle className="text-right text-lg sm:text-xl font-black text-slate-800 tracking-tight">
+              {analysisRecord
+                ? `تحليل التكلفة — ${shortProductName(productNameMap.get(analysisRecord.productId) || analysisRecord.productId)}`
+                : 'تحليل التكلفة'}
+            </DialogTitle>
+            <DialogDescription className="text-right text-slate-500">
+              {monthLabel}
+              {analysisRecord && productCodeMap.get(analysisRecord.productId)
+                ? ` · ${productCodeMap.get(analysisRecord.productId)}`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!analysisRecord && analysisProductId && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3">
+              لا يوجد هذا المنتج في الجدول الحالي.
+            </p>
+          )}
+
+          {analysisRecord && (
+            <div className="space-y-4 text-sm p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3">
+                  <span className="text-slate-500 text-[11px] block mb-1">الكمية المنتجة</span>
+                  <span className="font-mono font-extrabold text-slate-800">{formatCost(analysisRecord.totalProducedQty)}</span>
+                </div>
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 shadow-sm p-3">
+                  <span className="text-slate-500 text-[11px] block mb-1">متوسط تكلفة الوحدة</span>
+                  <span className="font-mono font-extrabold text-blue-700">{formatCost(analysisRecord.averageUnitCost)} ج.م</span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3">
+                  <span className="text-slate-500 text-[11px] block mb-1">إجمالي التكلفة</span>
+                  <span className="font-mono font-bold text-slate-800">{formatCost(analysisRecord.totalProductionCost)} ج.م</span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3">
+                  <span className="text-slate-500 text-[11px] block mb-1">الانحراف عن {previousMonthLabel}</span>
+                  {(() => {
+                    const info = prevMonthInfoMap[analysisRecord.productId];
+                    const prevAvg = info?.closed && (info.avg || 0) > 0 ? info.avg : null;
+                    if (prevAvg == null) {
+                      return <span className="text-slate-400">— (لا يوجد معيار معتمد)</span>;
+                    }
+                    const diff = analysisRecord.averageUnitCost - prevAvg;
+                    const pct = prevAvg > 0 ? (diff / prevAvg) * 100 : 0;
+                    return (
+                      <span className={`font-mono font-bold ${diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {diff >= 0 ? '+' : ''}{formatCost(diff)} ج.م ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-black text-slate-700">تحليل انحراف التكلفة</p>
+                  <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600">AI Insight</span>
+                </div>
+                {deviationAnalysis.loading && (
+                  <p className="text-xs text-slate-500">جاري تحليل الانحراف والاتجاه…</p>
+                )}
+                {!deviationAnalysis.loading && deviationAnalysis.alert && (
+                  <div className="rounded-lg border border-amber-300/80 bg-amber-50/90 text-amber-950 p-3 text-right">
+                    <p className="text-sm font-bold mb-1">تنبيه اتجاه</p>
+                    <p className="text-sm">{deviationAnalysis.alert}</p>
+                  </div>
+                )}
+                {!deviationAnalysis.loading && deviationAnalysis.analysis && !deviationAnalysis.analysis.valid && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+                    {deviationAnalysis.analysis.message || deviationAnalysis.analysis.summary}
+                  </p>
+                )}
+                {!deviationAnalysis.loading &&
+                  deviationAnalysis.analysis?.valid &&
+                  deviationAnalysis.analysis.deviationPercent !== undefined && (
+                    <div className="space-y-2 text-right rounded-xl bg-slate-50 border border-slate-200 p-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="text-xs text-slate-500">انحراف عن الشهر السابق (المحرّك)</span>
+                        <span
+                          className={`font-mono font-bold ${
+                            (deviationAnalysis.analysis.deviation ?? 0) >= 0 ? 'text-rose-600' : 'text-emerald-600'
+                          }`}
+                        >
+                          {(deviationAnalysis.analysis.deviationPercent ?? 0) >= 0 ? '+' : ''}
+                          {((deviationAnalysis.analysis.deviationPercent ?? 0) * 100).toFixed(1)}٪
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700">{deviationAnalysis.analysis.summary}</p>
+                      {deviationAnalysis.analysis.topReason && (
+                        <p className="text-xs">
+                          <span className="text-slate-500">السبب الأبرز: </span>
+                          <span className="font-semibold">{deviationAnalysis.analysis.topReason.title}</span>
+                        </p>
+                      )}
+                      <p className="text-[11px] text-slate-500">
+                        ثقة التحليل: {deviationAnalysis.analysis.confidence}%
+                      </p>
+                      {deviationAnalysis.analysis.reasons.length > 0 && (
+                        <ul className="list-disc list-inside space-y-1 text-[11px] text-[var(--color-text)] max-h-32 overflow-y-auto">
+                          {deviationAnalysis.analysis.reasons.slice(0, 8).map((reason) => (
+                            <li key={reason.id}>
+                              <span className="font-medium">{reason.title}</span>
+                              {reason.evidence?.length ? (
+                                <span className="text-slate-500"> — {reason.evidence[0]}</span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                {!deviationAnalysis.loading && deviationAnalysis.history.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-500 mb-2">آخر 6 أشهر</p>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      {[...deviationAnalysis.history]
+                        .sort((a, b) => b.month.localeCompare(a.month))
+                        .map((h) => (
+                          <div
+                            key={h.month}
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-mono text-right min-w-[5.5rem] shadow-sm"
+                          >
+                            <div className="text-slate-500">{h.month}</div>
+                            <div className={h.deviationPercent >= 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                              {h.deviationPercent >= 0 ? '+' : ''}
+                              {(h.deviationPercent * 100).toFixed(1)}٪
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between sm:space-x-0 px-6 py-4 border-t border-slate-200 bg-white/80">
+            <Button type="button" variant="outline" onClick={closeCostAnalysis}>
+              إغلاق
+            </Button>
+          </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {showColumnsModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>

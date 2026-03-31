@@ -58,6 +58,15 @@ export type Permission =
   | 'hrDashboard.view'
   | 'vehicles.view' | 'vehicles.manage'
   | 'hrSettings.view' | 'hrSettings.edit'
+  | 'repair.view'
+  | 'repair.dashboard.view'
+  | 'repair.adminDashboard.view'
+  | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete'
+  | 'repair.parts.view' | 'repair.parts.manage'
+  | 'repair.branches.manage'
+  | 'repair.technician.view'
+  | 'repair.treasury.view' | 'repair.treasury.manage'
+  | 'repair.salesInvoice.create' | 'repair.salesInvoice.view'
   | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -215,6 +224,26 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     ],
   },
   {
+    key: 'repair',
+    label: 'الصيانة',
+    permissions: [
+      { key: 'repair.view', label: 'عرض طلبات الصيانة' },
+      { key: 'repair.dashboard.view', label: 'عرض لوحة الصيانة' },
+      { key: 'repair.adminDashboard.view', label: 'عرض لوحة أدمن الصيانة' },
+      { key: 'repair.jobs.create', label: 'إنشاء طلب صيانة' },
+      { key: 'repair.jobs.edit', label: 'تعديل طلب صيانة' },
+      { key: 'repair.jobs.delete', label: 'حذف طلب صيانة' },
+      { key: 'repair.parts.view', label: 'عرض قطع الغيار' },
+      { key: 'repair.parts.manage', label: 'إدارة قطع الغيار' },
+      { key: 'repair.branches.manage', label: 'إدارة فروع الصيانة' },
+      { key: 'repair.technician.view', label: 'عرض أداء الفنيين' },
+      { key: 'repair.treasury.view', label: 'عرض خزينة الصيانة' },
+      { key: 'repair.treasury.manage', label: 'إدارة خزينة الصيانة' },
+      { key: 'repair.salesInvoice.create', label: 'إنشاء فاتورة بيع قطع الغيار' },
+      { key: 'repair.salesInvoice.view', label: 'عرض فواتير بيع قطع الغيار' },
+    ],
+  },
+  {
     key: 'costs',
     label: 'إدارة التكاليف',
     permissions: [
@@ -266,6 +295,7 @@ const PERMISSION_GROUP_ORDER: string[] = [
   // HR
   'hr',
   // Costs
+  'repair',
   'costs',
   // System
   'system',
@@ -390,6 +420,21 @@ const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
     ],
   },
   {
+    key: 'repair',
+    label: 'الصيانة',
+    items: [
+      { path: '/repair', icon: 'dashboard', label: 'لوحة الصيانة', permission: 'repair.dashboard.view' },
+      { path: '/repair/admin-dashboard', icon: 'admin_panel_settings', label: 'لوحة الأدمن', permission: 'repair.adminDashboard.view' },
+      { path: '/repair/jobs', icon: 'construction', label: 'طلبات الصيانة', permission: 'repair.view' },
+      { path: '/repair/jobs/new', icon: 'add_circle', label: 'جهاز جديد', permission: 'repair.jobs.create' },
+      { path: '/repair/parts', icon: 'inventory_2', label: 'قطع الغيار', permission: 'repair.parts.view' },
+      { path: '/repair/branches', icon: 'store', label: 'الفروع', permission: 'repair.branches.manage' },
+      { path: '/repair/technician-kpis', icon: 'leaderboard', label: 'أداء الفنيين', permission: 'repair.technician.view' },
+      { path: '/repair/treasury', icon: 'account_balance_wallet', label: 'الخزينة', permission: 'repair.treasury.view' },
+      { path: '/repair/sales-invoice', icon: 'receipt_long', label: 'فاتورة بيع', permission: 'repair.salesInvoice.create' },
+    ],
+  },
+  {
     key: 'costs',
     label: 'التكاليف',
     items: [
@@ -432,6 +477,7 @@ const SIDEBAR_GROUP_ORDER: string[] = [
   'inventory',
   'quality',
   'hr',
+  'repair',
   'costs',
   'system',
 ];
@@ -443,6 +489,7 @@ const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
   inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/quick-inventory-transfer', '/inventory/movements', '/inventory/counts'],
   quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
   hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/attendance/logs', '/attendance/daily', '/attendance/monthly', '/attendance/sync', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/payroll/accounts', '/hr/evaluations', '/hr-settings'],
+  repair: ['/repair', '/repair/admin-dashboard', '/repair/jobs', '/repair/jobs/new', '/repair/parts', '/repair/branches', '/repair/technician-kpis', '/repair/treasury', '/repair/sales-invoice'],
   costs: ['/cost-centers', '/cost-settings', '/costs/assets', '/costs/depreciation-report'],
   system: ['/system/users', '/roles', '/activity-log', '/operations-monitor', '/settings'],
 };
@@ -542,6 +589,16 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/vehicles': 'vehicles.view',
   '/organization': 'hrSettings.view',
   '/hr-settings': 'hrSettings.view',
+  '/repair': 'repair.dashboard.view',
+  '/repair/admin-dashboard': 'repair.adminDashboard.view',
+  '/repair/jobs': 'repair.view',
+  '/repair/jobs/new': 'repair.jobs.create',
+  '/repair/jobs/:jobId': 'repair.view',
+  '/repair/parts': 'repair.parts.view',
+  '/repair/branches': 'repair.branches.manage',
+  '/repair/technician-kpis': 'repair.technician.view',
+  '/repair/treasury': 'repair.treasury.view',
+  '/repair/sales-invoice': 'repair.salesInvoice.create',
 };
 
 // ─── Role-based Home Route ───────────────────────────────────────────────────

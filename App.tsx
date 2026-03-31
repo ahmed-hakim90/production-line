@@ -26,6 +26,7 @@ import { COST_ROUTES } from './modules/costs/routes';
 import { SYSTEM_ROUTES } from './modules/system/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import { ATTENDANCE_ROUTES } from './modules/attendance/routes';
+import { REPAIR_ROUTES } from './modules/repair/routes';
 import type { AppRouteDef } from './modules/shared/routes';
 import type { PublicRouteDef } from './modules/shared/routes/types';
 import { useAppStore } from './store/useAppStore';
@@ -59,6 +60,7 @@ const TenantLoginGateway = lazyNamed(
   () => import('./modules/auth/pages/TenantLoginGateway'),
   'TenantLoginGateway',
 );
+const RepairTrackPublic = lazyNamed(() => import('./modules/repair/pages/RepairTrackPublic'), 'RepairTrackPublic');
 const CompanyNotApprovedPage = lazyNamed(() => import('./modules/auth/pages/CompanyNotApprovedPage'), 'CompanyNotApprovedPage');
 const SuperAdminShell = lazyNamed(() => import('./modules/super-admin/SuperAdminShell'), 'SuperAdminShell');
 const TenantsApproval = lazyNamed(() => import('./modules/super-admin/pages/TenantsApproval'), 'TenantsApproval');
@@ -168,6 +170,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...SYSTEM_ROUTES,
   ...INVENTORY_ROUTES,
   ...ATTENDANCE_ROUTES,
+  ...REPAIR_ROUTES,
 ];
 
 /** `/products` → `products` (real URLs are `/t/:tenantSlug/products`). */
@@ -826,6 +829,14 @@ const App: React.FC = () => {
             element={
               <Suspense fallback={<PageRouteFallback />}>
                 <LandingPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/track"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <RepairTrackPublic />
               </Suspense>
             }
           />

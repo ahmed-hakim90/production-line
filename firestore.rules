@@ -92,6 +92,97 @@ service cloud.firestore {
         && request.resource.data.tenantId == currentUserDoc().data.tenantId;
     }
 
+    function isRepairBranchAdmin() {
+      return hasPermission('repair.branches.manage');
+    }
+
+    function currentUserRepairBranchId() {
+      return currentUserDoc().data.repairBranchId;
+    }
+
+    function currentUserRepairBranchIds() {
+      return currentUserDoc().data.repairBranchIds;
+    }
+
+    function currentUserHasRepairBranch(branchId) {
+      return (
+        (currentUserRepairBranchId() != null
+          && currentUserRepairBranchId() != ''
+          && branchId == currentUserRepairBranchId())
+        || (currentUserRepairBranchIds() is list
+          && branchId in currentUserRepairBranchIds())
+      );
+    }
+
+    function isTechnicianAssignedToBranch(branchId) {
+      return branchId != null
+        && branchId != ''
+        && exists(/databases/$(database)/documents/repair_branches/$(branchId))
+        && (
+          get(/databases/$(database)/documents/repair_branches/$(branchId)).data.technicianIds is list
+          && request.auth.uid in get(/databases/$(database)/documents/repair_branches/$(branchId)).data.technicianIds
+        );
+    }
+
+    function isBranchManager(branchId) {
+      return branchId != null
+        && branchId != ''
+        && exists(/databases/$(database)/documents/repair_branches/$(branchId))
+        && (
+          get(/databases/$(database)/documents/repair_branches/$(branchId)).data.managerEmployeeId is string
+          && get(/databases/$(database)/documents/repair_branches/$(branchId)).data.managerEmployeeId != ''
+          && exists(
+            /databases/$(database)/documents/employees/
+            $(get(/databases/$(database)/documents/repair_branches/$(branchId)).data.managerEmployeeId)
+          )
+          && get(
+            /databases/$(database)/documents/employees/
+            $(get(/databases/$(database)/documents/repair_branches/$(branchId)).data.managerEmployeeId)
+          ).data.userId == request.auth.uid
+        );
+    }
+
+    function canAccessBranch(branchId) {
+      return currentUserHasRepairBranch(branchId)
+        || isTechnicianAssignedToBranch(branchId)
+        || isBranchManager(branchId);
+    }
+
+    function canReadRepairBranchScoped() {
+      return sameTenantOrLegacyRead()
+        && (
+          isRepairBranchAdmin()
+          || (
+            'branchId' in resource.data
+            && canAccessBranch(resource.data.branchId)
+          )
+        );
+    }
+
+    function canCreateRepairBranchScoped() {
+      return sameTenantOrLegacyWrite()
+        && (
+          isRepairBranchAdmin()
+          || (
+            'branchId' in request.resource.data
+            && canAccessBranch(request.resource.data.branchId)
+          )
+        );
+    }
+
+    function canUpdateRepairBranchScoped() {
+      return sameTenantOrLegacyUpdate()
+        && (
+          isRepairBranchAdmin()
+          || (
+            'branchId' in resource.data
+            && 'branchId' in request.resource.data
+            && canAccessBranch(resource.data.branchId)
+            && canAccessBranch(request.resource.data.branchId)
+          )
+        );
+    }
+
     /**
      * Gradual hardening (after backfillTenantId / data audit):
      * 1. Ensure all business docs in production have tenantId set.
@@ -106,6 +197,7 @@ service cloud.firestore {
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
         'work_orders', 'notifications', 'scan_events', 'product_materials', 'monthly_production_costs',
+        'cost_deviation_analysis',
         'line_worker_assignments', 'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
         'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',
         'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations', 'system_settings',
@@ -257,6 +349,89 @@ service cloud.firestore {
       allow read: if (hasPermission('payroll.view') || hasPermission('payroll.accounts.view')) && sameTenantOrLegacyRead();
       allow create, update: if hasPermission('payroll.accounts.disburse') && sameTenantOrLegacyWrite();
       allow delete: if hasPermission('payroll.accounts.disburse') && sameTenantOrLegacyRead();
+    }
+
+    match /repair_branches/{id} {
+      allow read: if sameTenantOrLegacyRead() && (
+        isRepairBranchAdmin()
+        || hasPermission('repair.view')
+        || hasPermission('repair.dashboard.view')
+        || hasPermission('repair.parts.view')
+        || hasPermission('repair.parts.manage')
+        || hasPermission('repair.treasury.view')
+        || hasPermission('repair.treasury.manage')
+        || hasPermission('repair.salesInvoice.create')
+        || hasPermission('repair.salesInvoice.view')
+      );
+      allow create, update: if isRepairBranchAdmin() && sameTenantOrLegacyWrite();
+      allow delete: if isRepairBranchAdmin() && sameTenantOrLegacyRead();
+    }
+
+    match /repair_jobs/{id} {
+      allow read: if hasPermission('repair.view') && canReadRepairBranchScoped();
+      allow create: if hasPermission('repair.jobs.create') && canCreateRepairBranchScoped();
+      allow update: if hasPermission('repair.jobs.edit') && canUpdateRepairBranchScoped();
+      allow delete: if hasPermission('repair.jobs.delete') && canReadRepairBranchScoped();
+    }
+
+    match /repair_spare_parts/{id} {
+      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
+      allow create, update: if hasPermission('repair.parts.manage') && canCreateRepairBranchScoped();
+      allow delete: if hasPermission('repair.parts.manage') && canReadRepairBranchScoped();
+    }
+
+    match /repair_spare_parts_stock/{id} {
+      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
+      allow create, update: if hasPermission('repair.parts.manage') && canCreateRepairBranchScoped();
+      allow delete: if hasPermission('repair.parts.manage') && canReadRepairBranchScoped();
+    }
+
+    match /repair_parts_transactions/{id} {
+      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
+      allow create: if hasPermission('repair.parts.manage') && canCreateRepairBranchScoped();
+      allow update, delete: if false;
+    }
+
+    match /repair_treasury_sessions/{id} {
+      allow read: if (
+          hasPermission('repair.treasury.view')
+          || hasPermission('repair.treasury.manage')
+        ) && canReadRepairBranchScoped();
+      allow create: if hasPermission('repair.treasury.manage') && canCreateRepairBranchScoped();
+      allow update: if hasPermission('repair.treasury.manage') && canUpdateRepairBranchScoped();
+      allow delete: if false;
+    }
+
+    match /repair_treasury_entries/{id} {
+      allow read: if (
+          hasPermission('repair.treasury.view')
+          || hasPermission('repair.treasury.manage')
+        ) && canReadRepairBranchScoped();
+      allow create: if hasPermission('repair.treasury.manage') && canCreateRepairBranchScoped();
+      allow update, delete: if false;
+    }
+
+    match /repair_sales_invoices/{id} {
+      allow read: if (
+          hasPermission('repair.salesInvoice.view')
+          || hasPermission('repair.salesInvoice.create')
+        ) && canReadRepairBranchScoped();
+      allow create: if hasPermission('repair.salesInvoice.create') && canCreateRepairBranchScoped();
+      allow update, delete: if false;
+    }
+
+    match /_counters/{id} {
+      allow read: if isActiveUser()
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && hasPermission('repair.jobs.create');
+      allow create: if isActiveUser()
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && hasPermission('repair.jobs.create');
+      allow update: if isActiveUser()
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && hasPermission('repair.jobs.create');
+      allow delete: if false;
     }
 
     match /{coll}/{docId} {
