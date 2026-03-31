@@ -46,7 +46,21 @@ export const sparePartsService = {
     const snap = await getDocs(q);
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairSparePartStock));
     if (!warehouseId) return rows;
-    return rows.filter((row) => !row.warehouseId || row.warehouseId === warehouseId);
+
+    // Prefer rows for the selected warehouse and only fall back to legacy
+    // branch-level rows (without warehouseId) when no warehouse row exists.
+    const exactWarehouseRows = rows.filter((row) => String(row.warehouseId || '').trim() === warehouseId);
+    const exactPartIds = new Set(exactWarehouseRows.map((row) => String(row.partId || '')));
+    const fallbackLegacyRows = rows.filter((row) => !String(row.warehouseId || '').trim() && !exactPartIds.has(String(row.partId || '')));
+
+    const merged = [...exactWarehouseRows, ...fallbackLegacyRows];
+    const deduped = new Map<string, RepairSparePartStock>();
+    for (const row of merged) {
+      const partId = String(row.partId || '').trim();
+      if (!partId || deduped.has(partId)) continue;
+      deduped.set(partId, row);
+    }
+    return Array.from(deduped.values());
   },
 
   async createPart(input: Omit<RepairSparePart, 'id' | 'createdAt' | 'tenantId'>): Promise<string | null> {

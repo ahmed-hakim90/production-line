@@ -21,6 +21,7 @@ import {
   resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
+  type RepairJobProduct,
 } from '../types';
 
 const isRequiredMissing = (value: string) => !value.trim();
@@ -34,9 +35,25 @@ export const NewRepairJob: React.FC = () => {
   const products = useAppStore((s) => s._rawProducts);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [loading, setLoading] = useState(false);
+  const [jobProducts, setJobProducts] = useState<Array<{
+    itemId: string;
+    productId: string;
+    diagnosis: string;
+    estimatedCost: string;
+    finalCost: string;
+    inWarranty: boolean;
+  }>>([{
+    itemId: `item-${Date.now()}`,
+    productId: '',
+    diagnosis: '',
+    estimatedCost: '',
+    finalCost: '',
+    inWarranty: false,
+  }]);
+  const [isServiceOnly, setIsServiceOnly] = useState(false);
+  const [serviceOnlyCost, setServiceOnlyCost] = useState('');
   const [form, setForm] = useState({
     branchId: '',
-    productId: '',
     customerName: '',
     customerPhone: '',
     customerAddress: '',
@@ -85,39 +102,59 @@ export const NewRepairJob: React.FC = () => {
       toast.error('لا يوجد فرع صيانة مرتبط بالمستخدم.');
       return;
     }
-    if (!form.productId) {
-      toast.error('اختر المنتج أولًا.');
-      return;
-    }
-    if (!form.customerName || !form.customerPhone || !form.deviceBrand || !form.deviceModel) {
+    if (!form.customerName || !form.customerPhone) {
       toast.error('أكمل البيانات الأساسية.');
       return;
     }
-    const selectedProduct = products.find((p) => p.id === form.productId);
-    if (!selectedProduct?.id) {
-      toast.error('المنتج المختار غير صالح.');
+    const validRows = jobProducts.filter((row) => row.productId);
+    if (validRows.length === 0) {
+      toast.error('اختر منتجًا واحدًا على الأقل.');
       return;
     }
+    const normalizedProducts: RepairJobProduct[] = validRows.map((row, idx) => {
+      const selected = products.find((p) => p.id === row.productId);
+      return {
+        itemId: row.itemId || `item-${idx + 1}`,
+        productId: row.productId,
+        productName: String(selected?.name || selected?.code || `منتج ${idx + 1}`),
+        deviceType: 'منتج',
+        deviceBrand: String(selected?.name || ''),
+        deviceModel: String(selected?.model || selected?.code || ''),
+        diagnosis: row.diagnosis || '',
+        estimatedCost: Number(row.estimatedCost || 0),
+        finalCost: row.inWarranty ? 0 : Number(row.finalCost || 0),
+        inWarranty: row.inWarranty,
+      };
+    });
+    const leadProduct = normalizedProducts[0];
+    const productsEstimated = normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0);
+    const productsFinal = normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0);
+    const finalCostOverride = isServiceOnly ? Number(serviceOnlyCost || 0) : undefined;
     setLoading(true);
     try {
       const result = await repairJobService.create({
         branchId: form.branchId,
-        productId: selectedProduct.id,
-        productName: selectedProduct.name || selectedProduct.code || 'منتج',
+        productId: leadProduct?.productId,
+        productName: leadProduct?.productName || 'منتج',
+        jobProducts: normalizedProducts,
         customerName: form.customerName,
         customerPhone: form.customerPhone,
         customerAddress: form.customerAddress || '',
-        deviceType: form.deviceType || 'عام',
-        deviceBrand: form.deviceBrand,
-        deviceModel: form.deviceModel,
+        deviceType: leadProduct?.deviceType || form.deviceType || 'عام',
+        deviceBrand: leadProduct?.deviceBrand || form.deviceBrand,
+        deviceModel: leadProduct?.deviceModel || form.deviceModel,
         deviceColor: form.deviceColor || '',
         devicePassword: form.devicePassword || '',
         accessories: form.accessories || '',
-        problemDescription: form.problemDescription,
+        problemDescription: leadProduct?.diagnosis || form.problemDescription,
         status: 'received',
         warranty: 'none',
         partsUsed: [],
-        estimatedCost: Number(form.estimatedCost || 0),
+        estimatedCost: productsEstimated || Number(form.estimatedCost || 0),
+        finalCost: isServiceOnly ? Number(serviceOnlyCost || 0) : productsFinal,
+        finalCostOverride,
+        isServiceOnly,
+        serviceOnlyCost: isServiceOnly ? Number(serviceOnlyCost || 0) : 0,
       });
       if (!result.id) throw new Error('تعذر إنشاء الطلب.');
       toast.success('تم تسجيل جهاز الصيانة.');
@@ -170,31 +207,114 @@ export const NewRepairJob: React.FC = () => {
               </Select>
             </div>
             <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
-              <Label>المنتج <span className="text-rose-600">*</span></Label>
-              <Select
-                value={form.productId}
-                onValueChange={(value) => {
-                  const product = products.find((p) => p.id === value);
-                  setForm((p) => ({
-                    ...p,
-                    productId: value,
-                    deviceType: 'منتج',
-                    deviceBrand: String(product?.name || ''),
-                    deviceModel: String(product?.model || product?.code || ''),
-                  }));
-                }}
-              >
-                <SelectTrigger className={!form.productId ? 'border-rose-300' : ''}>
-                  <SelectValue placeholder="اختر المنتج من الأصناف المعرفة" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.filter((p) => p.id).map((product) => (
-                    <SelectItem key={product.id} value={String(product.id)}>
-                      {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>المنتجات / Products <span className="text-rose-600">*</span></Label>
+              <div className="space-y-2">
+                {jobProducts.map((row, idx) => (
+                  <div key={row.itemId} className="rounded-md border p-2 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-medium">منتج {idx + 1}</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setJobProducts((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.itemId !== row.itemId)));
+                        }}
+                        disabled={jobProducts.length <= 1}
+                      >
+                        حذف
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <Select
+                        value={row.productId}
+                        onValueChange={(value) => {
+                          setJobProducts((prev) => prev.map((item) => (
+                            item.itemId === row.itemId ? { ...item, productId: value } : item
+                          )));
+                        }}
+                      >
+                        <SelectTrigger className={!row.productId ? 'border-rose-300' : ''}>
+                          <SelectValue placeholder="اختر المنتج من الأصناف المعرفة" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.filter((p) => p.id).map((product) => (
+                            <SelectItem key={product.id} value={String(product.id)}>
+                              {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="تشخيص المنتج"
+                        value={row.diagnosis}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setJobProducts((prev) => prev.map((item) => (
+                            item.itemId === row.itemId ? { ...item, diagnosis: value } : item
+                          )));
+                        }}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="تكلفة متوقعة"
+                        value={row.estimatedCost}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setJobProducts((prev) => prev.map((item) => (
+                            item.itemId === row.itemId ? { ...item, estimatedCost: value } : item
+                          )));
+                        }}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="تكلفة نهائية"
+                        value={row.finalCost}
+                        disabled={row.inWarranty}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setJobProducts((prev) => prev.map((item) => (
+                            item.itemId === row.itemId ? { ...item, finalCost: value } : item
+                          )));
+                        }}
+                      />
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={row.inWarranty}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setJobProducts((prev) => prev.map((item) => (
+                            item.itemId === row.itemId
+                              ? { ...item, inWarranty: checked, finalCost: checked ? '0' : item.finalCost }
+                              : item
+                          )));
+                        }}
+                      />
+                      داخل الضمان (إصلاح مجاني)
+                    </label>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setJobProducts((prev) => [
+                      ...prev,
+                      {
+                        itemId: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        productId: '',
+                        diagnosis: '',
+                        estimatedCost: '',
+                        finalCost: '',
+                        inWarranty: false,
+                      },
+                    ]);
+                  }}
+                >
+                  إضافة منتج
+                </Button>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>اسم العميل <span className="text-rose-600">*</span></Label>
@@ -255,6 +375,24 @@ export const NewRepairJob: React.FC = () => {
             <div className="space-y-1.5 xl:max-w-[320px]">
               <Label>التكلفة المتوقعة</Label>
               <Input type="number" value={form.estimatedCost} onChange={(e) => setForm((p) => ({ ...p, estimatedCost: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5 xl:max-w-[420px]">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={isServiceOnly}
+                  onChange={(e) => setIsServiceOnly(e.target.checked)}
+                />
+                خدمة فقط بدون قطع غيار
+              </label>
+              {isServiceOnly && (
+                <Input
+                  type="number"
+                  value={serviceOnlyCost}
+                  onChange={(e) => setServiceOnlyCost(e.target.value)}
+                  placeholder="تكلفة خدمة الإصلاح"
+                />
+              )}
             </div>
           </div>
         </CardContent>

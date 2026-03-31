@@ -50,6 +50,9 @@ export interface RepairPartUsage {
   partName: string;
   quantity: number;
   unitCost: number;
+  scope?: 'job' | 'product';
+  productItemId?: string;
+  productName?: string;
 }
 
 export interface RepairStatusHistoryItem {
@@ -57,6 +60,20 @@ export interface RepairStatusHistoryItem {
   at: string;
   technicianId?: string;
   reason?: string;
+}
+
+export interface RepairJobProduct {
+  itemId: string;
+  productId?: string;
+  productName: string;
+  deviceType?: string;
+  deviceBrand?: string;
+  deviceModel?: string;
+  serialNo?: string;
+  diagnosis?: string;
+  estimatedCost?: number;
+  finalCost?: number;
+  inWarranty?: boolean;
 }
 
 export interface RepairJob {
@@ -78,7 +95,11 @@ export interface RepairJob {
   problemDescription: string;
   accessories?: string;
   status: RepairJobStatus;
+  jobProducts?: RepairJobProduct[];
+  isServiceOnly?: boolean;
+  serviceOnlyCost?: number;
   estimatedCost?: number;
+  finalCostOverride?: number;
   finalCost?: number;
   warranty: RepairWarranty;
   notes?: string;
@@ -87,6 +108,10 @@ export interface RepairJob {
   createdAt: string;
   updatedAt: string;
   deliveredAt?: string;
+  isClosed?: boolean;
+  closedAt?: string;
+  reopenedFromJobId?: string;
+  parentJobId?: string;
 }
 
 export interface RepairSparePart {

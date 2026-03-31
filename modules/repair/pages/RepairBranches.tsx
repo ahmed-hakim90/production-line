@@ -455,10 +455,10 @@ export const RepairBranches: React.FC = () => {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="mt-1 h-7 px-2 text-xs"
+                      className="mt-1 h-auto px-0 py-0 text-xs font-medium whitespace-nowrap justify-start"
                       onClick={() => openTechniciansModal(String(b.id || ''))}
                     >
-                      عرض الفنيين المعينين
+                      عرض الفنيين
                     </Button>
                   </div>
                   <div className="rounded border bg-muted/20 px-3 py-2">
@@ -634,6 +634,32 @@ export const RepairBranches: React.FC = () => {
             <Button onClick={handleCreateEmployee} disabled={employeeSaving}>
               {employeeSaving ? 'جاري الحفظ...' : 'حفظ الموظف'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={techniciansModalOpen} onOpenChange={setTechniciansModalOpen}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              الفنيون المعينون - {selectedTechniciansBranch?.name || 'الفرع'}
+            </DialogTitle>
+            <DialogDescription>
+              عدد الفنيين: {selectedTechnicianIds.length}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {selectedTechnicianIds.length === 0 ? (
+              <div className="text-sm text-muted-foreground">لا يوجد فنيون معينون لهذا الفرع حالياً.</div>
+            ) : (
+              selectedTechnicianIds.map((technicianId) => (
+                <div key={technicianId} className="rounded border px-3 py-2 text-sm">
+                  {employeeNameById.get(String(technicianId || '').trim()) || `ID: ${technicianId}`}
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTechniciansModalOpen(false)}>إغلاق</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
