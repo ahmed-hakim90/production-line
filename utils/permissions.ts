@@ -58,7 +58,14 @@ export type Permission =
   | 'hrDashboard.view'
   | 'vehicles.view' | 'vehicles.manage'
   | 'hrSettings.view' | 'hrSettings.edit'
-  | 'print' | 'export' | 'import';
+  | 'print' | 'export' | 'import'
+  | 'repair.view' | 'repair.admin.view' | 'repair.dashboard.view'
+  | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete'
+  | 'repair.parts.view' | 'repair.parts.manage'
+  | 'repair.branches.manage'
+  | 'repair.cashier.view' | 'repair.cashier.manage' | 'repair.cashier.close'
+  | 'repair.sales.create'
+  | 'repair.technician.view';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
 
@@ -250,6 +257,26 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'import', label: 'استيراد' },
     ],
   },
+  {
+    key: 'repair',
+    label: 'الصيانة',
+    permissions: [
+      { key: 'repair.admin.view', label: 'عرض لوحة أدمن الصيانة' },
+      { key: 'repair.dashboard.view', label: 'عرض لوحة الصيانة' },
+      { key: 'repair.view', label: 'عرض طلبات الصيانة' },
+      { key: 'repair.jobs.create', label: 'إنشاء طلب صيانة' },
+      { key: 'repair.jobs.edit', label: 'تعديل طلب صيانة' },
+      { key: 'repair.jobs.delete', label: 'حذف طلب صيانة' },
+      { key: 'repair.parts.view', label: 'عرض مخزن قطع الغيار' },
+      { key: 'repair.parts.manage', label: 'إدارة قطع الغيار' },
+      { key: 'repair.branches.manage', label: 'إدارة فروع الصيانة' },
+      { key: 'repair.cashier.view', label: 'عرض الخزينة' },
+      { key: 'repair.cashier.manage', label: 'إدارة الخزينة' },
+      { key: 'repair.cashier.close', label: 'تقفيل الخزينة' },
+      { key: 'repair.sales.create', label: 'إنشاء فاتورة بيع' },
+      { key: 'repair.technician.view', label: 'عرض أداء الفنيين' },
+    ],
+  },
 ];
 
 const PERMISSION_GROUP_ORDER: string[] = [
@@ -271,6 +298,8 @@ const PERMISSION_GROUP_ORDER: string[] = [
   'system',
   // Special
   'special',
+  // Repair
+  'repair',
 ];
 
 const permissionGroupOrderRank = new Map(

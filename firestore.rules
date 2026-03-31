@@ -106,5 +106,62 @@ service cloud.firestore {
         && !document.matches('payroll_cost_summary/.*')
         && !document.matches('payroll_distributions/.*');
     }
+
+    // ─── Repair Management Module ───────────────────────────────────────────
+
+    match /repair_branches/{branchId} {
+      allow read: if isActiveUser();
+      allow create: if hasPermission('repair.branches.manage');
+      allow update, delete: if hasPermission('repair.branches.manage');
+    }
+
+    match /repair_jobs/{jobId} {
+      // Public read: allowed only for tracker (client enforces receiptNo+phone match)
+      allow read: if true;
+      allow create: if hasPermission('repair.jobs.create');
+      allow update: if hasPermission('repair.jobs.edit') || hasPermission('repair.view');
+      allow delete: if hasPermission('repair.jobs.delete');
+    }
+
+    match /repair_spare_parts/{partId} {
+      allow read: if isActiveUser();
+      allow create, update: if hasPermission('repair.parts.manage');
+      allow delete: if hasPermission('repair.parts.manage');
+    }
+
+    match /repair_spare_parts_stock/{stockId} {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser();
+    }
+
+    match /repair_parts_transactions/{txId} {
+      allow read: if isActiveUser();
+      allow create: if isActiveUser();
+    }
+
+    match /repair_cash_transactions/{txId} {
+      allow read: if isActiveUser();
+      allow create: if hasPermission('repair.cashier.manage') || hasPermission('repair.cashier.view');
+    }
+
+    match /repair_cash_sessions/{sessionId} {
+      allow read: if isActiveUser();
+      allow create: if hasPermission('repair.cashier.manage');
+      allow update: if hasPermission('repair.cashier.close');
+    }
+
+    match /repair_sale_invoices/{invoiceId} {
+      allow read: if isActiveUser();
+      allow create: if hasPermission('repair.sales.create');
+    }
+
+    match /repair_technician_branches/{techId} {
+      allow read: if isActiveUser();
+      allow write: if hasPermission('repair.branches.manage');
+    }
+
+    match /_repair_counters/{counterId} {
+      allow read, write: if isActiveUser();
+    }
   }
 }

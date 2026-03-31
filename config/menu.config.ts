@@ -156,6 +156,22 @@ export const MENU_CONFIG: MenuGroup[] = [
     ],
   },
   {
+    key: 'repair',
+    label: 'الصيانة',
+    icon: 'build_circle',
+    children: [
+      { key: 'repair-admin-dash', label: 'لوحة الأدمن', icon: 'shield', path: '/repair/admin', permission: 'repair.admin.view' },
+      { key: 'repair-dashboard', label: 'لوحة الصيانة', icon: 'dashboard', path: '/repair', permission: 'repair.dashboard.view' },
+      { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
+      { key: 'repair-new', label: 'جهاز جديد', icon: 'add_circle', path: '/repair/jobs/new', permission: 'repair.jobs.create' },
+      { key: 'repair-parts', label: 'قطع الغيار', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
+      { key: 'repair-cashier', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/cashier', permission: 'repair.cashier.view' },
+      { key: 'repair-sales', label: 'فاتورة بيع', icon: 'receipt', path: '/repair/sale-invoice', permission: 'repair.sales.create' },
+      { key: 'repair-kpis', label: 'أداء الفنيين', icon: 'leaderboard', path: '/repair/technician-kpis', permission: 'repair.dashboard.view' },
+      { key: 'repair-branches', label: 'الفروع', icon: 'store', path: '/repair/branches', permission: 'repair.branches.manage' },
+    ],
+  },
+  {
     key: 'system',
     label: 'النظام',
     icon: 'tune',

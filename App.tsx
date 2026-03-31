@@ -15,6 +15,8 @@ import { COST_ROUTES } from './modules/costs/routes';
 import { SYSTEM_ROUTES } from './modules/system/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import { ATTENDANCE_ROUTES } from './modules/attendance/routes';
+import { REPAIR_ROUTES } from './modules/repair/routes';
+import { RepairTracker } from './modules/repair/pages/RepairTracker';
 import type { AppRouteDef } from './modules/shared/routes';
 import { useAppStore } from './store/useAppStore';
 import { useAuthUiSlice } from './store/selectors';
@@ -140,6 +142,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...SYSTEM_ROUTES,
   ...INVENTORY_ROUTES,
   ...ATTENDANCE_ROUTES,
+  ...REPAIR_ROUTES,
 ];
 
 const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
@@ -546,6 +549,9 @@ const App: React.FC = () => {
                 />
               </React.Fragment>
             ))}
+
+            {/* Public: Device tracker (no auth required) */}
+            <Route path="/track" element={<RepairTracker />} />
 
             {/* Protected: All app routes inside Layout */}
             <Route path="/*" element={<ProtectedLayoutRoute isAuthenticated={isAuthenticated} isPendingApproval={isPendingApproval} />} />
