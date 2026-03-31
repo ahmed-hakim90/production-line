@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppStore } from '../../../store/useAppStore';
-import { AuthAlert, AuthCard, AuthField, AuthPasswordField } from '../components';
 import { useTenantSlugResolve } from '../context/TenantSlugResolveContext';
 
 export const Login: React.FC = () => {
@@ -59,7 +56,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="erp-auth-page" dir="rtl">
+    <div className="erp-auth-page">
 
       {/* ── Left branding panel (desktop) ── */}
       <div className="erp-auth-panel">
@@ -95,188 +92,245 @@ export const Login: React.FC = () => {
           <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 
-        <AuthCard
-          title={mode === 'login' ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}
-          description={
-            mode === 'login' ? 'أدخل بياناتك للوصول إلى النظام' : 'سيتم مراجعة الحساب من قِبل المسؤول'
-          }
-        >
-          <div className="space-y-3">
-            {pendingRegistration ? (
-              <AuthAlert variant="info" icon="hourglass_top">
-                تسجيل هذه الشركة ما زال بانتظار موافقة إدارة المنصة. سجّل الدخول بحساب المسؤول الذي أنشأته عند
-                التسجيل؛ بعد الموافقة يُفعّل الوصول تلقائياً.
-              </AuthAlert>
-            ) : null}
+        {/* Card */}
+        <div className="erp-auth-card">
+          <div className="erp-auth-card-body">
+            <div className="erp-auth-headline">
+              <h3>{mode === 'login' ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}</h3>
+              <p>{mode === 'login' ? 'أدخل بياناتك للوصول إلى النظام' : 'سيتم مراجعة الحساب من قِبل المسؤول'}</p>
+            </div>
 
-            <Tabs value={mode} onValueChange={(v) => switchMode(v as 'login' | 'register')}>
-              <TabsList className="grid h-10 w-full grid-cols-2 bg-[var(--color-surface-hover)]/80 p-1">
-                <TabsTrigger
-                  value="login"
-                  className="text-xs font-semibold data-[state=active]:bg-[var(--color-card)] data-[state=active]:shadow-sm"
-                >
-                  تسجيل الدخول
-                </TabsTrigger>
-                <TabsTrigger
-                  value="register"
-                  className="text-xs font-semibold data-[state=active]:bg-[var(--color-card)] data-[state=active]:shadow-sm"
-                >
-                  حساب جديد
-                </TabsTrigger>
-              </TabsList>
+            {pendingRegistration && (
+              <div className="erp-alert erp-alert-info" style={{ marginBottom: 14 }}>
+                <span className="material-icons-round text-[17px] shrink-0">hourglass_top</span>
+                <span>
+                  تسجيل هذه الشركة ما زال بانتظار موافقة إدارة المنصة. سجّل الدخول بحساب المسؤول الذي أنشأته عند
+                  التسجيل؛ بعد الموافقة يُفعّل الوصول تلقائياً.
+                </span>
+              </div>
+            )}
 
-              {errorMsg ? (
-                <AuthAlert variant="error" icon="error_outline" className="mt-3">
-                  {errorMsg}
-                </AuthAlert>
-              ) : null}
-              {infoMsg ? (
-                <AuthAlert variant="success" icon="check_circle" className="mt-3">
-                  {infoMsg}
-                </AuthAlert>
-              ) : null}
+            {/* Tab switcher */}
+            <div className="erp-auth-tabs">
+              <button
+                type="button"
+                className={`erp-auth-tab${mode === 'login' ? ' active' : ''}`}
+                onClick={() => switchMode('login')}
+              >
+                تسجيل الدخول
+              </button>
+              <button
+                type="button"
+                className={`erp-auth-tab${mode === 'register' ? ' active' : ''}`}
+                onClick={() => switchMode('register')}
+              >
+                حساب جديد
+              </button>
+            </div>
 
-              <TabsContent value="login" className="mt-4 space-y-0 outline-none">
-                <form onSubmit={handleLogin} autoComplete="on" className="space-y-0">
-                  <AuthField
-                    id="login-email"
-                    label="البريد الإلكتروني"
-                    icon="email"
-                    type="email"
-                    placeholder="admin@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    dir="ltr"
-                    required
-                  />
-                  <AuthPasswordField
-                    id="login-pwd"
-                    label="كلمة المرور"
-                    icon="lock"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                    dir="ltr"
-                    required
-                    showPassword={showPwd}
-                    onTogglePassword={() => setShowPwd(!showPwd)}
-                  />
-                  <div className="mb-4 flex justify-end">
+            {/* Alerts */}
+            {errorMsg && (
+              <div className="erp-alert erp-alert-error" style={{ marginBottom: 14 }}>
+                <span className="material-icons-round text-[17px] shrink-0">error_outline</span>
+                <span>{errorMsg}</span>
+              </div>
+            )}
+            {infoMsg && (
+              <div className="erp-alert erp-alert-success" style={{ marginBottom: 14 }}>
+                <span className="material-icons-round text-[17px] shrink-0">check_circle</span>
+                <span>{infoMsg}</span>
+              </div>
+            )}
+
+            {/* ── Login form ── */}
+            {mode === 'login' && (
+              <form onSubmit={handleLogin} autoComplete="on">
+                <div className="erp-auth-field">
+                  <label htmlFor="login-email">البريد الإلكتروني</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">email</span>
+                    <input
+                      id="login-email"
+                      type="email"
+                      className="erp-auth-input"
+                      placeholder="admin@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      dir="ltr"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="erp-auth-field">
+                  <label htmlFor="login-pwd">كلمة المرور</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">lock</span>
+                    <input
+                      id="login-pwd"
+                      type={showPwd ? 'text' : 'password'}
+                      className="erp-auth-input has-right-action"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
+                      dir="ltr"
+                      required
+                    />
                     <button
                       type="button"
-                      className="erp-auth-link-btn"
-                      onClick={() => void handleForgotPassword()}
-                      disabled={loading}
+                      className="erp-auth-input-right-action"
+                      onClick={() => setShowPwd(!showPwd)}
+                      tabIndex={-1}
                     >
-                      نسيت كلمة المرور؟
+                      <span className="material-icons-round" style={{ fontSize: 19 }}>
+                        {showPwd ? 'visibility_off' : 'visibility'}
+                      </span>
                     </button>
                   </div>
-                  <Button
-                    type="submit"
-                    className="erp-auth-btn h-10 w-full border-0 font-bold shadow-md"
-                    disabled={loading || !email || !password}
-                  >
-                    {loading ? (
-                      <>
-                        <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity=".25" />
-                          <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        جاري تسجيل الدخول...
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-icons-round text-[17px]">login</span>
-                        تسجيل الدخول
-                      </>
-                    )}
-                  </Button>
-                  <div className="erp-auth-footer">
-                    ليس لديك حساب؟{' '}
-                    <button type="button" onClick={() => switchMode('register')}>
-                      إنشاء حساب جديد
-                    </button>
-                  </div>
-                </form>
-              </TabsContent>
+                </div>
 
-              <TabsContent value="register" className="mt-4 space-y-0 outline-none">
-                <form onSubmit={handleRegister} autoComplete="on" className="space-y-0">
-                  <AuthField
-                    id="reg-name"
-                    label="الاسم الكامل"
-                    icon="badge"
-                    type="text"
-                    placeholder="مثال: أحمد محمد"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    autoComplete="name"
-                    required
-                  />
-                  <AuthField
-                    id="reg-email"
-                    label="البريد الإلكتروني"
-                    icon="email"
-                    type="email"
-                    placeholder="user@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    dir="ltr"
-                    required
-                  />
-                  <AuthPasswordField
-                    id="reg-pwd"
-                    label="كلمة المرور"
-                    icon="lock"
-                    placeholder="6 أحرف على الأقل"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="new-password"
-                    minLength={6}
-                    dir="ltr"
-                    required
-                    showPassword={showPwd}
-                    onTogglePassword={() => setShowPwd(!showPwd)}
-                  />
-                  <Button
-                    type="submit"
-                    className="erp-auth-btn h-10 w-full border-0 font-bold shadow-md"
-                    disabled={loading || !email || !password || !displayName}
+                <div className="erp-auth-helper-row" style={{ marginBottom: 16 }}>
+                  <button
+                    type="button"
+                    className="erp-auth-link-btn"
+                    onClick={() => void handleForgotPassword()}
+                    disabled={loading}
                   >
-                    {loading ? (
-                      <>
-                        <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity=".25" />
-                          <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        جاري الإنشاء...
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-icons-round text-[17px]">person_add</span>
-                        إنشاء الحساب
-                      </>
-                    )}
-                  </Button>
-                  <div className="erp-auth-footer">
-                    عندك حساب بالفعل؟{' '}
-                    <button type="button" onClick={() => switchMode('login')}>
+                    نسيت كلمة المرور؟
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  className="erp-auth-btn"
+                  disabled={loading || !email || !password}
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity=".25" />
+                        <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      جاري تسجيل الدخول...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-icons-round" style={{ fontSize: 17 }}>login</span>
                       تسجيل الدخول
+                    </>
+                  )}
+                </button>
+
+                <div className="erp-auth-footer">
+                  ليس لديك حساب؟{' '}
+                  <button type="button" onClick={() => switchMode('register')}>إنشاء حساب جديد</button>
+                </div>
+              </form>
+            )}
+
+            {/* ── Register form ── */}
+            {mode === 'register' && (
+              <form onSubmit={handleRegister} autoComplete="on">
+                <div className="erp-auth-field">
+                  <label htmlFor="reg-name">الاسم الكامل</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">badge</span>
+                    <input
+                      id="reg-name"
+                      type="text"
+                      className="erp-auth-input"
+                      placeholder="مثال: أحمد محمد"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      autoComplete="name"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="erp-auth-field">
+                  <label htmlFor="reg-email">البريد الإلكتروني</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">email</span>
+                    <input
+                      id="reg-email"
+                      type="email"
+                      className="erp-auth-input"
+                      placeholder="user@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      dir="ltr"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="erp-auth-field">
+                  <label htmlFor="reg-pwd">كلمة المرور</label>
+                  <div className="erp-auth-input-wrap">
+                    <span className="erp-auth-input-icon material-icons-round">lock</span>
+                    <input
+                      id="reg-pwd"
+                      type={showPwd ? 'text' : 'password'}
+                      className="erp-auth-input has-right-action"
+                      placeholder="6 أحرف على الأقل"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="new-password"
+                      minLength={6}
+                      dir="ltr"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="erp-auth-input-right-action"
+                      onClick={() => setShowPwd(!showPwd)}
+                      tabIndex={-1}
+                    >
+                      <span className="material-icons-round" style={{ fontSize: 19 }}>
+                        {showPwd ? 'visibility_off' : 'visibility'}
+                      </span>
                     </button>
                   </div>
-                </form>
-              </TabsContent>
-            </Tabs>
+                </div>
 
-            <div className="erp-auth-tip mt-4">
+                <button
+                  type="submit"
+                  className="erp-auth-btn"
+                  disabled={loading || !email || !password || !displayName}
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity=".25" />
+                        <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      جاري الإنشاء...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-icons-round" style={{ fontSize: 17 }}>person_add</span>
+                      إنشاء الحساب
+                    </>
+                  )}
+                </button>
+
+                <div className="erp-auth-footer">
+                  عندك حساب بالفعل؟{' '}
+                  <button type="button" onClick={() => switchMode('login')}>تسجيل الدخول</button>
+                </div>
+              </form>
+            )}
+
+            <div className="erp-auth-tip">
               <span className="material-icons-round">verified_user</span>
               <p>الحسابات الجديدة تحتاج موافقة المسؤول قبل تفعيل الدخول.</p>
             </div>
           </div>
-        </AuthCard>
+        </div>
 
         <p className="erp-auth-copyright">
           © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM

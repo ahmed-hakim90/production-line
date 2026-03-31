@@ -667,24 +667,6 @@
       ]
     },
     {
-      "collectionGroup": "cost_deviation_analysis",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "productId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "month",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "monthly_production_costs",
       "queryScope": "COLLECTION",
       "fields": [

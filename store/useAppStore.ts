@@ -1186,6 +1186,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   _loadAppData: async () => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, productionPlanFollowUps, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
+      await Promise.all([
+        productService.getAll(),
+        lineService.getAll(),
+        employeeService.getAll(),
+        lineProductConfigService.getAll(),
+        productionPlanService.getAll(),
+        productionPlanFollowUpService.getAll(),
+        costCenterService.getAll(),
+        costCenterValueService.getAll(),
+        costAllocationService.getAll(),
+        laborSettingsService.get(),
+        assetService.getAll(),
+        assetDepreciationService.getByPeriod(currentMonth),
+        systemSettingsService.get(),
+      ]);
     const tenantId = get().userProfile?.tenantId;
     const [
       rawProducts,
