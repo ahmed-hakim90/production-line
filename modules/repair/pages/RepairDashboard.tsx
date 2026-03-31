@@ -31,6 +31,8 @@ import {
   type RepairJobStatus,
 } from '../types';
 import { repairJobService } from '../services/repairJobService';
+import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
+import type { RepairSalesInvoice } from '../types';
 
 const num = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const shortDay = (isoDate: string) =>
@@ -43,6 +45,7 @@ export const RepairDashboard: React.FC = () => {
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const [jobs, setJobs] = useState<RepairJob[]>([]);
+  const [salesInvoices, setSalesInvoices] = useState<RepairSalesInvoice[]>([]);
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const userBranchIds = useMemo(() => {
     const base = resolveUserRepairBranchIds(userProfile);
@@ -72,16 +75,27 @@ export const RepairDashboard: React.FC = () => {
     return () => unsub();
   }, [can, JSON.stringify(userBranchIds)]);
 
+  useEffect(() => {
+    const unsub = can('repair.branches.manage')
+      ? repairSalesInvoiceService.subscribeAll(setSalesInvoices)
+      : userBranchIds.length > 1
+        ? repairSalesInvoiceService.subscribeByBranches(userBranchIds, setSalesInvoices)
+        : repairSalesInvoiceService.subscribeByBranch(userBranchIds[0] || '', setSalesInvoices);
+    return () => unsub();
+  }, [can, JSON.stringify(userBranchIds)]);
+
   const kpis = useMemo(() => {
     const openJobs = jobs.filter((j) => !['delivered', 'unrepairable'].includes(j.status)).length;
     const pendingDelivery = jobs.filter((j) => j.status === 'ready').length;
-    const revenue = jobs
+    const repairRevenue = jobs
       .filter((j) => j.status === 'delivered')
       .reduce((sum, j) => sum + Number(j.finalCost || 0), 0);
+    const partsRevenue = salesInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+    const totalRevenue = repairRevenue + partsRevenue;
     const all = jobs.length || 1;
     const successRate = (jobs.filter((j) => j.status === 'delivered').length / all) * 100;
-    return { openJobs, pendingDelivery, revenue, successRate };
-  }, [jobs]);
+    return { openJobs, pendingDelivery, repairRevenue, partsRevenue, totalRevenue, successRate };
+  }, [jobs, salesInvoices]);
   const recent = useMemo(() => jobs.slice(0, 6), [jobs]);
   const avgTicket = useMemo(() => {
     const delivered = jobs.filter((job) => job.status === 'delivered');
@@ -156,7 +170,7 @@ export const RepairDashboard: React.FC = () => {
           </div>
         </CardContent>
       </Card>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">طلبات مفتوحة</CardTitle></CardHeader>
           <CardContent><p className="text-3xl font-bold">{num(kpis.openJobs)}</p></CardContent>
@@ -167,7 +181,11 @@ export const RepairDashboard: React.FC = () => {
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">إيرادات الصيانة</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-emerald-600">{num(kpis.revenue)}</p></CardContent>
+          <CardContent><p className="text-3xl font-bold text-emerald-600">{num(kpis.repairRevenue)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">مبيعات قطع الغيار (فواتير)</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold text-sky-600">{num(kpis.partsRevenue)}</p></CardContent>
         </Card>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -178,6 +196,10 @@ export const RepairDashboard: React.FC = () => {
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">إجمالي الطلبات</CardTitle></CardHeader>
           <CardContent><p className="text-2xl font-semibold">{num(jobs.length)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">إجمالي الإيراد التشغيلي</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold text-emerald-700">{num(kpis.totalRevenue)}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط قيمة الطلب المنجز</CardTitle></CardHeader>

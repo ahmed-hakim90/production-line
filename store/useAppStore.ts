@@ -3957,7 +3957,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       await systemSettingsService.set(merged);
       set({ systemSettings: merged });
       reapplyThemeFromAppStore(get, { syncTenantDoc: true });
-      await get().fetchProducts();
+
+      // Post-save refresh is best-effort and should not flip a successful settings write into a failure.
+      try {
+        await get().fetchProducts();
+      } catch (refreshError) {
+        console.warn('updateSystemSettings post-save refresh failed:', refreshError);
+      }
     } catch (error) {
       const message = (error as Error).message;
       set({ error: message });

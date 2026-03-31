@@ -22,6 +22,8 @@ import { repairReceiptService } from './repairReceiptService';
 import { sparePartsService } from './sparePartsService';
 
 const nowIso = () => new Date().toISOString();
+const withDefined = <T extends Record<string, unknown>>(obj: T): T =>
+  Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined)) as T;
 
 type NewRepairJobInput = Omit<
   RepairJob,
@@ -136,10 +138,14 @@ export const repairJobService = {
       : await repairReceiptService.getNextReceipt();
     const at = nowIso();
     const tenantId = getCurrentTenantId();
-    const history: RepairStatusHistoryItem[] = [{ status: input.status, at, technicianId: input.technicianId }];
+    const history: RepairStatusHistoryItem[] = [withDefined({
+      status: input.status,
+      at,
+      technicianId: input.technicianId,
+    }) as RepairStatusHistoryItem];
 
     const ref = await addDoc(collection(db, REPAIR_JOBS_COLLECTION), {
-      ...input,
+      ...withDefined(input),
       tenantId,
       receiptNo: receiptResult.receiptNo,
       createdAt: at,
@@ -178,7 +184,12 @@ export const repairJobService = {
       const job = { id: snap.id, ...snap.data() } as RepairJob;
       const at = nowIso();
       const history = Array.isArray(job.statusHistory) ? [...job.statusHistory] : [];
-      history.push({ status: input.status, at, technicianId: input.technicianId, reason: input.reason });
+      history.push(withDefined({
+        status: input.status,
+        at,
+        technicianId: input.technicianId,
+        reason: input.reason,
+      }) as RepairStatusHistoryItem);
 
       tx.update(ref, {
         status: input.status,

@@ -7,7 +7,7 @@ const BUILD_VERSION = __APP_VERSION__;
 type ClientVersionSettingsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
-  /** القيم الحالية كما وردت من Firestore (`system_settings/global`) بعد آخر تحميل */
+  /** القيم الحالية كما وردت من Firestore (`system_settings/{tenantId}`) بعد آخر تحميل */
   firestoreMinimumClientVersion?: string;
   firestoreForceClientUpdate?: boolean;
   firestoreClientUpdateMessageAr?: string;
@@ -65,7 +65,7 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
             آخر نسخة مسجّلة في Firebase
           </div>
           <p className="text-xs text-[var(--color-text-muted)] -mt-1">
-            من مستند <span className="font-mono dir-ltr inline-block">system_settings / global</span> — القيم المحفوظة حالياً على الخادم (ليست مسودة التحرير).
+            من مستند <span className="font-mono dir-ltr inline-block">system_settings / {'{tenantId}'}</span> — القيم المحفوظة حالياً على الخادم (ليست مسودة التحرير).
           </p>
           <div className="rounded-lg border border-border bg-accent px-4 py-3 space-y-2 text-sm">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">

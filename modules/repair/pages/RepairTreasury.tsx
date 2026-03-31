@@ -21,6 +21,7 @@ export const RepairTreasury: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [branchId, setBranchId] = useState('');
   const [sessions, setSessions] = useState<RepairTreasurySession[]>([]);
+  const [activeOpenSession, setActiveOpenSession] = useState<RepairTreasurySession | null>(null);
   const [entries, setEntries] = useState<RepairTreasuryEntry[]>([]);
   const [openingBalance, setOpeningBalance] = useState('0');
   const [closingBalance, setClosingBalance] = useState('0');
@@ -51,9 +52,12 @@ export const RepairTreasury: React.FC = () => {
       ]);
       setSessions(rowsSessions);
       setEntries(rowsEntries);
+      const liveOpenSession = await repairTreasuryService.getOpenSession(selectedBranchId);
+      setActiveOpenSession(liveOpenSession);
     } catch (e: any) {
       setSessions([]);
       setEntries([]);
+      setActiveOpenSession(null);
       if (!options?.suppressToast) {
         toast.error(e?.message || 'تعذر تحميل بيانات خزينة الصيانة.');
       }
@@ -72,6 +76,7 @@ export const RepairTreasury: React.FC = () => {
         if (!defaultBranch) {
           setSessions([]);
           setEntries([]);
+          setActiveOpenSession(null);
           return;
         }
         await load(defaultBranch, { suppressToast: true });
@@ -81,6 +86,7 @@ export const RepairTreasury: React.FC = () => {
         setBranchId('');
         setSessions([]);
         setEntries([]);
+        setActiveOpenSession(null);
         toast.error(e?.message || 'ليس لديك صلاحية للوصول إلى بيانات خزينة الصيانة.');
       }
     };
@@ -95,6 +101,7 @@ export const RepairTreasury: React.FC = () => {
       setBranchId('');
       setSessions([]);
       setEntries([]);
+      setActiveOpenSession(null);
       return;
     }
     const isCurrentAllowed = allowedBranches.some((branch) => branch.id === branchId);
@@ -105,8 +112,8 @@ export const RepairTreasury: React.FC = () => {
   }, [allowedBranches, branchId]);
 
   const openSession = useMemo(
-    () => sessions.find((s) => s.status === 'open') || null,
-    [sessions],
+    () => activeOpenSession || sessions.find((s) => s.status === 'open') || null,
+    [activeOpenSession, sessions],
   );
 
   const sessionEntries = useMemo(
@@ -148,6 +155,9 @@ export const RepairTreasury: React.FC = () => {
           <div className="text-sm rounded border p-2">
             <div className="text-muted-foreground">حالة الخزينة</div>
             <div className="font-bold">{openSession ? 'مفتوحة' : 'مقفلة'}</div>
+            {openSession?.needsManualClose && (
+              <div className="text-xs text-amber-700 mt-1">تحتاج إقفال يدوي (فرق رصيد)</div>
+            )}
           </div>
           <div className="text-sm rounded border p-2">
             <div className="text-muted-foreground">الرصيد الحالي (حسابي)</div>

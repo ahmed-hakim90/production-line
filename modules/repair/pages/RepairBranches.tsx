@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -58,6 +58,8 @@ export const RepairBranches: React.FC = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [assignAsBranchManager, setAssignAsBranchManager] = useState(true);
+  const [techniciansModalOpen, setTechniciansModalOpen] = useState(false);
+  const [techniciansModalBranchId, setTechniciansModalBranchId] = useState('');
   const [newEmployeeForm, setNewEmployeeForm] = useState({
     name: '',
     phone: '',
@@ -271,6 +273,9 @@ export const RepairBranches: React.FC = () => {
         }
       }
 
+      if (employeeId) {
+        await repairBranchService.assignTechnicianToBranch(employeeModalBranchId, employeeId);
+      }
       if (assignAsBranchManager && employeeId) {
         await repairBranchService.update(employeeModalBranchId, {
           managerEmployeeId: employeeId,
@@ -293,6 +298,25 @@ export const RepairBranches: React.FC = () => {
     const code = String(employee.code || '').toLowerCase();
     return `${name} ${code}`.includes(q);
   });
+  const employeeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    employees.forEach((employee) => {
+      const id = String(employee.id || '').trim();
+      if (!id) return;
+      map.set(id, String(employee.name || '').trim() || id);
+    });
+    return map;
+  }, [employees]);
+  const selectedTechniciansBranch = useMemo(
+    () => rows.find((branch) => String(branch.id || '') === techniciansModalBranchId) || null,
+    [rows, techniciansModalBranchId],
+  );
+  const selectedTechnicianIds = selectedTechniciansBranch?.technicianIds || [];
+
+  const openTechniciansModal = (branchId: string) => {
+    setTechniciansModalBranchId(branchId);
+    setTechniciansModalOpen(true);
+  };
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -428,6 +452,14 @@ export const RepairBranches: React.FC = () => {
                     <div className="text-lg font-semibold">
                       {branchStats[String(b.id || '')]?.techniciansCount ?? (b.technicianIds || []).length}
                     </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-1 h-7 px-2 text-xs"
+                      onClick={() => openTechniciansModal(String(b.id || ''))}
+                    >
+                      عرض الفنيين المعينين
+                    </Button>
                   </div>
                   <div className="rounded border bg-muted/20 px-3 py-2">
                     <div className="text-xs text-muted-foreground">الطلبات</div>

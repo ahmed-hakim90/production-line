@@ -66,7 +66,7 @@ export type Permission =
   | 'repair.branches.manage'
   | 'repair.technician.view'
   | 'repair.treasury.view' | 'repair.treasury.manage'
-  | 'repair.salesInvoice.create' | 'repair.salesInvoice.view'
+  | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
   | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -241,6 +241,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repair.treasury.manage', label: 'إدارة خزينة الصيانة' },
       { key: 'repair.salesInvoice.create', label: 'إنشاء فاتورة بيع قطع الغيار' },
       { key: 'repair.salesInvoice.view', label: 'عرض فواتير بيع قطع الغيار' },
+      { key: 'repair.salesInvoice.edit', label: 'تعديل فاتورة بيع قطع الغيار' },
+      { key: 'repair.salesInvoice.cancel', label: 'إلغاء فاتورة بيع قطع الغيار' },
     ],
   },
   {
@@ -647,6 +649,9 @@ export function checkPermission(
   }
   if (permission === 'catalog.categories.view') {
     return permissions['products.view'] === true;
+  }
+  if (permission === 'repair.salesInvoice.edit' || permission === 'repair.salesInvoice.cancel') {
+    return permissions['repair.salesInvoice.create'] === true;
   }
   if (
     permission === 'catalog.categories.create' ||

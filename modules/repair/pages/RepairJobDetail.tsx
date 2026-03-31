@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Printer } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +20,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
+import { repairTreasuryService } from '../services/repairTreasuryService';
 import { sparePartsService } from '../services/sparePartsService';
 import { productMaterialService } from '../../production/services/productMaterialService';
 import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
@@ -28,7 +30,7 @@ import { WhatsAppShare } from '../components/WhatsAppShare';
 import { REPAIR_JOB_STATUS_LABELS, type FirestoreUserWithRepair, type RepairBranch, type RepairJob, type RepairSparePart } from '../types';
 
 export const RepairJobDetail: React.FC = () => {
-  const { jobId = '' } = useParams<{ jobId: string }>();
+  const { jobId = '', tenantSlug = '' } = useParams<{ jobId: string; tenantSlug?: string }>();
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const [job, setJob] = useState<RepairJob | null>(null);
@@ -95,21 +97,37 @@ export const RepairJobDetail: React.FC = () => {
   const branchWarehouseId = String(branch?.warehouseId || '').trim();
   const branchWarehouseCode = String(branch?.warehouseCode || '').trim();
 
-  if (!job) return <div dir="rtl" role="status" aria-live="polite">جاري تحميل الطلب...</div>;
-
   const applyStatus = async () => {
     try {
+      const finalCostNumber = Number(finalCost || 0);
+      const needsTreasuryPosting = status === 'delivered'
+        && finalCostNumber > 0
+        && job.status !== 'delivered';
+      if (needsTreasuryPosting) {
+        await repairTreasuryService.ensureOpenSession(job.branchId);
+      }
       await repairJobService.changeStatus({
         jobId,
         status,
         technicianId: userProfile?.id,
         reason: status === 'unrepairable' ? reason : undefined,
-        finalCost: status === 'delivered' ? Number(finalCost || 0) : undefined,
+        finalCost: status === 'delivered' ? finalCostNumber : undefined,
         warranty: status === 'delivered' ? warranty : undefined,
       });
+      if (needsTreasuryPosting) {
+        await repairTreasuryService.addEntry({
+          branchId: job.branchId,
+          entryType: 'INCOME',
+          amount: finalCostNumber,
+          note: `تحصيل تسليم طلب صيانة #${job.receiptNo}`,
+          referenceId: jobId,
+          createdBy: userProfile?.id || '',
+          createdByName: userProfile?.displayName || userProfile?.email || 'system',
+        });
+      }
       const next = await repairJobService.getById(jobId);
       setJob(next);
-      toast.success('تم تحديث الحالة.');
+      toast.success(needsTreasuryPosting ? 'تم تحديث الحالة وتسجيل التحصيل بالخزينة.' : 'تم تحديث الحالة.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر تحديث الحالة.');
     }
@@ -117,9 +135,13 @@ export const RepairJobDetail: React.FC = () => {
 
   const assignToMe = async () => {
     if (!userProfile?.id) return;
-    await repairJobService.assignTechnician(jobId, userProfile.id);
-    setJob(await repairJobService.getById(jobId));
-    toast.success('تم إسناد الطلب لك.');
+    try {
+      await repairJobService.assignTechnician(jobId, userProfile.id);
+      setJob(await repairJobService.getById(jobId));
+      toast.success('تم إسناد الطلب لك.');
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر إسناد الطلب.');
+    }
   };
 
   const addPartUsage = async () => {
@@ -145,21 +167,25 @@ export const RepairJobDetail: React.FC = () => {
       quantity: qty,
       unitCost: 0,
     }];
-    await sparePartsService.adjustStock({
-      branchId: job.branchId,
-      warehouseId: branchWarehouseId,
-      warehouseName: branch?.name ? `مخزن ${branch.name}` : branchWarehouseCode,
-      partId: part.id || '',
-      partName: part.name,
-      quantity: qty,
-      type: 'OUT',
-      createdBy: userProfile?.displayName || userProfile?.email || 'system',
-      jobId,
-      notes: 'استهلاك قطع غيار في طلب صيانة',
-    });
-    await repairJobService.update(jobId, { partsUsed: nextParts });
-    setJob(await repairJobService.getById(jobId));
-    toast.success('تم خصم القطعة من المخزون.');
+    try {
+      await sparePartsService.adjustStock({
+        branchId: job.branchId,
+        warehouseId: branchWarehouseId,
+        warehouseName: branch?.name ? `مخزن ${branch.name}` : branchWarehouseCode,
+        partId: part.id || '',
+        partName: part.name,
+        quantity: qty,
+        type: 'OUT',
+        createdBy: userProfile?.displayName || userProfile?.email || 'system',
+        jobId,
+        notes: 'استهلاك قطع غيار في طلب صيانة',
+      });
+      await repairJobService.update(jobId, { partsUsed: nextParts });
+      setJob(await repairJobService.getById(jobId));
+      toast.success('تم خصم القطعة من المخزون.');
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر خصم القطعة من المخزون.');
+    }
   };
 
   const exportReceipt = async () => {
@@ -169,6 +195,38 @@ export const RepairJobDetail: React.FC = () => {
   const handlePrintRepairRequest = () => {
     window.print();
   };
+  const appBaseUrl = useMemo(() => {
+    const envUrl = String(import.meta.env.VITE_PUBLIC_APP_URL || import.meta.env.VITE_SITE_URL || '').trim();
+    if (envUrl) return envUrl.replace(/\/+$/, '');
+    if (typeof window === 'undefined') return '';
+    return String(window.location.origin || '').replace(/\/+$/, '');
+  }, []);
+  const trackUrl = useMemo(() => {
+    if (!job) return '';
+    if (!appBaseUrl) return '';
+    const slugFromPath = typeof window === 'undefined'
+      ? ''
+      : window.location.pathname.split('/').filter(Boolean)[1] || '';
+    const effectiveSlug = String(tenantSlug || slugFromPath || '').trim();
+    const params = new URLSearchParams();
+    if (effectiveSlug) params.set('slug', effectiveSlug);
+    if (job.receiptNo) params.set('receipt', String(job.receiptNo));
+    if (job.customerPhone) params.set('phone', String(job.customerPhone));
+    const query = params.toString();
+    return `${appBaseUrl}/track${query ? `?${query}` : ''}`;
+  }, [appBaseUrl, job, tenantSlug]);
+  const whatsappText = useMemo(() => {
+    if (!job) return '';
+    const baseMessage = formatRepairWhatsAppMessage(job);
+    if (!trackUrl) return `${baseMessage}\nرابط متابعة الطلب: /track`;
+    return [
+      baseMessage,
+      `رقم الإيصال: ${String(job.receiptNo || '-')}`,
+      `رابط متابعة الطلب (لينك كامل): ${trackUrl}`,
+    ].join('\n');
+  }, [job, trackUrl]);
+
+  if (!job) return <div dir="rtl" role="status" aria-live="polite">جاري تحميل الطلب...</div>;
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -186,14 +244,41 @@ export const RepairJobDetail: React.FC = () => {
 
       <Card className="no-print">
         <CardHeader><CardTitle>بيانات العميل والجهاز</CardTitle></CardHeader>
-        <CardContent className="text-sm space-y-1">
-          <div>{job.customerName} - {job.customerPhone}</div>
-          {job.customerAddress && <div>{job.customerAddress}</div>}
-          <div>{job.deviceBrand} {job.deviceModel}</div>
-          <div>نوع الجهاز: {job.deviceType || '—'}</div>
-          {job.deviceColor && <div>اللون: {job.deviceColor}</div>}
-          {job.accessories && <div>الإكسسوارات: {job.accessories}</div>}
-          <div className="pt-1">وصف العطل: {job.problemDescription}</div>
+        <CardContent className="text-sm">
+          <div className="grid gap-4 md:grid-cols-12">
+            <div className="space-y-1 md:col-span-8">
+              <div>{job.customerName} - {job.customerPhone}</div>
+              {job.customerAddress && <div>{job.customerAddress}</div>}
+              <div>{job.deviceBrand} {job.deviceModel}</div>
+              <div>نوع الجهاز: {job.deviceType || '—'}</div>
+              {job.deviceColor && <div>اللون: {job.deviceColor}</div>}
+              {job.accessories && <div>الإكسسوارات: {job.accessories}</div>}
+              <div className="pt-1">وصف العطل: {job.problemDescription}</div>
+            </div>
+            <div className="md:col-span-4 md:border-r md:pe-3 md:text-left">
+              {/* <div className="text-right">
+                <span className="font-semibold">رابط متابعة الطلب:</span>
+              </div> */}
+              {/* <a
+                href={trackUrl || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline break-all block mt-1 text-left"
+              >
+                {trackUrl || '/track'}
+              </a> */}
+              {trackUrl && (
+                <div className="pt-2 flex items-start gap-3 justify-start">
+                  <div className="rounded border p-2 bg-white">
+                  <div className="text-xs text-muted-foreground text-right">
+                    امسح QR لفتح صفحة تتبع الطلب مباشرة.
+                  </div>
+                    <QRCodeSVG value={trackUrl} size={88} includeMargin />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -303,7 +388,7 @@ export const RepairJobDetail: React.FC = () => {
         <Button variant="outline" onClick={handlePrintRepairRequest}>
           <Printer className="h-4 w-4 ms-1" /> طباعة طلب الصيانة
         </Button>
-        <WhatsAppShare text={formatRepairWhatsAppMessage(job)} />
+        <WhatsAppShare text={whatsappText} />
         <Button variant="outline" onClick={exportReceipt}>تنزيل إيصال PDF</Button>
       </div>
 
@@ -388,6 +473,17 @@ export const RepairJobDetail: React.FC = () => {
             <div className="border-t pt-2 text-center">توقيع الموظف</div>
             <div className="border-t pt-2 text-center">توقيع العميل</div>
           </div>
+          {trackUrl && (
+            <div className="pt-4 border-t">
+              <div className="text-sm font-semibold mb-2">متابعة الطلب (QR )افتح الكاميرا و انتظر النتيجة</div>
+              <div className="flex items-center justify-between gap-4">
+                {/* <div className="text-xs break-all">{trackUrl}</div> */}
+                <div className="rounded border p-2 bg-white">
+                  <QRCodeSVG value={trackUrl} size={96} includeMargin />
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

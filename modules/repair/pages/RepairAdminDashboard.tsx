@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairJobService } from '../services/repairJobService';
+import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import { sparePartsService } from '../services/sparePartsService';
-import type { RepairBranch, RepairJob, RepairSparePart, RepairSparePartStock } from '../types';
+import type { RepairBranch, RepairJob, RepairSalesInvoice, RepairSparePart, RepairSparePartStock } from '../types';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -16,19 +17,26 @@ type BranchKpi = {
   readyJobs: number;
   successRate: number;
   revenue: number;
+  partsRevenue: number;
+  totalRevenue: number;
   lowStockCount: number;
 };
 
 export const RepairAdminDashboard: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [jobs, setJobs] = useState<RepairJob[]>([]);
+  const [salesInvoices, setSalesInvoices] = useState<RepairSalesInvoice[]>([]);
   const [partsByBranch, setPartsByBranch] = useState<Record<string, RepairSparePart[]>>({});
   const [stockByBranch, setStockByBranch] = useState<Record<string, RepairSparePartStock[]>>({});
 
   useEffect(() => {
     void repairBranchService.list().then(setBranches);
     const unsub = repairJobService.subscribeAll(setJobs);
-    return () => unsub();
+    const unsubInvoices = repairSalesInvoiceService.subscribeAll(setSalesInvoices);
+    return () => {
+      unsub();
+      unsubInvoices();
+    };
   }, []);
 
   useEffect(() => {
@@ -66,6 +74,10 @@ export const RepairAdminDashboard: React.FC = () => {
       const revenue = branchJobs
         .filter((j) => j.status === 'delivered')
         .reduce((sum, j) => sum + Number(j.finalCost || 0), 0);
+      const partsRevenue = salesInvoices
+        .filter((invoice) => invoice.branchId === branchId)
+        .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+      const totalRevenue = revenue + partsRevenue;
 
       const parts = partsByBranch[branchId] || [];
       const stock = stockByBranch[branchId] || [];
@@ -80,10 +92,12 @@ export const RepairAdminDashboard: React.FC = () => {
         readyJobs,
         successRate,
         revenue,
+        partsRevenue,
+        totalRevenue,
         lowStockCount,
       };
     });
-  }, [branches, jobs, partsByBranch, stockByBranch]);
+  }, [branches, jobs, salesInvoices, partsByBranch, stockByBranch]);
 
   const overview = useMemo(() => {
     const totalJobs = cards.reduce((sum, card) => sum + card.totalJobs, 0);
@@ -91,9 +105,11 @@ export const RepairAdminDashboard: React.FC = () => {
     const readyJobs = cards.reduce((sum, card) => sum + card.readyJobs, 0);
     const deliveredJobs = cards.reduce((sum, card) => sum + card.deliveredJobs, 0);
     const revenue = cards.reduce((sum, card) => sum + card.revenue, 0);
+    const partsRevenue = cards.reduce((sum, card) => sum + card.partsRevenue, 0);
+    const totalRevenue = cards.reduce((sum, card) => sum + card.totalRevenue, 0);
     const lowStockCount = cards.reduce((sum, card) => sum + card.lowStockCount, 0);
     const successRate = totalJobs > 0 ? (deliveredJobs / totalJobs) * 100 : 0;
-    return { totalJobs, openJobs, readyJobs, deliveredJobs, revenue, lowStockCount, successRate };
+    return { totalJobs, openJobs, readyJobs, deliveredJobs, revenue, partsRevenue, totalRevenue, lowStockCount, successRate };
   }, [cards]);
 
   const rankedCards = useMemo(
@@ -119,7 +135,7 @@ export const RepairAdminDashboard: React.FC = () => {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Card className="shadow-sm">
           <CardContent className="pt-5 space-y-1">
             <p className="text-xs text-muted-foreground">إجمالي الطلبات</p>
@@ -142,6 +158,12 @@ export const RepairAdminDashboard: React.FC = () => {
           <CardContent className="pt-5 space-y-1">
             <p className="text-xs text-muted-foreground">إيراد الصيانة</p>
             <p className="text-2xl font-bold text-emerald-600">{fmt(overview.revenue)}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="pt-5 space-y-1">
+            <p className="text-xs text-muted-foreground">مبيعات قطع الغيار</p>
+            <p className="text-2xl font-bold text-sky-600">{fmt(overview.partsRevenue)}</p>
           </CardContent>
         </Card>
       </div>
@@ -223,6 +245,14 @@ export const RepairAdminDashboard: React.FC = () => {
                   <div className="font-bold text-emerald-600">{fmt(card.revenue)}</div>
                 </div>
                 <div className="rounded-lg border p-2.5">
+                  <div className="text-muted-foreground">مبيعات قطع الغيار</div>
+                  <div className="font-bold text-sky-600">{fmt(card.partsRevenue)}</div>
+                </div>
+                <div className="rounded-lg border p-2.5">
+                  <div className="text-muted-foreground">الإجمالي التشغيلي</div>
+                  <div className="font-bold text-emerald-700">{fmt(card.totalRevenue)}</div>
+                </div>
+                <div className="rounded-lg border p-2.5">
                   <div className="text-muted-foreground">منخفض المخزون</div>
                   <div className={`font-bold ${card.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                     {fmt(card.lowStockCount)}
@@ -259,7 +289,9 @@ export const RepairAdminDashboard: React.FC = () => {
                   <th className="text-right py-2 px-2 font-medium">الطلبات</th>
                   <th className="text-right py-2 px-2 font-medium">المنجز</th>
                   <th className="text-right py-2 px-2 font-medium">نسبة النجاح</th>
-                  <th className="text-right py-2 px-2 font-medium">الإيراد</th>
+                  <th className="text-right py-2 px-2 font-medium">إيراد الصيانة</th>
+                  <th className="text-right py-2 px-2 font-medium">مبيعات قطع الغيار</th>
+                  <th className="text-right py-2 px-2 font-medium">الإجمالي</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,6 +302,8 @@ export const RepairAdminDashboard: React.FC = () => {
                     <td className="py-2 px-2">{fmt(card.deliveredJobs)}</td>
                     <td className="py-2 px-2">{card.successRate.toFixed(1)}%</td>
                     <td className="py-2 px-2 text-emerald-600">{fmt(card.revenue)}</td>
+                    <td className="py-2 px-2 text-sky-600">{fmt(card.partsRevenue)}</td>
+                    <td className="py-2 px-2 text-emerald-700">{fmt(card.totalRevenue)}</td>
                   </tr>
                 ))}
               </tbody>

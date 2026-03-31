@@ -108,6 +108,7 @@ export const sparePartsService = {
     createdBy: string;
     notes?: string;
     jobId?: string;
+    referenceId?: string;
   }): Promise<void> {
     if (!isConfigured) return;
     const tenantId = getCurrentTenantId();
@@ -149,6 +150,7 @@ export const sparePartsService = {
         partName: input.partName,
         type: input.type,
         quantity: Math.abs(input.quantity),
+        ...(input.referenceId ? { referenceId: input.referenceId } : {}),
         ...(normalizedNotes ? { notes: normalizedNotes } : {}),
         ...(input.jobId ? { jobId: input.jobId } : {}),
         createdBy: input.createdBy,

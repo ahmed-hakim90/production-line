@@ -38,6 +38,7 @@ export const SparePartsInventory: React.FC = () => {
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const canManageAllBranches = can('repair.branches.manage');
+  const canManageParts = can('repair.parts.manage');
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const userBranchIds = useMemo(() => resolveUserRepairBranchIds(user), [user]);
@@ -154,18 +155,22 @@ export const SparePartsInventory: React.FC = () => {
       toast.error('هذا المكون مضاف بالفعل كقطعة غيار.');
       return;
     }
-    await sparePartsService.createPart({
-      branchId,
-      name: partName,
-      code: partCode,
-      category: 'مكونات منتج',
-      unit: form.unit || 'قطعة',
-      minStock: Number(form.minStock || 0),
-    });
-    toast.success('تمت إضافة القطعة.');
-    setForm((prev) => ({ ...prev, materialKey: '', unit: 'قطعة', minStock: '1' }));
-    setIsCreatePartModalOpen(false);
-    await load();
+    try {
+      await sparePartsService.createPart({
+        branchId,
+        name: partName,
+        code: partCode,
+        category: 'مكونات منتج',
+        unit: form.unit || 'قطعة',
+        minStock: Number(form.minStock || 0),
+      });
+      toast.success('تمت إضافة القطعة.');
+      setForm((prev) => ({ ...prev, materialKey: '', unit: 'قطعة', minStock: '1' }));
+      setIsCreatePartModalOpen(false);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر إضافة القطعة.');
+    }
   };
 
   const productMaterials = useMemo(() => {
@@ -174,22 +179,35 @@ export const SparePartsInventory: React.FC = () => {
   }, [form.productId, materials]);
 
   const increaseStock = async (part: RepairSparePart) => {
+    if (!canManageParts) {
+      toast.error('ليس لديك صلاحية تعديل المخزون.');
+      return;
+    }
     if (!part.id || !branchId || !activeWarehouseId) return;
     const qty = Math.max(1, Number(increaseQty || 1));
-    await sparePartsService.adjustStock({
-      branchId,
-      warehouseId: activeWarehouseId,
-      warehouseName: activeBranch?.name ? `مخزن ${activeBranch.name}` : activeWarehouseCode,
-      partId: part.id,
-      partName: part.name,
-      quantity: qty,
-      type: 'IN',
-      createdBy: user?.displayName || user?.email || 'system',
-      notes: 'إضافة يدوية',
-    });
-    await load();
+    try {
+      await sparePartsService.adjustStock({
+        branchId,
+        warehouseId: activeWarehouseId,
+        warehouseName: activeBranch?.name ? `مخزن ${activeBranch.name}` : activeWarehouseCode,
+        partId: part.id,
+        partName: part.name,
+        quantity: qty,
+        type: 'IN',
+        createdBy: user?.displayName || user?.email || 'system',
+        notes: 'إضافة يدوية',
+      });
+      await load();
+      toast.success('تمت إضافة الكمية بنجاح.');
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر إضافة الكمية.');
+    }
   };
   const decreaseStock = async (part: RepairSparePart) => {
+    if (!canManageParts) {
+      toast.error('ليس لديك صلاحية تعديل المخزون.');
+      return;
+    }
     if (!part.id || !branchId || !activeWarehouseId) return;
     const qty = Math.max(1, Number(increaseQty || 1));
     try {
@@ -205,6 +223,7 @@ export const SparePartsInventory: React.FC = () => {
         notes: 'سحب يدوي',
       });
       await load();
+      toast.success('تم سحب الكمية بنجاح.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر سحب الكمية.');
     }
@@ -289,7 +308,7 @@ export const SparePartsInventory: React.FC = () => {
           هذا الفرع لا يملك مخزنًا مرتبطًا بعد. أنشئ فرعًا جديدًا أو اربط مخزنًا يدويًا للفرع الحالي.
         </div>
       )}
-      {can('repair.parts.manage') && (
+      {canManageParts && (
         <div className="flex justify-end">
           <Dialog open={isCreatePartModalOpen} onOpenChange={setIsCreatePartModalOpen}>
             <DialogTrigger asChild>
@@ -394,13 +413,13 @@ export const SparePartsInventory: React.FC = () => {
                       </td>
                       <td className="p-2">
                         <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => increaseStock(part)}>
+                          <Button variant="outline" size="sm" onClick={() => increaseStock(part)} disabled={!canManageParts}>
                             +{Math.max(1, Number(increaseQty || 1))}
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => decreaseStock(part)}>
+                          <Button variant="outline" size="sm" onClick={() => decreaseStock(part)} disabled={!canManageParts}>
                             -{Math.max(1, Number(increaseQty || 1))}
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={() => setPartPendingDelete(part)}>
+                          <Button variant="destructive" size="sm" onClick={() => setPartPendingDelete(part)} disabled={!canManageParts}>
                             حذف
                           </Button>
                         </div>

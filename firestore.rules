@@ -183,6 +183,29 @@ service cloud.firestore {
         );
     }
 
+    function canCreateRepairTreasuryEntryForOpenSession() {
+      return (
+        'sessionId' in request.resource.data
+        && exists(
+          /databases/$(database)/documents/repair_treasury_sessions/$(request.resource.data.sessionId)
+        )
+        && get(
+          /databases/$(database)/documents/repair_treasury_sessions/$(request.resource.data.sessionId)
+        ).data.branchId == request.resource.data.branchId
+        && get(
+          /databases/$(database)/documents/repair_treasury_sessions/$(request.resource.data.sessionId)
+        ).data.status == 'open'
+        && (
+          !('needsManualClose' in get(
+            /databases/$(database)/documents/repair_treasury_sessions/$(request.resource.data.sessionId)
+          ).data)
+          || get(
+            /databases/$(database)/documents/repair_treasury_sessions/$(request.resource.data.sessionId)
+          ).data.needsManualClose != true
+        )
+      );
+    }
+
     /**
      * Gradual hardening (after backfillTenantId / data audit):
      * 1. Ensure all business docs in production have tenantId set.
@@ -407,7 +430,9 @@ service cloud.firestore {
           hasPermission('repair.treasury.view')
           || hasPermission('repair.treasury.manage')
         ) && canReadRepairBranchScoped();
-      allow create: if hasPermission('repair.treasury.manage') && canCreateRepairBranchScoped();
+      allow create: if hasPermission('repair.treasury.manage')
+        && canCreateRepairBranchScoped()
+        && canCreateRepairTreasuryEntryForOpenSession();
       allow update, delete: if false;
     }
 
@@ -417,7 +442,11 @@ service cloud.firestore {
           || hasPermission('repair.salesInvoice.create')
         ) && canReadRepairBranchScoped();
       allow create: if hasPermission('repair.salesInvoice.create') && canCreateRepairBranchScoped();
-      allow update, delete: if false;
+      allow update: if (
+          hasPermission('repair.salesInvoice.edit')
+          || hasPermission('repair.salesInvoice.cancel')
+        ) && canUpdateRepairBranchScoped();
+      allow delete: if false;
     }
 
     match /_counters/{id} {

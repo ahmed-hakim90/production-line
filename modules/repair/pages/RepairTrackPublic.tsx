@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,16 @@ export const RepairTrackPublic: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any | null>(null);
   const [error, setError] = useState('');
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const slug = String(params.get('slug') || '').trim();
+    const receipt = String(params.get('receipt') || '').trim();
+    const customerPhone = String(params.get('phone') || '').trim();
+    if (slug) setTenantSlug(slug);
+    if (receipt) setReceiptNo(receipt);
+    if (customerPhone) setPhone(customerPhone);
+  }, []);
 
   const search = async () => {
     if (!isConfigured) return;

@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDocs,
+  limit,
   orderBy,
   query,
   runTransaction,
@@ -76,6 +77,47 @@ export const repairTreasuryService = {
     }
   },
 
+  async ensureOpenSession(branchId: string): Promise<RepairTreasurySession> {
+    const openSession = await this.getOpenSession(branchId);
+    if (!openSession?.id) {
+      throw new Error('لا توجد خزينة مفتوحة لهذا الفرع.');
+    }
+    if (openSession.needsManualClose) {
+      throw new Error('الخزينة تحتاج إقفال يدوي بسبب فرق في الرصيد. لا يمكن تسجيل حركات جديدة.');
+    }
+    return openSession;
+  },
+
+  async hasIncomeEntryByReference(sessionId: string, referenceId: string): Promise<boolean> {
+    if (!isConfigured || !sessionId || !referenceId) return false;
+    try {
+      const q = query(
+        collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION),
+        where('sessionId', '==', sessionId),
+        where('entryType', '==', 'INCOME'),
+        where('referenceId', '==', referenceId),
+        limit(1),
+      );
+      const snap = await getDocs(q);
+      return !snap.empty;
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر التحقق من قيود التحصيل السابقة.');
+    }
+  },
+
+  async hasEntryByReference(referenceId: string, entryType?: RepairTreasuryEntryType): Promise<boolean> {
+    if (!isConfigured || !referenceId) return false;
+    try {
+      const constraints = [where('referenceId', '==', referenceId)] as Parameters<typeof query>[1][];
+      if (entryType) constraints.push(where('entryType', '==', entryType));
+      const q = query(collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION), ...constraints, limit(1));
+      const snap = await getDocs(q);
+      return !snap.empty;
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر التحقق من قيد الخزينة المرجعي.');
+    }
+  },
+
   async openSession(input: {
     branchId: string;
     openingBalance: number;
@@ -127,8 +169,13 @@ export const repairTreasuryService = {
     if (!isConfigured) return null;
     try {
       const tenantId = getCurrentTenantId();
-      const openSession = await this.getOpenSession(input.branchId);
-      if (!openSession?.id) throw new Error('لا توجد خزينة مفتوحة لهذا الفرع.');
+      const openSession = await this.ensureOpenSession(input.branchId);
+      if (input.entryType === 'INCOME' && input.referenceId) {
+        const alreadyPosted = await this.hasIncomeEntryByReference(openSession.id || '', input.referenceId);
+        if (alreadyPosted) {
+          throw new Error('تم تسجيل تحصيل خزينة مسبقًا لنفس المرجع.');
+        }
+      }
       const ref = await addDoc(collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION), {
         tenantId,
         branchId: input.branchId,
@@ -167,6 +214,8 @@ export const repairTreasuryService = {
           closedBy: input.closedBy,
           closedByName: input.closedByName,
           closingBalance: Number(input.closingBalance || 0),
+          needsManualClose: false,
+          closeBlockReason: '',
         });
         const entryRef = doc(collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION));
         tx.set(entryRef, {

@@ -1704,7 +1704,7 @@ export const Reports: React.FC = () => {
     setSyncingMissingTransfers(true);
     try {
       const summary = await syncMissingProductionEntryTransfers(startDate, endDate);
-      toast.warning(
+      toast.success(
         `تمت المزامنة بنجاح.\n` +
         `تم الفحص: ${summary.processed}\n` +
         `تم الإنشاء: ${summary.created}\n` +
@@ -1772,7 +1772,7 @@ export const Reports: React.FC = () => {
         });
       }
 
-      toast.warning(
+      toast.success(
         `تمت معالجة الربط بنجاح.\n` +
         `تم الفحص: ${summary.processed}\n` +
         `تم الربط: ${summary.linked}\n` +
@@ -1852,7 +1852,7 @@ export const Reports: React.FC = () => {
         });
       }
 
-      toast.warning(
+      toast.success(
         `تم تنفيذ فك الربط.\n` +
         `تم الفحص: ${summary.processed}\n` +
         `تم فك الربط: ${summary.unlinked}\n` +

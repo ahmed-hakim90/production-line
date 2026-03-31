@@ -712,7 +712,7 @@ export interface MonthlyProductionCost {
   calculatedAt?: any;
 }
 
-// ─── System Settings (system_settings/global) ───────────────────────────────
+// ─── System Settings (system_settings/{tenantId}) ───────────────────────────
 
 export interface WidgetConfig {
   id: string;

@@ -31,6 +31,8 @@ const ROLES_COLLECTION = 'roles';
 const ASSETS_COLLECTION = 'assets';
 const ASSET_DEPRECIATIONS_COLLECTION = 'asset_depreciations';
 const FCM_TOKEN_SUBCOLLECTION = 'fcmTokens';
+const REPAIR_TREASURY_SESSIONS_COLLECTION = 'repair_treasury_sessions';
+const REPAIR_TREASURY_ENTRIES_COLLECTION = 'repair_treasury_entries';
 
 type ReportLike = {
   date?: string;
@@ -103,6 +105,21 @@ const calculateMonthlyDepreciationSafe = (
   const safeLife = Math.max(1, Math.floor(toNumberSafe(usefulLifeMonths, 1)));
   return Math.max(0, safeCost - safeSalvage) / safeLife;
 };
+
+type RepairTreasuryEntryLike = {
+  entryType?: string;
+  amount?: number;
+};
+
+const computeRepairSessionBalance = (entries: RepairTreasuryEntryLike[]): number => (
+  entries.reduce((sum, entry) => {
+    const amount = toNumberSafe(entry.amount, 0);
+    const type = String(entry.entryType || '');
+    if (type === 'OPENING' || type === 'INCOME' || type === 'TRANSFER_IN') return sum + amount;
+    if (type === 'EXPENSE' || type === 'TRANSFER_OUT') return sum - amount;
+    return sum;
+  }, 0)
+);
 
 const runAssetDepreciationForPeriod = async (periodInput?: string) => {
   const period = normalizePeriod(periodInput);
@@ -747,6 +764,101 @@ export const scheduledAssetDepreciationJob = onSchedule(
   },
   async () => {
     await runAssetDepreciationForPeriod();
+  },
+);
+
+export const scheduledRepairTreasuryAutoCloseJob = onSchedule(
+  {
+    schedule: '0 21 * * *',
+    timeZone: 'Africa/Cairo',
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async () => {
+    const sessionsSnap = await db
+      .collection(REPAIR_TREASURY_SESSIONS_COLLECTION)
+      .where('status', '==', 'open')
+      .get();
+
+    for (const sessionDoc of sessionsSnap.docs) {
+      const session = sessionDoc.data() as {
+        tenantId?: string;
+        branchId?: string;
+        openedBy?: string;
+        openedByName?: string;
+        needsManualClose?: boolean;
+        expectedClosingBalance?: number;
+        actualBalance?: number;
+        closingBalance?: number;
+      };
+      const sessionId = sessionDoc.id;
+      const branchId = String(session.branchId || '').trim();
+      const tenantId = String(session.tenantId || '').trim();
+      if (!branchId || !tenantId) continue;
+      if (session.needsManualClose === true) continue;
+
+      const entriesSnap = await db
+        .collection(REPAIR_TREASURY_ENTRIES_COLLECTION)
+        .where('sessionId', '==', sessionId)
+        .get();
+      const entries = entriesSnap.docs.map((d) => d.data() as RepairTreasuryEntryLike);
+      const computedBalance = computeRepairSessionBalance(entries);
+
+      const expectedCandidates = [
+        session.expectedClosingBalance,
+        session.actualBalance,
+        session.closingBalance,
+      ];
+      const expectedBalance = expectedCandidates.find((value) => Number.isFinite(Number(value)));
+      const hasExpectedBalance = expectedBalance !== undefined;
+      const diff = hasExpectedBalance
+        ? Math.abs(toNumberSafe(expectedBalance, computedBalance) - computedBalance)
+        : 0;
+
+      if (hasExpectedBalance && diff > 0.01) {
+        await sessionDoc.ref.set(
+          {
+            needsManualClose: true,
+            closeBlockReason: 'balance_mismatch',
+            closeDifference: diff,
+            autoCloseCheckedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+        continue;
+      }
+
+      const closedAt = new Date().toISOString();
+      const batch = db.batch();
+      batch.set(
+        sessionDoc.ref,
+        {
+          status: 'closed',
+          closedAt,
+          closedBy: 'system:auto-close',
+          closedByName: 'System Auto Close',
+          closingBalance: computedBalance,
+          needsManualClose: false,
+          closeBlockReason: '',
+          autoClosedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      const closingRef = db.collection(REPAIR_TREASURY_ENTRIES_COLLECTION).doc();
+      batch.set(closingRef, {
+        tenantId,
+        branchId,
+        sessionId,
+        entryType: 'CLOSING',
+        amount: computedBalance,
+        note: 'إقفال تلقائي 9:00 مساءً',
+        createdBy: 'system:auto-close',
+        createdByName: 'System Auto Close',
+        createdAt: closedAt,
+      });
+      await batch.commit();
+    }
   },
 );
 

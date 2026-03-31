@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AVAILABLE_QUICK_ACTIONS,
   DASHBOARD_LABELS,
@@ -42,11 +42,35 @@ type WidgetFormState = {
 };
 
 export const useSettingsDraft = (systemSettings: SystemSettings) => {
+  const normalizedSource = useMemo(() => ({
+    dashboardWidgets: JSON.parse(JSON.stringify(systemSettings.dashboardWidgets)) as Record<string, WidgetConfig[]>,
+    customDashboardWidgets: JSON.parse(JSON.stringify(systemSettings.customDashboardWidgets ?? [])) as CustomWidgetConfig[],
+    alertSettings: { ...DEFAULT_ALERT_SETTINGS, ...systemSettings.alertSettings } as AlertSettings,
+    kpiThresholds: { ...DEFAULT_KPI_THRESHOLDS, ...systemSettings.kpiThresholds } as Record<string, KPIThreshold>,
+    printTemplate: { ...DEFAULT_PRINT_TEMPLATE, ...systemSettings.printTemplate } as PrintTemplateSettings,
+    planSettings: { ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings } as PlanSettings,
+    branding: { ...DEFAULT_BRANDING, ...systemSettings.branding } as BrandingSettings,
+    theme: { ...DEFAULT_THEME, ...systemSettings.theme } as ThemeSettings,
+    dashboardDisplay: { ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay } as DashboardDisplaySettings,
+    alertToggles: { ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles } as AlertToggleSettings,
+    quickActions: (systemSettings.quickActions ?? [])
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map((item, index) => ({ ...item, order: item.order ?? index })),
+    exportImport: { pages: { ...(systemSettings.exportImport?.pages ?? {}) } } as ExportImportSettings,
+    minimumClientVersion: systemSettings.minimumClientVersion ?? '',
+    forceClientUpdate: systemSettings.forceClientUpdate === true,
+    clientUpdateMessageAr: systemSettings.clientUpdateMessageAr ?? '',
+  }), [systemSettings]);
+  const sourceSignature = useMemo(() => JSON.stringify(normalizedSource), [normalizedSource]);
+  const initialSourceSignatureRef = useRef<string>(sourceSignature);
+  const didInitialHydrationRef = useRef<boolean>(false);
+
   const [localWidgets, setLocalWidgets] = useState<Record<string, WidgetConfig[]>>(
-    () => JSON.parse(JSON.stringify(systemSettings.dashboardWidgets))
+    () => normalizedSource.dashboardWidgets
   );
   const [localCustomWidgets, setLocalCustomWidgets] = useState<CustomWidgetConfig[]>(
-    () => JSON.parse(JSON.stringify(systemSettings.customDashboardWidgets ?? []))
+    () => normalizedSource.customDashboardWidgets
   );
   const [selectedDashboardKey, setSelectedDashboardKey] = useState<string>(() => Object.keys(DASHBOARD_LABELS)[0] ?? 'dashboard');
   const [widgetForm, setWidgetForm] = useState<WidgetFormState>({
@@ -62,47 +86,65 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
   });
 
   const [localAlerts, setLocalAlerts] = useState<AlertSettings>(
-    () => ({ ...DEFAULT_ALERT_SETTINGS, ...systemSettings.alertSettings })
+    () => normalizedSource.alertSettings
   );
   const [localKPIs, setLocalKPIs] = useState<Record<string, KPIThreshold>>(
-    () => ({ ...DEFAULT_KPI_THRESHOLDS, ...systemSettings.kpiThresholds })
+    () => normalizedSource.kpiThresholds
   );
   const [localPrint, setLocalPrint] = useState<PrintTemplateSettings>(
-    () => ({ ...DEFAULT_PRINT_TEMPLATE, ...systemSettings.printTemplate })
+    () => normalizedSource.printTemplate
   );
   const [localPlanSettings, setLocalPlanSettings] = useState<PlanSettings>(
-    () => ({ ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings })
+    () => normalizedSource.planSettings
   );
   const [localBranding, setLocalBranding] = useState<BrandingSettings>(
-    () => ({ ...DEFAULT_BRANDING, ...systemSettings.branding })
+    () => normalizedSource.branding
   );
   const [localTheme, setLocalTheme] = useState<ThemeSettings>(
-    () => ({ ...DEFAULT_THEME, ...systemSettings.theme })
+    () => normalizedSource.theme
   );
   const [localDashboardDisplay, setLocalDashboardDisplay] = useState<DashboardDisplaySettings>(
-    () => ({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay })
+    () => normalizedSource.dashboardDisplay
   );
   const [localAlertToggles, setLocalAlertToggles] = useState<AlertToggleSettings>(
-    () => ({ ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles })
+    () => normalizedSource.alertToggles
   );
   const [localQuickActions, setLocalQuickActions] = useState<QuickActionItem[]>(
-    () => (systemSettings.quickActions ?? [])
-      .slice()
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .map((item, index) => ({ ...item, order: item.order ?? index }))
+    () => normalizedSource.quickActions
   );
   const [localExportImport, setLocalExportImport] = useState<ExportImportSettings>(
-    () => ({ pages: { ...(systemSettings.exportImport?.pages ?? {}) } })
+    () => normalizedSource.exportImport
   );
   const [localMinimumClientVersion, setLocalMinimumClientVersion] = useState(
-    () => systemSettings.minimumClientVersion ?? '',
+    () => normalizedSource.minimumClientVersion,
   );
   const [localForceClientUpdate, setLocalForceClientUpdate] = useState(
-    () => systemSettings.forceClientUpdate === true,
+    () => normalizedSource.forceClientUpdate,
   );
   const [localClientUpdateMessageAr, setLocalClientUpdateMessageAr] = useState(
-    () => systemSettings.clientUpdateMessageAr ?? '',
+    () => normalizedSource.clientUpdateMessageAr,
   );
+
+  useEffect(() => {
+    if (sourceSignature === initialSourceSignatureRef.current || didInitialHydrationRef.current) return;
+
+    setLocalWidgets(normalizedSource.dashboardWidgets);
+    setLocalCustomWidgets(normalizedSource.customDashboardWidgets);
+    setLocalAlerts(normalizedSource.alertSettings);
+    setLocalKPIs(normalizedSource.kpiThresholds);
+    setLocalPrint(normalizedSource.printTemplate);
+    setLocalPlanSettings(normalizedSource.planSettings);
+    setLocalBranding(normalizedSource.branding);
+    setLocalTheme(normalizedSource.theme);
+    setLocalDashboardDisplay(normalizedSource.dashboardDisplay);
+    setLocalAlertToggles(normalizedSource.alertToggles);
+    setLocalQuickActions(normalizedSource.quickActions);
+    setLocalExportImport(normalizedSource.exportImport);
+    setLocalMinimumClientVersion(normalizedSource.minimumClientVersion);
+    setLocalForceClientUpdate(normalizedSource.forceClientUpdate);
+    setLocalClientUpdateMessageAr(normalizedSource.clientUpdateMessageAr);
+    didInitialHydrationRef.current = true;
+  }, [normalizedSource, sourceSignature]);
 
   const normalizeQuickActions = useCallback(
     (items: QuickActionItem[]) => items.map((item, index) => ({ ...item, order: index })),

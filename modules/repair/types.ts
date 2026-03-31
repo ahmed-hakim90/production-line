@@ -122,6 +122,7 @@ export interface RepairPartTransaction {
   type: RepairPartTransactionType;
   quantity: number;
   jobId?: string;
+  referenceId?: string;
   notes?: string;
   createdBy: string;
   createdAt: string;
@@ -139,6 +140,8 @@ export interface RepairTreasurySession {
   closedBy?: string;
   closedByName?: string;
   closingBalance?: number;
+  needsManualClose?: boolean;
+  closeBlockReason?: string;
   status: 'open' | 'closed';
 }
 
@@ -174,9 +177,19 @@ export interface RepairSalesInvoice {
   notes?: string;
   total: number;
   lines: RepairSalesInvoiceLine[];
+  status?: 'active' | 'cancelled';
+  warehouseId?: string;
+  warehouseName?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByName?: string;
+  cancelReason?: string;
 }
 
 export interface RepairTechnicianKPI {
