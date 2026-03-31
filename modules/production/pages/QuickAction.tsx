@@ -3,7 +3,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
-import { exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
+import { exportAsImage, exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
@@ -368,7 +368,7 @@ export const QuickAction: React.FC = () => {
       return;
     }
     if (Number(quantity || 0) <= 0 || Number(hours || 0) <= 0 || (requiresWorkers && workersTotal <= 0)) {
-      setSaveError('أكمل الحقول المطلوبة أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
+      setSaveError('أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
       return;
     }
     setSaving(true);
@@ -464,19 +464,7 @@ export const QuickAction: React.FC = () => {
     if (!printRef.current) return;
     setExporting(true);
     try {
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      });
-      const url = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `تقرير-سريع-${today}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      await exportAsImage(printRef.current, `تقرير-سريع-${today}`);
     } finally {
       setExporting(false);
     }
@@ -564,7 +552,7 @@ export const QuickAction: React.FC = () => {
     <div className="erp-ds-clean space-y-6">
       <PageHeader
         title="إدخال سريع"
-        subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، طباعة، ومشاركة."
+        subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، طباعة ومشاركة."
         icon="bolt"
       />
 
@@ -636,7 +624,7 @@ export const QuickAction: React.FC = () => {
               </Select>
               {scopedActiveWOs.length === 0 && (
                 <p className="mt-1.5 text-[11px] text-slate-400">
-                  لا توجد أوامر شغل نشطة مرتبطة بالمشرف المختار.
+                  لا توجد أوامر شغل مرتبطة بالمشرف المختار.
                 </p>
               )}
             </div>
@@ -878,13 +866,13 @@ export const QuickAction: React.FC = () => {
             </div>
             )}
             <div className="md:col-span-2">
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ملحوظة</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ملاحظات</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
                 className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12 resize-y"
-                placeholder="اكتب أي ملحوظة إضافية للتقرير..."
+                placeholder="اكتب أي ملاحظات إضافية للتقرير..."
               />
             </div>
           </div>
@@ -979,7 +967,7 @@ export const QuickAction: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الموظف</p>
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملاحظات</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{printReport.employeeName}</p>
                   </div>
                   <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
@@ -1017,7 +1005,7 @@ export const QuickAction: React.FC = () => {
                 )}
                 {printReport.notes?.trim() && (
                   <div className="bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-lg)] p-3 border border-amber-100 dark:border-amber-900/20">
-                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملحوظة</p>
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملاحظات</p>
                     <p className="text-sm font-medium text-[var(--color-text)]">{printReport.notes}</p>
                   </div>
                 )}

@@ -1,5 +1,11 @@
 import { initializeApp, deleteApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import {
+  Firestore,
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import {
   getAuth,
@@ -31,9 +37,26 @@ let auth: Auth;
 let storage: FirebaseStorage;
 let functionsClient: Functions;
 
+/** True when IndexedDB persistence (multi-tab) initialized successfully. */
+export let firestoreOfflinePersistenceEnabled = false;
+
 if (isConfigured) {
   app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
+  try {
+    db = initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+    firestoreOfflinePersistenceEnabled = true;
+  } catch (err) {
+    console.warn(
+      'Firestore: persistent cache unavailable, using default instance.',
+      err,
+    );
+    db = getFirestore(app);
+  }
   auth = getAuth(app);
   storage = getStorage(app);
   functionsClient = getFunctions(app, 'us-central1');
@@ -55,6 +78,9 @@ const normalizeCallableError = (error: any): Error => {
   }
   if (code.includes('failed-precondition')) {
     return new Error(message || 'لا يمكن تنفيذ العملية في الحالة الحالية.');
+  }
+  if (code.includes('resource-exhausted')) {
+    return new Error(message || 'العملية تتجاوز الحد المسموح.');
   }
   if (code.includes('not-found')) {
     return new Error('الخدمة غير متاحة حاليًا. تأكد من نشر Cloud Functions.');
@@ -79,7 +105,13 @@ export const signInWithEmail = async (
 export const createUserWithEmail = async (
   email: string,
   password: string,
-  userData?: { displayName: string; roleId: string; createdBy: string },
+  userData?: {
+    displayName: string;
+    roleId: string;
+    createdBy: string;
+    tenantId: string;
+    isActive?: boolean;
+  },
 ): Promise<{ uid: string }> => {
   if (!isConfigured) throw new Error('Firebase not configured');
 
@@ -103,7 +135,8 @@ export const createUserWithEmail = async (
         email,
         displayName: userData.displayName,
         roleId: userData.roleId,
-        isActive: true,
+        tenantId: userData.tenantId,
+        isActive: userData.isActive ?? true,
         createdBy: userData.createdBy,
         createdAt: fsTs(),
       });
@@ -185,6 +218,137 @@ export const runAssetDepreciationCallable = async (input?: { period?: string }):
   >(functionsClient, 'runAssetDepreciationJob');
   try {
     const result = await callable(input);
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export type ResolveTenantSlugResult = {
+  exists: boolean;
+  tenantId?: string;
+  status?: string;
+  pendingRegistration?: boolean;
+};
+
+/** Pre-login: resolves company slug via Cloud Function (Firestore tenant_slugs is auth-only). */
+export const resolveTenantSlugCallable = async (slug: string): Promise<ResolveTenantSlugResult> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ slug: string }, ResolveTenantSlugResult>(
+    functionsClient,
+    'resolveTenantSlug',
+  );
+  try {
+    const result = await callable({ slug: slug.trim().toLowerCase() });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export type TenantFirestoreFootprint = {
+  tenantId: string;
+  slug: string;
+  name: string;
+  status: string;
+  userCount: number;
+  collectionsWithData: number;
+  totalDocuments: number;
+  perCollection: Record<string, number>;
+  failedCollections: string[];
+  estimatedStorageBytes: number;
+  avgDocBytesAssumption: number;
+  usageNoteAr: string;
+};
+
+/** Super-admin: per-tenant Firestore document counts (Cloud Function + Admin SDK). */
+export const getTenantFirestoreFootprintCallable = async (
+  tenantId: string,
+): Promise<TenantFirestoreFootprint> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ tenantId: string }, TenantFirestoreFootprint>(
+    functionsClient,
+    'getTenantFirestoreFootprint',
+  );
+  try {
+    const result = await callable({ tenantId: tenantId.trim() });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+/** Full JSON backup for one tenant (same shape as Settings → backup export). */
+export type SuperAdminTenantBackupFile = {
+  metadata: {
+    version: string;
+    createdAt: string;
+    type: 'full';
+    collectionsIncluded: string[];
+    documentCounts: Record<string, number>;
+    totalDocuments: number;
+    createdBy: string;
+    tenantId: string;
+  };
+  collections: Record<string, Record<string, unknown>[]>;
+  collectionGroups?: Record<string, Record<string, unknown>[]>;
+};
+
+export const exportTenantBackupCallable = async (
+  tenantId: string,
+): Promise<SuperAdminTenantBackupFile> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ tenantId: string }, { backup: SuperAdminTenantBackupFile }>(
+    functionsClient,
+    'exportTenantBackup',
+  );
+  try {
+    const result = await callable({ tenantId: tenantId.trim() });
+    return result.data.backup;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const adminDeleteTenantCascadeCallable = async (
+  tenantId: string,
+  confirmPhrase: string,
+): Promise<{ ok: boolean; deletedFirestoreDocs: number; deletedAuthUsers: number }> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { tenantId: string; confirmPhrase: string },
+    { ok: boolean; deletedFirestoreDocs: number; deletedAuthUsers: number }
+  >(functionsClient, 'adminDeleteTenantCascade');
+  try {
+    const result = await callable({
+      tenantId: tenantId.trim(),
+      confirmPhrase: confirmPhrase.trim(),
+    });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+/** Super-admin: restore backup JSON via Admin SDK (bypasses client Firestore rules). */
+export type ImportTenantBackupMode = 'merge' | 'replace' | 'full_reset';
+
+export const importTenantBackupCallable = async (
+  backup: Record<string, unknown>,
+  mode: ImportTenantBackupMode,
+  tenantIdForHistory?: string,
+): Promise<{ success: true; restored: number }> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { backup: Record<string, unknown>; mode: ImportTenantBackupMode; tenantIdForHistory?: string },
+    { success: true; restored: number }
+  >(functionsClient, 'importTenantBackup');
+  try {
+    const result = await callable({
+      backup,
+      mode,
+      tenantIdForHistory: tenantIdForHistory?.trim(),
+    });
     return result.data;
   } catch (error: any) {
     throw normalizeCallableError(error);

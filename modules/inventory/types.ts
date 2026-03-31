@@ -18,6 +18,7 @@ export interface RawMaterial {
   unit: string;
   minStock: number;
   isActive: boolean;
+  tenantId?: string;
   createdAt: string;
 }
 

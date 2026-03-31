@@ -47,7 +47,9 @@ const parseEmployeeName = (employeeId: string, employeeNameMap: Map<string, stri
   employeeNameMap.get(employeeId) || "—";
 
 export const useProductDetail = (id?: string) => {
+  const tenantId = useAppStore((s) => s.userProfile?.tenantId ?? '');
   const rawProducts = useAppStore((s) => s._rawProducts);
+  const productRow = useAppStore((s) => (id ? s._rawProducts.find((p) => p.id === id) : undefined));
   const rawLines = useAppStore((s) => s._rawLines);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
@@ -60,22 +62,12 @@ export const useProductDetail = (id?: string) => {
   const systemSettings = useAppStore((s) => s.systemSettings);
   const productsLoading = useAppStore((s) => s.productsLoading);
 
+  const productRevision = productRow
+    ? `${String(productRow.code)}|${String(productRow.model ?? "")}|${String(productRow.openingBalance ?? 0)}`
+    : "";
+
   return useQuery<ProductDetailData>({
-    queryKey: [
-      "catalog",
-      "product-detail",
-      id ?? "",
-      rawProducts.length,
-      rawLines.length,
-      rawEmployees.length,
-      lineProductConfigs.length,
-      costCenters.length,
-      costCenterValues.length,
-      costAllocations.length,
-      assets.length,
-      assetDepreciations.length,
-      laborSettings?.hourlyRate ?? 0,
-    ],
+    queryKey: ["catalog", "product-detail", tenantId, id ?? "", productRevision],
     enabled: Boolean(id) && !productsLoading,
     queryFn: async () => {
       if (!id) throw new Error("missing product id");
@@ -486,12 +478,12 @@ export const useProductDetail = (id?: string) => {
           { id: "r4", type: "row", label: "تكلفة العلبة الداخلية", value: `${formatCost(breakdown.innerBoxCost)} ج.م` },
           { id: "r5", type: "row", label: `نصيب الكرتونة (${formatCost(breakdown.outerCartonCost)} ÷ ${breakdown.unitsPerCarton || 0})`, value: `${formatCost(breakdown.cartonShare)} ج.م` },
           { id: "s2", type: "section", label: "تكاليف صناعية (مباشرة وغير مباشرة)" },
-          { id: "r6", type: "row", label: "التكاليف الصناعية المباشرة (متوسط شهري/قطعة)", value: `${formatCost(monthlyUnitDirect)} ج.م` },
-          { id: "r7", type: "row", label: "التكاليف الصناعية غير المباشرة (متوسط شهري/قطعة)", value: `${formatCost(monthlyUnitIndirect)} ج.م` },
+          { id: "r6", type: "row", label: "التكاليف الصناعية المباشرة (متوسط شهري/وحدة)", value: `${formatCost(monthlyUnitDirect)} ج.م` },
+          { id: "r7", type: "row", label: "التكاليف الصناعية غير المباشرة (متوسط شهري/وحدة)", value: `${formatCost(monthlyUnitIndirect)} ج.م` },
           {
             id: "t1",
             type: "total",
-            label: `إجمالي تكاليف صناعية للمنتج | ${formatCost(monthlyUnitDirect + monthlyUnitIndirect)} ج.م/قطعة`,
+            label: `إجمالي تكاليف صناعية للمنتج | ${formatCost(monthlyUnitDirect + monthlyUnitIndirect)} ج.م/وحدة`,
             subLabel: `إجمالي شهري مرجعي: ${formatCost(Number(currentTotalCost || 0))} ج.م`,
           },
         ],

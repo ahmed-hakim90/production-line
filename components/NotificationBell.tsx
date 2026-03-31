@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { withTenantPath } from '@/lib/tenantPaths';
 import {
   Bell,
   BellOff,
@@ -87,6 +88,7 @@ export const NotificationBell: React.FC = () => {
   }));
 
   const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id);
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -116,25 +118,25 @@ export const NotificationBell: React.FC = () => {
     if (!n.isRead) markNotificationRead(n.id!);
     if (n.type === 'production_report') {
       setOpen(false);
-      navigate('/reports');
+      navigate(withTenantPath(tenantSlug, '/reports'));
       return;
     }
     if (n.referenceId && n.type.startsWith('work_order')) {
       setOpen(false);
-      navigate(`/work-orders?highlight=${n.referenceId}`);
+      navigate(withTenantPath(tenantSlug, `/work-orders?highlight=${n.referenceId}`));
       return;
     }
     if (n.type.startsWith('quality_report')) {
       setOpen(false);
-      navigate('/quality/reports');
+      navigate(withTenantPath(tenantSlug, '/quality/reports'));
     }
-  }, [markNotificationRead, navigate]);
+  }, [markNotificationRead, navigate, tenantSlug]);
 
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="relative p-2 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] rounded-full transition-colors group"
+        className="relative p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] rounded-full transition-colors group"
       >
         <Bell size={20} />
         {unreadCount > 0 && (

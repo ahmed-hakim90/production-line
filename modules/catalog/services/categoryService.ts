@@ -4,12 +4,13 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  orderBy,
   query,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { productService } from '../../production/services/productService';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
 
 export type CategoryType = 'product' | 'raw_material';
 
@@ -19,6 +20,7 @@ export interface ProductCategory {
   code?: string;
   type?: CategoryType;
   isActive: boolean;
+  tenantId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -41,16 +43,21 @@ export const getEffectiveCategoryType = (category?: Partial<ProductCategory>): C
 export const categoryService = {
   async getAll(): Promise<ProductCategory[]> {
     if (!isConfigured) return [];
-    const q = query(collection(db, COLLECTION), orderBy('name', 'asc'));
+    const tenantId = getCurrentTenantId();
+    const q = query(collection(db, COLLECTION), where('tenantId', '==', tenantId));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductCategory));
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as ProductCategory))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
   },
 
   async create(payload: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<string | null> {
     if (!isConfigured) return null;
+    const tenantId = getCurrentTenantId();
     const ref = await addDoc(collection(db, COLLECTION), {
       ...payload,
       type: payload.type === 'raw_material' ? 'raw_material' : 'product',
+      tenantId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

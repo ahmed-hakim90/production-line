@@ -5,7 +5,6 @@ const root = process.cwd();
 const exts = new Set(['.ts', '.tsx']);
 const ignoreDirs = new Set([
   '.git',
-  '.cursor',
   '.firebase',
   'node_modules',
   'dist',

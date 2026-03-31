@@ -164,7 +164,7 @@ export const CostDataHealth: React.FC = () => {
             id: `missing-allocation-${centerId}`,
             type: 'calc',
             severity: 'critical',
-            title: `توزيع الخطوط مفقود لمركز "${center.name}"`,
+            title: `توزيع مرجعي مفقود لمركز "${center.name}"`,
             description: 'مركز line_percentage بدون نسب توزيع يمنع تحميل التكلفة غير المباشرة بشكل صحيح.',
             recommendation: 'أضف cost_allocations للشهر بنفس المركز وتأكد أن النسب مكتملة.',
           });
@@ -177,7 +177,7 @@ export const CostDataHealth: React.FC = () => {
               severity: 'high',
               title: `إجمالي نسب توزيع "${center.name}" لا يساوي 100%`,
               description: `الإجمالي الحالي = ${formatCost(totalPct)}%.`,
-              recommendation: 'عدّل نسب الخطوط لتساوي 100% لنفس الشهر.',
+              recommendation: 'عدّل نسب التوزيع لتساوي 100% لنفس الشهر.',
             });
           }
         }
@@ -199,7 +199,7 @@ export const CostDataHealth: React.FC = () => {
             id: `by-qty-zero-scope-${centerId}`,
             type: 'calc',
             severity: 'high',
-            title: `مركز by_qty "${center.name}" بدون كمية نطاق`,
+            title: `مركز by_qty "${center.name}" بدون كمية في النطاق`,
             description: 'لا توجد كمية إنتاج ضمن نطاق المركز، وبالتالي لا يمكن توزيع التكلفة بنسب الكمية.',
             recommendation: 'راجع productScope / categories أو بيانات الإنتاج للشهر.',
           });
@@ -278,8 +278,8 @@ export const CostDataHealth: React.FC = () => {
           id: `avg-mismatch-${row.productId}`,
           type: 'calc',
           severity: 'critical',
-          title: `متوسط الوحدة غير متطابق لمنتج ${row.productId}`,
-          description: `averageUnitCost لا يطابق totalProductionCost / totalProducedQty (الفرق ${formatCost(avgDelta)}).`,
+          title: `متوسط الوحدة غير مرجعي لمنتج ${row.productId}`,
+          description: `averageUnitCost لا يساوي totalProductionCost / totalProducedQty (الفرق ${formatCost(avgDelta)}).`,
           recommendation: 'أعد الحساب وتأكد من القسمة على الكمية المنتجة الصحيحة.',
         });
       }
@@ -303,7 +303,7 @@ export const CostDataHealth: React.FC = () => {
         id: 'mixed-close-status',
         type: 'calc',
         severity: 'high',
-        title: 'حالة إغلاق مختلطة داخل نفس الشهر',
+        title: 'حالة إغلاق مرجعية داخل نفس الشهر',
         description: 'بعض سجلات الشهر مغلقة وبعضها مفتوح، وده ممكن يسبب فروقات عند إعادة الحساب.',
         recommendation: 'وحّد حالة الشهر (إغلاق كامل أو مراجعة السجلات المفتوحة).',
       });
@@ -329,7 +329,7 @@ export const CostDataHealth: React.FC = () => {
           severity: 'medium',
           title: 'سجلات تكلفة بدون منتجات فعالة',
           description: `وجدنا ${staleCoverage.length} سجل تكلفة لمنتجات غير موجودة حاليًا في قائمة المنتجات.`,
-          recommendation: 'راجع تنظيف بيانات monthly_production_costs أو أرشفة المنتجات.',
+          recommendation: 'راجع أرشفة بيانات monthly_production_costs أو أرشفة المنتجات.',
         });
       }
     }
@@ -460,14 +460,14 @@ export const CostDataHealth: React.FC = () => {
         ) : filteredIssues.length === 0 ? (
           <div className="py-14 text-center">
             <span className="material-icons-round text-5xl text-emerald-500 mb-3 block">verified</span>
-            <p className="text-lg font-bold text-emerald-600">ممتاز، لا توجد مشاكل ظاهرة للشهر {month}</p>
+            <p className="text-lg font-bold text-emerald-600">ممتاز، لا توجد مشاكل مرجعية للشهر {month}</p>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">
-              كل الفحوصات الحالية (حسابات/بيانات/اتساق) مرت بدون أخطاء.
+              كل الفحوصات الحالية (حسابات/بيانات/اتساق) مرت بدون مرجعية.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto erp-table-scroll">
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">#</th>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Armchair,
@@ -43,9 +44,9 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useDashboardSlice } from '../../../store/selectors';
-import { useAppStore } from '../../../store/useAppStore';
+import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { Card, KPIBox, Badge } from '../components/UI';
@@ -56,8 +57,6 @@ import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
-import { reportService } from '@/modules/production/services/reportService';
-import { dashboardStatsService } from '../../../services/dashboardStatsService';
 import { adminService, type SystemUsers } from '../services/adminService';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
@@ -113,7 +112,7 @@ import {
   BarChart,
 } from 'recharts';
 
-// ── Period filter types (local to this dashboard) ────────────────────────────
+// â”€â”€ Period filter types (local to this dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type PeriodPreset = 'today' | 'yesterday' | 'week' | 'month' | '3months' | 'custom';
 
@@ -277,7 +276,7 @@ const renderDashboardIcon = (
   return <Icon className={className} style={style} />;
 };
 
-// ── Gauge Chart Component ────────────────────────────────────────────────────
+// â”€â”€ Gauge Chart Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }) => {
   const clampedValue = Math.max(0, Math.min(100, value));
@@ -369,10 +368,11 @@ const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }
   );
 };
 
-// ── Main Component ───────────────────────────────────────────────────────────
+// â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const AdminDashboard: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
 
@@ -397,6 +397,7 @@ export const AdminDashboard: React.FC = () => {
   const appLoading = useAppStore((s) => s.loading);
   const productsLoading = useAppStore((s) => s.productsLoading);
   const linesLoading = useAppStore((s) => s.linesLoading);
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
   const pageControl = useMemo(
     () => getExportImportPageControl(systemSettings.exportImport, 'adminDashboard'),
     [systemSettings.exportImport]
@@ -435,17 +436,16 @@ export const AdminDashboard: React.FC = () => {
     [systemSettings]
   );
 
-  // ── Period filter state (local to this dashboard) ────────────────────────
+  // â”€â”€ Period filter state (local to this dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [preset, setPreset] = useState<PeriodPreset>('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [reports, setReports] = useState<ProductionReport[]>([]);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [rangeAggregate, setRangeAggregate] = useState<{ totalProduction: number; totalWaste: number; totalCost: number; reportsCount: number } | null>(null);
   const [monthlyCostSummary, setMonthlyCostSummary] = useState<MonthlyDashboardCostSummary | null>(null);
 
-  // ── System metrics state ─────────────────────────────────────────────────
+  // â”€â”€ System metrics state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('all');
   const [systemUsers, setSystemUsers] = useState<SystemUsers>({ total: 0, active: 0, disabled: 0 });
@@ -533,29 +533,35 @@ export const AdminDashboard: React.FC = () => {
     };
   }, [activeWorkOrders]);
 
-  // Fetch production reports by date range
+  // Fetch production reports by date range (shared Zustand cache + stale-while-revalidate)
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const { start, end } = dateRange;
+    const maxAgeMs = 5 * 60 * 1000;
+    const cacheKey = getProductionReportsRangeCacheKey(start, end);
+    const cached = useAppStore.getState().productionReportsRangeCache[cacheKey];
+    if (cached) {
+      setReports(cached.rows);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setReportsError(null);
-    Promise.all([
-      reportService.getByDateRange(dateRange.start, dateRange.end),
-      dashboardStatsService.getRangeTotals(dateRange.start, dateRange.end).catch(() => null),
-    ]).then(([data, aggregate]) => {
-      if (cancelled) return;
-      setReports(Array.isArray(data) ? data : []);
-      setRangeAggregate(aggregate);
-      setLoading(false);
-    }).catch((error) => {
-      if (cancelled) return;
-      const message = error instanceof Error ? error.message : 'تعذر تحميل تقارير الإنتاج.';
-      setReportsError(message);
-      setReports([]);
-      setRangeAggregate(null);
-      setLoading(false);
-    });
+    ensureProductionReportsForRange(start, end, { maxAgeMs })
+      .then((data) => {
+        if (cancelled) return;
+        setReports(data);
+        setLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : 'تعذر تحميل تقارير الإنتاج.';
+        setReportsError(message);
+        setReports([]);
+        setLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange.start, dateRange.end, ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -573,10 +579,13 @@ export const AdminDashboard: React.FC = () => {
     return () => { cancelled = true; };
   }, [fullMonthKey]);
 
-  // Fetch system metrics (one-time, not affected by period)
+  // Fetch system metrics (tenant-aware)
   useEffect(() => {
     let cancelled = false;
     setSystemLoading(true);
+    setSystemUsers({ total: 0, active: 0, disabled: 0 });
+    setRolesDistribution([]);
+    setRecentActivity([]);
     Promise.all([
       adminService.getSystemUsers(),
       adminService.getRolesDistribution(),
@@ -592,7 +601,7 @@ export const AdminDashboard: React.FC = () => {
       if (!cancelled) setSystemLoading(false);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [tenantSlug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -690,16 +699,16 @@ export const AdminDashboard: React.FC = () => {
   );
   const monthlyCostMode = Boolean(fullMonthKey && monthlyCostSummary);
 
-  // ── KPI Calculations ──────────────────────────────────────────────────────
+  // â”€â”€ KPI Calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const kpis = useMemo(() => {
     const reportsTotalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
     const reportsTotalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
-    const hasAggregateData = Boolean(rangeAggregate && rangeAggregate.reportsCount > 0);
+    // Same source as FactoryManagerDashboard: sum loaded reports (not dashboardStats) so KPI matches raw data.
     const totalProduction = monthlyCostMode
       ? Number(monthlyCostSummary?.totals.producedQty || 0)
-      : (hasAggregateData ? (rangeAggregate?.totalProduction || 0) : reportsTotalProduction);
-    const totalWaste = hasAggregateData ? (rangeAggregate?.totalWaste || 0) : reportsTotalWaste;
+      : reportsTotalProduction;
+    const totalWaste = reportsTotalWaste;
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
@@ -757,9 +766,9 @@ export const AdminDashboard: React.FC = () => {
       totalIndirectCost,
       totalCost,
     };
-  }, [reports, rangeAggregate, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
+  }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
-  // ── Cost Allocation Completion % ──────────────────────────────────────────
+  // â”€â”€ Cost Allocation Completion % â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const costAllocationCompletion = useMemo(() => {
     if (costCenters.length === 0) return 0;
@@ -776,7 +785,7 @@ export const AdminDashboard: React.FC = () => {
     return Number(((allocated / activeCenters.length) * 100).toFixed(0));
   }, [costCenters, costCenterValues, costAllocations]);
 
-  // ── Production Health Score ───────────────────────────────────────────────
+  // â”€â”€ Production Health Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const healthScore = useMemo(() => {
     const efficiencyScore = Math.min(kpis.efficiency, 100);
@@ -799,7 +808,7 @@ export const AdminDashboard: React.FC = () => {
     return Math.max(0, Math.min(100, score));
   }, [kpis]);
 
-  // ── Charts Data ───────────────────────────────────────────────────────────
+  // â”€â”€ Charts Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const dailyChartData = useMemo(() => {
     const byDate = new Map<string, { production: number; laborCost: number }>();
@@ -872,7 +881,7 @@ export const AdminDashboard: React.FC = () => {
     return { topLines: lines, topProducts: products, topSupervisors: supervisors };
   }, [reports, _rawLines, _rawProducts, _rawEmployees]);
 
-  // ── Roles chart data ──────────────────────────────────────────────────────
+  // â”€â”€ Roles chart data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const rolesChartData = useMemo(() => {
     return rolesDistribution
@@ -880,7 +889,7 @@ export const AdminDashboard: React.FC = () => {
       .map((r) => ({ name: r.roleName, value: r.count }));
   }, [rolesDistribution]);
 
-  // ── Cost Centers Summary ──────────────────────────────────────────────────
+  // â”€â”€ Cost Centers Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const costCentersSummary = useMemo(() => {
     const currentMonth = getCurrentMonth();
@@ -1084,7 +1093,7 @@ export const AdminDashboard: React.FC = () => {
     };
   }, [workOrders]);
 
-  // ── Product Summary (products worked on during the period) ────────────────
+  // â”€â”€ Product Summary (products worked on during the period) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const productSummary = useMemo(() => {
     const sourceRows = monthlyCostMode
@@ -1198,7 +1207,7 @@ export const AdminDashboard: React.FC = () => {
     }
   }, [navigate, filteredProductSummary, canViewCosts, canExportFromPage]);
 
-  // ── Alerts ────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
     const result: { type: 'danger' | 'warning' | 'info'; icon: string; message: string }[] = [];
@@ -1228,7 +1237,7 @@ export const AdminDashboard: React.FC = () => {
       result.push({
         type: 'warning',
         icon: 'schedule',
-        message: `${delayedPlans.length} خطة إنتاج متأخرة عن الجدول الزمني`,
+        message: `${delayedPlans.length} خطط إنتاج متأخرة عن الجدول الزمني`,
       });
     }
 
@@ -1273,7 +1282,7 @@ export const AdminDashboard: React.FC = () => {
     return result;
   }, [kpis, productionPlans, planReports, systemUsers, alertCfg]);
 
-  // ── Tooltips ──────────────────────────────────────────────────────────────
+  // â”€â”€ Tooltips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -1322,7 +1331,7 @@ export const AdminDashboard: React.FC = () => {
     );
   }, []);
 
-  // ── Format timestamp helper ───────────────────────────────────────────────
+  // â”€â”€ Format timestamp helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const formatTimestamp = (ts: any): string => {
     if (!ts) return '—';
@@ -1356,7 +1365,7 @@ export const AdminDashboard: React.FC = () => {
     []
   );
 
-  // ── Loading State ─────────────────────────────────────────────────────────
+  // â”€â”€ Loading State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (isFinalLoading && reports.length === 0) {
     return (
@@ -1373,7 +1382,7 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="erp-dashboard-theme space-y-6">
-      {/* ── Alerts ──────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('alerts') && alerts.length > 0 && (
         <div className="space-y-1.5">
           {alerts.map((alert, i) => (
@@ -1394,7 +1403,7 @@ export const AdminDashboard: React.FC = () => {
 
      
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <PageHeader
         title="لوحة مدير النظام"
         subtitle="نظرة شاملة على الإنتاج والنظام والصحة العامة"
@@ -1408,7 +1417,7 @@ export const AdminDashboard: React.FC = () => {
         }
       />
 
-      {/* ── Period Filter ───────────────────────────────────────────────────── */}
+      {/* â”€â”€ Period Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <SmartFilterBar
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
@@ -1484,7 +1493,7 @@ export const AdminDashboard: React.FC = () => {
       <CustomDashboardWidgets dashboardKey="adminDashboard" systemSettings={systemSettings} />
 
 
-      {/* ── Operational KPIs ────────────────────────────────────────────────── */}
+      {/* â”€â”€ Operational KPIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('operational_kpis') && (
       <div>
         <h3 className="text-sm font-medium text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -1572,7 +1581,7 @@ export const AdminDashboard: React.FC = () => {
           أعلى نشاط حالي: <span className="font-bold text-[var(--color-text)]">{liveScanKpis.hotLineProduct}</span>
         </p>
       </Card> */}
-{/* ── Product Summary Table ──────────────────────────────────────────── */}
+{/* â”€â”€ Product Summary Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
 {productSummary.length > 0 && (() => {
         return (
           <Card>
@@ -1679,7 +1688,7 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">#</th>
@@ -1790,7 +1799,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-no-table-enhance="true">
+            <table className="erp-table w-full text-sm" data-no-table-enhance="true">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">المنتج</th>
@@ -1921,7 +1930,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </Card>
 
-{/* ── Active Work Orders (same visual style) ─────────────────────────── */}
+{/* â”€â”€ Active Work Orders (same visual style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
 {(() => {
         const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
@@ -2011,7 +2020,7 @@ export const AdminDashboard: React.FC = () => {
                             <span className="text-sm font-bold text-emerald-600">
                               {metrics.estimatedUnitCost !== null ? formatCost(metrics.estimatedUnitCost) : '—'}
                             </span>
-                            <span className="text-[10px] text-slate-400">/قطعة</span>
+                            <span className="text-[10px] text-slate-400">/وحدة</span>
                           </div>
                           <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
                             {renderDashboardIcon('calculate', 'text-primary text-sm')}
@@ -2019,7 +2028,7 @@ export const AdminDashboard: React.FC = () => {
                             <span className="text-sm font-bold text-primary">
                               {metrics.actualUnitCostToDate !== null ? formatCost(metrics.actualUnitCostToDate) : '—'}
                             </span>
-                            <span className="text-[10px] text-slate-400">/قطعة</span>
+                            <span className="text-[10px] text-slate-400">/وحدة</span>
                           </div>
                         </div>
                       )}
@@ -2107,7 +2116,7 @@ export const AdminDashboard: React.FC = () => {
       })()}
       
       
-      {/* ── System KPIs ─────────────────────────────────────────────────────── */}
+      {/* â”€â”€ System KPIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('system_kpis') && <div>
         <h3 className="text-sm font-bold text-[var(--color-text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">
           {renderDashboardIcon('computer', 'text-base')}
@@ -2155,7 +2164,7 @@ export const AdminDashboard: React.FC = () => {
       </div>}
 
      
-      {/* ── Production Health Score + Charts ─────────────────────────────────── */}
+      {/* â”€â”€ Production Health Score + Charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Health Score Gauge */}
         {/* {isVisible('health_score') &&
@@ -2172,7 +2181,7 @@ export const AdminDashboard: React.FC = () => {
               { label: 'الكفاءة', value: kpis.efficiency, weight: '30%', icon: 'speed' },
               { label: 'انحراف التكلفة', value: Math.abs(kpis.costVariance) <= 5 ? 100 : Math.abs(kpis.costVariance) <= 15 ? 70 : 40, weight: '20%', icon: 'compare_arrows' },
               { label: 'الهدر', value: kpis.wastePercent <= 2 ? 100 : kpis.wastePercent <= 5 ? 75 : 40, weight: '25%', icon: 'delete_sweep' },
-              { label: 'تحقيق الخطط', value: kpis.planAchievementRate, weight: '25%', icon: 'fact_check' },
+              { label: 'تحقيق الخطة', value: kpis.planAchievementRate, weight: '25%', icon: 'fact_check' },
             ].map((metric) => (
               <div key={metric.label} className="flex items-center gap-3">
                 {renderDashboardIcon(metric.icon, 'text-[14px] text-[var(--color-text-muted)]')}
@@ -2201,7 +2210,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">توزيع الأدوار</h3>
           </div>
           {rolesChartData.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-56">
+            <div style={{ direction: 'ltr' }} className="h-56 min-h-[14rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -2240,7 +2249,7 @@ export const AdminDashboard: React.FC = () => {
         </Card>}
       </div>
 
-      {/* ── Production vs Cost Chart (full width) ────────────────────────────── */}
+      {/* â”€â”€ Production vs Cost Chart (full width) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('production_cost_chart') && canViewCosts && (
         <Card>
           <div className="flex items-center gap-2 mb-4">
@@ -2248,7 +2257,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">الإنتاج مقابل تكلفة الوحدة</h3>
           </div>
           {dailyChartData.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-72">
+            <div style={{ direction: 'ltr' }} className="h-72 min-h-[18rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={dailyChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" strokeOpacity={0.7} />
@@ -2274,7 +2283,7 @@ export const AdminDashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* ── System Monitoring Section ────────────────────────────────────────── */}
+      {/* â”€â”€ System Monitoring Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Activity Log Snapshot */}
         {isVisible('activity_log') && <Card>
@@ -2329,7 +2338,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             {costCentersSummary.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">المركز</th>
@@ -2384,7 +2393,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             {monthlyDepreciationSummary.rows.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">مركز التكلفة</th>
@@ -2422,7 +2431,7 @@ export const AdminDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* ── Top Lines & Products ─────────────────────────────────────────────── */}
+      {/* â”€â”€ Top Lines & Products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Top 5 Lines */}
         {isVisible('top_lines') && <Card>
@@ -2431,7 +2440,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">أعلى 5 خطوط إنتاج</h3>
           </div>
           {topLines.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topLines} layout="vertical" margin={{ left: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -2456,7 +2465,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">أعلى 5 منتجات</h3>
           </div>
           {topProducts.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topProducts} layout="vertical" margin={{ left: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -2481,7 +2490,7 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-lg font-bold">أعلى 5 مشرفين في الأداء</h3>
           </div>
           {topSupervisors.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topSupervisors} layout="vertical" margin={{ left: 70 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -2500,7 +2509,7 @@ export const AdminDashboard: React.FC = () => {
         </Card>}
       </div>
 
-      {/* ── Product Performance Table ────────────────────────────────────────── */}
+      {/* â”€â”€ Product Performance Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('product_performance') && <Card>
         <div className="flex items-center gap-2 mb-4">
           {renderDashboardIcon('table_chart', 'text-primary')}
@@ -2508,7 +2517,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
         {topProducts.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">المنتج</th>
@@ -2546,5 +2555,9 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 };
+
+
+
+
 
 

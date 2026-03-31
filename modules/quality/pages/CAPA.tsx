@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -211,7 +211,7 @@ export const CAPA: React.FC = () => {
           <textarea
             value={form.actionPlan}
             onChange={(e) => setForm((s) => ({ ...s, actionPlan: e.target.value }))}
-            placeholder="خطة الإجراء"
+            placeholder="وصف الإجراء"
             className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm min-h-[100px]"
           />
 
@@ -229,7 +229,7 @@ export const CAPA: React.FC = () => {
 
       <Card title="متابعة CAPA">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr className="border-b border-[var(--color-border)] text-slate-500">
                 <th className="erp-th">Title</th>

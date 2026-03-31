@@ -14,8 +14,11 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { employeesRef, HR_COLLECTIONS } from './collections';
 import type { FirestoreEmployee } from '@/types';
+
+const eqTenant = () => where('tenantId', '==', getCurrentTenantId());
 
 /** Strip undefined values — Firestore rejects them */
 function clean<T extends Record<string, any>>(obj: T): T {
@@ -29,7 +32,7 @@ function clean<T extends Record<string, any>>(obj: T): T {
 export const employeeService = {
   async getAll(): Promise<FirestoreEmployee[]> {
     if (!isConfigured) return [];
-    const snap = await getDocs(employeesRef());
+    const snap = await getDocs(query(employeesRef(), eqTenant()));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployee));
   },
 
@@ -44,6 +47,7 @@ export const employeeService = {
     if (!isConfigured) return null;
     const ref = await addDoc(employeesRef(), {
       ...clean(data),
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
     });
     return ref.id;
@@ -62,14 +66,14 @@ export const employeeService = {
 
   async getByDepartment(departmentId: string): Promise<FirestoreEmployee[]> {
     if (!isConfigured) return [];
-    const q = query(employeesRef(), where('departmentId', '==', departmentId));
+    const q = query(employeesRef(), eqTenant(), where('departmentId', '==', departmentId));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployee));
   },
 
   async getByManager(managerId: string): Promise<FirestoreEmployee[]> {
     if (!isConfigured) return [];
-    const q = query(employeesRef(), where('managerId', '==', managerId));
+    const q = query(employeesRef(), eqTenant(), where('managerId', '==', managerId));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployee));
   },
@@ -96,7 +100,7 @@ export const employeeService = {
 
   async getByUserId(userId: string): Promise<FirestoreEmployee | null> {
     if (!isConfigured) return null;
-    const q = query(employeesRef(), where('userId', '==', userId));
+    const q = query(employeesRef(), eqTenant(), where('userId', '==', userId));
     const snap = await getDocs(q);
     if (snap.empty) return null;
     const d = snap.docs[0];

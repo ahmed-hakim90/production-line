@@ -6,13 +6,14 @@ import {
   getDocs,
   limit,
   onSnapshot,
-  query,
   serverTimestamp,
   where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { WorkOrderLiveSummary, WorkOrderPauseWindow, WorkOrderScanEvent, WorkOrderScanSession } from '../../../types';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 
 const COLLECTION = 'scan_events';
 const SERIAL_SCAN_COOLDOWN_MS = 1200;
@@ -221,15 +222,16 @@ export interface ToggleScanResult {
 export const scanEventService = {
   async getByWorkOrder(workOrderId: string): Promise<WorkOrderScanEvent[]> {
     if (!isConfigured) return [];
-    const q = query(collection(db, COLLECTION), where('workOrderId', '==', workOrderId));
+    const q = tenantQuery(db, COLLECTION, where('workOrderId', '==', workOrderId));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrderScanEvent));
   },
 
   async getByWorkOrderAndSerial(workOrderId: string, serialBarcode: string): Promise<WorkOrderScanEvent[]> {
     if (!isConfigured) return [];
-    const q = query(
-      collection(db, COLLECTION),
+    const q = tenantQuery(
+      db,
+      COLLECTION,
       where('workOrderId', '==', workOrderId),
       where('serialBarcode', '==', serialBarcode),
       limit(100),
@@ -259,6 +261,7 @@ export const scanEventService = {
       timestamp: serverTimestamp(),
     };
     if (payload.employeeId) docData.employeeId = payload.employeeId;
+    docData.tenantId = getCurrentTenantId();
     const ref = await addDoc(collection(db, COLLECTION), docData);
     return { action: 'IN', eventId: ref.id, sessionId };
   },
@@ -288,6 +291,7 @@ export const scanEventService = {
       timestamp: serverTimestamp(),
     };
     if (payload.employeeId) docData.employeeId = payload.employeeId;
+    docData.tenantId = getCurrentTenantId();
     const ref = await addDoc(collection(db, COLLECTION), docData);
     return { action: 'OUT', eventId: ref.id, sessionId: payload.sessionId, cycleSeconds: payload.cycleSeconds };
   },
@@ -356,20 +360,34 @@ export const scanEventService = {
 
   subscribeByWorkOrder(workOrderId: string, onData: (events: WorkOrderScanEvent[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    const q = query(collection(db, COLLECTION), where('workOrderId', '==', workOrderId));
-    return onSnapshot(q, (snap) => {
-      const events = snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrderScanEvent));
-      onData(events);
-    });
+    const q = tenantQuery(db, COLLECTION, where('workOrderId', '==', workOrderId));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const events = snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrderScanEvent));
+        onData(events);
+      },
+      (err) => {
+        console.error('scanEventService.subscribeByWorkOrder error:', err);
+        onData([]);
+      },
+    );
   },
 
   subscribeLiveToday(todayStr: string, onData: (events: WorkOrderScanEvent[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    const q = query(collection(db, COLLECTION), where('scanDate', '==', todayStr));
-    return onSnapshot(q, (snap) => {
-      const events = snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrderScanEvent));
-      onData(events);
-    });
+    const q = tenantQuery(db, COLLECTION, where('scanDate', '==', todayStr));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const events = snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrderScanEvent));
+        onData(events);
+      },
+      (err) => {
+        console.error('scanEventService.subscribeLiveToday error:', err);
+        onData([]);
+      },
+    );
   },
 
   sessionsFromEvents,

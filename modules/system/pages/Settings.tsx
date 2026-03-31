@@ -23,7 +23,12 @@ import {
   DEFAULT_EXPORT_IMPORT_PAGE_CONTROL,
 } from '../../../utils/dashboardConfig';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { applyTheme, setupAutoThemeListener } from '../../../utils/themeEngine';
+import {
+  applyAppTheme,
+  mergeTenantThemeForApply,
+  readCachedTenantTheme,
+  resolveTheme,
+} from '../../../core/ui-engine/theme/tenantTheme';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { userService } from '../../../services/userService';
 import type {
@@ -42,14 +47,17 @@ import { KPIThresholdsSection } from '../components/settings/KPIThresholdsSectio
 import { PrintTemplateSettingsSection } from '../components/settings/PrintTemplateSettingsSection';
 import { ExportImportSettingsSection } from '../components/settings/ExportImportSettingsSection';
 import { BackupRestoreSection } from '../components/settings/BackupRestoreSection';
+import { ClientVersionSettingsSection } from '../components/settings/ClientVersionSettingsSection';
 import { AlertRulesSection } from '../components/settings/AlertRulesSection';
 import { QuickActionsSection } from '../components/settings/QuickActionsSection';
 import { DashboardWidgetsSection } from '../components/settings/DashboardWidgetsSection';
 import { useSettingsDraft } from '../hooks/useSettingsDraft';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { PageHeader } from '../../../components/PageHeader';
+import { CompanyTenantSection } from '../components/settings/CompanyTenantSection';
+import { UiDensitySection } from '../components/settings/UiDensitySection';
 
-type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'backup';
+type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'clientVersion' | 'backup';
 
 const TABS: { key: SettingsTab; label: string; icon: string; adminOnly: boolean }[] = [
   { key: 'general', label: 'الإعدادات العامة', icon: 'settings', adminOnly: false },
@@ -59,6 +67,7 @@ const TABS: { key: SettingsTab; label: string; icon: string; adminOnly: boolean 
   { key: 'kpiThresholds', label: 'حدود المؤشرات', icon: 'tune', adminOnly: true },
   { key: 'printTemplate', label: 'إعدادات الطباعة', icon: 'print', adminOnly: true },
   { key: 'exportImport', label: 'التصدير والاستيراد', icon: 'import_export', adminOnly: true },
+  { key: 'clientVersion', label: 'إصدار التطبيق', icon: 'system_update', adminOnly: true },
   { key: 'backup', label: 'النسخ الاحتياطي', icon: 'backup', adminOnly: true },
 ];
 
@@ -80,7 +89,7 @@ const TIMEZONES = [
   { value: 'Africa/Cairo', label: 'القاهرة (GMT+2)' },
   { value: 'Asia/Dubai', label: 'دبي (GMT+4)' },
   { value: 'Asia/Kuwait', label: 'الكويت (GMT+3)' },
-  { value: 'Asia/Qatar', label: 'قطر (GMT+3)' },
+  { value: 'Asia/Qatar', label: 'الدوحة (GMT+3)' },
   { value: 'Asia/Bahrain', label: 'البحرين (GMT+3)' },
   { value: 'Asia/Muscat', label: 'مسقط (GMT+4)' },
   { value: 'Asia/Amman', label: 'عمّان (GMT+3)' },
@@ -316,6 +325,12 @@ export const Settings: React.FC = () => {
     setLocalQuickActions,
     localExportImport,
     setLocalExportImport,
+    localMinimumClientVersion,
+    setLocalMinimumClientVersion,
+    localForceClientUpdate,
+    setLocalForceClientUpdate,
+    localClientUpdateMessageAr,
+    setLocalClientUpdateMessageAr,
     normalizeQuickActions,
     getQuickActionMatch,
     normalizeCustomWidgets,
@@ -329,13 +344,21 @@ export const Settings: React.FC = () => {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const brandingLogoRef = useRef<HTMLInputElement>(null);
 
-  // Instant theme preview
+  // Instant theme preview (merges with cached tenant logo / styles).
   useEffect(() => {
     if (activeTab === 'general') {
-      applyTheme(localTheme);
-      setupAutoThemeListener(localTheme);
+      const base = readCachedTenantTheme() ?? resolveTheme();
+      applyAppTheme(mergeTenantThemeForApply(base, localTheme), localTheme);
     }
   }, [localTheme, activeTab]);
+
+  // Revert preview when leaving the General tab (back to last saved theme from store).
+  useEffect(() => {
+    if (activeTab === 'general') return;
+    const saved = systemSettings.theme ?? DEFAULT_THEME;
+    const base = readCachedTenantTheme() ?? resolveTheme();
+    applyAppTheme(mergeTenantThemeForApply(base, saved), saved);
+  }, [activeTab, systemSettings.theme]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -361,12 +384,12 @@ export const Settings: React.FC = () => {
     })();
   }, [isAdmin]);
 
-  // Revert to saved theme when leaving general tab
+  // Revert to persisted theme when leaving the settings page (uses latest store snapshot).
   useEffect(() => {
     return () => {
-      const saved = systemSettings.theme ?? DEFAULT_THEME;
-      applyTheme(saved);
-      setupAutoThemeListener(saved);
+      const saved = useAppStore.getState().systemSettings.theme ?? DEFAULT_THEME;
+      const base = readCachedTenantTheme() ?? resolveTheme();
+      applyAppTheme(mergeTenantThemeForApply(base, saved), saved);
     };
   }, []);
 
@@ -377,9 +400,6 @@ export const Settings: React.FC = () => {
     setBackupMessage,
     backupHistory,
     historyLoading,
-    firebaseUsage,
-    firebaseUsageLoading,
-    firebaseUsageError,
     selectedMonth,
     setSelectedMonth,
     importFile,
@@ -390,19 +410,18 @@ export const Settings: React.FC = () => {
     showConfirmRestore,
     setShowConfirmRestore,
     importInputRef,
-    loadFirebaseUsage,
     handleExportFull,
     handleExportMonthly,
     handleExportSettings,
     handleFileSelect,
     clearImportSelection,
     handleRestore,
-    projectId,
-    firestoreUsagePercent,
-    firestoreRemainingBytes,
-    sparkDaily,
     restoreModes,
-    formatBytes,
+    skipAutoBackupBeforeRestore,
+    setSkipAutoBackupBeforeRestore,
+    useServerImport,
+    setUseServerImport,
+    isSuperAdmin,
   } = useBackupRestore({ activeTab, isAdmin });
 
   const handleLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -439,7 +458,7 @@ export const Settings: React.FC = () => {
     if (brandingLogoRef.current) brandingLogoRef.current.value = '';
   }, []);
 
-  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print' | 'exportImport') => {
+  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print' | 'exportImport' | 'clientVersion') => {
     setSaving(true);
     setSaveMessage('');
     try {
@@ -459,6 +478,12 @@ export const Settings: React.FC = () => {
         alertToggles: section === 'general' ? localAlertToggles : (systemSettings.alertToggles ?? DEFAULT_ALERT_TOGGLES),
         quickActions: section === 'quickActions' ? normalizeQuickActions(localQuickActions) : (systemSettings.quickActions ?? []),
         exportImport: section === 'exportImport' ? localExportImport : (systemSettings.exportImport ?? { pages: {} }),
+        minimumClientVersion:
+          section === 'clientVersion' ? localMinimumClientVersion.trim() : systemSettings.minimumClientVersion,
+        forceClientUpdate:
+          section === 'clientVersion' ? localForceClientUpdate : systemSettings.forceClientUpdate,
+        clientUpdateMessageAr:
+          section === 'clientVersion' ? localClientUpdateMessageAr.trim() : systemSettings.clientUpdateMessageAr,
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم الحفظ بنجاح');
@@ -467,7 +492,7 @@ export const Settings: React.FC = () => {
       setSaveMessage('فشل الحفظ');
     }
     setSaving(false);
-  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, updateSystemSettings]);
+  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, localMinimumClientVersion, localForceClientUpdate, localClientUpdateMessageAr, updateSystemSettings]);
   const handleSaveAll = useCallback(async () => {
     setSaving(true);
     setSaveMessage('');
@@ -486,6 +511,9 @@ export const Settings: React.FC = () => {
         alertToggles: localAlertToggles,
         quickActions: normalizeQuickActions(localQuickActions),
         exportImport: localExportImport,
+        minimumClientVersion: localMinimumClientVersion.trim(),
+        forceClientUpdate: localForceClientUpdate,
+        clientUpdateMessageAr: localClientUpdateMessageAr.trim(),
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
@@ -509,6 +537,9 @@ export const Settings: React.FC = () => {
     localAlertToggles,
     localQuickActions,
     localExportImport,
+    localMinimumClientVersion,
+    localForceClientUpdate,
+    localClientUpdateMessageAr,
     normalizeCustomWidgets,
     normalizeQuickActions,
     updateSystemSettings,
@@ -659,6 +690,28 @@ export const Settings: React.FC = () => {
     setWidgetForm((prev) => ({ ...prev, dashboardKey }));
   };
 
+  const moveWidgetToDashboard = (fromKey: string, toKey: string, widgetId: string) => {
+    if (fromKey === toKey) return;
+    const isCustom = localCustomWidgets.some((w) => w.id === widgetId);
+    setLocalWidgets((prev) => {
+      const fromList = [...(prev[fromKey] || selectedWidgetDefs(fromKey).map((d) => ({ id: d.id, visible: true })))];
+      const idx = fromList.findIndex((w) => w.id === widgetId);
+      if (idx === -1) return prev;
+      const [item] = fromList.splice(idx, 1);
+      const toList = [...(prev[toKey] || selectedWidgetDefs(toKey).map((d) => ({ id: d.id, visible: true })))];
+      if (toList.some((w) => w.id === widgetId)) return prev;
+      toList.push({ id: item.id, visible: item.visible });
+      return { ...prev, [fromKey]: fromList, [toKey]: toList };
+    });
+    if (isCustom) {
+      setLocalCustomWidgets((prev) =>
+        normalizeCustomWidgets(prev.map((w) => (w.id === widgetId ? { ...w, dashboardKey: toKey } : w)))
+      );
+    }
+    setSelectedDashboardKey(toKey);
+    setSaveMessage('');
+  };
+
   const addQuickAction = () => {
     const template = AVAILABLE_QUICK_ACTIONS[0];
     const newAction: QuickActionItem = {
@@ -718,10 +771,9 @@ export const Settings: React.FC = () => {
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
   const serialize = useCallback((value: unknown) => JSON.stringify(value), []);
   const dirtyBySection = useMemo(() => {
-    const savedQuickActions = (systemSettings.quickActions ?? [])
+    const savedQuickActionsSorted = (systemSettings.quickActions ?? [])
       .slice()
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .map((item, index) => ({ ...item, order: item.order ?? index }));
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return {
       general:
         serialize({ ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings }) !== serialize(localPlanSettings) ||
@@ -730,10 +782,10 @@ export const Settings: React.FC = () => {
         serialize({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay }) !== serialize(localDashboardDisplay) ||
         serialize({ ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles }) !== serialize(localAlertToggles),
       quickActions:
-        serialize(savedQuickActions) !== serialize(normalizeQuickActions(localQuickActions)),
+        serialize(normalizeQuickActions(savedQuickActionsSorted)) !== serialize(normalizeQuickActions(localQuickActions)),
       widgets:
         serialize(systemSettings.dashboardWidgets) !== serialize(localWidgets) ||
-        serialize(systemSettings.customDashboardWidgets ?? []) !== serialize(normalizeCustomWidgets(localCustomWidgets)),
+        serialize(normalizeCustomWidgets(systemSettings.customDashboardWidgets ?? [])) !== serialize(normalizeCustomWidgets(localCustomWidgets)),
       alerts:
         serialize(systemSettings.alertSettings) !== serialize(localAlerts),
       kpis:
@@ -742,6 +794,10 @@ export const Settings: React.FC = () => {
         serialize(systemSettings.printTemplate) !== serialize(localPrint),
       exportImport:
         serialize(systemSettings.exportImport ?? { pages: {} }) !== serialize(localExportImport),
+      clientVersion:
+        (systemSettings.minimumClientVersion ?? '') !== localMinimumClientVersion ||
+        (systemSettings.forceClientUpdate === true) !== localForceClientUpdate ||
+        (systemSettings.clientUpdateMessageAr ?? '') !== localClientUpdateMessageAr,
     } as const;
   }, [
     serialize,
@@ -758,6 +814,9 @@ export const Settings: React.FC = () => {
     localKPIs,
     localPrint,
     localExportImport,
+    localMinimumClientVersion,
+    localForceClientUpdate,
+    localClientUpdateMessageAr,
     normalizeQuickActions,
     normalizeCustomWidgets,
   ]);
@@ -773,6 +832,7 @@ export const Settings: React.FC = () => {
     kpiThresholds: 'kpis',
     printTemplate: 'print',
     exportImport: 'exportImport',
+    clientVersion: 'clientVersion',
   };
   const handleTabChange = useCallback((nextTab: SettingsTab) => {
     if (nextTab === activeTab) return;
@@ -801,7 +861,7 @@ export const Settings: React.FC = () => {
     <div className="space-y-6 erp-ds-clean">
       <PageHeader
         title="الإعدادات"
-        subtitle="إعدادات النظام وحالة الاتصال والصلاحيات."
+        subtitle="إعدادات المصنع وحالة الاتصال والصلاحيات."
         backAction={false}
         primaryAction={{
           label: 'حفظ جميع الإعدادات',
@@ -813,7 +873,7 @@ export const Settings: React.FC = () => {
       />
 
       {hasUnsavedChanges && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/40">
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-accent text-accent-foreground border border-border">
           <span className="material-icons-round text-base">info</span>
           لديك تعديلات غير محفوظة. احفظ التغييرات قبل مغادرة الصفحة.
         </div>
@@ -827,15 +887,15 @@ export const Settings: React.FC = () => {
             onClick={() => handleTabChange(tab.key)}
             className={`relative flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors shrink-0 border-b-2 ${
               activeTab === tab.key
-                ? 'text-indigo-700 border-indigo-600'
-                : 'text-[var(--color-text-muted)] border-transparent hover:text-indigo-600'
+                ? 'text-primary border-primary'
+                : 'text-[var(--color-text-muted)] border-transparent hover:text-primary'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
             {tab.label}
             {getTabDirty(tab.key) && (
               <span className={`inline-block w-2 h-2 rounded-full ${
-                activeTab === tab.key ? 'bg-indigo-600' : 'bg-amber-500'
+                activeTab === tab.key ? 'bg-primary' : 'bg-muted-foreground'
               }`} />
             )}
           </button>
@@ -846,8 +906,8 @@ export const Settings: React.FC = () => {
       {saveMessage && (
         <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-medium ${
           saveMessage.includes('نجاح')
-            ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
-            : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
+            ? 'bg-accent text-accent-foreground border border-border'
+            : 'bg-destructive/10 text-destructive border border-destructive/25'
         }`}>
           <span className="material-icons-round text-lg">{saveMessage.includes('نجاح') ? 'check_circle' : 'error'}</span>
           {saveMessage}
@@ -864,6 +924,10 @@ export const Settings: React.FC = () => {
             saving={saving}
             onSave={() => handleSave('general')}
           />
+
+          <UiDensitySection />
+
+          <CompanyTenantSection isAdmin={isAdmin} />
 
           <GeneralBrandingSection
             isAdmin={isAdmin}
@@ -910,7 +974,7 @@ export const Settings: React.FC = () => {
           />
 
           {/* ── System Status (for all users) ─────────────────────────────── */}
-          <Card title="حالة النظام" className="bg-white border-slate-200 rounded-xl shadow-none">
+          <Card title="حالة النظام" className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
                 <span className="material-icons-round text-primary text-3xl mb-2 block">cloud_done</span>
@@ -938,7 +1002,7 @@ export const Settings: React.FC = () => {
           </Card>
 
           {/* Current Role Info (for all users) */}
-          <Card title="الدور الحالي والصلاحيات" className="bg-white border-slate-200 rounded-xl shadow-none">
+          <Card title="الدور الحالي والصلاحيات" className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                 <span className="material-icons-round text-primary text-2xl">shield</span>
@@ -1001,6 +1065,7 @@ export const Settings: React.FC = () => {
           setWidgetForm={setWidgetForm}
           addCustomWidget={addCustomWidget}
           onSave={() => handleSave('widgets')}
+          onMoveWidgetToDashboard={moveWidgetToDashboard}
         />
       )}
 
@@ -1065,6 +1130,26 @@ export const Settings: React.FC = () => {
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* ── TAB: Client version / forced update ─────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'clientVersion' && isAdmin && (
+        <ClientVersionSettingsSection
+          isAdmin={isAdmin}
+          saving={saving}
+          firestoreMinimumClientVersion={systemSettings.minimumClientVersion}
+          firestoreForceClientUpdate={systemSettings.forceClientUpdate}
+          firestoreClientUpdateMessageAr={systemSettings.clientUpdateMessageAr}
+          localMinimumClientVersion={localMinimumClientVersion}
+          setLocalMinimumClientVersion={setLocalMinimumClientVersion}
+          localForceClientUpdate={localForceClientUpdate}
+          setLocalForceClientUpdate={setLocalForceClientUpdate}
+          localClientUpdateMessageAr={localClientUpdateMessageAr}
+          setLocalClientUpdateMessageAr={setLocalClientUpdateMessageAr}
+          onSave={() => handleSave('clientVersion')}
+        />
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
       {/* ── TAB: Backup & Restore ──────────────────────────────────────── */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'backup' && isAdmin && (
@@ -1073,16 +1158,7 @@ export const Settings: React.FC = () => {
           backupMessage={backupMessage}
           setBackupMessage={setBackupMessage}
           backupProgress={backupProgress}
-          loadFirebaseUsage={loadFirebaseUsage}
-          firebaseUsageLoading={firebaseUsageLoading}
           backupLoading={backupLoading}
-          firebaseUsage={firebaseUsage}
-          projectId={projectId}
-          firebaseUsageError={firebaseUsageError}
-          formatBytes={formatBytes}
-          firestoreRemainingBytes={firestoreRemainingBytes}
-          firestoreUsagePercent={firestoreUsagePercent}
-          sparkDaily={sparkDaily}
           handleExportFull={handleExportFull}
           selectedMonth={selectedMonth}
           setSelectedMonth={setSelectedMonth}
@@ -1102,6 +1178,11 @@ export const Settings: React.FC = () => {
           backupHistory={backupHistory}
           showConfirmRestore={showConfirmRestore}
           handleRestore={handleRestore}
+          skipAutoBackupBeforeRestore={skipAutoBackupBeforeRestore}
+          setSkipAutoBackupBeforeRestore={setSkipAutoBackupBeforeRestore}
+          useServerImport={useServerImport}
+          setUseServerImport={setUseServerImport}
+          isSuperAdmin={isSuperAdmin}
         />
       )}
     </div>

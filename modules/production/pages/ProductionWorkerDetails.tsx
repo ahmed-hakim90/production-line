@@ -1,6 +1,15 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { PageHeader } from '@/components/PageHeader';
+import { Card as UiCard, CardContent } from '@/components/ui/card';
+import {
+  DetailPageShell,
+  DetailPageStickyHeader,
+  SectionSkeleton,
+  SURFACE_CARD,
+} from '@/src/components/erp/DetailPageChrome';
+import { Card, KPIBox, Badge, Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
@@ -61,7 +70,7 @@ function getWeekStart(): string {
 
 export const ProductionWorkerDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const employees = useAppStore((s) => s.employees);
@@ -260,12 +269,24 @@ export const ProductionWorkerDetails: React.FC = () => {
   }, [employee, employees]);
 
   if (loading) {
-    return <div className="space-y-6"><LoadingSkeleton type="detail" /></div>;
+    return (
+      <DetailPageShell>
+        <DetailPageStickyHeader>
+          <PageHeader title="تفاصيل عامل الإنتاج" backAction={{ to: '/production-workers', label: 'رجوع' }} loading />
+          <UiCard className={SURFACE_CARD}>
+            <SectionSkeleton rows={2} height={38} />
+          </UiCard>
+        </DetailPageStickyHeader>
+        <UiCard className={SURFACE_CARD}>
+          <SectionSkeleton rows={6} height={68} />
+        </UiCard>
+      </DetailPageShell>
+    );
   }
 
   if (!employee) {
     return (
-      <div className="space-y-6">
+      <DetailPageShell>
         <div className="text-center py-16 text-slate-400">
           <span className="material-icons-round text-6xl mb-4 block opacity-30">person_off</span>
           <p className="font-bold text-lg">العامل غير موجود</p>
@@ -274,7 +295,7 @@ export const ProductionWorkerDetails: React.FC = () => {
             العودة لعمال الإنتاج
           </Button>
         </div>
-      </div>
+      </DetailPageShell>
     );
   }
 
@@ -282,8 +303,7 @@ export const ProductionWorkerDetails: React.FC = () => {
   const scoreBadge = performanceScore >= 85 ? { variant: 'success' as const, label: 'ممتاز' } : performanceScore >= 70 ? { variant: 'warning' as const, label: 'جيد' } : { variant: 'danger' as const, label: 'ضعيف' };
 
   return (
-    <div className="space-y-6">
-      {/* Alerts */}
+    <DetailPageShell>
       {alerts.length > 0 && alerts[0].type !== 'info' && (
         <div className="space-y-2">
           {alerts.filter((a) => a.type !== 'info').map((alert, i) => (
@@ -302,95 +322,69 @@ export const ProductionWorkerDetails: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-start sm:items-center justify-between gap-3">
-        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-          <button
-            onClick={() => navigate('/production-workers')}
-            className="p-2 text-[var(--color-text-muted)] hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-[var(--border-radius-base)] transition-all shrink-0 mt-1 sm:mt-0"
-          >
-            <span className="material-icons-round">arrow_forward</span>
-          </button>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3 mb-1">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-teal-500/20 to-teal-500/5 ring-2 ring-teal-500/10 shrink-0">
-                <span className="material-icons-round text-2xl text-teal-600">construction</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] truncate">
-                {employee.name}
-              </h2>
+      <DetailPageStickyHeader>
+        <PageHeader
+          title={employee.name}
+          subtitle={`${getDepartmentName(employee.departmentId)} — ${getJobPositionTitle(employee.jobPositionId)} · ${lineStats.length} خط إنتاج`}
+          icon="user"
+          backAction={{ to: '/production-workers', label: 'رجوع' }}
+          secondaryAction={{ label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/employees/${id}`) }}
+          moreActions={can('print') ? [{ label: 'طباعة', icon: 'print', onClick: () => { handlePrint(); }, group: 'تصدير' }] : undefined}
+          extra={(
+            <div className="flex flex-wrap items-center gap-2">
               {employee.code && (
-                <span className="font-mono text-sm bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+                <span className="rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
                   {employee.code}
                 </span>
               )}
               <Badge variant={scoreBadge.variant}>{scoreBadge.label} ({performanceScore})</Badge>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-              <Badge variant="neutral">{getDepartmentName(employee.departmentId)}</Badge>
-              <Badge variant="info">{getJobPositionTitle(employee.jobPositionId)}</Badge>
               <Badge variant={employee.isActive ? 'success' : 'danger'}>
                 {employee.isActive ? 'نشط' : 'غير نشط'}
               </Badge>
-              <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
-              <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
-                <span className="material-icons-round text-xs">precision_manufacturing</span>
-                {lineStats.length} خط إنتاج
-              </span>
             </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {can('print') && (
-            <Button variant="outline" onClick={() => handlePrint()}>
-              <span className="material-icons-round text-lg">print</span>
-              طباعة
-            </Button>
           )}
-          <Button variant="outline" onClick={() => navigate(`/employees/${id}`)}>
-            <span className="material-icons-round text-lg">person</span>
-            الملف الشخصي
-          </Button>
-        </div>
-      </div>
+        />
+        <UiCard className={SURFACE_CARD}>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" />
+              <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20" />
+              <KPIBox
+                label="إجمالي الإنتاج"
+                value={formatNumber(totalProduced)}
+                unit={target > 0 ? `/ ${formatNumber(target)}` : 'وحدة'}
+                icon="inventory"
+                colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+                trend={target > 0 ? `${Math.min(Math.round((totalProduced / target) * 100), 100)}% من الهدف` : undefined}
+                trendUp={target > 0 && totalProduced >= target * 0.5}
+              />
+              <KPIBox
+                label="نسبة الهدر"
+                value={`${wasteRatio}%`}
+                icon="delete_sweep"
+                colorClass={wasteRatio <= 2 ? 'bg-emerald-50 text-emerald-600' : wasteRatio <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
+                trend={`${formatNumber(totalWaste)} وحدة هالك`}
+                trendUp={wasteRatio <= wasteThreshold}
+              />
+              <KPIBox label="ساعات العمل" value={formatNumber(totalHours)} unit="ساعة" icon="schedule" colorClass="bg-amber-50 text-amber-600" trend={`${uniqueDays} يوم عمل`} trendUp />
+              <KPIBox label="متوسط الإنتاج/تقرير" value={formatNumber(avgPerReport)} icon="trending_up" colorClass="bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400" />
+              <KPIBox label="عدد التقارير" value={formatNumber(reports.length)} icon="description" colorClass="bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400" />
+              <KPIBox
+                label="درجة الأداء"
+                value={performanceScore}
+                unit="/ 100"
+                icon="speed"
+                colorClass={performanceScore >= 85 ? 'bg-emerald-50 text-emerald-600' : performanceScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
+                trend={scoreBadge.label}
+                trendUp={performanceScore >= 70}
+              />
+            </div>
+          </CardContent>
+        </UiCard>
+      </DetailPageStickyHeader>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" />
-        <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20" />
-        <KPIBox
-          label="إجمالي الإنتاج"
-          value={formatNumber(totalProduced)}
-          unit={target > 0 ? `/ ${formatNumber(target)}` : 'وحدة'}
-          icon="inventory"
-          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
-          trend={target > 0 ? `${Math.min(Math.round((totalProduced / target) * 100), 100)}% من الهدف` : undefined}
-          trendUp={target > 0 && totalProduced >= target * 0.5}
-        />
-        <KPIBox
-          label="نسبة الهدر"
-          value={`${wasteRatio}%`}
-          icon="delete_sweep"
-          colorClass={wasteRatio <= 2 ? 'bg-emerald-50 text-emerald-600' : wasteRatio <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
-          trend={`${formatNumber(totalWaste)} وحدة هالك`}
-          trendUp={wasteRatio <= wasteThreshold}
-        />
-        <KPIBox label="ساعات العمل" value={formatNumber(totalHours)} unit="ساعة" icon="schedule" colorClass="bg-amber-50 text-amber-600" trend={`${uniqueDays} يوم عمل`} trendUp />
-        <KPIBox label="متوسط الإنتاج/تقرير" value={formatNumber(avgPerReport)} icon="trending_up" colorClass="bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400" />
-        <KPIBox label="عدد التقارير" value={formatNumber(reports.length)} icon="description" colorClass="bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400" />
-        <KPIBox
-          label="درجة الأداء"
-          value={performanceScore}
-          unit="/ 100"
-          icon="speed"
-          colorClass={performanceScore >= 85 ? 'bg-emerald-50 text-emerald-600' : performanceScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
-          trend={scoreBadge.label}
-          trendUp={performanceScore >= 70}
-        />
-      </div>
-
-      {/* Detail Tabs */}
-      <div className="flex flex-wrap gap-1">
+      <UiCard className={SURFACE_CARD}>
+        <CardContent className="flex flex-wrap gap-1 p-4">
         {DETAIL_TABS.map((tab) => (
           <button
             key={tab.id}
@@ -405,7 +399,8 @@ export const ProductionWorkerDetails: React.FC = () => {
             {tab.label}
           </button>
         ))}
-      </div>
+        </CardContent>
+      </UiCard>
 
       {/* Tab: Production */}
       {activeTab === 'production' && (
@@ -509,7 +504,7 @@ export const ProductionWorkerDetails: React.FC = () => {
               <h3 className="text-lg font-bold">سجل التقارير</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -565,7 +560,7 @@ export const ProductionWorkerDetails: React.FC = () => {
             <Card>
               <div className="text-center py-12 text-slate-400">
                 <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
-                <p className="font-bold">لا توجد خطوط إنتاج مرتبطة</p>
+                <p className="font-bold">لا توجد خطوط إنتاج مطابقة</p>
               </div>
             </Card>
           ) : (
@@ -581,7 +576,7 @@ export const ProductionWorkerDetails: React.FC = () => {
                         </div>
                         <div>
                           <h4 className="font-bold text-[var(--color-text)]">{line.name}</h4>
-                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير · {formatNumber(Math.round(line.hours))} ساعة</span>
+                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير آ· {formatNumber(Math.round(line.hours))} ساعة</span>
                         </div>
                       </div>
                       <button
@@ -680,6 +675,9 @@ export const ProductionWorkerDetails: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
-    </div>
+    </DetailPageShell>
   );
 };
+
+
+

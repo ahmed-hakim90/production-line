@@ -55,7 +55,7 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">شعار المصنع</p>
-              <p className="text-xs text-[var(--color-text-muted)]">PNG أو JPG — يظهر في الواجهة والتقارير</p>
+              <p className="text-xs text-[var(--color-text-muted)]">PNG أو JPG — يُعرض في الواجهة والتقارير</p>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">

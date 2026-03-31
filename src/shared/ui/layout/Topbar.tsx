@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
+  ArrowLeft,
   Download,
   Home,
   Lock,
+  Languages,
   Menu,
   RefreshCw,
   Search,
@@ -12,11 +15,16 @@ import {
 import { useCurrentRole, usePermission } from '@/utils/permissions';
 import { NotificationBell } from '@/components/NotificationBell';
 import { TasksNavButton } from '@/components/background-jobs/JobsPanel';
+import { useAppStore } from '@/store/useAppStore';
+import { userService } from '@/services/userService';
+import { setAppLanguage, type SupportedLanguage } from '@/src/i18n';
 import { useSidebar, useSidebarActiveRoute } from './useSidebar';
 import { MENU_CONFIG } from '@/config/menu.config';
 import { CommandPalette } from '@/components/CommandPalette';
 import { useCommandPalette } from '@/components/useCommandPalette';
 import { resolveMenuIcon } from './menuIconMap';
+import { usePageBackRegistration } from './PageBackContext';
+import { tenantHomePath } from '@/lib/tenantPaths';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -44,12 +52,18 @@ function useScrolled(threshold = 4): boolean {
 }
 
 export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseToggle }) => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { isReadOnly } = useCurrentRole();
   const { canViewActivityLog } = usePermission();
   const { collapsed }  = useSidebar();
   const navigate       = useNavigate();
   const location       = useLocation();
+  const homePath       = tenantHomePath(tenantSlug);
   const scrolled       = useScrolled();
+  const { t, i18n } = useTranslation();
+
+  const uid = useAppStore((s) => s.uid);
+  const userProfile = useAppStore((s) => s.userProfile);
 
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled,    setIsInstalled]    = useState(false);
@@ -57,6 +71,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
 
   const { isActiveItem } = useSidebarActiveRoute();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+  const pageBack = usePageBackRegistration();
 
   /* Resolve breadcrumb from location */
   const breadcrumb = useMemo(() => {
@@ -104,6 +119,25 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
     window.location.reload();
   }, []);
 
+  const handleToggleLanguage = useCallback(async () => {
+    const current = (i18n.language || 'ar').startsWith('en') ? 'en' : 'ar';
+    const next: SupportedLanguage = current === 'ar' ? 'en' : 'ar';
+
+    await setAppLanguage(next);
+
+    if (!uid) return;
+    const currentPrefs = userProfile?.uiPreferences ?? {};
+    const nextPrefs = { ...currentPrefs, language: next };
+
+    useAppStore.setState((s) => ({
+      userProfile: s.userProfile ? { ...s.userProfile, uiPreferences: nextPrefs } : s.userProfile,
+    }));
+
+    void userService.update(uid, { uiPreferences: nextPrefs }).catch((e) => {
+      console.warn('Failed to persist language preference:', e);
+    });
+  }, [i18n.language, uid, userProfile?.uiPreferences]);
+
   return (
     <>
       <header
@@ -122,8 +156,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Mobile hamburger */}
           <button
             onClick={onMenuToggle}
-            className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
-            aria-label="فتح القائمة"
+            className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors shrink-0"
+            aria-label={t('topbar.openMenu')}
           >
             <Menu size={18} />
           </button>
@@ -131,17 +165,30 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Desktop sidebar collapse toggle */}
           <button
             onClick={onSidebarCollapseToggle}
-            className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors shrink-0"
-            title={collapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'}
+            className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors shrink-0"
+            title={collapsed ? t('topbar.expandSidebar') : t('topbar.collapseSidebar')}
           >
             <Sidebar size={18} className={`transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
           </button>
+
+          {pageBack && (
+            <button
+              type="button"
+              onClick={pageBack.onClick}
+              disabled={pageBack.disabled}
+              className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors shrink-0 disabled:opacity-50 disabled:pointer-events-none"
+              title={pageBack.label}
+              aria-label={pageBack.label}
+            >
+              <ArrowLeft size={18} />
+            </button>
+          )}
 
           {/* Breadcrumb */}
           {breadcrumb ? (
             <nav className="hidden sm:flex items-center gap-1 text-[12.5px] min-w-0">
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate(homePath)}
                 className="flex items-center gap-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
               >
                 {renderTopbarIcon(breadcrumb.groupIcon, undefined, 13)}
@@ -155,11 +202,11 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             </nav>
           ) : (
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(homePath)}
               className="hidden sm:flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--color-text)] hover:text-primary transition-colors"
             >
               <Home size={15} />
-              <span>الرئيسية</span>
+              <span>{t('topbar.home')}</span>
             </button>
           )}
 
@@ -175,10 +222,10 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
         <div className="flex-1 max-w-[320px] hidden md:flex">
           <button
             onClick={() => setCmdOpen(true)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-[#f0f2f5] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group"
+            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group"
           >
             <Search size={15} className="group-hover:text-primary transition-colors" />
-            <span className="flex-1 text-start">البحث في النظام...</span>
+            <span className="flex-1 text-start">{t('topbar.globalSearchPlaceholder')}</span>
             <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
               Ctrl K
             </kbd>
@@ -191,8 +238,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Mobile search icon */}
           <button
             onClick={() => setCmdOpen(true)}
-            className="md:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors"
-            title="بحث"
+            className="md:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
+            title={t('topbar.search')}
           >
             <Search size={18} />
           </button>
@@ -204,7 +251,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[11.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
             >
               <Download size={14} />
-              تثبيت
+              {t('topbar.install')}
             </button>
           )}
 
@@ -212,16 +259,28 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {isReadOnly && (
             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-sm)] text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
               <Lock size={13} />
-              قراءة فقط
+              {t('topbar.readOnly')}
             </span>
           )}
+
+          {/* Language toggle */}
+          <button
+            type="button"
+            onClick={() => { void handleToggleLanguage(); }}
+            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[11.5px] font-semibold bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text)] hover:border-primary/40 hover:bg-primary/5 transition-colors"
+            title={i18n.language?.startsWith('en') ? t('language.switchToAr') : t('language.switchToEn')}
+            aria-label={i18n.language?.startsWith('en') ? t('language.switchToAr') : t('language.switchToEn')}
+          >
+            <Languages size={15} />
+            <span className="font-mono">{i18n.language?.startsWith('en') ? 'EN' : 'AR'}</span>
+          </button>
 
           {/* Refresh */}
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors disabled:opacity-50"
-            title="تحديث"
+            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50"
+            title={t('topbar.refresh')}
           >
             <RefreshCw size={18} className={refreshing ? 'animate-spin text-primary' : ''} />
           </button>
@@ -233,10 +292,14 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           <NotificationBell />
 
           {/* Date chip — desktop only */}
-          <div className="hidden xl:flex flex-col items-end px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-[#f0f2f5] border border-[var(--color-border)]">
-            <span className="text-[9px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider leading-none">اليوم</span>
+          <div className="hidden xl:flex flex-col items-end px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
+            <span className="text-[9px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider leading-none">{t('topbar.today')}</span>
             <span className="text-[11px] font-bold text-[var(--color-text)] leading-tight mt-0.5">
-              {new Date().toLocaleDateString('ar-EG', { weekday: 'short', day: 'numeric', month: 'short' })}
+              {new Date().toLocaleDateString(i18n.language?.startsWith('en') ? 'en-US' : 'ar-EG', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+              })}
             </span>
           </div>
         </div>

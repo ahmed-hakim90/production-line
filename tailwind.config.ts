@@ -4,6 +4,7 @@ import containerQueries from "@tailwindcss/container-queries"
 
 const config: Config = {
   important: "#root",
+  darkMode: "class",
   content: [
     "./index.html",
     "./index.tsx",

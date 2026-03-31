@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -17,11 +17,11 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
-import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
-import { useAppStore } from '../../../store/useAppStore';
+import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
+import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import {
   formatNumber,
   buildDashboardKPIs,
@@ -41,12 +41,10 @@ import {
 import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
 import { ProductionLineStatus, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { reportService } from '@/modules/production/services/reportService';
 import {
   getKPIThreshold,
   getKPIColor,
   KPI_COLOR_CLASSES,
-  isWidgetVisible,
 } from '../../../utils/dashboardConfig';
 import {
   ComposedChart,
@@ -144,15 +142,11 @@ export const Dashboard: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const uid = useAppStore((s) => s.uid);
   const systemSettings = useAppStore((s) => s.systemSettings);
-  const navigate = useNavigate();
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+  const navigate = useTenantNavigate();
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
-
-  const isVisible = useCallback(
-    (widgetId: string) => isWidgetVisible(systemSettings, 'dashboard', widgetId),
-    [systemSettings]
-  );
 
   const linkedEmployee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
@@ -169,7 +163,7 @@ export const Dashboard: React.FC = () => {
   const [costProductIds, setCostProductIds] = useState<string[]>([]);
   const [costProductCandidate, setCostProductCandidate] = useState('');
 
-  // ── Daily Production vs Cost Chart ──
+  // â”€â”€ Daily Production vs Cost Chart â”€â”€
   const [chartProductId, setChartProductId] = useState('');
   const [chartLineId, setChartLineId] = useState('');
   const [chartMonth, setChartMonth] = useState(getCurrentMonth);
@@ -181,29 +175,33 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const loadScopedReports = async () => {
-      const now = new Date();
-      const month = getCurrentMonth();
-      const monthStart = `${month}-01`;
-      const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
-      const today = new Date().toISOString().slice(0, 10);
-      try {
-        const [todayPage, monthPage] = await Promise.all([
-          reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
-          reportService.listByDateRangePaged({ startDate: monthStart, endDate: monthEnd, limit: 100 }),
-        ]);
+    const now = new Date();
+    const month = getCurrentMonth();
+    const monthStart = `${month}-01`;
+    const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const maxAgeMs = 5 * 60 * 1000;
+    const kToday = getProductionReportsRangeCacheKey(today, today);
+    const kMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+    const cache = useAppStore.getState().productionReportsRangeCache;
+    if (cache[kToday]) setTodayReportsScoped(cache[kToday].rows);
+    if (cache[kMonth]) setMonthlyReportsScoped(cache[kMonth].rows);
+    void Promise.all([
+      ensureProductionReportsForRange(today, today, { maxAgeMs }),
+      ensureProductionReportsForRange(monthStart, monthEnd, { maxAgeMs }),
+    ])
+      .then(([todayRows, monthRows]) => {
         if (cancelled) return;
-        setTodayReportsScoped(todayPage.items);
-        setMonthlyReportsScoped(monthPage.items);
-      } catch {
+        setTodayReportsScoped(todayRows);
+        setMonthlyReportsScoped(monthRows);
+      })
+      .catch(() => {
         if (cancelled) return;
         setTodayReportsScoped([]);
         setMonthlyReportsScoped([]);
-      }
-    };
-    void loadScopedReports();
+      });
     return () => { cancelled = true; };
-  }, []);
+  }, [ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -221,7 +219,7 @@ export const Dashboard: React.FC = () => {
   const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
   const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
 
-  // ── Set Target Modal ──
+  // â”€â”€ Set Target Modal â”€â”€
   const [targetModal, setTargetModal] = useState<{ lineId: string; lineName: string } | null>(null);
   const [targetForm, setTargetForm] = useState({ currentProductId: '', targetTodayQty: 0 });
   const [targetSaving, setTargetSaving] = useState(false);
@@ -441,21 +439,31 @@ export const Dashboard: React.FC = () => {
       return;
     }
     let cancelled = false;
-    setChartLoading(true);
     const [y, m] = chartMonth.split('-').map(Number);
     const dim = new Date(y, m, 0).getDate();
     const startDate = `${chartMonth}-01`;
     const endDate = `${chartMonth}-${String(dim).padStart(2, '0')}`;
-    reportService.getByDateRange(startDate, endDate).then((reports) => {
-      if (!cancelled) {
-        setChartReports(reports);
-        setChartLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelled) setChartLoading(false);
-    });
+    const maxAgeMs = 5 * 60 * 1000;
+    const ck = getProductionReportsRangeCacheKey(startDate, endDate);
+    const cached = useAppStore.getState().productionReportsRangeCache[ck];
+    if (cached) {
+      setChartReports(cached.rows);
+      setChartLoading(false);
+    } else {
+      setChartLoading(true);
+    }
+    ensureProductionReportsForRange(startDate, endDate, { maxAgeMs })
+      .then((reports) => {
+        if (!cancelled) {
+          setChartReports(reports);
+          setChartLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setChartLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [canViewCosts, chartMonth, monthlyReports]);
+  }, [canViewCosts, chartMonth, monthlyReports, ensureProductionReportsForRange]);
 
   const dailyChartData = useMemo(() => {
     if (!canViewCosts || chartReports.length === 0) return [];
@@ -553,12 +561,16 @@ export const Dashboard: React.FC = () => {
     <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
       {/* <div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
-        <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">نظرة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
+        <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">لوحة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
       </div> */}
 
-      <CustomDashboardWidgets dashboardKey="dashboard" systemSettings={systemSettings} />
-
-      {isVisible('kpi_row') && (
+      <OrderedDashboardWidgets
+        dashboardKey="dashboard"
+        systemSettings={systemSettings}
+        renderBuiltin={(widgetId) => {
+          switch (widgetId) {
+            case 'kpi_row':
+              return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {/* Production Card — Daily & Monthly */}
         <div className="bg-[var(--color-card)] p-4 sm:p-6 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-2 md:col-span-1">
@@ -590,10 +602,10 @@ export const Dashboard: React.FC = () => {
           return <KPIBox label="نسبة الهالك" value={`${kpis.wasteRatio}%`} icon="delete_sweep" trend="" trendUp={wasteColor === 'good'} colorClass={KPI_COLOR_CLASSES[wasteColor]} />;
         })()}
       </div>
-      )}
-
-      {/* ── Product Cost Analysis Section ── */}
-      {isVisible('product_cost_analysis') && canViewCosts && (
+              );
+            case 'product_cost_analysis':
+              if (!canViewCosts) return null;
+              return (
         <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
           <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -694,7 +706,7 @@ export const Dashboard: React.FC = () => {
                 })}
               </div>
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-right border-collapse">
+                <table className="erp-table w-full text-right border-collapse">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">المنتج</th>
@@ -765,10 +777,10 @@ export const Dashboard: React.FC = () => {
             </div>
           ) : null}
         </div>
-      )}
-
-      {/* ── Daily Production vs Cost Chart ── */}
-      {isVisible('daily_cost_chart') && canViewCosts && (
+              );
+            case 'daily_cost_chart':
+              if (!canViewCosts) return null;
+              return (
         <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
           <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -890,10 +902,10 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-        {isVisible('production_lines') && <div className="lg:col-span-2 space-y-5 sm:space-y-6">
+              );
+            case 'production_lines':
+              return (
+          <>
           <div className="flex items-center justify-between px-2 gap-3">
             <h3 className="text-lg sm:text-xl font-bold flex items-center gap-3">
               <span className="w-2 h-7 bg-primary rounded-full shrink-0"></span>
@@ -981,10 +993,11 @@ export const Dashboard: React.FC = () => {
               </Card>
             ))}
           </div>
-        </div>}
-
-        {isVisible('smart_planning') && <div className="lg:col-span-1">
-          <Card className="lg:sticky lg:top-24 border-primary/20 shadow-primary/5" title="التخطيط الذكي">
+          </>
+              );
+            case 'smart_planning':
+              return (
+          <Card className="lg:sticky lg:top-24 border-primary/20 shadow-primary/5" title="الملخص الذكي">
             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المنتج</label>
@@ -1002,7 +1015,7 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المطلوبة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المخططة</label>
                 <input 
                   className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" 
                   placeholder="أدخل الكمية..." 
@@ -1021,11 +1034,11 @@ export const Dashboard: React.FC = () => {
                       <span className="text-sm font-bold text-primary">{planResults.avgAssemblyTime} دقيقة/وحدة</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">الطاقة اليومية لكل خط</span>
+                      <span className="text-xs font-bold text-slate-500">الأهداف اليومية لكل خط</span>
                       <span className="text-sm font-bold text-primary">{formatNumber(planResults.dailyCapacityPerLine)} وحدة</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">إجمالي الطاقة اليومية</span>
+                      <span className="text-xs font-bold text-slate-500">إجمالي الأهداف اليومية</span>
                       <span className="text-sm font-bold text-primary">
                         {formatNumber(planResults.totalDailyCapacity)} وحدة ({planResults.activeLinesCount} خط)
                       </span>
@@ -1062,7 +1075,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => navigate(`/production-plans?productId=${selectedProductId}&quantity=${planQuantity}`)}
                 >
                   <DashboardIcon name="add_task" className="text-sm" />
-                  إنشاء خطة رسمية
+                  إنشاء خطط رسمية
                 </Button>
               </div>
             )}
@@ -1093,7 +1106,7 @@ export const Dashboard: React.FC = () => {
             )}
 
             <div className="mt-8 pt-6 border-t border-[var(--color-border)]">
-              <h4 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.2em] mb-4">أهم تنبيهات النظام</h4>
+              <h4 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.2em] mb-4">أهم تنبيهات اليوم</h4>
               {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length > 0 ? (
                 <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-[var(--border-radius-base)] border border-amber-100 dark:border-amber-900/20">
                   <DashboardIcon name="info" className="text-amber-500 text-sm mt-0.5" />
@@ -1118,10 +1131,14 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
           </Card>
-        </div>}
-      </div>
+              );
+            default:
+              return null;
+          }
+        }}
+      />
 
-      {/* ── Set Target Modal ── */}
+      {/* â”€â”€ Set Target Modal â”€â”€ */}
 
       {targetModal && can("lineStatus.edit") && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
@@ -1192,3 +1209,7 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+
+
+

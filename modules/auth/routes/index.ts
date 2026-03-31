@@ -1,27 +1,39 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import type { PublicRouteDef } from '../../shared/routes';
-import { Setup } from '../pages/Setup';
-import { Login } from '../pages/Login';
-import { PendingApproval } from '../pages/PendingApproval';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const Setup = lazyNamed(() => import('../pages/Setup'), 'Setup');
+const Login = lazyNamed(() => import('../pages/Login'), 'Login');
+const PendingApproval = lazyNamed(() => import('../pages/PendingApproval'), 'PendingApproval');
+
+const NavigateToTenantLogin: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  return React.createElement(Navigate, { to: `/t/${tenantSlug}/login`, replace: true });
+};
+
+const NavigateToTenantPending: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  return React.createElement(Navigate, { to: `/t/${tenantSlug}/pending`, replace: true });
+};
 
 export const AUTH_PUBLIC_ROUTES: PublicRouteDef[] = [
   {
-    path: '/setup',
+    path: 'setup',
     resolveElement: () => React.createElement(Setup),
   },
   {
-    path: '/login',
+    path: 'login',
     resolveElement: ({ isAuthenticated, isPendingApproval, loginRedirectElement }) =>
       isAuthenticated
-        ? (isPendingApproval ? React.createElement(Navigate, { to: '/pending', replace: true }) : loginRedirectElement)
+        ? (isPendingApproval ? React.createElement(NavigateToTenantPending) : loginRedirectElement)
         : React.createElement(Login),
   },
   {
-    path: '/pending',
+    path: 'pending',
     resolveElement: ({ isAuthenticated, isPendingApproval, loginRedirectElement }) =>
       !isAuthenticated
-        ? React.createElement(Navigate, { to: '/login', replace: true })
+        ? React.createElement(NavigateToTenantLogin)
         : isPendingApproval
           ? React.createElement(PendingApproval)
           : loginRedirectElement,

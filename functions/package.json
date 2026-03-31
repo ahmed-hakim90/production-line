@@ -15,7 +15,9 @@
     "backfill:dashboardStats:dry": "npm run build && node lib/scripts/backfillDashboardStats.js --dry-run",
     "backfill:dashboardStats:apply": "npm run build && node lib/scripts/backfillDashboardStats.js --apply",
     "backfill:supervisorAssignments:dry": "npm run build && node lib/scripts/backfillSupervisorLineAssignments.js",
-    "backfill:supervisorAssignments:apply": "npm run build && node lib/scripts/backfillSupervisorLineAssignments.js --apply"
+    "backfill:supervisorAssignments:apply": "npm run build && node lib/scripts/backfillSupervisorLineAssignments.js --apply",
+    "backfill:tenantId:dry": "npm run build && node lib/scripts/backfillTenantId.js",
+    "backfill:tenantId:apply": "npm run build && node lib/scripts/backfillTenantId.js --apply"
   },
   "dependencies": {
     "firebase-admin": "^13.5.0",

@@ -19,6 +19,7 @@ import {
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import {
   employeeLoansRef,
   HR_COLLECTIONS,
@@ -70,6 +71,7 @@ export const loanService = {
     const docRef = await addDoc(employeeLoansRef(), {
       ...data,
       disbursed: data.disbursed ?? false,
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
     });
     return docRef.id;

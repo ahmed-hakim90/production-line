@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { Button } from '../../../components/UI';
 import {
@@ -32,7 +32,7 @@ const getMonthRange = (month: string): { startDate: string; endDate: string } =>
 };
 
 export const DepreciationReport: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const [mode, setMode] = useState<ReportMode>('monthly');
   const [month, setMonth] = useState(getCurrentMonth());
 
@@ -228,7 +228,7 @@ export const DepreciationReport: React.FC = () => {
     <div className="space-y-6 erp-ds-clean">
       <PageHeader
         title="تقرير الإهلاك"
-        subtitle="تحليل الإهلاك الشهري والسنوي وربطه بمراكز التكلفة والخطوط والمنتجات"
+        subtitle="تحليل الإهلاك الشهري والسنوي بمراكز التكلفة مرجعية والمنتجات"
         icon="receipt_long"
         backAction={false}
         extra={(
@@ -291,7 +291,7 @@ export const DepreciationReport: React.FC = () => {
           <DataTable
             columns={centerColumns}
             data={centerBreakdown}
-            emptyMessage="لا توجد مراكز مرتبطة"
+            emptyMessage="لا توجد مراكز مرجعية"
           />
         </div>
       </div>

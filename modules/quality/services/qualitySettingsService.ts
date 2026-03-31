@@ -37,7 +37,7 @@ const DEFAULT_REWORK_POLICIES: QualityReworkPolicySettings = {
 
 const DEFAULT_PRINT_TEMPLATES: QualityPrintTemplateSettings = {
   headerText: 'تقرير الجودة',
-  footerText: 'تم الإنشاء بواسطة نظام الإنتاج',
+  footerText: 'تم الإنشاء تلقائياً من الإنتاج',
   showSignatureInspector: true,
   showSignatureSupervisor: true,
   showSignatureQualityManager: true,
@@ -154,7 +154,7 @@ export const qualitySettingsService = {
     const existing = await this.getReasons(false);
     if (existing.length > 0) return;
     const defaults: Omit<QualityReasonCatalogItem, 'id' | 'createdAt' | 'updatedAt'>[] = [
-      { code: 'FIN-SCRATCH', labelAr: 'خدش في التشطيب', category: 'تشطيب', severityDefault: 'medium', isActive: true },
+      { code: 'FIN-SCRATCH', labelAr: 'خدش في الطلاء', category: 'تشطيب', severityDefault: 'medium', isActive: true },
       { code: 'ASSY-MISS', labelAr: 'نقص في التجميع', category: 'تجميع', severityDefault: 'high', isActive: true },
       { code: 'COLOR-MISMATCH', labelAr: 'اختلاف لون', category: 'لون', severityDefault: 'low', isActive: true },
       { code: 'SIZE-OFF', labelAr: 'مقاس غير مطابق', category: 'مقاس', severityDefault: 'high', isActive: true },

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { SingleReportPrint } from '../../../production/components/ProductionReportPrint';
 import { Card, Button } from '../UI';
 import type { PaperOrientation, PaperSize, PrintTemplateSettings, PrintThemePreset } from '../../../../types';
@@ -46,7 +47,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
         <div className="erp-page-actions w-full sm:w-auto">
           <Button
             onClick={() => setShowPreview(true)}
-            className="!bg-[#f0f2f5] dark:!bg-slate-800 !text-[var(--color-text)] dark:!text-[var(--color-text-muted)] hover:!bg-slate-200 dark:hover:!bg-slate-700"
+            className="!bg-[var(--color-bg)] !text-[var(--color-text)] hover:!bg-[var(--color-surface-hover)]"
           >
             <span className="material-icons-round text-sm">visibility</span>
             معاينة
@@ -61,14 +62,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
 
       <Card title="الشعار والعنوان">
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">image</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">شعار الشركة</p>
-                <p className="text-xs text-slate-400">يظهر أعلى التقرير المطبوع — PNG أو JPG</p>
+                <p className="text-xs text-[var(--color-text-muted)]">يظهر أعلى التقرير المطبوع — PNG أو JPG</p>
               </div>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -103,14 +104,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">title</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">عنوان الرأس</p>
-                <p className="text-xs text-slate-400">اسم الشركة / المؤسسة في أعلى التقرير</p>
+                <p className="text-xs text-[var(--color-text-muted)]">اسم الشركة / المؤسسة في أعلى التقرير</p>
               </div>
             </div>
             <input
@@ -121,14 +122,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">short_text</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">نص التذييل</p>
-                <p className="text-xs text-slate-400">يظهر أسفل التقرير المطبوع</p>
+                <p className="text-xs text-[var(--color-text-muted)]">يظهر أسفل التقرير المطبوع</p>
               </div>
             </div>
             <input
@@ -139,14 +140,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">palette</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">اللون الرئيسي</p>
-                <p className="text-xs text-slate-400">لون العناوين والحدود في التقرير</p>
+                <p className="text-xs text-[var(--color-text-muted)]">لون العناوين والحدود في التقرير</p>
               </div>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -165,14 +166,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
           </div>
 
-          <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
+          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">style</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">ثيم الطباعة الشامل</p>
-                <p className="text-xs text-slate-400">ينطبق على كل التقارير المطبوعة. يُنصح باختيار ERPNext للتقارير الرسمية.</p>
+                <p className="text-xs text-[var(--color-text-muted)]">يُطبق على كل التقارير المطبوعة. يُنصح باختيار ERPNext للتقارير الرسمية.</p>
               </div>
             </div>
 
@@ -233,7 +234,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 { key: 'accentDangerColor' as const, label: 'لون الخطر' },
               ]).map((field) => (
                 <label key={field.key} className="space-y-1">
-                  <span className="text-xs font-bold text-slate-500">{field.label}</span>
+                  <span className="text-xs font-bold text-[var(--color-text-muted)]">{field.label}</span>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
@@ -255,16 +256,16 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
         </div>
       </Card>
 
-      <Card title="الورق والطباعة">
+      <Card title="الورق والهوامش">
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">description</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">حجم الورق</p>
-                <p className="text-xs text-slate-400">A4 / A5 / حراري</p>
+                <p className="text-xs text-[var(--color-text-muted)]">A4 / A5 / حراري</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -284,14 +285,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">crop_rotate</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">اتجاه الورق</p>
-                <p className="text-xs text-slate-400">عمودي أو أفقي</p>
+                <p className="text-xs text-[var(--color-text-muted)]">عمودي أو أفقي</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -312,14 +313,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">content_copy</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">عدد النسخ</p>
-                <p className="text-xs text-slate-400">عدد النسخ الافتراضي عند الطباعة</p>
+                <p className="text-xs text-[var(--color-text-muted)]">عدد النسخ الافتراضي عند الطباعة</p>
               </div>
             </div>
             <input
@@ -332,14 +333,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             />
           </div>
 
-          <div className="p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
+          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">border_outer</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">هوامش الصفحة (mm)</p>
-                <p className="text-xs text-slate-400">تُطبَّق تلقائيًا على كل صفحات الطباعة في النظام</p>
+                <p className="text-xs text-[var(--color-text-muted)]">يُطبق تلقائيًا على كل صفحات التقرير في المعاينة</p>
               </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -350,7 +351,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 { key: 'marginLeftMm' as const, label: 'يسار' },
               ]).map((field) => (
                 <label key={field.key} className="space-y-1">
-                  <span className="text-xs font-bold text-slate-500">{field.label}</span>
+                  <span className="text-xs font-bold text-[var(--color-text-muted)]">{field.label}</span>
                   <input
                     type="number"
                     min={0}
@@ -368,14 +369,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary">decimal_increase</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">المنازل العشرية</p>
-                <p className="text-xs text-slate-400">عدد الخانات بعد الفاصلة في الأرقام</p>
+                <p className="text-xs text-[var(--color-text-muted)]">عدد الخانات بعد الفاصلة في الأرقام</p>
               </div>
             </div>
             <input
@@ -394,11 +395,11 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
         <div className="space-y-3">
           {([
             { key: 'showWaste' as const, label: 'عرض الهالك', icon: 'delete_sweep', desc: 'إظهار عمود ونسبة الهالك في التقرير' },
-            { key: 'showEmployee' as const, label: 'عرض الموظف', icon: 'person', desc: 'إظهار اسم الموظف في التقرير' },
-            { key: 'showCosts' as const, label: 'عرض التكاليف', icon: 'payments', desc: 'إظهار تكاليف المنتج والتكاليف الصناعية في الطباعة' },
+            { key: 'showEmployee' as const, label: 'عرض المشرف', icon: 'person', desc: 'إظهار اسم المشرف في التقرير' },
+            { key: 'showCosts' as const, label: 'عرض التكاليف', icon: 'payments', desc: 'إظهار تكاليف المنتج والتكاليف الصناعية في الجدول' },
             { key: 'showWorkOrder' as const, label: 'عرض أمر الشغل', icon: 'assignment', desc: 'إظهار رقم أمر الشغل وبياناته في التقرير' },
-            { key: 'showSellingPrice' as const, label: 'عرض سعر البيع', icon: 'sell', desc: 'إظهار سعر البيع وهامش الربح في طباعة المنتج' },
-            { key: 'printBackground' as const, label: 'طباعة الألوان والخلفيات', icon: 'format_color_fill', desc: 'المحافظة على ألوان التصميم أثناء الطباعة' },
+            { key: 'showSellingPrice' as const, label: 'عرض سعر البيع', icon: 'sell', desc: 'إظهار سعر البيع وهامش الربح في بطاقة المنتج' },
+            { key: 'printBackground' as const, label: 'طباعة الألوان والخلفيات', icon: 'format_color_fill', desc: 'الاعتماد على ألوان التصميم أثناء الطباعة' },
             { key: 'showQRCode' as const, label: 'عرض رمز QR', icon: 'qr_code', desc: 'إظهار رمز QR للتحقق من صحة التقرير' },
           ]).map((toggle) => (
             <div
@@ -406,7 +407,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               className={`flex items-center gap-3 p-4 rounded-[var(--border-radius-lg)] border transition-all ${
                 localPrint[toggle.key]
                   ? 'bg-[var(--color-card)] border-[var(--color-border)]'
-                  : 'bg-[#f8f9fa]/50 border-[var(--color-border)] opacity-60'
+                  : 'bg-[var(--color-bg)]/70 border-[var(--color-border)] opacity-60'
               }`}
             >
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -414,7 +415,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">{toggle.label}</p>
-                <p className="text-xs text-slate-400">{toggle.desc}</p>
+                <p className="text-xs text-[var(--color-text-muted)]">{toggle.desc}</p>
               </div>
               <button
                 onClick={() => setLocalPrint((p) => ({ ...p, [toggle.key]: !p[toggle.key] }))}
@@ -453,12 +454,12 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               </h3>
               <button
                 onClick={() => setShowPreview(false)}
-                className="w-9 h-9 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center hover:bg-[#e8eaed] transition-all"
+                className="w-9 h-9 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] flex items-center justify-center hover:bg-[var(--color-surface-hover)] transition-all"
               >
-                <span className="material-icons-round text-slate-500">close</span>
+                <span className="material-icons-round text-[var(--color-text-muted)]">close</span>
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-6 bg-[#f0f2f5] dark:bg-slate-950 flex justify-center">
+            <div className="flex-1 overflow-auto p-6 bg-[var(--color-bg)] flex justify-center">
               <div className="shadow-2xl">
                 <SingleReportPrint
                   report={
@@ -489,6 +490,19 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
           </div>
         </div>
       )}
+
+      <Card title="معمل تصدير الصور وواتساب">
+        <p className="text-sm text-[var(--color-text-muted)] mb-3">
+          جرّب تصدير PNG ومشاركة واتساب بنفس قالب التقرير الموحّد (تقرير إنتاج، تحويل مخزن، تقرير مجمّع).
+        </p>
+        <Link
+          to="/dev/image-export"
+          className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline"
+        >
+          <span className="material-icons-round text-base">open_in_new</span>
+          فتح معمل التصدير
+        </Link>
+      </Card>
     </>
   );
 };

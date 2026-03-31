@@ -1,6 +1,17 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  DetailCollapsibleSection,
+  DetailPageShell,
+  DetailPageStickyHeader,
+  SectionSkeleton,
+  SURFACE_CARD,
+} from '@/src/components/erp/DetailPageChrome';
+import { Card as ErpCard, KPIBox, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
@@ -37,7 +48,7 @@ import {
   Legend,
 } from 'recharts';
 
-// ─── Performance Score ────────────────────────────────────────────────────────
+// â”€â”€â”€ Performance Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
 
@@ -122,7 +133,7 @@ function computeSupervisorLikePerformanceScore(
   return clamp(Math.round(weightedLineScore), 0, 100);
 }
 
-// ─── Chart Tab type ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Chart Tab type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type ChartTab = 'production' | 'efficiency' | 'hours';
 type DetailTab = 'production' | 'lines' | 'info';
@@ -148,7 +159,7 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getWeekStart(): string {
   const d = new Date();
@@ -160,7 +171,7 @@ function getWeekStart(): string {
 
 export const SupervisorDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -277,7 +288,7 @@ export const SupervisorDetails: React.FC = () => {
   const printRows = useMemo(() => mapReportsToPrintRows(reports, lookups), [reports, lookups]);
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
 
-  // ── Core metrics ────────────────────────────────────────────────────────────
+  // â”€â”€ Core metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const today = getTodayDateString();
   const weekStart = useMemo(() => getWeekStart(), []);
@@ -446,7 +457,7 @@ export const SupervisorDetails: React.FC = () => {
     };
   }, [activeExecutionRows]);
 
-  // ── Alerts ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const wasteThreshold = systemSettings?.alertSettings?.wasteThreshold ?? 5;
 
@@ -466,12 +477,12 @@ export const SupervisorDetails: React.FC = () => {
       result.push({ type: 'warning', icon: 'today', message: 'لا يوجد إنتاج مسجل اليوم' });
     }
     if (result.length === 0) {
-      result.push({ type: 'info', icon: 'check_circle', message: 'المشرف يعمل بشكل طبيعي — لا توجد تنبيهات' });
+      result.push({ type: 'info', icon: 'check_circle', message: 'المشرف يعمل بشكل جيد — لا توجد تنبيهات' });
     }
     return result;
   }, [wasteRatio, wasteThreshold, performanceScore, todayProduced, period, periodReports.length]);
 
-  // ── Chart data ──────────────────────────────────────────────────────────────
+  // â”€â”€ Chart data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const enrichedChartData = useMemo(() => {
     const byDate = new Map<string, { produced: number; waste: number; hours: number; workerHours: number; workers: number; count: number }>();
@@ -502,7 +513,7 @@ export const SupervisorDetails: React.FC = () => {
       .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
   }, [periodReports]);
 
-  // ── Lines breakdown ─────────────────────────────────────────────────────────
+  // â”€â”€ Lines breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const lineStats = useMemo(() => {
     const map = new Map<string, { reports: number; produced: number; waste: number; maxHoursByDate: Map<string, number> }>();
@@ -527,7 +538,7 @@ export const SupervisorDetails: React.FC = () => {
       .sort((a, b) => b.produced - a.produced);
   }, [periodReports, productionLines]);
 
-  // ── Products breakdown ──────────────────────────────────────────────────────
+  // â”€â”€ Products breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const productStats = useMemo(() => {
     const map = new Map<string, { produced: number; waste: number }>();
@@ -542,7 +553,14 @@ export const SupervisorDetails: React.FC = () => {
       .sort((a, b) => b.produced - a.produced);
   }, [periodReports, products]);
 
-  // ── Chart tooltip ───────────────────────────────────────────────────────────
+  const supervisorPageSubtitle = useMemo(() => {
+    if (!employee) return 'تفاصيل المشرف';
+    const dept = departments.find((d) => d.id === employee.departmentId)?.name ?? '—';
+    const job = jobPositions.find((j) => j.id === employee.jobPositionId)?.title ?? '—';
+    return `${dept} آ· ${job} آ· ${lineStats.length} خط إنتاج`;
+  }, [employee, departments, jobPositions, lineStats.length]);
+
+  // â”€â”€ Chart tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -565,24 +583,38 @@ export const SupervisorDetails: React.FC = () => {
     return employees.find((e) => e.id === employee.managerId)?.name ?? '—';
   }, [employee, employees]);
 
-  // ── Loading / Not Found ─────────────────────────────────────────────────────
+  // â”€â”€ Loading / Not Found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (loading) {
-    return <div className="space-y-6"><LoadingSkeleton type="detail" /></div>;
+    return (
+      <DetailPageShell>
+        <DetailPageStickyHeader>
+          <PageHeader title="تفاصيل المشرف" backAction={{ to: '/supervisors', label: 'رجوع' }} loading />
+          <Card className={SURFACE_CARD}>
+            <SectionSkeleton rows={2} height={38} />
+          </Card>
+        </DetailPageStickyHeader>
+        <Card className={SURFACE_CARD}>
+          <SectionSkeleton rows={6} height={68} />
+        </Card>
+      </DetailPageShell>
+    );
   }
 
   if (!employee) {
     return (
-      <div className="space-y-6">
-        <div className="text-center py-16 text-slate-400">
-          <span className="material-icons-round text-6xl mb-4 block opacity-30">person_off</span>
-          <p className="font-bold text-lg">المشرف غير موجود</p>
-          <Button variant="outline" className="mt-4" onClick={() => navigate('/supervisors')}>
-            <span className="material-icons-round text-sm">arrow_forward</span>
-            العودة للمشرفين
-          </Button>
-        </div>
-      </div>
+      <DetailPageShell>
+        <PageHeader title="تفاصيل المشرف" backAction={{ to: '/supervisors', label: 'رجوع' }} />
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="space-y-4 p-6 text-center">
+            <span className="material-icons-round block text-6xl opacity-30 text-muted-foreground">person_off</span>
+            <p className="text-lg font-bold text-destructive">المشرف غير موجود</p>
+            <Button type="button" variant="outline" onClick={() => navigate('/supervisors')}>
+              العودة للمشرفين
+            </Button>
+          </CardContent>
+        </Card>
+      </DetailPageShell>
     );
   }
 
@@ -590,100 +622,50 @@ export const SupervisorDetails: React.FC = () => {
   const scoreBadge = performanceScore >= 85 ? { variant: 'success' as const, label: 'ممتاز' } : performanceScore >= 70 ? { variant: 'warning' as const, label: 'جيد' } : { variant: 'danger' as const, label: 'ضعيف' };
 
   return (
-    <div className="space-y-6">
-      {/* ── Alerts ──────────────────────────────────────────────────────────── */}
-      {alerts.length > 0 && alerts[0].type !== 'info' && (
-        <div className="space-y-2">
-          {alerts.filter((a) => a.type !== 'info').map((alert, i) => (
-            <div
-              key={i}
-              className={`flex items-start sm:items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
-                alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
-                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
-              }`}
-            >
-              <span className="material-icons-round text-lg">{alert.icon}</span>
-              <span>{alert.message}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-          <button
-            onClick={() => navigate('/supervisors')}
-            className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all shrink-0 mt-1 sm:mt-0"
-          >
-            <span className="material-icons-round">arrow_forward</span>
-          </button>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3 mb-1">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 ring-2 ring-primary/10 shrink-0">
-                <span className="material-icons-round text-2xl text-primary">engineering</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] truncate">
-                {employee.name}
-              </h2>
+    <DetailPageShell>
+      <DetailPageStickyHeader>
+        <PageHeader
+          title={employee.name}
+          subtitle={`${supervisorPageSubtitle} آ· متوسط ${avgWorkersPerReport} عامل`}
+          icon="user"
+          backAction={{ to: '/supervisors', label: 'رجوع' }}
+          secondaryAction={{ label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/employees/${id}`) }}
+          moreActions={can('print') ? [{ label: 'طباعة', icon: 'print', onClick: () => { handlePrint(); }, group: 'تصدير' }] : undefined}
+          extra={(
+            <div className="flex flex-wrap items-center gap-2">
               {employee.code && (
-                <span className="font-mono text-sm bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+                <span className="rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
                   {employee.code}
                 </span>
               )}
               <Badge variant={scoreBadge.variant}>{scoreBadge.label} ({performanceScore})</Badge>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-              <Badge variant="neutral">{getDepartmentName(employee.departmentId)}</Badge>
-              <Badge variant="info">{getJobPositionTitle(employee.jobPositionId)}</Badge>
               <Badge variant={employee.isActive ? 'success' : 'danger'}>
                 {employee.isActive ? 'نشط' : 'غير نشط'}
               </Badge>
-              <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
-              <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
-                <span className="material-icons-round text-xs">precision_manufacturing</span>
-                {lineStats.length} خط إنتاج
-              </span>
-              <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
-              <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
-                <span className="material-icons-round text-xs">groups</span>
-                متوسط {avgWorkersPerReport} عامل
-              </span>
             </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0">
-          {can('print') && (
-            <Button variant="outline" onClick={() => handlePrint()}>
-              <span className="material-icons-round text-lg">print</span>
-              طباعة
-            </Button>
           )}
-          <Button variant="outline" onClick={() => navigate(`/employees/${id}`)}>
-            <span className="material-icons-round text-lg">person</span>
-            الملف الشخصي
-          </Button>
-        </div>
-      </div>
+        />
+        <Card className={SURFACE_CARD}>
+          <CardContent className="flex flex-wrap items-center justify-end gap-3 p-4">
+            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
+              {PERIOD_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant={period === opt.value ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setPeriod(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </DetailPageStickyHeader>
 
-      <div className="flex items-center justify-end">
-        <div className="erp-date-seg w-full sm:w-auto">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setPeriod(opt.value)}
-              className={`erp-date-seg-btn${
-                period === opt.value
-                  ? ' active' : ''}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
+      <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         {/* <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" /> */}
         <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20" />
@@ -748,7 +730,10 @@ export const SupervisorDetails: React.FC = () => {
           trendUp={executionSummary.weightedDeviation !== null && executionSummary.weightedDeviation >= 0}
         />
       </div>
-      <Card title="تفصيل العمالة">
+      </DetailCollapsibleSection>
+
+      <DetailCollapsibleSection title="تفصيل العمالة" defaultOpen>
+      <ErpCard title="تفصيل العمالة">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
             <p className="text-xs font-bold text-[var(--color-text-muted)]">إنتاج</p>
@@ -771,9 +756,11 @@ export const SupervisorDetails: React.FC = () => {
             <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.external)}</p>
           </div>
         </div>
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
-      {/* ── Detail Tabs ────────────────────────────────────────────────────── */}
+      <DetailCollapsibleSection title="التقارير والتحليل" defaultOpen>
+      {/* â”€â”€ Detail Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex flex-wrap gap-1">
         {DETAIL_TABS.map((tab) => (
           <button
@@ -791,10 +778,10 @@ export const SupervisorDetails: React.FC = () => {
         ))}
       </div>
 
-      {/* ── Tab: Production ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Tab: Production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'production' && (
         <div className="space-y-6">
-          <Card title="انضباط تنفيذ أوامر الشغل">
+          <ErpCard title="انضباط تنفيذ أوامر الشغل">
             {activeExecutionRows.length === 0 ? (
               <div className="text-center py-8 text-[var(--color-text-muted)]">
                 <span className="material-icons-round text-4xl mb-2 block opacity-40">assignment</span>
@@ -802,7 +789,7 @@ export const SupervisorDetails: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">رقم الأمر</th>
@@ -852,9 +839,9 @@ export const SupervisorDetails: React.FC = () => {
                 </table>
               </div>
             )}
-          </Card>
+          </ErpCard>
           {/* Charts with tab switcher */}
-          <Card>
+          <ErpCard>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">show_chart</span>
@@ -928,11 +915,11 @@ export const SupervisorDetails: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             )}
-          </Card>
+          </ErpCard>
 
           {/* Production by product */}
           {productStats.length > 0 && (
-            <Card title="الإنتاج حسب المنتج">
+            <ErpCard title="الإنتاج حسب المنتج">
               <div style={{ width: '100%', height: 280 }} dir="ltr">
                 <ResponsiveContainer>
                   <BarChart data={productStats} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -946,21 +933,21 @@ export const SupervisorDetails: React.FC = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </Card>
+            </ErpCard>
           )}
 
           {/* Reports table */}
-          <Card className="!p-0 border-none overflow-hidden " title="">
+          <ErpCard className="!p-0 border-none overflow-hidden " title="">
             <div className="px-6 py-4 border-b border-[var(--color-border)]">
               <h3 className="text-lg font-bold">سجل التقارير</h3>
               {reports.length > 0 && periodReports.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  لا توجد تقارير داخل الفترة الحالية. جرّب تغيير الفترة إلى "كل البيانات".
+                  لا توجد تقارير داخل الفترة الحالية. جرظ‘ب تغيير الفترة إلى "كل البيانات".
                 </p>
               )}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -1011,26 +998,26 @@ export const SupervisorDetails: React.FC = () => {
                 </span>
               </div>
             )}
-          </Card>
+          </ErpCard>
         </div>
       )}
 
-      {/* ── Tab: Lines ─────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Tab: Lines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'lines' && (
         <div className="space-y-6">
           {lineStats.length === 0 ? (
-            <Card>
+            <ErpCard>
               <div className="text-center py-12 text-slate-400">
                 <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
                 <p className="font-bold">لا توجد خطوط إنتاج مرتبطة</p>
               </div>
-            </Card>
+            </ErpCard>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {lineStats.map((line) => {
                 const lineWasteRatio = calculateWasteRatio(line.waste, line.produced + line.waste);
                 return (
-                  <Card key={line.lineId}>
+                  <ErpCard key={line.lineId}>
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 flex items-center justify-center">
@@ -1038,7 +1025,7 @@ export const SupervisorDetails: React.FC = () => {
                         </div>
                         <div>
                           <h4 className="font-bold text-[var(--color-text)]">{line.name}</h4>
-                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير · {formatNumber(Math.round(line.hours))} ساعة</span>
+                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير آ· {formatNumber(Math.round(line.hours))} ساعة</span>
                         </div>
                       </div>
                       <button
@@ -1063,7 +1050,7 @@ export const SupervisorDetails: React.FC = () => {
                         <p className={`text-lg font-bold ${lineWasteRatio > 5 ? 'text-rose-700' : 'text-amber-700'}`}>{lineWasteRatio}%</p>
                       </div>
                     </div>
-                  </Card>
+                  </ErpCard>
                 );
               })}
             </div>
@@ -1071,9 +1058,9 @@ export const SupervisorDetails: React.FC = () => {
         </div>
       )}
 
-      {/* ── Tab: HR Info ────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Tab: HR Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'info' && (
-        <Card title="بيانات الموظف">
+        <ErpCard title="بيانات الموظف">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { label: 'القسم', value: getDepartmentName(employee.departmentId), icon: 'business' },
@@ -1098,11 +1085,13 @@ export const SupervisorDetails: React.FC = () => {
               </div>
             ))}
           </div>
-        </Card>
+        </ErpCard>
       )}
 
-      {/* ── Alerts Section ──────────────────────────────────────────────────── */}
-      <Card>
+      </DetailCollapsibleSection>
+
+      <DetailCollapsibleSection title="التنبيهات" defaultOpen>
+      <ErpCard>
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-amber-500">notifications_active</span>
           <h3 className="text-lg font-bold">التنبيهات</h3>
@@ -1124,7 +1113,8 @@ export const SupervisorDetails: React.FC = () => {
             </div>
           ))}
         </div>
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
       {/* Hidden print template */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
@@ -1137,6 +1127,9 @@ export const SupervisorDetails: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
-    </div>
+    </DetailPageShell>
   );
 };
+
+
+

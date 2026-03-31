@@ -1,10 +1,21 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { PageRouteFallback } from './components/PageRouteFallback';
+import { RouterRealtimeSubscriptions } from './components/RouterRealtimeSubscriptions';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { Dashboard } from './modules/dashboards/pages/Dashboard';
+import { lazyNamed } from './modules/shared/routes/lazyNamed';
 import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
 import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
 import { CATALOG_ROUTES } from './modules/catalog/routes';
@@ -16,10 +27,10 @@ import { SYSTEM_ROUTES } from './modules/system/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import { ATTENDANCE_ROUTES } from './modules/attendance/routes';
 import type { AppRouteDef } from './modules/shared/routes';
+import type { PublicRouteDef } from './modules/shared/routes/types';
 import { useAppStore } from './store/useAppStore';
 import { useAuthUiSlice } from './store/selectors';
-import { onAuthChange } from './services/firebase';
-import { getHomeRoute } from './utils/permissions';
+import { auth, onAuthChange } from './services/firebase';
 import { eventBus, registerSystemEventListeners, SystemEvents } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
@@ -31,16 +42,44 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { presenceService } from './services/presenceService';
 import { pushService } from './services/pushService';
 import { sessionTrackerService } from './modules/system/audit';
-import { BarChart3, Boxes, Factory, Hammer, Users, type LucideIcon } from 'lucide-react';
+import { userService } from './services/userService';
+import { ForcedClientUpdateGate } from './components/ForcedClientUpdateGate';
+import { setCurrentTenant } from './lib/currentTenant';
+import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
+import { tenantService } from './services/tenantService';
+import { setAppLanguage, type SupportedLanguage } from './src/i18n';
+import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
+import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
+import { SuperAdminGuard } from './modules/super-admin/SuperAdminGuard';
+import { AuthBrandedLoadingPage } from './components/system-ui/AuthLoadingState';
+
+const HomeDashboardRouter = lazyNamed(() => import('./modules/dashboards/pages/HomeDashboardRouter'), 'HomeDashboardRouter');
+const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
+const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
+const TenantLoginGateway = lazyNamed(
+  () => import('./modules/auth/pages/TenantLoginGateway'),
+  'TenantLoginGateway',
+);
+const CompanyNotApprovedPage = lazyNamed(() => import('./modules/auth/pages/CompanyNotApprovedPage'), 'CompanyNotApprovedPage');
+const SuperAdminShell = lazyNamed(() => import('./modules/super-admin/SuperAdminShell'), 'SuperAdminShell');
+const TenantsApproval = lazyNamed(() => import('./modules/super-admin/pages/TenantsApproval'), 'TenantsApproval');
+const TenantInsightsPage = lazyNamed(() => import('./modules/super-admin/pages/TenantInsightsPage'), 'TenantInsightsPage');
+import { UiDensityBootstrap } from './core/ui-engine/density/UiDensityBootstrap';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
+const LEGACY_MODAL_WORKSPACE_LS = 'global_modal_workspace_v1';
+const MODAL_WORKSPACE_CLEARED_FLAG = 'erp_modal_workspace_cleared_v1';
 
 const buildCurrentPath = (location: { pathname: string; search: string }) =>
   `${location.pathname}${location.search}`;
 
-const shouldPersistRedirect = (path: string) =>
-  !!path && path !== '/login' && path !== '/setup' && path !== '/pending';
+const shouldPersistRedirect = (path: string) => {
+  if (!path) return false;
+  const lower = path.toLowerCase();
+  if (lower.includes('/login') || lower.includes('/setup') || lower.includes('/pending')) return false;
+  return true;
+};
 
 const savePostLoginRedirect = (path: string) => {
   if (!shouldPersistRedirect(path)) return;
@@ -60,19 +99,6 @@ const getTodayYmd = (): string => {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-};
-
-const AUTH_ICON_MAP: Record<string, LucideIcon> = {
-  factory: Factory,
-  precision_manufacturing: Hammer,
-  inventory_2: Boxes,
-  groups: Users,
-  bar_chart: BarChart3,
-};
-
-const renderAuthIcon = (name: string, className?: string, size = 20) => {
-  const Icon = AUTH_ICON_MAP[name] ?? Factory;
-  return <Icon size={size} className={className} />;
 };
 
 const playNotificationTone = () => {
@@ -110,25 +136,28 @@ const playNotificationTone = () => {
   }
 };
 
-/** Redirects to the role-appropriate dashboard after login */
+/** After login: deep link if saved, otherwise tenant home */
 const LoginRedirect: React.FC = () => {
-  const permissions = useAppStore((s) => s.userPermissions);
-  const home = getHomeRoute(permissions);
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const target = useMemo(() => {
-    // Employee role should always land on employee dashboard after login.
-    if (home === '/employee-dashboard') return home;
-    return consumePostLoginRedirect() ?? home;
-  }, [home]);
+    const saved = consumePostLoginRedirect();
+    if (saved) {
+      if (saved.startsWith('/t/')) return saved;
+      if (saved.startsWith('/') && tenantSlug) {
+        return `/t/${tenantSlug}${saved}`;
+      }
+    }
+    return tenantHomePath(tenantSlug);
+  }, [tenantSlug]);
   return <Navigate to={target} replace />;
 };
 
-/** Shows the main Dashboard or redirects to the role-specific one on `/` */
-const HomeRedirect: React.FC = () => {
-  const permissions = useAppStore((s) => s.userPermissions);
-  const home = getHomeRoute(permissions);
-  if (home === '/') return <Dashboard />;
-  return <Navigate to={home} replace />;
-};
+/** Unified home: content by role permissions */
+const HomeRedirect: React.FC = () => (
+  <Suspense fallback={<PageRouteFallback />}>
+    <HomeDashboardRouter />
+  </Suspense>
+);
 
 const PROTECTED_ROUTES: AppRouteDef[] = [
   ...DASHBOARD_ROUTES,
@@ -142,47 +171,88 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...ATTENDANCE_ROUTES,
 ];
 
-const ProtectedLayoutRoute: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
+/** `/products` → `products` (real URLs are `/t/:tenantSlug/products`). */
+const tenantRelativePath = (absolutePath: string): string =>
+  absolutePath === '/' || absolutePath === '' ? '' : absolutePath.replace(/^\//, '');
+
+const TenantCatchAll: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  return <Navigate to={tenantHomePath(tenantSlug)} replace />;
+};
+
+const TenantPathRedirect: React.FC<{ redirectTo: string }> = ({ redirectTo }) => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const target =
+    redirectTo === '/' || redirectTo === ''
+      ? tenantHomePath(tenantSlug)
+      : withTenantPath(tenantSlug, redirectTo);
+  return <Navigate to={target} replace />;
+};
+
+const WrongCompanyLinkScreen: React.FC<{ forceLogout?: boolean }> = ({ forceLogout = false }) => {
+  const navigate = useNavigate();
+  const logout = useAppStore((s) => s.logout);
+
+  useEffect(() => {
+    if (forceLogout) {
+      void logout().catch(() => {});
+    }
+  }, [forceLogout, logout]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      navigate('/', { replace: true });
+    }, 2800);
+    return () => window.clearTimeout(timer);
+  }, [navigate]);
+
+  return (
+    <div className="erp-auth-page" dir="rtl">
+      <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
+        <span className="material-icons-round text-5xl text-rose-500 mb-3 block">link_off</span>
+        <h2 className="text-lg font-bold mb-2 text-rose-600">رابط الشركة غير صحيح</h2>
+        <p className="text-sm text-[var(--color-text-muted)] mb-4">
+          هذا الحساب تابع لشركة مختلفة. سيتم تحويلك للصفحة الرئيسية.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate('/', { replace: true })}
+          className="inline-flex items-center justify-center rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+        >
+          العودة للصفحة الرئيسية
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
   isAuthenticated,
   isPendingApproval,
 }) => {
   const location = useLocation();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const authError = useAppStore((s) => s.authError);
+
+  const wrongCompanyLink =
+    !isAuthenticated && String(authError || '').includes('لا ينتمي لهذه الشركة');
+
+  if (wrongCompanyLink) {
+    return <WrongCompanyLinkScreen />;
+  }
 
   if (!isAuthenticated) {
     savePostLoginRedirect(buildCurrentPath(location));
-    return <Navigate to="/login" replace />;
+    return <Navigate to={`/t/${tenantSlug}/login`} replace />;
   }
 
   if (isPendingApproval) {
-    return <Navigate to="/pending" replace />;
+    return <Navigate to={`/t/${tenantSlug}/pending`} replace />;
   }
 
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<HomeRedirect />} />
-        {PROTECTED_ROUTES.map((r) => {
-          if (r.redirectTo) {
-            return (
-              <React.Fragment key={r.path}>
-                <Route path={r.path} element={<Navigate to={r.redirectTo} replace />} />
-              </React.Fragment>
-            );
-          }
-
-          if (!r.component || !r.permission) return null;
-          const Component = r.component;
-          return (
-            <React.Fragment key={r.path}>
-              <Route
-                path={r.path}
-                element={<ProtectedRoute permission={r.permission}><Component /></ProtectedRoute>}
-              />
-            </React.Fragment>
-          );
-        })}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Outlet />
     </Layout>
   );
 };
@@ -201,6 +271,310 @@ const AuthUiStateGuard: React.FC = () => {
   }, [isAuthenticated, isPendingApproval, resetAllModals, resetJobsUiState]);
 
   return null;
+};
+
+/** Migrates old bookmarks like `/#/path` to `/path` once on load. */
+const LegacyHashRedirect: React.FC = () => {
+  const navigate = useNavigate();
+  useLayoutEffect(() => {
+    const { hash } = window.location;
+    if (!hash.startsWith('#/')) return;
+    const currentSlug = tenantSlugFromPathname(window.location.pathname);
+    navigate(resolveTenantNavigationTarget(currentSlug, hash.slice(1)), { replace: true });
+  }, [navigate]);
+  return null;
+};
+
+const ServiceWorkerNavigateBridge: React.FC = () => {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const onWorkerMessage = (event: MessageEvent) => {
+      if (event?.data?.type !== 'notification-click') return;
+      const targetUrl = String(event.data.targetUrl || '/');
+      if (targetUrl.startsWith('/')) {
+        const currentSlug = tenantSlugFromPathname(window.location.pathname);
+        navigate(resolveTenantNavigationTarget(currentSlug, targetUrl), { replace: true });
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', onWorkerMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onWorkerMessage);
+  }, [navigate]);
+  return null;
+};
+
+const PresenceHeartbeatBridge: React.FC = () => {
+  const location = useLocation();
+  const { isAuthenticated, isPendingApproval } = useAuthUiSlice();
+  const uid = useAppStore((s) => s.uid);
+  const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id || '');
+  const userEmail = useAppStore((s) => s.userEmail);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const prevAuditRouteRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || !uid) {
+      prevAuditRouteRef.current = null;
+      return;
+    }
+    const route = `${location.pathname}${location.search}` || '/';
+    if (prevAuditRouteRef.current === route) return;
+    const prev = prevAuditRouteRef.current;
+    prevAuditRouteRef.current = route;
+    if (prev !== null) {
+      sessionTrackerService.onAppRouteChange(route);
+    }
+  }, [location.pathname, location.search, isAuthenticated, isPendingApproval, uid]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || !uid) return;
+    const getRoute = () => `${location.pathname}${location.search}` || '/';
+    const deriveModule = (route: string) => {
+      if (!route || route === '/') return 'dashboard';
+      const first = route.split('?')[0].split('/').filter(Boolean)[0];
+      return first || 'dashboard';
+    };
+
+    /** Must match Firestore rules `request.auth.uid == userId` — store `uid` can lag after auth switches (e.g. register-company). */
+    const presenceUid = auth?.currentUser?.uid;
+    if (!presenceUid || presenceUid !== uid) return;
+
+    const emitHeartbeat = () => {
+      const route = getRoute();
+      const writer = auth?.currentUser?.uid;
+      if (!writer || writer !== presenceUid) return;
+      void presenceService.heartbeat({
+        userId: writer,
+        employeeId: currentEmployeeId || '',
+        userEmail: userEmail || '',
+        displayName: userDisplayName || '',
+        roleId: userRoleId || '',
+        currentRoute: route,
+        currentModule: deriveModule(route),
+      });
+    };
+
+    emitHeartbeat();
+    const timer = window.setInterval(emitHeartbeat, 60_000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') emitHeartbeat();
+    };
+    const onBeforeUnload = () => {
+      const w = auth?.currentUser?.uid;
+      if (w) void presenceService.markOffline(w);
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    const unsubActions = eventBus.on(SystemEvents.USER_ACTION, (payload) => {
+      const action = String(payload.action || payload.description || 'user.action');
+      const w = auth?.currentUser?.uid;
+      if (w && w === presenceUid) void presenceService.setLastAction(w, action);
+    });
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      unsubActions();
+      const w = auth?.currentUser?.uid;
+      if (w && w === presenceUid) void presenceService.markOffline(w);
+    };
+  }, [
+    isAuthenticated,
+    isPendingApproval,
+    uid,
+    currentEmployeeId,
+    userEmail,
+    userDisplayName,
+    userRoleId,
+    location.pathname,
+    location.search,
+  ]);
+
+  return null;
+};
+
+/** One-time: drop minimized-window workspace localStorage + Firestore uiPreferences.modalWorkspace. */
+const ModalWorkspaceMigration: React.FC = () => {
+  const uid = useAppStore((s) => s.uid);
+  const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
+
+  useEffect(() => {
+    if (!isAuthenticated || isPendingApproval || loading || !uid) return;
+    if (localStorage.getItem(MODAL_WORKSPACE_CLEARED_FLAG)) return;
+    try {
+      localStorage.removeItem(LEGACY_MODAL_WORKSPACE_LS);
+    } catch {
+      /* ignore */
+    }
+    void userService.clearModalWorkspacePreference(uid).finally(() => {
+      try {
+        localStorage.setItem(MODAL_WORKSPACE_CLEARED_FLAG, '1');
+      } catch {
+        /* ignore */
+      }
+    });
+  }, [isAuthenticated, isPendingApproval, loading, uid]);
+
+  return null;
+};
+
+type TenantGate = 'loading' | 'ready' | 'missing' | 'suspended' | 'inactive' | 'forbidden_slug';
+
+const DEFAULT_TENANT_SLUG = defaultTenantSlug();
+
+const TenantPublicRoute: React.FC<{ resolveElement: PublicRouteDef['resolveElement'] }> = ({
+  resolveElement,
+}) => {
+  const { isAuthenticated, isPendingApproval } = useAuthUiSlice();
+  return (
+    <Suspense fallback={<PageRouteFallback />}>
+      {resolveElement({
+        isAuthenticated,
+        isPendingApproval,
+        loginRedirectElement: <LoginRedirect />,
+      })}
+    </Suspense>
+  );
+};
+
+const defaultTenantResolve: TenantSlugResolveValue = {
+  pendingRegistration: false,
+  tenantStatus: '',
+};
+
+const TenantLayout: React.FC = () => {
+  const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
+  const [gate, setGate] = useState<TenantGate>('loading');
+  const [tenantResolve, setTenantResolve] = useState<TenantSlugResolveValue>(defaultTenantResolve);
+  const [forbiddenRequiresLogout, setForbiddenRequiresLogout] = useState(false);
+  const [forbiddenRedirectPath, setForbiddenRedirectPath] = useState<string | null>(null);
+  const { isAuthenticated } = useAuthUiSlice();
+  const userProfile = useAppStore((s) => s.userProfile);
+
+  useEffect(() => {
+    let alive = true;
+    setGate('loading');
+    setTenantResolve(defaultTenantResolve);
+    setForbiddenRequiresLogout(false);
+    setForbiddenRedirectPath(null);
+    void (async () => {
+      try {
+        const r = await tenantService.resolveSlug(tenantSlug);
+        if (!alive) return;
+        if (!r.exists || !r.tenantId) {
+          setGate('missing');
+          return;
+        }
+
+        const loggedInTenantId = String(userProfile?.tenantId || '');
+        const isSuperAdmin = Boolean(userProfile?.isSuperAdmin);
+        if (isAuthenticated && !isSuperAdmin && (!loggedInTenantId || loggedInTenantId !== r.tenantId)) {
+          // Keep current tenant during slug correction redirect to avoid breaking services
+          // that synchronously read getCurrentTenantId().
+          if (!loggedInTenantId) {
+            setForbiddenRequiresLogout(true);
+            setForbiddenRedirectPath('/');
+          } else {
+            try {
+              const ownTenant = await tenantService.getById(loggedInTenantId);
+              const ownSlug = String(ownTenant?.slug || '').trim();
+              if (ownSlug) {
+                setForbiddenRequiresLogout(false);
+                setForbiddenRedirectPath(`/t/${encodeURIComponent(ownSlug)}/`);
+              } else {
+                setForbiddenRequiresLogout(true);
+                setForbiddenRedirectPath('/');
+              }
+            } catch {
+              setForbiddenRequiresLogout(true);
+              setForbiddenRedirectPath('/');
+            }
+          }
+          setGate('forbidden_slug');
+          return;
+        }
+
+        setCurrentTenant(r.tenantId);
+        if (r.pendingRegistration) {
+          setTenantResolve({
+            pendingRegistration: true,
+            tenantStatus: r.status || 'pending',
+          });
+          setGate('ready');
+          return;
+        }
+        if (r.status === 'suspended') {
+          setGate('suspended');
+          return;
+        }
+        if (r.status !== 'active') {
+          setTenantResolve({
+            pendingRegistration: false,
+            tenantStatus: r.status || 'pending',
+          });
+          setGate('inactive');
+          return;
+        }
+        setTenantResolve({
+          pendingRegistration: false,
+          tenantStatus: r.status || 'active',
+        });
+        setGate('ready');
+      } catch {
+        if (!alive) return;
+        setGate('missing');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [tenantSlug, isAuthenticated, userProfile?.tenantId, userProfile?.isSuperAdmin]);
+
+  if (gate === 'loading') {
+    return <AuthBrandedLoadingPage subtitle="جاري تحميل بيانات الشركة..." />;
+  }
+
+  if (gate === 'missing') {
+    return <Navigate to="/" replace />;
+  }
+
+  if (gate === 'forbidden_slug') {
+    if (forbiddenRedirectPath) {
+      return <Navigate to={forbiddenRedirectPath} replace />;
+    }
+    return <WrongCompanyLinkScreen forceLogout={forbiddenRequiresLogout} />;
+  }
+
+  if (gate === 'suspended') {
+    return (
+      <div className="erp-auth-page" dir="rtl">
+        <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
+          <h2 className="text-lg font-bold mb-2 text-rose-600">الشركة موقوفة</h2>
+          <p className="text-sm text-[var(--color-text-muted)]">تواصل مع الدعم لمزيد من المعلومات.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (gate === 'inactive') {
+    return (
+      <Suspense fallback={<PageRouteFallback />}>
+        <CompanyNotApprovedPage tenantSlug={tenantSlug} status={tenantResolve.tenantStatus} />
+      </Suspense>
+    );
+  }
+
+  return (
+    <TenantSlugResolveProvider value={tenantResolve}>
+      <Outlet />
+    </TenantSlugResolveProvider>
+  );
+};
+
+const RootFallbackRedirect: React.FC = () => {
+  return <Navigate to="/" replace />;
 };
 
 const DailyWelcomeLauncher: React.FC = () => {
@@ -236,21 +610,21 @@ const App: React.FC = () => {
   useTenantTheme();
 
   const initializeApp = useAppStore((s) => s.initializeApp);
-  const subscribeToDashboard = useAppStore((s) => s.subscribeToDashboard);
-  const subscribeToLineStatuses = useAppStore((s) => s.subscribeToLineStatuses);
-  const subscribeToWorkOrders = useAppStore((s) => s.subscribeToWorkOrders);
-  const subscribeToScanEventsToday = useAppStore((s) => s.subscribeToScanEventsToday);
   const syncAttendanceFromDevices = useAppStore((s) => s.syncAttendanceFromDevices);
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const uid = useAppStore((s) => s.uid);
   const addRealtimeNotification = useAppStore((s) => s.addRealtimeNotification);
-  const userEmail = useAppStore((s) => s.userEmail);
-  const userDisplayName = useAppStore((s) => s.userDisplayName);
-  const userRoleId = useAppStore((s) => s.userRoleId);
   const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id || '');
+  const userLanguage = useAppStore((s) => (s.userProfile?.uiPreferences?.language as SupportedLanguage | undefined));
   const activeSessionUidRef = useRef<string | null>(null);
   const cleanupSubsRef = useRef<(() => void) | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
+
+  useEffect(() => {
+    if (!authResolved) return;
+    const lang = userLanguage ?? 'ar';
+    void setAppLanguage(lang);
+  }, [authResolved, userLanguage]);
 
   useEffect(() => {
     const clearSubscriptions = () => {
@@ -267,6 +641,7 @@ const App: React.FC = () => {
       window.clearTimeout(resolveTimer);
       setAuthResolved(true);
       if (!user) {
+        setCurrentTenant(null);
         sessionTrackerService.stop('auth_logout');
         activeSessionUidRef.current = null;
         clearSubscriptions();
@@ -302,16 +677,8 @@ const App: React.FC = () => {
       activeSessionUidRef.current = user.uid;
 
       const cleanupEvents = registerSystemEventListeners();
-      const unsubReports = subscribeToDashboard();
-      const unsubStatuses = subscribeToLineStatuses();
-      const unsubWorkOrders = subscribeToWorkOrders();
-      const unsubScans = subscribeToScanEventsToday();
       cleanupSubsRef.current = () => {
         cleanupEvents();
-        unsubReports();
-        unsubStatuses();
-        unsubWorkOrders();
-        unsubScans();
       };
       sessionTrackerService.start({
         uid: user.uid,
@@ -326,68 +693,7 @@ const App: React.FC = () => {
       cleanupSubsRef.current?.();
       cleanupSubsRef.current = null;
     };
-  }, [initializeApp, subscribeToDashboard, subscribeToLineStatuses, subscribeToWorkOrders, subscribeToScanEventsToday]);
-
-  useEffect(() => {
-    if (!isAuthenticated || isPendingApproval || !uid) return;
-    const getRoute = () => {
-      const hash = window.location.hash || '#/';
-      return hash.startsWith('#') ? hash.slice(1) : hash;
-    };
-    const deriveModule = (route: string) => {
-      if (!route || route === '/') return 'dashboard';
-      const first = route.split('?')[0].split('/').filter(Boolean)[0];
-      return first || 'dashboard';
-    };
-
-    const emitHeartbeat = () => {
-      const route = getRoute();
-      void presenceService.heartbeat({
-        userId: uid,
-        employeeId: currentEmployeeId || '',
-        userEmail: userEmail || '',
-        displayName: userDisplayName || '',
-        roleId: userRoleId || '',
-        currentRoute: route,
-        currentModule: deriveModule(route),
-      });
-    };
-
-    emitHeartbeat();
-    const timer = window.setInterval(emitHeartbeat, 60_000);
-    const onRouteChanged = () => emitHeartbeat();
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') emitHeartbeat();
-    };
-    const onBeforeUnload = () => {
-      void presenceService.markOffline(uid);
-    };
-
-    window.addEventListener('hashchange', onRouteChanged);
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('beforeunload', onBeforeUnload);
-    const unsubActions = eventBus.on(SystemEvents.USER_ACTION, (payload) => {
-      const action = String(payload.action || payload.description || 'user.action');
-      void presenceService.setLastAction(uid, action);
-    });
-
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('hashchange', onRouteChanged);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      unsubActions();
-      void presenceService.markOffline(uid);
-    };
-  }, [
-    isAuthenticated,
-    isPendingApproval,
-    uid,
-    currentEmployeeId,
-    userEmail,
-    userDisplayName,
-    userRoleId,
-  ]);
+  }, [initializeApp]);
 
   useEffect(() => {
     if (!isAuthenticated || isPendingApproval || !uid) return;
@@ -421,22 +727,8 @@ const App: React.FC = () => {
       unsub = fn;
     });
 
-    const onWorkerMessage = (event: MessageEvent) => {
-      if (event?.data?.type !== 'notification-click') return;
-      const targetUrl = String(event.data.targetUrl || '/');
-      // targetUrl is already a hash-based route (e.g. "/#/work-orders")
-      // or a bare path (e.g. "/work-orders") — normalise to hash.
-      const hash = targetUrl.startsWith('/#')
-        ? targetUrl.slice(2)   // strip "/#" → "/work-orders"
-        : targetUrl.startsWith('/')
-          ? targetUrl          // bare path → use directly as hash
-          : '/' + targetUrl;
-      window.location.hash = hash;
-    };
-    navigator.serviceWorker?.addEventListener('message', onWorkerMessage);
     return () => {
       unsub();
-      navigator.serviceWorker?.removeEventListener('message', onWorkerMessage);
     };
   }, [addRealtimeNotification]);
 
@@ -470,61 +762,7 @@ const App: React.FC = () => {
   }, []);
 
   if (!authResolved) {
-    return (
-      <div className="erp-auth-page has-panel" dir="rtl">
-        {/* Brand Panel — desktop left side */}
-        <div className="erp-auth-panel">
-          {/* decorative circles handled by ::before / ::after */}
-          <div className="erp-auth-panel-logo">
-            {renderAuthIcon('factory', undefined, 26)}
-          </div>
-          <h1 className="erp-auth-panel-name">Hakimo ERP</h1>
-          <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
-          <div className="erp-auth-panel-features">
-            {[
-              { icon: 'precision_manufacturing', text: 'إدارة خطوط وخطط الإنتاج' },
-              { icon: 'inventory_2',             text: 'متابعة المخزون والمواد الخام' },
-              { icon: 'groups',                  text: 'إدارة الموارد البشرية والحضور' },
-              { icon: 'bar_chart',               text: 'تقارير وتحليلات متقدمة' },
-            ].map(({ icon, text }) => (
-              <div key={icon} className="erp-auth-panel-feature">
-                {renderAuthIcon(icon, undefined, 20)}
-                <span>{text}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Loading Content */}
-        <div className="erp-auth-container erp-auth-loading-wrap">
-          <div className="erp-auth-loading-content">
-            {/* App icon with spinning ring */}
-            <div className="erp-auth-loading-icon-shell">
-              <div className="erp-auth-loading-icon">
-                {renderAuthIcon('factory', undefined, 20)}
-              </div>
-              {/* spinning ring around icon */}
-              <div className="erp-auth-loading-ring" />
-            </div>
-
-            <h2 className="erp-auth-loading-title">Hakimo ERP</h2>
-            <p className="erp-auth-loading-subtitle">جاري تهيئة النظام...</p>
-
-            {/* Animated dots */}
-            <div className="erp-loading-dots erp-auth-loading-dots">
-              <span />
-              <span />
-              <span />
-            </div>
-
-            {/* Thin progress bar */}
-            <div className="erp-auth-loading-progress">
-              <div className="erp-auth-loading-progress-bar" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <AuthBrandedLoadingPage subtitle="جاري تهيئة النظام..." />;
   }
 
   return (
@@ -555,6 +793,125 @@ const App: React.FC = () => {
         </HashRouter>
       </GlobalModalManagerProvider>
     </ErrorBoundary>
+    <GlobalModalManagerProvider>
+      <UiDensityBootstrap />
+      <AuthUiStateGuard />
+      <ModalWorkspaceMigration />
+      <DailyWelcomeLauncher />
+      <BrowserRouter>
+        <RouterRealtimeSubscriptions />
+        <LegacyHashRedirect />
+        <ServiceWorkerNavigateBridge />
+        <PresenceHeartbeatBridge />
+        <Routes>
+          <Route
+            path="/register-company"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <RegisterCompany />
+              </Suspense>
+            }
+          />
+          <Route path="/super-admin" element={<SuperAdminGuard />}>
+            <Route
+              element={
+                <Suspense fallback={<PageRouteFallback />}>
+                  <SuperAdminShell />
+                </Suspense>
+              }
+            >
+              <Route index element={<Navigate to="tenants" replace />} />
+              <Route
+                path="tenants"
+                element={
+                  <Suspense fallback={<PageRouteFallback />}>
+                    <TenantsApproval />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="insights"
+                element={
+                  <Suspense fallback={<PageRouteFallback />}>
+                    <TenantInsightsPage />
+                  </Suspense>
+                }
+              />
+            </Route>
+          </Route>
+          <Route
+            path="/login"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <TenantLoginGateway />
+              </Suspense>
+            }
+          />
+          <Route path="/setup" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/setup`} replace />} />
+          <Route path="/pending" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/pending`} replace />} />
+          <Route
+            path="/"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <LandingPage />
+              </Suspense>
+            }
+          />
+          <Route path="/t/:tenantSlug" element={<TenantLayout />}>
+            {AUTH_PUBLIC_ROUTES.map((r) => (
+              <Route
+                key={r.path}
+                path={r.path}
+                element={<TenantPublicRoute resolveElement={r.resolveElement} />}
+              />
+            ))}
+            <Route
+              element={
+                <ProtectedTenantShell
+                  isAuthenticated={isAuthenticated}
+                  isPendingApproval={isPendingApproval}
+                />
+              }
+            >
+              <Route index element={<HomeRedirect />} />
+              {PROTECTED_ROUTES.map((r) => {
+                const childPath = tenantRelativePath(r.path);
+                if (!childPath) return null;
+                if (r.redirectTo) {
+                  return (
+                    <Route
+                      key={r.path}
+                      path={childPath}
+                      element={<TenantPathRedirect redirectTo={r.redirectTo} />}
+                    />
+                  );
+                }
+                if (!r.component || !r.permission) return null;
+                const Component = r.component;
+                return (
+                  <Route
+                    key={r.path}
+                    path={childPath}
+                    element={
+                      <ProtectedRoute permission={r.permission}>
+                        <Suspense fallback={<PageRouteFallback />}>
+                          <Component />
+                        </Suspense>
+                      </ProtectedRoute>
+                    }
+                  />
+                );
+              })}
+              <Route path="*" element={<TenantCatchAll />} />
+            </Route>
+          </Route>
+          <Route path="*" element={<RootFallbackRedirect />} />
+        </Routes>
+        {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
+        <ForcedClientUpdateGate />
+        <ToastContainer />
+      </BrowserRouter>
+    </GlobalModalManagerProvider>
   );
 };
 

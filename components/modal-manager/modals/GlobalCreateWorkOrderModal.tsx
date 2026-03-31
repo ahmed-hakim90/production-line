@@ -46,10 +46,11 @@ const emptyForm = (): WorkOrderFormState => ({
 });
 
 export const GlobalCreateWorkOrderModal: React.FC = () => {
-  const { isOpen, close } = useManagedModalController(MODAL_KEYS.WORK_ORDERS_CREATE);
+  const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.WORK_ORDERS_CREATE);
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
   const createWorkOrder = useAppStore((s) => s.createWorkOrder);
+  const updateWorkOrder = useAppStore((s) => s.updateWorkOrder);
   const plans = useAppStore((s) => s.productionPlans);
   const products = useAppStore((s) => s._rawProducts);
   const lines = useAppStore((s) => s._rawLines);
@@ -59,6 +60,8 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
   const [form, setForm] = useState<WorkOrderFormState>(emptyForm());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,14 +110,81 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!isOpen) return;
-    if (!canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders) {
-      setForm((prev) => ({ ...prev, workOrderType: 'component_injection' }));
+    if (!isOpen) {
+      setEditingId(null);
+      setLoadingEdit(false);
+      return;
     }
-  }, [isOpen, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
+
+    const mode = payload && typeof payload.mode === 'string' ? payload.mode : '';
+    const workOrderId =
+      payload && typeof payload.workOrderId === 'string' ? payload.workOrderId.trim() : '';
+
+    if (mode !== 'edit' || !workOrderId) {
+      setEditingId(null);
+      setLoadingEdit(false);
+      const base = emptyForm();
+      setForm(
+        !canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders
+          ? { ...base, workOrderType: 'component_injection' }
+          : base,
+      );
+      setError(null);
+      setMessage(null);
+      return;
+    }
+
+    setEditingId(workOrderId);
+    let cancelled = false;
+    setLoadingEdit(true);
+    setError(null);
+    setMessage(null);
+
+    void workOrderService.getById(workOrderId).then((wo) => {
+      if (cancelled) return;
+      setLoadingEdit(false);
+      if (!wo) {
+        setError('تعذر تحميل أمر الشغل.');
+        return;
+      }
+      setForm({
+        planId: wo.planId || '',
+        workOrderType: wo.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product',
+        productId: wo.productId,
+        lineId: wo.lineId,
+        supervisorId: wo.supervisorId,
+        quantity: wo.quantity,
+        maxWorkers: wo.maxWorkers,
+        workHours: Number((wo as { workHours?: number }).workHours || 0),
+        targetDate: wo.targetDate,
+        notes: wo.notes || '',
+        breakStartTime: wo.breakStartTime || DEFAULT_BREAK_START,
+        breakEndTime: wo.breakEndTime || DEFAULT_BREAK_END,
+        workdayEndTime: wo.workdayEndTime || DEFAULT_WORKDAY_END,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, payload, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
+
+  const openForEdit =
+    isOpen &&
+    payload &&
+    payload.mode === 'edit' &&
+    typeof payload.workOrderId === 'string' &&
+    payload.workOrderId.trim().length > 0;
+
+  const isEditMode = Boolean(editingId);
 
   if (!isOpen) return null;
-  if (!canCreateFinishedWorkOrders && !canManageComponentInjectionWorkOrders) return null;
+
+  const canUseModal =
+    canCreateFinishedWorkOrders ||
+    canManageComponentInjectionWorkOrders ||
+    (openForEdit && can('workOrders.edit'));
+  if (!canUseModal) return null;
 
   const handleClose = () => {
     if (saving) return;
@@ -126,69 +196,99 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const handleSave = async () => {
     if (!form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0) return;
     if (form.workOrderType === 'component_injection' && !canManageComponentInjectionWorkOrders) {
-      setError('غير مصرح بإنشاء أمر شغل مكون الحقن');
+      setError(isEditMode ? 'غير مصرح بتعديل أمر شغل مكون الحقن.' : 'غير مصرح بإنشاء أمر شغل مكون الحقن');
+      return;
+    }
+    if (isEditMode && !can('workOrders.edit')) {
+      setError('غير مصرح بتعديل أمر الشغل.');
       return;
     }
     setSaving(true);
     setMessage(null);
     setError(null);
     try {
-      const woNumber = await workOrderService.generateNextNumber();
-      const est = estimateReportCost(
-        form.maxWorkers,
-        form.workHours,
-        form.quantity,
-        laborSettings?.hourlyRate ?? 0,
-        employees.find((e) => e.id === form.supervisorId)?.hourlyRate ?? 0,
-        form.lineId,
-        form.targetDate,
-        costCenters,
-        costCenterValues,
-        costAllocations,
-      );
-      const createdId = await createWorkOrder({
-        workOrderNumber: woNumber,
-        ...(form.planId ? { planId: form.planId } : {}),
-        workOrderType: form.workOrderType,
-        productId: form.productId,
-        lineId: form.lineId,
-        supervisorId: form.supervisorId,
-        quantity: form.quantity,
-        producedQuantity: 0,
-        maxWorkers: form.maxWorkers,
-        targetDate: form.targetDate,
-        estimatedCost: est.totalCost,
-        actualCost: 0,
-        status: 'pending',
-        notes: form.notes,
-        breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
-        breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
-        workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
-        createdBy: uid || '',
-      });
-      if (!createdId) throw new Error('Failed create');
-      setMessage('تم إنشاء أمر الشغل بنجاح');
-      setForm(emptyForm());
+      if (isEditMode && editingId) {
+        await updateWorkOrder(editingId, {
+          workOrderType: form.workOrderType,
+          productId: form.productId,
+          lineId: form.lineId,
+          supervisorId: form.supervisorId,
+          quantity: form.quantity,
+          maxWorkers: form.maxWorkers,
+          targetDate: form.targetDate,
+          notes: form.notes,
+          breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
+          breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
+          workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
+          ...(form.planId ? { planId: form.planId } : {}),
+        });
+        setMessage('تم حفظ تعديلات أمر الشغل بنجاح');
+      } else {
+        const woNumber = await workOrderService.generateNextNumber();
+        const est = estimateReportCost(
+          form.maxWorkers,
+          form.workHours,
+          form.quantity,
+          laborSettings?.hourlyRate ?? 0,
+          employees.find((e) => e.id === form.supervisorId)?.hourlyRate ?? 0,
+          form.lineId,
+          form.targetDate,
+          costCenters,
+          costCenterValues,
+          costAllocations,
+        );
+        const createdId = await createWorkOrder({
+          workOrderNumber: woNumber,
+          ...(form.planId ? { planId: form.planId } : {}),
+          workOrderType: form.workOrderType,
+          productId: form.productId,
+          lineId: form.lineId,
+          supervisorId: form.supervisorId,
+          quantity: form.quantity,
+          producedQuantity: 0,
+          maxWorkers: form.maxWorkers,
+          targetDate: form.targetDate,
+          estimatedCost: est.totalCost,
+          actualCost: 0,
+          status: 'pending',
+          notes: form.notes,
+          breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
+          breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
+          workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
+          createdBy: uid || '',
+        });
+        if (!createdId) throw new Error('Failed create');
+        setMessage('تم إنشاء أمر الشغل بنجاح');
+        setForm(emptyForm());
+      }
     } catch {
-      setError('تعذر إنشاء أمر الشغل الآن');
+      setError(isEditMode ? 'تعذر حفظ التعديلات.' : 'تعذر إنشاء أمر الشغل الآن');
     } finally {
       setSaving(false);
     }
   };
 
+  const showEditChrome = openForEdit || isEditMode;
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onClick={handleClose}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-lg border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-base sm:text-lg font-bold">أمر شغل جديد</h3>
+          <h3 className="text-base sm:text-lg font-bold">{showEditChrome ? 'تعديل أمر شغل' : 'أمر شغل جديد'}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
         </div>
-        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 relative">
+          {loadingEdit && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[var(--border-radius-lg)] bg-[var(--color-card)]/80 backdrop-blur-[2px]">
+              <Loader2 size={28} className="animate-spin text-primary" aria-hidden />
+              <span className="sr-only">جاري تحميل بيانات أمر الشغل</span>
+            </div>
+          )}
           {message && (
             <div className="erp-alert erp-alert-success">
               <CheckCircle2 size={16} className="text-emerald-500" />
@@ -354,10 +454,21 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           </p>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
-          <Button variant="outline" onClick={handleClose} disabled={saving}>إلغاء</Button>
-          <Button variant="primary" onClick={handleSave} disabled={saving || !form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0}>
+          <Button variant="outline" onClick={handleClose} disabled={saving || loadingEdit}>إلغاء</Button>
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            disabled={
+              saving ||
+              loadingEdit ||
+              !form.productId ||
+              !form.lineId ||
+              !form.supervisorId ||
+              form.quantity <= 0
+            }
+          >
             {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-            إنشاء أمر الشغل
+            {showEditChrome ? 'حفظ التعديلات' : 'إنشاء أمر الشغل'}
           </Button>
         </div>
       </div>

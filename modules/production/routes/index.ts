@@ -1,17 +1,19 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { Lines } from '../pages/Lines';
-import { LineDetails } from '../pages/LineDetails';
-import { ProductionPlans } from '../pages/ProductionPlans';
-import { WorkOrders } from '../pages/WorkOrders/index';
-import { WorkOrderScanner } from '../pages/WorkOrderScanner';
-import { Supervisors } from '../pages/Supervisors';
-import { SupervisorDetails } from '../pages/SupervisorDetails';
-import { SupervisorLineAssignment } from '../pages/SupervisorLineAssignment';
-import { ProductionWorkers } from '../pages/ProductionWorkers';
-import { ProductionWorkerDetails } from '../pages/ProductionWorkerDetails';
-import { Reports } from '../pages/Reports';
-import { QuickAction } from '../pages/QuickAction';
-import { LineWorkerAssignment } from '../pages/LineWorkerAssignment';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const Lines = lazyNamed(() => import('../pages/Lines'), 'Lines');
+const LineDetails = lazyNamed(() => import('../pages/LineDetails'), 'LineDetails');
+const ProductionPlans = lazyNamed(() => import('../pages/ProductionPlans'), 'ProductionPlans');
+const WorkOrders = lazyNamed(() => import('../pages/WorkOrders/index'), 'WorkOrders');
+const WorkOrderScanner = lazyNamed(() => import('../pages/WorkOrderScanner'), 'WorkOrderScanner');
+const Supervisors = lazyNamed(() => import('../pages/Supervisors'), 'Supervisors');
+const SupervisorDetails = lazyNamed(() => import('../pages/SupervisorDetails'), 'SupervisorDetails');
+const SupervisorLineAssignment = lazyNamed(() => import('../pages/SupervisorLineAssignment'), 'SupervisorLineAssignment');
+const ProductionWorkers = lazyNamed(() => import('../pages/ProductionWorkers'), 'ProductionWorkers');
+const ProductionWorkerDetails = lazyNamed(() => import('../pages/ProductionWorkerDetails'), 'ProductionWorkerDetails');
+const Reports = lazyNamed(() => import('../pages/Reports'), 'Reports');
+const QuickAction = lazyNamed(() => import('../pages/QuickAction'), 'QuickAction');
+const LineWorkerAssignment = lazyNamed(() => import('../pages/LineWorkerAssignment'), 'LineWorkerAssignment');
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/lines', permission: 'lines.view', component: Lines },

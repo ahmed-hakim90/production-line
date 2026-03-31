@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 import { PageHeader } from '../../../../components/PageHeader';
 import { toast } from '../../../../components/Toast';
@@ -387,11 +388,62 @@ export const WorkOrders: React.FC = () => {
 
   const handleCloseOrder = useCallback(async (order: WorkOrder) => {
     if (!order.id) return;
+    if (
+      !window.confirm(
+        'تأكيد إغلاق أمر الشغل وتسجيله كـ «مكتمل»؟ تأكد أن الإنتاج والتقارير صحيحة قبل المتابعة.',
+      )
+    ) {
+      return;
+    }
     await handleStatusChange(order.id, 'completed');
   }, [handleStatusChange]);
 
   const handleEditOrder = useCallback((order: WorkOrder) => {
+  const handleReopenCompletedOrder = useCallback(
+    async (order: WorkOrder) => {
+      const id = order.id;
+      if (!id || !isConfigured || !db) return;
+      if (!can('workOrders.edit')) {
+        toast.error('غير مصرح بإعادة فتح أمر الشغل.');
+        return;
+      }
+      const stored = orderMap[id]?.status;
+      if (stored !== 'completed') return;
+      if (
+        !window.confirm(
+          'أمر الشغل مسجّل كمكتمل. هل تريد إعادته إلى «قيد التنفيذ»؟ استخدم ذلك عند الإغلاق بالخطأ؛ يمكنك إغلاقه مرة أخرى بعد التصحيح.',
+        )
+      ) {
+        return;
+      }
+
+      const previous = orderMap[id];
+      updateOrder(id, { status: 'in_progress' });
+      setSyncingStatus(id);
+
+      try {
+        await updateDoc(doc(db, 'work_orders', id), {
+          status: 'in_progress',
+          updatedAt: serverTimestamp(),
+          completedAt: deleteField(),
+          scanSessionClosedAt: deleteField(),
+          reopenedFromCompletedAt: serverTimestamp(),
+        });
+        toast.success('تم إعادة فتح أمر الشغل.');
+      } catch (reopenError) {
+        if (previous) updateOrder(id, { status: previous.status });
+        toast.error('تعذر إعادة فتح الأمر. تحقق من الصلاحيات أو الاتصال.');
+        console.error('work order reopen error', reopenError);
+      } finally {
+        setSyncingStatus(null);
+      }
+    },
+    [can, db, isConfigured, orderMap, updateOrder],
+  );
+
+  const handleEditOrder = (order: WorkOrder) => {
     if (!order.id) return;
+    setSelectedOrder(null);
     openModal(MODAL_KEYS.WORK_ORDERS_CREATE, {
       source: 'workOrders.drawer',
       mode: 'edit',
@@ -399,6 +451,7 @@ export const WorkOrders: React.FC = () => {
     });
     toast.info('تم فتح نموذج أمر الشغل. دعم التحميل التلقائي لبيانات التعديل سيتم إضافته في خطوة لاحقة.');
   }, [openModal]);
+  };
 
   const handlePrintOrder = useCallback((order: WorkOrder) => {
     setPrintData({
@@ -473,7 +526,7 @@ export const WorkOrders: React.FC = () => {
     <div className={`erp-ds-clean ${styles.page}`}>
       <PageHeader
         title="أوامر الشغل"
-        subtitle="نسخة مضغوطة مع تفاصيل في درج جانبي وتحديث لحظي"
+        subtitle="نسخة محسّنة مع تفاصيل في درج جانبي وتحديث مباشر"
         icon="assignment"
         primaryAction={canCreateWorkOrder ? {
           label: 'أمر شغل جديد',
@@ -539,6 +592,7 @@ export const WorkOrders: React.FC = () => {
         onStatusChange={handleStatusChange}
         onEdit={handleEditOrder}
         onCloseOrder={(order) => void handleCloseOrder(order)}
+        onReopenCompleted={can('workOrders.edit') ? handleReopenCompletedOrder : undefined}
         onLoadMore={() => void loadMore()}
       />
 
@@ -553,6 +607,8 @@ export const WorkOrders: React.FC = () => {
         onEdit={handleEditOrder}
         onCloseOrder={handleCloseOrder}
         onPrint={handlePrintOrder}
+        canReopenCompleted={can('workOrders.edit')}
+        onReopenCompleted={handleReopenCompletedOrder}
       />
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <WorkOrderPrint ref={woPrintRef} data={printData} printSettings={printTemplate} />

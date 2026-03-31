@@ -1,26 +1,80 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+/* Fonts load once from index.html (single request; avoids duplicate Cairo fetch vs former @import). */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /*
+   * Design tokens: defaults in :root; at runtime `applyAppTheme()` + `applyTenantTheme()` merge
+   * `system_settings.theme` (ThemeSettings) with `tenants/{id}.theme` and set ERP + shadcn CSS vars.
+   * Typography, density, radii, layout: `--content-max-width`, `--page-shell-gap`, motion tokens.
+   */
   :root {
-    --color-primary: #4F46E5;
-    --color-primary-hover: #4338CA;
-    --color-secondary: #6366F1;
-    --color-success: #059669;
-    --color-danger: #DC2626;
-    --color-warning: #D97706;
-    --color-info: #2563EB;
-    --color-page-bg: #F8FAFC;
-    --color-card-bg: #FFFFFF;
-    --color-border-ui: #E2E8F0;
-    --color-text-1: #0F172A;
-    --color-text-2: #64748B;
-    --color-text-3: #94A3B8;
-    --color-background: #F8FAFC;
+    /* RGB channels (space-separated) — Tailwind: rgb(var(--color-primary) / <alpha>) */
+    --color-primary: 79 70 229;
+    --color-primary-hover: 67 56 202;
+    --color-secondary: 99 102 241;
+    --color-success: 5 150 105;
+    --color-warning: 217 119 6;
+    --color-danger: 220 38 38;
 
+    --color-bg: #f8fafc;
+    --color-background: #f8fafc;
+    --color-card: #ffffff;
+    --color-border: #e2e8f0;
+    --color-text: #0f172a;
+    --color-text-muted: #64748b;
+    /* Hover / subtle fill for chrome (topbar, sidebar, kbd chips) — synced in applyTenantTheme */
+    --color-surface-hover: #f0f2f5;
+
+    --color-sidebar-bg: #ffffff;
+    --color-sidebar-text: #334155;
+    --color-sidebar-border: #e8e8e8;
+
+    --font-family-base: 'Cairo', 'Noto Sans Arabic', sans-serif;
+    --font-size-base: 13px;
+    --font-size-sm: 12px;
+    --font-size-xs: 11px;
+    --font-size-2xs: 10px;
+
+    --border-radius-sm: 4px;
+    --border-radius-base: 6px;
+    --border-radius-lg: 8px;
+    --border-radius-xl: 12px;
+
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.14);
+    --density-scale: 1;
+    --page-shell-gap: 1rem;
+    --layout-main-padding-y: 1rem;
+    --content-max-width: 1536px;
+
+    --motion-duration: 200ms;
+    --motion-duration-slow: 300ms;
+    --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Aliases for erp / slide-over components */
+    --color-page-bg: var(--color-bg);
+    --color-card-bg: var(--color-card);
+    --color-border-ui: var(--color-border);
+    --color-text-1: var(--color-text);
+    --color-text-2: #64748b;
+    --color-text-3: #94a3b8;
+    --color-info: #2563eb;
+
+    /* Chart palette (global dashboards) */
+    --chart-1: #1392ec;
+    --chart-2: #10b981;
+    --chart-3: #f59e0b;
+    --chart-4: #ef4444;
+    --chart-5: #8b5cf6;
+    --chart-6: #ec4899;
+    --chart-7: #06b6d4;
+    --chart-8: #84cc16;
+
+    /* shadcn — hsl(var(--token)) */
     --background: 210 40% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
@@ -32,7 +86,7 @@
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 6% 10%;
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 46%;
+    --muted-foreground: 215 16% 42%;
     --accent: 239 84% 97%;
     --accent-foreground: 239 84% 30%;
     --destructive: 0 84% 60%;
@@ -49,8 +103,32 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-base);
     font-weight: 400;
+    line-height: 1.5;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --motion-duration: 0.01ms;
+      --motion-duration-slow: 0.01ms;
+    }
+  }
+}
+
+.layout-transition {
+  transition:
+    margin var(--motion-duration-slow, 300ms) var(--motion-ease, ease),
+    width var(--motion-duration-slow, 300ms) var(--motion-ease, ease) !important;
+}
+
+#main-content:focus {
+  outline: none;
+}
+
+#main-content:focus-visible {
+  box-shadow: inset 0 0 0 2px rgb(var(--color-primary) / 0.35);
 }
 
 /* RTL override for shadcn components */

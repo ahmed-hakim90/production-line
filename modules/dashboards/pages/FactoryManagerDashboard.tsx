@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAppStore } from '../../../store/useAppStore';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { Card, Badge } from '../components/UI';
 import { PageHeader } from '@/src/components/erp/PageHeader';
@@ -9,8 +9,7 @@ import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
-import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
-import { reportService } from '@/modules/production/services/reportService';
+import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
   calculateProgressRatio,
@@ -40,7 +39,6 @@ import {
   getAlertSettings,
   getKPIThreshold,
   getKPIColor,
-  isWidgetVisible,
 } from '../../../utils/dashboardConfig';
 import type { ProductionReport, PlanPriority, SmartStatus } from '../../../types';
 import {
@@ -109,7 +107,7 @@ const resolveWorkOrderProducedNow = (
 };
 
 export const FactoryManagerDashboard: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
   const canExport = can('export');
@@ -130,12 +128,9 @@ export const FactoryManagerDashboard: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   const alertCfg = useMemo(() => getAlertSettings(systemSettings), [systemSettings]);
-  const isVisible = useCallback(
-    (widgetId: string) => isWidgetVisible(systemSettings, 'factoryDashboard', widgetId),
-    [systemSettings]
-  );
 
   const [preset, setPreset] = useState<PeriodPreset>('month');
   const [customStart, setCustomStart] = useState('');
@@ -186,17 +181,28 @@ export const FactoryManagerDashboard: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    reportService.getByDateRange(dateRange.start, dateRange.end).then((data) => {
-      if (!cancelled) {
-        setReports(data);
-        setLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelled) setLoading(false);
-    });
+    const { start, end } = dateRange;
+    const maxAgeMs = 5 * 60 * 1000;
+    const cacheKey = getProductionReportsRangeCacheKey(start, end);
+    const cached = useAppStore.getState().productionReportsRangeCache[cacheKey];
+    if (cached) {
+      setReports(cached.rows);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    ensureProductionReportsForRange(start, end, { maxAgeMs })
+      .then((data) => {
+        if (!cancelled) {
+          setReports(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange.start, dateRange.end, ensureProductionReportsForRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,7 +350,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   );
   const monthlyCostMode = Boolean(fullMonthKey && monthlyCostSummary);
 
-  // ── KPI Calculations ────────────────────────────────────────────────────────
+  // â”€â”€ KPI Calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const kpis = useMemo(() => {
     const totalProduction = monthlyCostMode
@@ -408,7 +414,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     };
   }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
-  // ── Chart 1: Production vs Cost Per Unit (daily) ────────────────────────────
+  // â”€â”€ Chart 1: Production vs Cost Per Unit (daily) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const dailyChartData = useMemo(() => {
     const byDate = new Map<string, { production: number; laborCost: number }>();
@@ -443,7 +449,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [reports, hourlyRate, liveCostComputation.reportUnitCost]);
 
-  // ── Chart 3: Top 5 Lines by production ──────────────────────────────────────
+  // â”€â”€ Chart 3: Top 5 Lines by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const topLines = useMemo(() => {
     const lineMap = new Map<string, number>();
@@ -459,7 +465,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       .slice(0, 5);
   }, [reports, lineByIdMap]);
 
-  // ── Chart 4: Top 5 Products by production ───────────────────────────────────
+  // â”€â”€ Chart 4: Top 5 Products by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const topProducts = useMemo(() => {
     const prodMap = new Map<string, number>();
@@ -476,7 +482,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       .slice(0, 5);
   }, [reports, productByIdMap]);
 
-  // ── Alerts ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
     const result: { type: 'danger' | 'warning' | 'info'; icon: string; message: string }[] = [];
@@ -528,7 +534,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       result.push({
         type: 'warning',
         icon: 'speed',
-        message: `الكفاءة أقل من الحد المطلوب: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
+        message: `الكفاءة أقل من الحد المحدد: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
       });
     }
 
@@ -645,12 +651,12 @@ export const FactoryManagerDashboard: React.FC = () => {
       { key: 'productName', header: 'المنتج', cell: (row) => <span className="font-medium text-[#0F172A]">{row.productName}</span>, sortable: true },
       { key: 'componentName', header: 'المكون', cell: (row) => row.componentName },
       { key: 'shortageQty', header: 'الكمية', align: 'center', cell: (row) => formatNumber(row.shortageQty), sortable: true },
-      { key: 'note', header: 'الملحوظة', cell: (row) => row.note || '—' },
+      { key: 'note', header: 'ملاحظات', cell: (row) => row.note || '—' },
     ],
     []
   );
 
-  // ── Custom Tooltip ──────────────────────────────────────────────────────────
+  // â”€â”€ Custom Tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -683,7 +689,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
   return (
     <div className="erp-dashboard-theme space-y-6">
-      {/* ── Header ─────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <PageHeader
         title="لوحة مدير المصنع"
         subtitle="تحليلات متقدمة للإنتاج والتكاليف"
@@ -697,9 +703,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         }
       />
 
-      <CustomDashboardWidgets dashboardKey="factoryDashboard" systemSettings={systemSettings} />
-
-      {/* ── Period Filter ──────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Period Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <SmartFilterBar
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
@@ -729,13 +733,18 @@ export const FactoryManagerDashboard: React.FC = () => {
         applyLabel="عرض"
         extra={(
           <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
-            {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
+            {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب فوري (fallback)'}
           </div>
         )}
       />
 
-      {/* ── KPI Section ────────────────────────────────────────────────────────── */}
-      {isVisible('kpis') && (
+      <OrderedDashboardWidgets
+        dashboardKey="factoryDashboard"
+        systemSettings={systemSettings}
+        renderBuiltin={(widgetId) => {
+          switch (widgetId) {
+            case 'kpis':
+              return (
       <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
@@ -798,7 +807,7 @@ export const FactoryManagerDashboard: React.FC = () => {
               const mappedColor = paColor === 'good' ? 'green' : paColor === 'warning' ? 'amber' : 'red';
               return (
                 <KPICard
-                  label="تحقيق الخطط"
+                  label="تحقيق الخطة"
                   value={`${kpis.planAchievementRate}%`}
                   iconType="trend"
                   color={mappedColor}
@@ -808,10 +817,10 @@ export const FactoryManagerDashboard: React.FC = () => {
           </div>
         )}
       </div>
-      )}
-
-      {/* ── Alerts ─────────────────────────────────────────────────────────────── */}
-      {isVisible('alerts') && alerts.length > 0 && (
+              );
+            case 'alerts':
+              if (alerts.length === 0) return null;
+              return (
         <div className="space-y-2">
           {alerts.map((alert, i) => (
             <div
@@ -829,9 +838,187 @@ export const FactoryManagerDashboard: React.FC = () => {
             </div>
           ))}
         </div>
-      )}
+              );
+            case 'production_cost_chart':
+              if (!canViewCosts) return null;
+              return (
+          <Card className="w-full">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="material-icons-round text-primary">show_chart</span>
+              <h3 className="text-lg font-bold">الإنتاج مقابل تكلفة الوحدة</h3>
+            </div>
+            {dailyChartData.length > 0 ? (
+              <div style={{ direction: 'ltr' }} className="h-72 min-h-[18rem] min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={dailyChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend
+                      formatter={(val: string) =>
+                        val === 'production' ? 'الإنتاج' : 'تكلفة الوحدة'
+                      }
+                    />
+                    <Bar yAxisId="left" dataKey="production" name="production" fill="#1392ec" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-72 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
+                <span className="material-icons-round ml-2">bar_chart</span>
+                لا توجد بيانات للفترة المحددة
+              </div>
+            )}
+          </Card>
+              );
+            case 'cost_breakdown':
+              return null;
+            case 'top_lines':
+              return (
+          <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
+            <h3 className="text-lg font-bold">أعلى 5 خطط إنتاج</h3>
+          </div>
+          {topLines.length > 0 ? (
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topLines} layout="vertical" margin={{ left: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="production" name="الإنتاج" fill="#10b981" radius={[0, 4, 4, 0]} barSize={18} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
+              لا توجد بيانات
+            </div>
+          )}
+        </Card>
+              );
+            case 'top_products':
+              return (
+          <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-icons-round text-violet-500">inventory_2</span>
+            <h3 className="text-lg font-bold">أعلى 5 منتجات</h3>
+          </div>
+          {topProducts.length > 0 ? (
+            <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topProducts} layout="vertical" margin={{ left: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="production" name="الإنتاج" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={18} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
+              لا توجد بيانات
+            </div>
+          )}
+        </Card>
+              );
+            case 'product_performance':
+              return (
+          <Card className="w-full">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-icons-round text-primary">table_chart</span>
+            <h3 className="text-lg font-bold">ملخص أداء المنتجات</h3>
+          </div>
+          {topProducts.length > 0 ? (
+            <>
+              <div className="md:hidden space-y-2.5">
+                {topProducts.map((p, i) => {
+                  const share = kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0;
+                  return (
+                    <div key={p.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          onClick={() => navigate(`/products/${p.id}`)}
+                          className="text-sm font-bold text-primary text-right leading-snug hover:underline"
+                        >
+                          {p.name}
+                        </button>
+                        <span className="text-[11px] font-mono text-[var(--color-text-muted)]">#{i + 1}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الإنتاج</p>
+                          <p className="font-mono font-bold text-primary">{formatNumber(p.production)}</p>
+                        </div>
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <p className="text-[var(--color-text-muted)] mb-0.5">الحصة</p>
+                          <p className="font-mono font-bold text-violet-600">{share.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-violet-500 rounded-full transition-all"
+                            style={{ width: `${share}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-      {/* ── Active Work Orders ───────────────────────────────────────────────── */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="erp-table w-full text-sm">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">المنتج</th>
+                      <th className="erp-th">الإنتاج</th>
+                      <th className="erp-th">الحصة %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topProducts.map((p, i) => (
+                      <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
+                        <td className="py-3 px-4 font-bold text-primary">{p.name}</td>
+                        <td className="py-3 px-4">{formatNumber(p.production)}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 max-w-[120px] h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-violet-500 rounded-full transition-all"
+                                style={{ width: `${kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-[var(--color-text-muted)] text-xs font-bold">
+                              {kpis.totalProduction > 0 ? ((p.production / kpis.totalProduction) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
+          )}
+        </Card>
+              );
+            default:
+              return null;
+          }
+        }}
+      />
+
+      {/* â”€â”€ Active Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {(() => {
         const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
@@ -844,7 +1031,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-amber-500">assignment</span>
-                <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
+                <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل المرتبطة</h3>
                 <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -924,7 +1111,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-3 gap-3 text-center">
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المطلوب</p>
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">ملاحظات</p>
                         <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
@@ -1040,7 +1227,7 @@ export const FactoryManagerDashboard: React.FC = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المشرفين المطلوب منهم</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي المشرفين النشطين منهم</p>
                 <p className="text-2xl font-medium text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
@@ -1096,7 +1283,7 @@ export const FactoryManagerDashboard: React.FC = () => {
         )}
       </Card>
 
-      {/* ── Active Production Plans ──────────────────────────────────────────── */}
+      {/* â”€â”€ Active Production Plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {(() => {
         const activePlans = productionPlans.filter((p) => p.status === 'in_progress' || p.status === 'planned');
         if (activePlans.length === 0) return null;
@@ -1124,7 +1311,7 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-indigo-500">event_note</span>
-                <h3 className="text-base font-bold text-[var(--color-text)]">خطط الإنتاج النشطة</h3>
+                <h3 className="text-base font-bold text-[var(--color-text)]">خطط الإنتاج المتأخرة</h3>
                 <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-xs font-bold px-2 py-0.5 rounded-full">{activePlans.length}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -1176,7 +1363,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-3 gap-3 text-center">
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
-                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المخطط</p>
+                        <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
                         <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(plan.plannedQuantity)}</p>
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
@@ -1251,179 +1438,12 @@ export const FactoryManagerDashboard: React.FC = () => {
           <DataTable columns={shortageColumns} data={shortageRows} emptyMessage="لا توجد نواقص مكونات مسجلة حاليًا." />
         )}
       </Card>
-
-      {/* ── Charts Grid ────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Chart 1: Production vs Cost Per Unit */}
-        {isVisible('production_cost_chart') && canViewCosts && (
-          <Card className="lg:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="material-icons-round text-primary">show_chart</span>
-              <h3 className="text-lg font-bold">الإنتاج مقابل تكلفة الوحدة</h3>
-            </div>
-            {dailyChartData.length > 0 ? (
-              <div style={{ direction: 'ltr' }} className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={dailyChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Legend
-                      formatter={(val: string) =>
-                        val === 'production' ? 'الإنتاج' : 'تكلفة الوحدة'
-                      }
-                    />
-                    <Bar yAxisId="left" dataKey="production" name="production" fill="#1392ec" radius={[4, 4, 0, 0]} barSize={20} />
-                    <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-72 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
-                <span className="material-icons-round ml-2">bar_chart</span>
-                لا توجد بيانات للفترة المحددة
-              </div>
-            )}
-          </Card>
-        )}
-
-        {/* Chart 3: Top 5 Lines */}
-        {isVisible('top_lines') && <Card>
-          <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
-            <h3 className="text-lg font-bold">أعلى 5 خطوط إنتاج</h3>
-          </div>
-          {topLines.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topLines} layout="vertical" margin={{ left: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="production" name="الإنتاج" fill="#10b981" radius={[0, 4, 4, 0]} barSize={18} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
-              لا توجد بيانات
-            </div>
-          )}
-        </Card>}
-
-        {/* Chart 4: Top 5 Products */}
-        {isVisible('top_products') && <Card>
-          <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-violet-500">inventory_2</span>
-            <h3 className="text-lg font-bold">أعلى 5 منتجات</h3>
-          </div>
-          {topProducts.length > 0 ? (
-            <div style={{ direction: 'ltr' }} className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topProducts} layout="vertical" margin={{ left: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="production" name="الإنتاج" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={18} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
-              لا توجد بيانات
-            </div>
-          )}
-        </Card>}
-
-        {/* Chart: Top 5 Products Table Detail */}
-        {isVisible('product_performance') && <Card className="lg:col-span-2">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="material-icons-round text-primary">table_chart</span>
-            <h3 className="text-lg font-bold">ملخص أداء المنتجات</h3>
-          </div>
-          {topProducts.length > 0 ? (
-            <>
-              <div className="md:hidden space-y-2.5">
-                {topProducts.map((p, i) => {
-                  const share = kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0;
-                  return (
-                    <div key={p.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          onClick={() => navigate(`/products/${p.id}`)}
-                          className="text-sm font-bold text-primary text-right leading-snug hover:underline"
-                        >
-                          {p.name}
-                        </button>
-                        <span className="text-[11px] font-mono text-[var(--color-text-muted)]">#{i + 1}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
-                          <p className="text-[var(--color-text-muted)] mb-0.5">الإنتاج</p>
-                          <p className="font-mono font-bold text-primary">{formatNumber(p.production)}</p>
-                        </div>
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
-                          <p className="text-[var(--color-text-muted)] mb-0.5">الحصة</p>
-                          <p className="font-mono font-bold text-violet-600">{share.toFixed(1)}%</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-violet-500 rounded-full transition-all"
-                            style={{ width: `${share}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="erp-thead">
-                    <tr>
-                      <th className="erp-th">المنتج</th>
-                      <th className="erp-th">الإنتاج</th>
-                      <th className="erp-th">الحصة %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topProducts.map((p, i) => (
-                      <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
-                        <td className="py-3 px-4 font-bold text-primary">{p.name}</td>
-                        <td className="py-3 px-4">{formatNumber(p.production)}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 max-w-[120px] h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-violet-500 rounded-full transition-all"
-                                style={{ width: `${kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-[var(--color-text-muted)] text-xs font-bold">
-                              {kpis.totalProduction > 0 ? ((p.production / kpis.totalProduction) * 100).toFixed(1) : 0}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : (
-            <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
-          )}
-        </Card>}
-      </div>
     </div>
   );
 };
+
+
+
+
 
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import type { FirestoreEmployee } from '../../../types';
@@ -69,11 +70,11 @@ const APPROVAL_STATUS_LABELS: Record<string, string> = {
 
 const LOAN_STATUS_LABELS: Record<string, string> = {
   pending: 'قيد المراجعة',
-  active: 'نشطة',
+  active: 'نشط',
   closed: 'مغلقة',
 };
 
-// ─── Financials Tab Component ────────────────────────────────────────────────
+// â”€â”€â”€ Financials Tab Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface FinancialsTabProps {
   employee: FirestoreEmployee;
@@ -273,13 +274,13 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
         }
       >
         <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-          <table className="w-full text-sm text-right">
+          <table className="erp-table w-full text-sm text-right">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">النوع</th>
                 <th className="erp-th">المبلغ</th>
                 <th className="erp-th">التكرار</th>
-                <th className="erp-th">شهر البدء</th>
+                <th className="erp-th">شهر البد،</th>
                 <th className="erp-th">الحالة</th>
                 {canEdit && <th className="erp-th">إجراءات</th>}
               </tr>
@@ -378,14 +379,14 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
         }
       >
         <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-          <table className="w-full text-sm text-right">
+          <table className="erp-table w-full text-sm text-right">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">النوع</th>
                 <th className="erp-th">المبلغ</th>
                 <th className="erp-th">التكرار</th>
                 <th className="erp-th">التصنيف</th>
-                <th className="erp-th">شهر البدء</th>
+                <th className="erp-th">شهر البد،</th>
                 <th className="erp-th">الحالة</th>
                 <th className="erp-th">السبب</th>
                 {canEdit && <th className="erp-th">إجراءات</th>}
@@ -458,7 +459,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <span className="material-icons-round text-emerald-500">add_circle</span>
-                إضافة بدل للموظف
+                إضافة بدل جديد
               </h3>
               <button onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)]">
                 <span className="material-icons-round">close</span>
@@ -517,7 +518,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <span className="material-icons-round text-rose-500">remove_circle</span>
-                إضافة خصم للموظف
+                إضافة خصم جديد
               </h3>
               <button onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)]">
                 <span className="material-icons-round">close</span>
@@ -579,11 +580,11 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
   );
 };
 
-// ─── Main EmployeeProfile ───────────────────────────────────────────────────
+// â”€â”€â”€ Main EmployeeProfile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const EmployeeProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const updateEmployee = useAppStore((s) => s.updateEmployee);
 
@@ -877,7 +878,7 @@ export const EmployeeProfile: React.FC = () => {
       <div className="p-6 max-w-5xl mx-auto text-center" dir="rtl">
         <Card>
           <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-slate-600">person_off</span>
-          <h2 className="text-xl font-bold mt-4">الموظف غير موجود</h2>
+          <h2 className="text-xl font-bold mt-4">موظف غير موجود</h2>
           <p className="text-[var(--color-text-muted)] mt-2">لم يتم العثور على الموظف المطلوب.</p>
           <Button className="mt-6" onClick={() => navigate('/employees')}>
             <span className="material-icons-round text-lg">arrow_back</span>
@@ -1008,7 +1009,7 @@ export const EmployeeProfile: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {[
               { label: 'القسم', value: getDepartmentName(employee.departmentId) },
-              { label: 'الوظيفة', value: getJobPositionTitle(employee.jobPositionId) },
+              { label: 'المنصب', value: getJobPositionTitle(employee.jobPositionId) },
               { label: 'المستوى', value: levelLabel },
               { label: 'نوع التوظيف', value: EMPLOYMENT_TYPE_LABELS[employee.employmentType] },
               { label: 'الراتب الأساسي', value: formatNumber(employee.baseSalary) + ' ج.م' },
@@ -1084,7 +1085,7 @@ export const EmployeeProfile: React.FC = () => {
           </Card>
           <Card title="سجلات الحضور">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -1183,7 +1184,7 @@ export const EmployeeProfile: React.FC = () => {
         <div className="space-y-6">
           <Card title="ملخص رصيد الإجازات (المستخدم والمتاح)">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">نوع الإجازة</th>
@@ -1224,7 +1225,7 @@ export const EmployeeProfile: React.FC = () => {
           </Card>
           <Card title="طلبات الإجازة">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">النوع</th>
@@ -1275,7 +1276,7 @@ export const EmployeeProfile: React.FC = () => {
               </div>
               <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
                 <span className="material-icons-round text-emerald-500 text-2xl mb-1 block">trending_up</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نشطة</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نشط</p>
                 <p className="text-xl font-bold text-emerald-600">{activeLoans.length}</p>
               </div>
               <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
@@ -1289,7 +1290,7 @@ export const EmployeeProfile: React.FC = () => {
           )}
           <Card title="السُلف">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <table className="w-full text-sm text-right">
+              <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">النوع</th>
@@ -1327,7 +1328,7 @@ export const EmployeeProfile: React.FC = () => {
                         {loan.disbursed ? (
                           <Badge variant="success">تم الصرف</Badge>
                         ) : (
-                          <Badge variant="warning">لم يُصرف</Badge>
+                          <Badge variant="warning">لم يظڈصرف</Badge>
                         )}
                       </td>
                     </tr>
@@ -1335,7 +1336,7 @@ export const EmployeeProfile: React.FC = () => {
                   {loans.length === 0 && (
                     <tr>
                       <td colSpan={7} className="p-6 text-center text-slate-500">
-                        لا توجد سُلف
+                        لا توجد سظڈلف
                       </td>
                     </tr>
                   )}
@@ -1348,3 +1349,6 @@ export const EmployeeProfile: React.FC = () => {
     </div>
   );
 };
+
+
+

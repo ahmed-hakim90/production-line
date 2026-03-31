@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -87,7 +87,7 @@ export const QualityWorkers: React.FC = () => {
     e.preventDefault();
     if (!canManage) return;
     if (!form.employeeId) {
-      setMessage('يرجى اختيار الموظف');
+      setMessage('يرجى اختيار موظف');
       return;
     }
 
@@ -149,7 +149,7 @@ export const QualityWorkers: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text)]">عمال الجودة</h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            ربط أدوار الجودة بالموظفين الحاليين دون إنشاء بيانات موظف منفصلة.
+            ربط أدوار الجودة بموظفي HR الحاليين دون إنشاء بيانات عاملين منفصلة.
           </p>
         </div>
         <Badge variant="info">إجمالي التعيينات: {assignments.length}</Badge>
@@ -172,7 +172,7 @@ export const QualityWorkers: React.FC = () => {
                 disabled={!canManage}
                 className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
               >
-                <option value="">اختر موظفًا</option>
+                <option value="">اختر موظفاً</option>
                 {rawEmployees
                   .filter((employee) => employee.id)
                   .map((employee) => (
@@ -254,7 +254,7 @@ export const QualityWorkers: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="erp-table min-w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الموظف</th>
@@ -282,7 +282,7 @@ export const QualityWorkers: React.FC = () => {
                       <td className="py-2 px-2">{roleLabel}</td>
                       <td className="py-2 px-2">
                         <Badge variant={row.isActive ? 'success' : 'neutral'}>
-                          {row.isActive ? 'نشط' : 'معطل'}
+                          {row.isActive ? 'نشط' : 'معطّل'}
                         </Badge>
                       </td>
                       <td className="py-2 px-2 text-xs">{(row.activeLines ?? []).join(', ') || '-'}</td>

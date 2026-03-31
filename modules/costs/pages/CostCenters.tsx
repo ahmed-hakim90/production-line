@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Eye, Pencil, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button } from '../../../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
 import {
@@ -33,7 +33,7 @@ export const CostCenters: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const deleteCostCenter = useAppStore((s) => s.deleteCostCenter);
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
   const canManage = can('costs.manage');
@@ -476,3 +476,7 @@ export const CostCenters: React.FC = () => {
     </div>
   );
 };
+
+
+
+

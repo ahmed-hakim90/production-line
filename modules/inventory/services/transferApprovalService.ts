@@ -5,7 +5,6 @@ import {
   getDoc,
   getDocs,
   orderBy,
-  query,
   updateDoc,
   where,
   limit,
@@ -13,6 +12,8 @@ import {
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type {
   InventoryTransferRequest,
   TransferRequestLine,
@@ -63,7 +64,7 @@ const normalizeActor = (value?: string) => String(value || '').trim().toLowerCas
 export const transferApprovalService = {
   async getNextInvReferenceNo(): Promise<string> {
     if (!isConfigured) return formatInvReference(1);
-    const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'), limit(500));
+    const q = tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc'), limit(500));
     const snap = await getDocs(q);
     const maxInv = snap.docs.reduce((max, d) => {
       const ref = String((d.data() as any)?.referenceNo || '').trim();
@@ -86,7 +87,7 @@ export const transferApprovalService = {
     if (params?.status) constraints.unshift(where('status', '==', params.status));
     if (params?.requestType) constraints.unshift(where('requestType', '==', params.requestType));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
-    const q = query(collection(db, COLLECTION), ...constraints);
+    const q = tenantQuery(db, COLLECTION, ...constraints);
     const snap = await getDocs(q);
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
@@ -131,8 +132,9 @@ export const transferApprovalService = {
   async getBySourceReportId(sourceReportId: string): Promise<InventoryTransferRequest[]> {
     if (!isConfigured || !sourceReportId.trim()) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('sourceReportId', '==', sourceReportId.trim()),
         orderBy('createdAt', 'desc'),
       );
@@ -145,8 +147,9 @@ export const transferApprovalService = {
       if (!requiresIndex) throw error;
 
       // Fallback for environments where sourceReportId+createdAt index is not deployed yet.
-      const fallbackQ = query(
-        collection(db, COLLECTION),
+      const fallbackQ = tenantQuery(
+        db,
+        COLLECTION,
         where('sourceReportId', '==', sourceReportId.trim()),
         limit(500),
       );
@@ -196,7 +199,10 @@ export const transferApprovalService = {
     if (sourceReportId) payload.sourceReportId = sourceReportId;
     const createdByUserId = String(input.createdByUserId || '').trim();
     if (createdByUserId) payload.createdByUserId = createdByUserId;
-    const ref = await addDoc(collection(db, COLLECTION), payload);
+    const ref = await addDoc(collection(db, COLLECTION), {
+      ...payload,
+      tenantId: getCurrentTenantId(),
+    });
     return ref.id;
   },
 
@@ -237,6 +243,8 @@ export const transferApprovalService = {
           note: request.note || `Approved production entry ${id}`,
           referenceNo: request.referenceNo,
           createdBy: approvedBy,
+          // يسمح بإتمام الإدخال إذا كان الرصيد الحالي سالباً بحيث تبقى النتيجة سالبة مؤقتاً (بيانات قديمة أو تسويات)
+          allowNegative: true,
         });
       } else {
         await stockService.createMovement({

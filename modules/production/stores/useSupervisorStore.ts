@@ -31,6 +31,7 @@ export interface SupervisorStore {
   toast: ToastState;
   history: SupervisorAssignmentLogItem[];
   historyLoading: boolean;
+  historyError: string | null;
   historyContext: HistoryContext | null;
   fetchLines: () => Promise<void>;
   fetchSupervisors: () => Promise<void>;
@@ -59,21 +60,17 @@ const getTodayYmd = (): string => {
   return `${y}-${m}-${d}`;
 };
 
-const toDateFromYmd = (value: string): Date => new Date(`${value}T00:00:00`);
-
-const getPeriodRange = (period: HistoryPeriod, referenceDate: string): { start: string; end: string } => {
-  const reference = toDateFromYmd(referenceDate);
-  if (Number.isNaN(reference.getTime())) {
-    return { start: referenceDate, end: referenceDate };
+/** Sort key: prefer changedAt (event time), else effectiveFrom. */
+const assignmentRowSortMs = (row: { effectiveFrom?: string; changedAt?: unknown }): number => {
+  const ts = row.changedAt;
+  if (ts && typeof ts === 'object' && ts !== null && 'toDate' in ts && typeof (ts as { toDate?: () => Date }).toDate === 'function') {
+    const d = (ts as { toDate: () => Date }).toDate();
+    if (!Number.isNaN(d.getTime())) return d.getTime();
   }
-  if (period === 'yesterday') {
-    reference.setDate(reference.getDate() - 1);
-  }
-  const y = reference.getFullYear();
-  const m = String(reference.getMonth() + 1).padStart(2, '0');
-  const d = String(reference.getDate()).padStart(2, '0');
-  const day = `${y}-${m}-${d}`;
-  return { start: day, end: day };
+  const from = String(row.effectiveFrom || '').trim();
+  if (!from) return 0;
+  const parsed = new Date(`${from}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
 };
 
 const mapReasonToAction = (reason?: string): SupervisorAssignmentLogItem['action'] => {
@@ -91,6 +88,7 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
   toast: null,
   history: [],
   historyLoading: false,
+  historyError: null,
   historyContext: null,
 
   fetchLines: async () => {
@@ -347,17 +345,13 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
   fetchHistory: async (lineId, lineName, period, referenceDate) => {
     set({
       historyLoading: true,
+      historyError: null,
       historyContext: { lineId, lineName, period, referenceDate },
     });
     try {
-      const { start, end } = getPeriodRange(period, referenceDate);
       const rows = await supervisorLineAssignmentService.getHistoryByLine(lineId);
       const history = rows
-        .filter((row) => {
-          const from = String(row.effectiveFrom || '').trim();
-          return Boolean(from) && from >= start && from <= end;
-        })
-        .sort((a, b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')))
+        .sort((a, b) => assignmentRowSortMs(b) - assignmentRowSortMs(a))
         .map((row) => ({
           id: String(row.id || `${row.lineId}-${row.effectiveFrom}-${row.supervisorId}`),
           lineId: String(row.lineId || lineId),
@@ -368,19 +362,22 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
           assignedAt: row.changedAt,
           action: mapReasonToAction(row.reason),
         }));
-      set({ history, historyLoading: false });
+      set({ history, historyLoading: false, historyError: null });
     } catch (error) {
+      const message = (error as Error)?.message || 'تعذر تحميل سجل التعيينات.';
       set({
         history: [],
         historyLoading: false,
+        historyError: message,
         toast: {
           type: 'error',
-          message: (error as Error)?.message || 'تعذر تحميل سجل التعيينات.',
+          message,
         },
       });
     }
   },
 
   clearToast: () => set({ toast: null }),
-  clearHistory: () => set({ history: [], historyLoading: false, historyContext: null }),
+  clearHistory: () =>
+    set({ history: [], historyLoading: false, historyError: null, historyContext: null }),
 }));

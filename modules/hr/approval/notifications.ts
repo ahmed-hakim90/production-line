@@ -1,6 +1,7 @@
 import {
   addDoc,
   doc,
+  type FirestoreError,
   getDocs,
   limit,
   onSnapshot,
@@ -30,9 +31,21 @@ export const hrNotificationService = {
       orderBy('createdAt', 'desc'),
       limit(20),
     );
-    return onSnapshot(q, (snap) => {
-      cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HRNotification)));
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HRNotification)));
+      },
+      (error: FirestoreError) => {
+        // Composite index can be temporarily unavailable right after deployment.
+        if (error.code === 'failed-precondition') {
+          console.warn('[hrNotificationService] unread subscription index not ready yet.', error.message);
+          cb([]);
+          return;
+        }
+        console.error('[hrNotificationService] unread subscription failed.', error);
+      },
+    );
   },
 
   async markRead(id: string): Promise<void> {

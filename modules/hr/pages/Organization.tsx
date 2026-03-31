@@ -211,7 +211,7 @@ export const Organization: React.FC = () => {
                   <td className="py-3 px-4 text-[var(--color-text-muted)]">{d.managerId ? getManagerName(d.managerId) : '—'}</td>
                   <td className="py-3 px-4 text-center font-bold">{deptEmployeeCount[d.id!] || 0}</td>
                   <td className="py-3 px-4 text-center font-bold">{posCountByDept[d.id!] || 0}</td>
-                  <td className="py-3 px-4 text-center"><Badge variant={d.isActive ? 'success' : 'neutral'}>{d.isActive ? 'نشط' : 'معطل'}</Badge></td>
+                  <td className="py-3 px-4 text-center"><Badge variant={d.isActive ? 'success' : 'neutral'}>{d.isActive ? 'نشط' : 'غير نشط'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditDept(d)} onDelete={() => setDeleteConfirmId(d.id!)} />}
                 </tr>
               ))}
@@ -224,14 +224,14 @@ export const Organization: React.FC = () => {
       {tab === 'positions' && (
         <Card>
           {positions.length === 0 ? <EmptyState icon="work" label="لا يوجد مناصب" sub='اضغط "إضافة منصب" للبدء' /> : (
-            <DataTable headers={['المنصب', 'القسم', { label: 'المستوى', center: true }, { label: 'دخول نظام', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
+            <DataTable headers={['المنصب', 'القسم', { label: 'المستوى', center: true }, { label: 'دخول النظام', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {positions.map((p) => (
                 <tr key={p.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{p.title}</td>
                   <td className="py-3 px-4 text-[var(--color-text-muted)]">{getDeptName(p.departmentId)}</td>
                   <td className="py-3 px-4 text-center"><span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full text-xs font-bold">{JOB_LEVEL_LABELS[p.level]}</span></td>
                   <td className="py-3 px-4 text-center"><span className={`material-icons-round text-lg ${p.hasSystemAccessDefault ? 'text-emerald-500' : 'text-[var(--color-text-muted)]'}`}>{p.hasSystemAccessDefault ? 'check_circle' : 'cancel'}</span></td>
-                  <td className="py-3 px-4 text-center"><Badge variant={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'نشط' : 'معطل'}</Badge></td>
+                  <td className="py-3 px-4 text-center"><Badge variant={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'نشط' : 'غير نشط'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditPos(p)} onDelete={() => setDeleteConfirmId(p.id!)} />}
                 </tr>
               ))}
@@ -250,9 +250,9 @@ export const Organization: React.FC = () => {
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{s.name}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.startTime}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.endTime}</td>
-                  <td className="py-3 px-4 text-center">{s.breakMinutes} ط¯</td>
-                  <td className="py-3 px-4 text-center">{s.lateGraceMinutes} ط¯</td>
-                  <td className="py-3 px-4 text-center"><Badge variant={s.isActive ? 'success' : 'neutral'}>{s.isActive ? 'نشطة' : 'معطلة'}</Badge></td>
+                  <td className="py-3 px-4 text-center">{s.breakMinutes} د</td>
+                  <td className="py-3 px-4 text-center">{s.lateGraceMinutes} د</td>
+                  <td className="py-3 px-4 text-center"><Badge variant={s.isActive ? 'success' : 'neutral'}>{s.isActive ? 'نشط' : 'غير نشطة'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditShift(s)} onDelete={() => setDeleteConfirmId(s.id!)} />}
                 </tr>
               ))}
@@ -271,8 +271,8 @@ export const Organization: React.FC = () => {
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{p.name}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={p.type === 'disciplinary' ? 'danger' : p.type === 'absence' ? 'warning' : 'info'}>{PENALTY_TYPE_LABELS[p.type]}</Badge></td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[p.valueType]}</td>
-                  <td className="py-3 px-4 text-center font-bold">{p.value}{p.valueType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
-                  <td className="py-3 px-4 text-center"><Badge variant={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'نشط' : 'معطل'}</Badge></td>
+                  <td className="py-3 px-4 text-center font-bold">{p.value}{p.valueType === 'percentage' ? '%' : ' ج.م'}</td>
+                  <td className="py-3 px-4 text-center"><Badge variant={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'نشط' : 'غير نشط'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditPenalty(p)} onDelete={() => setDeleteConfirmId(p.id!)} />}
                 </tr>
               ))}
@@ -286,7 +286,7 @@ export const Organization: React.FC = () => {
         <Card>
           <div className="mb-4 p-3 rounded-[var(--border-radius-base)] bg-amber-50 border border-amber-200">
             <p className="text-xs font-bold text-amber-700">
-              قواعد التأخير بتحدد الخصم حسب عدد دقائق التأخير. كل قاعدة بتغطي نطاق معين من الدقائق.
+              قواعد التأخير بتحدد الخصم حسب عدد دقائق التأخير. كل قاعدة تغطي نطاقاً معيناً من الدقائق.
             </p>
           </div>
           {lateRulesList.length === 0 ? <EmptyState icon="timer_off" label="لا يوجد قواعد تأخير" sub='اضغط "إضافة قاعدة" لإنشاء قاعدة تأخير' /> : (
@@ -296,7 +296,7 @@ export const Organization: React.FC = () => {
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesFrom}</td>
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesTo}</td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[r.penaltyType]}</td>
-                  <td className="py-3 px-4 text-center font-bold text-rose-600">{r.penaltyValue}{r.penaltyType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
+                  <td className="py-3 px-4 text-center font-bold text-rose-600">{r.penaltyValue}{r.penaltyType === 'percentage' ? '%' : ' ج.م'}</td>
                   {canEdit && <ActionCell onEdit={() => openEditLateRule(r)} onDelete={() => setDeleteConfirmId(r.id!)} />}
                 </tr>
               ))}
@@ -314,8 +314,8 @@ export const Organization: React.FC = () => {
                 <tr key={a.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{a.name}</td>
                   <td className="py-3 px-4 text-center text-sm">{CALC_TYPE_LABELS[a.calculationType]}</td>
-                  <td className="py-3 px-4 text-center font-bold text-emerald-600">{a.value}{a.calculationType === 'percentage' ? '%' : ' ط¬.ظ…'}</td>
-                  <td className="py-3 px-4 text-center"><Badge variant={a.isActive ? 'success' : 'neutral'}>{a.isActive ? 'نشط' : 'معطل'}</Badge></td>
+                  <td className="py-3 px-4 text-center font-bold text-emerald-600">{a.value}{a.calculationType === 'percentage' ? '%' : ' ج.م'}</td>
+                  <td className="py-3 px-4 text-center"><Badge variant={a.isActive ? 'success' : 'neutral'}>{a.isActive ? 'نشط' : 'غير نشط'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditAllowance(a)} onDelete={() => setDeleteConfirmId(a.id!)} />}
                 </tr>
               ))}
@@ -373,7 +373,7 @@ const DataTable: React.FC<{
   children: React.ReactNode;
 }> = ({ headers, canEdit, children }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-sm">
+    <table className="erp-table w-full text-sm">
       <thead className="erp-thead">
         <tr>
           {headers.map((h, i) => {

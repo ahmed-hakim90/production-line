@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Button } from '../components/UI';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { RawMaterial } from '../../inventory/types';
@@ -22,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// ── Usage Popover ────────────────────────────────────────────────────────────
+// â”€â”€ Usage Popover â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function UsagePopover({ count, productNames }: { count: number; productNames: string[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -96,7 +97,7 @@ export const RawMaterials: React.FC = () => {
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const [rows, setRows] = useState<RawMaterial[]>([]);
   const [usageByMaterialId, setUsageByMaterialId] = useState<Record<string, UsageInfo>>({});
   const [loading, setLoading] = useState(false);
@@ -280,7 +281,7 @@ export const RawMaterials: React.FC = () => {
       });
       return;
     }
-    const ok = window.confirm(`هل تريد حذف المادة الخام "${rawMaterial.name}"؟`);
+    const ok = window.confirm(`هل تريد حذف المادة الخام "${rawMaterial.name}"طں`);
     if (!ok) return;
 
     setSavingDeleteId(rawId);
@@ -490,4 +491,7 @@ export const RawMaterials: React.FC = () => {
     </div>
   );
 };
+
+
+
 

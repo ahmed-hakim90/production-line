@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button, KPIBox, SearchableSelect } from '../components/UI';
 import { WorkOrderPrint } from '../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../components/ProductionReportPrint';
@@ -62,7 +63,7 @@ const EMPTY_FORM = {
 
 export const WorkOrders: React.FC = () => {
   const { openModal } = useGlobalModalManager();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canCreateFinishedWorkOrders = can('workOrders.create');
   const canManageComponentInjectionWorkOrders = can('workOrders.componentInjection.manage');
@@ -407,7 +408,7 @@ export const WorkOrders: React.FC = () => {
     const scanSummary = await scanEventService.buildWorkOrderSummary(wo.id!);
     if (scanSummary.openSessions.length > 0) {
       const shouldClose = window.confirm(
-        `يوجد ${scanSummary.openSessions.length} قطعة قيد التشغيل بدون تسجيل خروج. هل تريد إغلاق أمر الشغل رغم ذلك؟`,
+        `يوجد ${scanSummary.openSessions.length} جلسات قيد التشغيل بدون تسجيل خروج. هل تريد إغلاق أمر الشغل رغم ذلك؟`,
       );
       if (!shouldClose) return;
     }
@@ -455,7 +456,7 @@ export const WorkOrders: React.FC = () => {
       }
       const scanSummary = await scanEventService.buildWorkOrderSummary(closingWorkOrder.id!);
       if (scanSummary.openSessions.length > 0) {
-        toast.warning(`لا يمكن إغلاق أمر الشغل لوجود ${scanSummary.openSessions.length} قطعة قيد التشغيل بدون تسجيل خروج.`);
+        toast.warning(`لا يمكن إغلاق أمر الشغل لوجود ${scanSummary.openSessions.length} جلسات قيد التشغيل بدون تسجيل خروج.`);
         return;
       }
       const scannedQty = scanSummary.summary.completedUnits || 0;
@@ -635,7 +636,7 @@ export const WorkOrders: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
-                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">المطلوب</p>
+                      <p className="text-[10px] text-[var(--color-text-muted)] mb-0.5">المستهدف</p>
                       <p className="text-xs font-bold">{formatNumber(wo.quantity)}</p>
                     </div>
                     <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
@@ -682,7 +683,7 @@ export const WorkOrders: React.FC = () => {
               ))}
             </div>
             <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm" data-no-table-enhance="true">
+            <table className="erp-table w-full text-sm" data-no-table-enhance="true">
               <thead className="erp-thead">
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
                   <th className="erp-th">رقم الأمر</th>
@@ -1117,7 +1118,7 @@ export const WorkOrders: React.FC = () => {
 
             {closingOpenSessions > 0 && (
               <div className="mb-4 p-3 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 text-amber-700 text-sm font-bold">
-                يوجد {closingOpenSessions} قطعة ما زالت قيد التشغيل بدون تسجيل خروج.
+                يوجد {closingOpenSessions} جلسات ما زالت قيد التشغيل بدون تسجيل خروج.
               </div>
             )}
 
@@ -1158,13 +1159,13 @@ export const WorkOrders: React.FC = () => {
             </div>
 
             <div className="mb-5">
-              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ملحوظة الإغلاق</label>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ملاحظات الإغلاق</label>
               <textarea
                 rows={3}
                 value={closingNote}
                 onChange={(e) => setClosingNote(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold resize-none"
-                placeholder="أضف ملحوظة للتتبع (اختياري)"
+                placeholder="أضف ملاحظات للتتبع (اختياري)"
               />
             </div>
 
@@ -1181,3 +1182,7 @@ export const WorkOrders: React.FC = () => {
     </div>
   );
 };
+
+
+
+

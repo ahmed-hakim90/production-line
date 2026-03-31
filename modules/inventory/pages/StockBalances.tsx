@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
@@ -17,7 +17,7 @@ import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export const StockBalances: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const rawProducts = useAppStore((s) => s._rawProducts);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
@@ -71,7 +71,7 @@ export const StockBalances: React.FC = () => {
     const exportRows = rows.map((row) => {
       const isLow = row.minStock > 0 && row.quantity <= row.minStock;
       const isOut = row.quantity <= 0;
-      const status = isOut ? 'نفد' : isLow ? 'منخفض' : 'طبيعي';
+      const status = isOut ? 'نفد' : isLow ? 'منخفض' : 'متوفر';
       const unitsPerCarton = row.itemType === 'finished_good'
         ? Number(unitsPerCartonByProductId.get(row.itemId) || 0)
         : 0;
@@ -146,7 +146,7 @@ export const StockBalances: React.FC = () => {
               key: 'status',
               placeholder: 'كل الحالات',
               options: [
-                { value: 'ok', label: 'طبيعي' },
+                { value: 'ok', label: 'متوفر' },
                 { value: 'low', label: 'منخفض' },
                 { value: 'out', label: 'نفد' },
               ],
@@ -183,7 +183,7 @@ export const StockBalances: React.FC = () => {
 
       <Card className="!p-0 overflow-hidden">
         <div className="overflow-x-auto erp-table-scroll">
-          <table className="w-full text-right border-collapse">
+          <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الصنف</th>
@@ -229,7 +229,7 @@ export const StockBalances: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 text-sm text-center font-bold tabular-nums">{formatNumber(row.minStock || 0)}</td>
                     <td className="px-4 py-3 text-center">
-                      {isOut ? <Badge variant="danger">نفد</Badge> : isLow ? <Badge variant="warning">منخفض</Badge> : <Badge variant="success">طبيعي</Badge>}
+                      {isOut ? <Badge variant="danger">نفد</Badge> : isLow ? <Badge variant="warning">منخفض</Badge> : <Badge variant="success">متوفر</Badge>}
                     </td>
                   </tr>
                 );
@@ -241,3 +241,7 @@ export const StockBalances: React.FC = () => {
     </div>
   );
 };
+
+
+
+

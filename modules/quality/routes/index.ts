@@ -1,11 +1,13 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { QualitySettings } from '../pages/QualitySettings';
-import { QualityWorkers } from '../pages/QualityWorkers';
-import { FinalInspection } from '../pages/FinalInspection';
-import { IPQC } from '../pages/IPQC';
-import { ReworkOrders } from '../pages/ReworkOrders';
-import { CAPA } from '../pages/CAPA';
-import { QualityReports } from '../pages/QualityReports';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const QualitySettings = lazyNamed(() => import('../pages/QualitySettings'), 'QualitySettings');
+const QualityWorkers = lazyNamed(() => import('../pages/QualityWorkers'), 'QualityWorkers');
+const FinalInspection = lazyNamed(() => import('../pages/FinalInspection'), 'FinalInspection');
+const IPQC = lazyNamed(() => import('../pages/IPQC'), 'IPQC');
+const ReworkOrders = lazyNamed(() => import('../pages/ReworkOrders'), 'ReworkOrders');
+const CAPA = lazyNamed(() => import('../pages/CAPA'), 'CAPA');
+const QualityReports = lazyNamed(() => import('../pages/QualityReports'), 'QualityReports');
 
 export const QUALITY_ROUTES: AppRouteDef[] = [
   { path: '/quality/settings', permission: 'quality.settings.view', component: QualitySettings },

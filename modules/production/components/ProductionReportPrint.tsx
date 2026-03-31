@@ -207,7 +207,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
             {ps.headerText}
           </h1>
           <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
-            نظام إدارة الإنتاج - مؤسسة المغربي
+           مؤسسة المغربي
           </p>
         </div>
 
@@ -249,6 +249,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
 
         {/* ── Data Table ── */}
         <table
+          className="erp-table"
           style={{
             width: '100%',
             borderCollapse: 'collapse',
@@ -266,7 +267,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               <Th wrap>المنتج</Th>
               {showEmployee && <Th>المشرف</Th>}
               {showWO       && <Th>أمر شغل</Th>}
-              {showNotes    && <Th wrap>ملاحظة</Th>}
+              {showNotes    && <Th wrap>ملاحظات</Th>}
               <Th align="center">الكمية المنتجة</Th>
               {showWaste    && <Th align="center">الهالك</Th>}
               <Th align="center">عدد العمال</Th>
@@ -358,10 +359,12 @@ ProductionReportPrint.displayName = 'ProductionReportPrint';
 export interface SingleReportPrintProps {
   report: ReportPrintRow | null;
   printSettings?: PrintTemplateSettings;
+  /** Unique root id when multiple export layouts exist on one page (e.g. showcase). */
+  exportRootId?: string;
 }
 
 export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPrintProps>(
-  ({ report, printSettings }, ref) => {
+  ({ report, printSettings, exportRootId }, ref) => {
     if (!report) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
@@ -373,12 +376,13 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     return (
       <PrintReportLayout
         ref={ref}
+        exportRootId={exportRootId}
         companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
         reportType="تقرير إنتاج"
         printDate={now}
         logoUrl={ps.logoUrl}
-        accentColor={ps.primaryColor}
-        footerText={ps.footerText}
+        brandAccent={ps.primaryColor}
+        footerTagline={ps.footerText?.trim() || undefined}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
         meta={{
@@ -475,8 +479,8 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
         reportType="أمر شغل"
         printDate={now}
         logoUrl={ps.logoUrl}
-        accentColor={ps.primaryColor}
-        footerText={ps.footerText}
+        brandAccent={ps.primaryColor}
+        footerTagline={ps.footerText?.trim() || undefined}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
         meta={{
@@ -486,7 +490,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
           supervisorName: data.supervisorName || '—',
         }}
         kpis={[
-          { label: 'الكمية المطلوبة', value: Number(data.quantity || 0), unit: 'وحدة', color: 'indigo' },
+          { label: 'الكمية المنتجة', value: Number(data.quantity || 0), unit: 'وحدة', color: 'indigo' },
           { label: 'الكمية المنتجة', value: Number(data.producedQuantity || 0), unit: 'وحدة', color: 'green' },
           { label: 'المتبقي', value: remaining, unit: 'وحدة', color: remaining > 0 ? 'red' : 'default' },
           { label: 'نسبة الإنجاز', value: progress.toFixed(dp), unit: '%', color: progress >= 100 ? 'green' : 'default' },

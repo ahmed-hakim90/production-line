@@ -68,23 +68,26 @@ export const CostSettings: React.FC = () => {
 
   const handleSaveWorkingDays = async () => {
     setSavingDays(true);
-    const nextMap = { ...(systemSettings.costMonthlyWorkingDays || {}) };
-    monthsOfYear.forEach((monthKey) => {
-      const fallbackDays = getWorkingDaysExcludingFriday(monthKey);
-      const rawValue = Number(workingDaysDraft[monthKey] ?? fallbackDays);
-      const normalized = Number.isFinite(rawValue)
-        ? Math.min(31, Math.max(1, Math.round(rawValue)))
-        : fallbackDays;
-      nextMap[monthKey] = normalized;
-    });
-    await updateSystemSettings({
-      ...systemSettings,
-      costMonthlyWorkingDays: nextMap,
-    });
-    setSavingDays(false);
-    setSavedDays(true);
-    const timer = window.setTimeout(() => setSavedDays(false), 2000);
-    saveToastTimersRef.current.push(timer);
+    try {
+      const nextMap = { ...(systemSettings.costMonthlyWorkingDays || {}) };
+      monthsOfYear.forEach((monthKey) => {
+        const fallbackDays = getWorkingDaysExcludingFriday(monthKey);
+        const rawValue = Number(workingDaysDraft[monthKey] ?? fallbackDays);
+        const normalized = Number.isFinite(rawValue)
+          ? Math.min(31, Math.max(1, Math.round(rawValue)))
+          : fallbackDays;
+        nextMap[monthKey] = normalized;
+      });
+      await updateSystemSettings({
+        ...systemSettings,
+        costMonthlyWorkingDays: nextMap,
+      });
+      setSavedDays(true);
+      const timer = window.setTimeout(() => setSavedDays(false), 2000);
+      saveToastTimersRef.current.push(timer);
+    } finally {
+      setSavingDays(false);
+    }
   };
 
   return (
@@ -232,7 +235,7 @@ export const CostSettings: React.FC = () => {
             </Button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="erp-table w-full text-sm border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الشهر</th>

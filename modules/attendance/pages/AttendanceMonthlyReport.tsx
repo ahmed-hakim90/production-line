@@ -97,7 +97,7 @@ export const AttendanceMonthlyReport: React.FC = () => {
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-right">
+        <table className="erp-table w-full text-right">
           <thead className="erp-thead">
             <tr>
               <th className="erp-th">الموظف</th>

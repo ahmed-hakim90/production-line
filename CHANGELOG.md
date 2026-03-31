@@ -370,3 +370,63 @@
 ## [4.0.68] - 2026-03-16
 
 - Photo Shere & Transfer
+
+## [4.0.69] - 2026-03-18
+
+- All Files
+
+## [4.0.70] - 2026-03-28
+
+- Add Freatures Updated
+
+## [4.0.71] - 2026-03-28
+
+- Add updated Error
+
+## [4.0.72] - 2026-03-28
+
+- Add updated 10.10.10
+
+## [4.0.73] - 2026-03-29
+
+- Add Features And Shere Card For Production
+
+## [4.0.74] - 2026-03-29
+
+- Add Features And Shere Card For Production v
+
+## [4.0.75] - 2026-03-29
+
+- Add Features And Shere Card For Production v2
+
+## [4.0.76] - 2026-03-29
+
+- Add Features And Shere Card For Production v3
+
+## [4.0.77] - 2026-03-29
+
+- Production v3
+
+## [4.0.78] - 2026-03-30
+
+- Production v8
+
+## [4.0.79] - 2026-03-30
+
+- Add Tamentid
+
+## [4.0.80] - 2026-03-30
+
+- Add landing page
+
+## [4.0.81] - 2026-03-30
+
+- Add some
+
+## [4.0.82] - 2026-03-30
+
+- Add some 7878
+
+## [4.0.83] - 2026-03-30
+
+- Add some Add

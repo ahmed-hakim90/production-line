@@ -179,8 +179,9 @@ export const ApprovalCenter: React.FC = () => {
     permissions,
   }), [approverEmployeeId, approverName, permissions]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent);
+    if (!silent) setLoading(true);
     try {
       let data: FirestoreApprovalRequest[];
       if (viewAll) {
@@ -216,7 +217,7 @@ export const ApprovalCenter: React.FC = () => {
     } catch (err) {
       console.error('Error loading approvals:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [viewAll, approverEmployeeId]);
 
@@ -255,7 +256,7 @@ export const ApprovalCenter: React.FC = () => {
       }
 
       setActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err) {
       console.error('Approval error:', err);
     } finally {
@@ -294,7 +295,7 @@ export const ApprovalCenter: React.FC = () => {
         }
       }
       setActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err) {
       console.error('Rejection error:', err);
     } finally {
@@ -332,7 +333,7 @@ export const ApprovalCenter: React.FC = () => {
           );
         }
       }
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err) {
       console.error('Cancel error:', err);
     } finally {
@@ -407,7 +408,7 @@ export const ApprovalCenter: React.FC = () => {
           {actionableCount > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-2 flex items-center gap-2">
               <span className="material-icons-round text-amber-500 text-lg">notifications_active</span>
-              <span className="text-sm font-bold text-amber-700">{actionableCount} طلب بانتظار إجراءك</span>
+              <span className="text-sm font-bold text-amber-700">{actionableCount} طلب يتطلب إجراءك</span>
             </div>
           )}
           {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
@@ -431,7 +432,7 @@ export const ApprovalCenter: React.FC = () => {
 
       <div className="flex flex-wrap gap-2">
         {[
-          { key: 'actionable', label: 'بانتظار إجراءي' },
+          { key: 'actionable', label: 'تتطلب إجرائي' },
           { key: 'all', label: 'الكل' },
           { key: 'pending', label: 'قيد الانتظار' },
           { key: 'approved', label: 'مُعتمد' },
@@ -474,7 +475,7 @@ export const ApprovalCenter: React.FC = () => {
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">task_alt</span>
             <p className="text-sm font-bold text-slate-500">
-              {filterStatus === 'actionable' ? 'لا توجد طلبات بانتظار إجراءك' : 'لا توجد طلبات'}
+              {filterStatus === 'actionable' ? 'لا توجد طلبات تتطلب إجراءك' : 'لا توجد طلبات'}
             </p>
           </div>
         </Card>
@@ -523,7 +524,7 @@ export const ApprovalCenter: React.FC = () => {
                         {canAct && (
                           <button onClick={() => toggleContext(req.id!)} className="text-xs text-primary font-medium flex items-center gap-1 mt-2">
                             <span className="material-icons-round text-sm">{expandedContext.has(req.id!) ? 'expand_less' : 'info'}</span>
-                            {expandedContext.has(req.id!) ? 'إخفاء التفاصيل' : 'عرض بيانات الموظف'}
+                            {expandedContext.has(req.id!) ? 'إخفاء التفاصيل' : 'عرض بيانات الطلب'}
                           </button>
                         )}
                       </div>

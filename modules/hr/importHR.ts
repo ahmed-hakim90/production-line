@@ -81,7 +81,7 @@ const DEPT_HEADERS: Record<string, string> = {
 };
 
 const POS_HEADERS: Record<string, string> = {
-  'المنصب': 'title', 'اسم المنصب': 'title', 'الوظيفة': 'title', 'المسمى الوظيفي': 'title',
+  'المنصب': 'title', 'اسم المنصب': 'title', 'المسمى الوظيفي': 'title', 'المسمى الوظيفى': 'title',
   'القسم': 'departmentName', 'اسم القسم': 'departmentName',
   'المستوى': 'level',
 };
@@ -91,7 +91,7 @@ const EMP_HEADERS: Record<string, string> = {
   'الرمز': 'code', 'رمز الموظف': 'code', 'الكود': 'code',
   'رقم الهاتف': 'phone', 'الهاتف': 'phone', 'موبايل': 'phone', 'الموبايل': 'phone',
   'القسم': 'departmentName', 'اسم القسم': 'departmentName',
-  'المنصب': 'positionTitle', 'المسمى الوظيفي': 'positionTitle', 'الوظيفة': 'positionTitle',
+  'المنصب': 'positionTitle', 'المسمى الوظيفي': 'positionTitle', 'المسمى الوظيفى': 'positionTitle',
   'المستوى': 'level',
   'نوع التوظيف': 'employmentType', 'نوع العمل': 'employmentType',
   'الراتب الأساسي': 'baseSalary', 'الراتب': 'baseSalary',
@@ -105,8 +105,8 @@ const EMP_HEADERS: Record<string, string> = {
 
 const SHEET_ALIASES: Record<string, 'departments' | 'positions' | 'employees'> = {
   'الأقسام': 'departments', 'الاقسام': 'departments', 'أقسام': 'departments', 'اقسام': 'departments', 'departments': 'departments',
-  'المناصب': 'positions', 'مناصب': 'positions', 'الوظائف': 'positions', 'وظائف': 'positions', 'positions': 'positions',
-  'الموظفين': 'employees', 'موظفين': 'employees', 'الموظفون': 'employees', 'employees': 'employees',
+  'المناصب': 'positions', 'مناصب': 'positions', 'الوظائف': 'positions', 'positions': 'positions',
+  'الموظفين': 'employees', 'موظفين': 'employees', 'موظفون': 'employees', 'employees': 'employees',
 };
 
 // ─── Reverse label lookups ───────────────────────────────────────────────────

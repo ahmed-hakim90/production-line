@@ -23,7 +23,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../../shared/components/SelectableTable';
@@ -104,7 +104,7 @@ const EmployeeIcon = ({
 };
 
 export const Employees: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can, canManageUsers } = usePermission();
 
   const employees = useAppStore((s) => s.employees);
@@ -316,7 +316,7 @@ export const Employees: React.FC = () => {
     if (!shareCredentials) return;
     const loginUrl = `${window.location.origin}/login`;
     const msg = [
-      `أهلاً ${shareCredentials.name}`,
+      `أهلاظ‹ ${shareCredentials.name}`,
       'تم إنشاء حسابك على نظام الشركة.',
       '',
       `البريد الإلكتروني: ${shareCredentials.email}`,
@@ -366,7 +366,7 @@ export const Employees: React.FC = () => {
             uid,
             userEmail,
             'SALARY_CHANGE',
-            `تعديل راتب ${form.name.trim()}: ${originalSalary} → ${Number(form.baseSalary)}`,
+            `تعديل راتب ${form.name.trim()}: ${originalSalary} â†’ ${Number(form.baseSalary)}`,
             {
               employeeId: editId,
               employeeName: form.name.trim(),
@@ -578,7 +578,7 @@ export const Employees: React.FC = () => {
 
   const salaryChanged = editId && originalSalary !== null && Number(form.baseSalary) !== originalSalary;
 
-  // ── SelectableTable: columns ──
+  // â”€â”€ SelectableTable: columns â”€â”€
   const employeeColumns = useMemo<TableColumn<FirestoreEmployee>[]>(() => [
     {
       header: 'الاسم',
@@ -660,7 +660,7 @@ export const Employees: React.FC = () => {
     },
   ], [departments, jobPositions, can]);
 
-  // ── SelectableTable: row actions ──
+  // â”€â”€ SelectableTable: row actions â”€â”€
   const renderEmployeeActions = useCallback((emp: FirestoreEmployee) => (
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
       {can('employees.viewDetails') && (
@@ -711,7 +711,7 @@ export const Employees: React.FC = () => {
     </div>
   ), [can, navigate]);
 
-  // ── SelectableTable: bulk actions ──
+  // â”€â”€ SelectableTable: bulk actions â”€â”€
   const handleBulkActivate = useCallback(async (items: FirestoreEmployee[]) => {
     for (const emp of items) {
       if (emp.isActive === false) {
@@ -846,7 +846,7 @@ export const Employees: React.FC = () => {
           <p className="text-2xl font-bold text-slate-500">{summaryKpis.inactive}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">لديهم دخول للنظام</p>
+          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">لديهم دخول النظام</p>
           <p className="text-2xl font-bold text-primary">{summaryKpis.withSystemAccess}</p>
         </Card>
         <Card className="p-4">
@@ -974,7 +974,9 @@ export const Employees: React.FC = () => {
       <Card className="py-3 px-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-bold text-[var(--color-text-muted)]">إجمالي المرتبات (حسب النتائج المعروضة)</span>
-          <span className="text-base font-extrabold text-primary">{filteredSalaryTotal.toLocaleString('ar-EG')} ج.م</span>
+          <span className="text-base font-extrabold text-primary">
+            {filteredSalaryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+          </span>
         </div>
       </Card>
 
@@ -1033,7 +1035,7 @@ export const Employees: React.FC = () => {
                 </div>
               )}
 
-              {/* ═══ Tab 1: Job Info ═══ */}
+              {/* â•گâ•گâ•گ Tab 1: Job Info â•گâ•گâ•گ */}
               {formTab === 'job' && (
                 <div className="space-y-5 min-h-[360px]">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1185,7 +1187,7 @@ export const Employees: React.FC = () => {
                 </div>
               )}
 
-              {/* ═══ Tab 2: Employment & Salary ═══ */}
+              {/* â•گâ•گâ•گ Tab 2: Employment & Salary â•گâ•گâ•گ */}
               {formTab === 'salary' && (
                 <div className="space-y-5 min-h-[360px]">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1271,7 +1273,7 @@ export const Employees: React.FC = () => {
                         <p className="text-xs font-bold text-amber-700">تغيير في الراتب</p>
                         <p className="text-sm text-amber-600">
                           <span className="line-through opacity-60">{originalSalary?.toLocaleString()}</span>
-                          <span className="mx-2">←</span>
+                          <span className="mx-2">â†گ</span>
                           <span className="font-bold">{Number(form.baseSalary).toLocaleString()}</span>
                           <span className="text-xs mr-1">ج.م</span>
                         </p>
@@ -1302,7 +1304,7 @@ export const Employees: React.FC = () => {
                 </div>
               )}
 
-              {/* ═══ Tab 3: System Access ═══ */}
+              {/* â•گâ•گâ•گ Tab 3: System Access â•گâ•گâ•گ */}
               {formTab === 'access' && (
                 <div className="space-y-5 min-h-[360px]">
                   <div className="border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-blue-50/50 dark:bg-blue-900/10">
@@ -1311,7 +1313,7 @@ export const Employees: React.FC = () => {
                       <div>
                         <p className="text-sm font-bold text-blue-700">إدارة حسابات الدخول أصبحت من صفحة المستخدمين</p>
                         <p className="text-xs text-blue-700/80 mt-1">
-                          لإنشاء/ربط/فك ربط/تغيير دور/حذف نهائي للمستخدم، استخدم صفحة النظام → المستخدمون.
+                          لإنشاء/ربط/فك ربط/تغيير دور/حذف نهائي للمستخدم، استخدم صفحة النظام -&gt; المستخدمون.
                         </p>
                       </div>
                     </div>
@@ -1352,7 +1354,7 @@ export const Employees: React.FC = () => {
                 <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>
                 <Button variant="primary" onClick={handleSave} disabled={saving || !isFormValid}>
                   {saving && <EmployeeIcon name="refresh" className="animate-spin text-sm" />}
-                  {editId ? 'حفظ التعديلات' : 'إضافة الموظف'}
+                  {editId ? 'حفظ التعديلات' : 'إضافة موظف'}
                 </Button>
               </div>
             </div>
@@ -1367,7 +1369,7 @@ export const Employees: React.FC = () => {
             <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <EmployeeIcon name="person_off" className="text-amber-500 text-3xl" />
             </div>
-            <h3 className="text-lg font-bold mb-2">تعطيل الموظف</h3>
+            <h3 className="text-lg font-bold mb-2">تعطيل موظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
               سيتم تعطيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === deleteConfirmId))}</span> وإيقاف حساب الدخول المرتبط به.
             </p>
@@ -1403,7 +1405,7 @@ export const Employees: React.FC = () => {
                 لا يمكن التراجع عن هذا الإجراء
               </p>
               {_rawEmployees.find((e) => e.id === permanentDeleteId)?.userId && (
-                <p className="text-xs text-rose-500 mt-1">سيتم حذف حساب المستخدم المرتبط. حساب Firebase Auth يحتاج حذف يدوي من الـ Console.</p>
+                <p className="text-xs text-rose-500 mt-1">سيتم حذف حساب المستخدم المرتبط. حساب Firebase Auth يحتاج حذف يدوي من الظ€ Console.</p>
               )}
             </div>
             <div className="flex items-center justify-center gap-3">
@@ -1427,7 +1429,7 @@ export const Employees: React.FC = () => {
             <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <EmployeeIcon name="person_add" className="text-emerald-500 text-3xl" />
             </div>
-            <h3 className="text-lg font-bold mb-2">إعادة تفعيل الموظف</h3>
+            <h3 className="text-lg font-bold mb-2">إعادة تفعيل موظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">
               سيتم إعادة تفعيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === toggleConfirmId))}</span> وتفعيل حساب الدخول المرتبط به.
             </p>
@@ -1507,3 +1509,7 @@ export const Employees: React.FC = () => {
     </div>
   );
 };
+
+
+
+

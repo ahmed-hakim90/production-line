@@ -1,7 +1,19 @@
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+import {
+  DetailCollapsibleSection,
+  DetailPageShell,
+  DetailPageStickyHeader,
+  SectionSkeleton,
+  SURFACE_CARD,
+} from '@/src/components/erp/DetailPageChrome';
+import { Card as ErpCard, KPIBox, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
@@ -47,7 +59,7 @@ import {
   Legend,
 } from 'recharts';
 
-// ── Status display config ────────────────────────────────────────────────────
+// â”€â”€ Status display config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'neutral' }> = {
   [ProductionLineStatus.ACTIVE]: { label: 'نشط', variant: 'success' },
@@ -58,13 +70,13 @@ const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warni
 };
 
 const HEALTH_STATUS_CONFIG = {
-  on_track: { label: 'في الموعد', variant: 'success' as const, color: 'text-emerald-500', desc: 'سير العمل طبيعي' },
+  on_track: { label: 'في الموعد', variant: 'success' as const, color: 'text-emerald-500', desc: 'سير العمل ضمن المسار' },
   at_risk: { label: 'معرض للخطر', variant: 'warning' as const, color: 'text-amber-500', desc: 'يحتاج متابعة' },
   delayed: { label: 'متأخر', variant: 'danger' as const, color: 'text-rose-500', desc: 'يحتاج تدخل' },
   critical: { label: 'حرج', variant: 'danger' as const, color: 'text-rose-600', desc: 'يحتاج تدخل فوري' },
 };
 
-// ── Chart tab types ──────────────────────────────────────────────────────────
+// â”€â”€ Chart tab types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type ChartTab = 'production' | 'cost' | 'efficiency' | 'hours';
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
@@ -83,11 +95,11 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
-// ── Main Component ───────────────────────────────────────────────────────────
+// â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const LineDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
 
@@ -219,7 +231,7 @@ export const LineDetails: React.FC = () => {
     return () => { cancelled = true; };
   }, [id]);
 
-  // ── Active plan for this line ────────────────────────────────────────────
+  // â”€â”€ Active plan for this line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const activePlan = useMemo(
     () => productionPlans.find((p) => p.lineId === id && (p.status === 'in_progress' || p.status === 'planned')),
@@ -238,7 +250,15 @@ export const LineDetails: React.FC = () => {
     [activePlan, _rawProducts]
   );
 
-  // ── Core metrics ──────────────────────────────────────────────────────────
+  const linePageSubtitle = useMemo(() => {
+    const parts: string[] = [];
+    if (line?.employeeName) parts.push(`المشرف: ${line.employeeName}`);
+    if (rawLine) parts.push(`${rawLine.dailyWorkingHours} ساعة آ· ${rawLine.maxWorkers} عامل`);
+    if (activePlanProduct) parts.push(`المنتج: ${activePlanProduct}`);
+    return parts.length > 0 ? parts.join(' آ· ') : 'تفاصيل خط الإنتاج';
+  }, [line?.employeeName, rawLine, activePlanProduct]);
+
+  // â”€â”€ Core metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const totalProduced = useMemo(
     () => periodReports.reduce((sum, r) => sum + (r.quantityProduced || 0), 0),
@@ -390,7 +410,7 @@ export const LineDetails: React.FC = () => {
 
         return {
           date,
-          supervisorsText: supervisorNames.length > 0 ? Array.from(new Set(supervisorNames)).join('، ') : '—',
+          supervisorsText: supervisorNames.length > 0 ? Array.from(new Set(supervisorNames)).join('طŒ ') : '—',
           totalHours: Number(totalHours.toFixed(2)),
           totalCost,
           produced: data.totalProduced,
@@ -400,7 +420,7 @@ export const LineDetails: React.FC = () => {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [periodReports, employeeHourlyRates, hourlyRate, employees]);
 
-  // ── Cost per unit ──────────────────────────────────────────────────────────
+  // â”€â”€ Cost per unit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const costPerUnit = useMemo(() => {
     if (totalProduced === 0 || !id) return 0;
@@ -435,7 +455,7 @@ export const LineDetails: React.FC = () => {
     return (totalLaborCost + totalIndirect + totalSupervisorIndirect) / totalProduced;
   }, [periodReports, hourlyRate, id, costCenters, costCenterValues, costAllocations, totalProduced, employeeHourlyRates]);
 
-  // ── Capacity metrics ───────────────────────────────────────────────────────
+  // â”€â”€ Capacity metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const dailyCapacity = useMemo(
     () => calculateDailyCapacity(rawLine?.maxWorkers ?? 0, rawLine?.dailyWorkingHours ?? 0, avgAssemblyTime),
@@ -455,7 +475,7 @@ export const LineDetails: React.FC = () => {
     [activePlan, remainingQty, dailyCapacity]
   );
 
-  // ── Planned end date (estimated) ───────────────────────────────────────────
+  // â”€â”€ Planned end date (estimated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const plannedEndDate = useMemo(() => {
     if (!activePlan || dailyCapacity <= 0) return null;
@@ -465,7 +485,7 @@ export const LineDetails: React.FC = () => {
     return start.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
   }, [activePlan, dailyCapacity]);
 
-  // ── Plan Health ────────────────────────────────────────────────────────────
+  // â”€â”€ Plan Health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const planHealth = useMemo(() => {
     if (!activePlan) return null;
@@ -504,7 +524,7 @@ export const LineDetails: React.FC = () => {
     };
   }, [activePlan, dailyCapacity, planActualProduced]);
 
-  // ── Chart data (all metrics per date) ──────────────────────────────────────
+  // â”€â”€ Chart data (all metrics per date) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const enrichedChartData = useMemo(() => {
     const byDate = new Map<string, { produced: number; waste: number; hours: number; workerHours: number }>();
@@ -556,14 +576,14 @@ export const LineDetails: React.FC = () => {
       .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
   }, [periodReports, id, hourlyRate, costCenters, costCenterValues, costAllocations, standardTime, employeeHourlyRates]);
 
-  // ── Visible chart tabs ─────────────────────────────────────────────────────
+  // â”€â”€ Visible chart tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const visibleChartTabs = useMemo(
     () => CHART_TABS.filter((tab) => tab.key !== 'cost' || canViewCosts),
     [canViewCosts]
   );
 
-  // ── Alerts ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
     const result: { type: 'danger' | 'warning' | 'info'; icon: string; message: string }[] = [];
@@ -586,7 +606,7 @@ export const LineDetails: React.FC = () => {
       result.push({
         type: 'warning',
         icon: 'speed',
-        message: `الكفاءة أقل من الحد المطلوب: ${efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
+        message: `الكفاءة أقل من الحد المحدد: ${efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
       });
     }
 
@@ -611,7 +631,7 @@ export const LineDetails: React.FC = () => {
     return result;
   }, [wasteRatio, efficiency, planHealth, alertCfg]);
 
-  // ── Chart tooltip ──────────────────────────────────────────────────────────
+  // â”€â”€ Chart tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
@@ -629,28 +649,38 @@ export const LineDetails: React.FC = () => {
     );
   }, []);
 
-  // ── Loading / Not Found ────────────────────────────────────────────────────
+  // â”€â”€ Loading / Not Found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <LoadingSkeleton type="detail" />
-      </div>
+      <DetailPageShell>
+        <DetailPageStickyHeader>
+          <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} loading />
+          <Card className={SURFACE_CARD}>
+            <SectionSkeleton rows={2} height={38} />
+          </Card>
+        </DetailPageStickyHeader>
+        <Card className={SURFACE_CARD}>
+          <SectionSkeleton rows={6} height={68} />
+        </Card>
+      </DetailPageShell>
     );
   }
 
   if (!line && !loading) {
     return (
-      <div className="space-y-6">
-        <div className="text-center py-16 text-slate-400">
-          <span className="material-icons-round text-6xl mb-4 block opacity-30">precision_manufacturing</span>
-          <p className="font-bold text-lg">خط الإنتاج غير موجود</p>
-          <Button variant="outline" className="mt-4" onClick={() => navigate('/lines')}>
-            <span className="material-icons-round text-sm">arrow_forward</span>
-            العودة لخطوط الإنتاج
-          </Button>
-        </div>
-      </div>
+      <DetailPageShell>
+        <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} />
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="space-y-4 p-6 text-center">
+            <span className="material-icons-round block text-6xl opacity-30 text-muted-foreground">precision_manufacturing</span>
+            <p className="text-lg font-bold text-destructive">خط الإنتاج غير موجود</p>
+            <Button type="button" variant="outline" onClick={() => navigate('/lines')}>
+              العودة لخطوط الإنتاج
+            </Button>
+          </CardContent>
+        </Card>
+      </DetailPageShell>
     );
   }
 
@@ -658,102 +688,40 @@ export const LineDetails: React.FC = () => {
   const healthCfg = planHealth ? HEALTH_STATUS_CONFIG[planHealth.status] : null;
 
   return (
-    <div className="space-y-6">
-      {/* ── Alerts ──────────────────────────────────────────────────────────── */}
-      {alerts.length > 0 && alerts[0].type !== 'info' && (
-        <div className="space-y-2">
-          {alerts.filter((a) => a.type !== 'info').map((alert, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
-                alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
-                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
-              }`}
-            >
-              <span className="material-icons-round text-lg">{alert.icon}</span>
-              <span>{alert.message}</span>
+    <DetailPageShell>
+      <DetailPageStickyHeader>
+        <PageHeader
+          title={line?.name ?? 'تفاصيل الخط'}
+          subtitle={linePageSubtitle}
+          icon="factory"
+          backAction={{ to: '/lines', label: 'رجوع' }}
+          extra={(
+            <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
+              {statusCfg.label}
+            </Badge>
+          )}
+        />
+        <Card className={SURFACE_CARD}>
+          <CardContent className="flex flex-wrap items-center justify-end gap-3 p-4">
+            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
+              {PERIOD_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant={period === opt.value ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setPeriod(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          </CardContent>
+        </Card>
+      </DetailPageStickyHeader>
 
-      {/* ── Enhanced Header ─────────────────────────────────────────────────── */}
-      <div className="flex items-start sm:items-center justify-between gap-3">
-        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-          <button
-            onClick={() => navigate('/lines')}
-            className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all shrink-0 mt-1 sm:mt-0"
-          >
-            <span className="material-icons-round">arrow_forward</span>
-          </button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] truncate">
-                {line?.name}
-              </h2>
-              <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
-                {statusCfg.label}
-              </Badge>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-              <span className="text-xs sm:text-sm text-[var(--color-text-muted)] font-medium flex items-center gap-1">
-                <span className="material-icons-round text-xs">person</span>
-                الموظف: <strong className="text-slate-600">{line?.employeeName}</strong>
-              </span>
-              {rawLine && (
-                <>
-                  <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
-                  <span className="text-xs sm:text-sm text-slate-400">
-                    {rawLine.dailyWorkingHours} ساعة · {rawLine.maxWorkers} عامل
-                  </span>
-                </>
-              )}
-              {activePlanProduct && (
-                <>
-                  <span className="hidden sm:inline text-[var(--color-text-muted)] dark:text-slate-600">|</span>
-                  <span className="text-xs sm:text-sm text-[var(--color-text-muted)] flex items-center gap-1">
-                    <span className="material-icons-round text-xs">event_note</span>
-                    الخطة: <strong className="text-primary">{activePlanProduct}</strong>
-                  </span>
-                </>
-              )}
-            </div>
-            {activePlan && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
-                {plannedEndDate && (
-                  <span className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1">
-                    <span className="material-icons-round text-xs">event</span>
-                    الانتهاء المتوقع: <strong className="text-slate-600">{plannedEndDate}</strong>
-                  </span>
-                )}
-                <span className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1">
-                  <span className="material-icons-round text-xs">inventory</span>
-                  المتبقي: <strong className="text-slate-600">{formatNumber(remainingQty)}</strong> وحدة
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end">
-        <div className="erp-date-seg">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setPeriod(opt.value)}
-              className={`erp-date-seg-btn${
-                period === opt.value
-                  ? ' active' : ''}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Expanded KPI Cards ──────────────────────────────────────────────── */}
+      <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         <KPIBox
           label="الإنتاج مقابل الهدف"
@@ -848,9 +816,12 @@ export const LineDetails: React.FC = () => {
           />
         )}
       </div>
+      </DetailCollapsibleSection>
 
-      {canViewCosts && lineAllocatedCosts && (
-        <Card>
+      {canViewCosts && (
+        <DetailCollapsibleSection title="التكاليف والتوزيع" defaultOpen>
+      {lineAllocatedCosts && (
+        <ErpCard>
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-violet-500">account_balance</span>
@@ -882,7 +853,7 @@ export const LineDetails: React.FC = () => {
 
           {lineAllocatedCosts.centers.length > 0 ? (
             <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-              <table className="w-full text-right text-sm">
+              <table className="erp-table w-full text-right text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">مركز التكلفة</th>
@@ -908,24 +879,23 @@ export const LineDetails: React.FC = () => {
               لا توجد توزيعات تكلفة غير مباشرة على هذا الخط خلال الشهر الحالي.
             </div>
           )}
-        </Card>
+        </ErpCard>
       )}
 
-      {canViewCosts && (
-        <Card>
+        <ErpCard>
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-emerald-500">manage_accounts</span>
               <h3 className="text-lg font-bold">تكلفة المشرف اليومية</h3>
             </div>
             <span className="text-xs text-[var(--color-text-muted)] font-bold">
-              المعادلة: ساعات المشرف × أجر الساعة
+              المعادلة: ساعات المشرف أ— أجر الساعة
             </span>
           </div>
 
           {dailySupervisorCostRows.length > 0 ? (
             <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-              <table className="w-full text-right text-sm">
+              <table className="erp-table w-full text-right text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -957,12 +927,14 @@ export const LineDetails: React.FC = () => {
               لا توجد تقارير كافية لحساب تكلفة المشرف على هذا الخط.
             </div>
           )}
-        </Card>
+        </ErpCard>
+        </DetailCollapsibleSection>
       )}
 
-      {/* ── Plan Health Block ──────────────────────────────────────────────── */}
+      {/* â”€â”€ Plan Health Block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activePlan && planHealth && healthCfg && (
-        <Card>
+        <DetailCollapsibleSection title="صحة الخطة" defaultOpen>
+        <ErpCard>
           <div className="flex items-center gap-2 mb-5">
             <span className="material-icons-round text-violet-500">monitor_heart</span>
             <h3 className="text-lg font-bold">صحة الخطة</h3>
@@ -1018,11 +990,13 @@ export const LineDetails: React.FC = () => {
               <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{healthCfg.desc}</p>
             </div>
           </div>
-        </Card>
+        </ErpCard>
+        </DetailCollapsibleSection>
       )}
 
-      {/* ── Charts with Tab Switcher ──────────────────────────────────────── */}
-      <Card>
+      {/* â”€â”€ Charts with Tab Switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <DetailCollapsibleSection title="تحليل الأداء" defaultOpen>
+      <ErpCard>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <span className="material-icons-round text-primary">show_chart</span>
@@ -1107,17 +1081,19 @@ export const LineDetails: React.FC = () => {
             </ResponsiveContainer>
           </div>
         )}
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
-      {/* ── Capacity Section ──────────────────────────────────────────────── */}
-      <Card>
+      {/* â”€â”€ Capacity Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <DetailCollapsibleSection title="مؤشرات الإنتاجية" defaultOpen>
+      <ErpCard>
         <div className="flex items-center gap-2 mb-5">
           <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
-          <h3 className="text-lg font-bold">الطاقة الإنتاجية</h3>
+          <h3 className="text-lg font-bold">مؤشرات الإنتاجية</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           <div className="text-center">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الطاقة اليومية</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الإنتاج اليومي</p>
             <p className="text-2xl font-bold text-primary">
               {dailyCapacity > 0 ? formatNumber(dailyCapacity) : '—'}
             </p>
@@ -1169,10 +1145,12 @@ export const LineDetails: React.FC = () => {
             </div>
           </div>
         )}
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
-      {/* ── Alerts Section ────────────────────────────────────────────────── */}
-      <Card>
+      {/* â”€â”€ Alerts Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <DetailCollapsibleSection title="التنبيهات" defaultOpen>
+      <ErpCard>
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-amber-500">notifications_active</span>
           <h3 className="text-lg font-bold">التنبيهات</h3>
@@ -1194,14 +1172,16 @@ export const LineDetails: React.FC = () => {
             </div>
           ))}
         </div>
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
-      {/* ── Active Work Orders ──────────────────────────────────────────── */}
+      {/* â”€â”€ Active Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {can('workOrders.view') && lineWorkOrders.length > 0 && (
-        <Card className="!p-0 border-none overflow-hidden " title="">
+        <DetailCollapsibleSection title="أوامر الشغل المرتبطة" defaultOpen>
+        <ErpCard className="!p-0 border-none overflow-hidden " title="">
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
             <span className="material-icons-round text-primary">assignment</span>
-            <h3 className="text-lg font-bold">أوامر الشغل النشطة</h3>
+            <h3 className="text-lg font-bold">أوامر الشغل المرتبطة</h3>
             <Badge variant="info">{lineWorkOrders.length}</Badge>
           </div>
           <div className="divide-y divide-[var(--color-border)]">
@@ -1219,7 +1199,7 @@ export const LineDetails: React.FC = () => {
                       </Badge>
                     </div>
                     <p className="text-sm font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
-                    <p className="text-xs text-slate-500">المشرف: {supervisor?.name ?? '—'} · الحد الأقصى: {wo.maxWorkers} عامل · التسليم: {wo.targetDate}</p>
+                    <p className="text-xs text-slate-500">المشرف: {supervisor?.name ?? '—'} آ· الحد الأقصى: {wo.maxWorkers} عامل آ· التسليم: {wo.targetDate}</p>
                   </div>
                   <div className="sm:w-48 space-y-1">
                     <div className="flex justify-between text-xs font-bold">
@@ -1241,16 +1221,18 @@ export const LineDetails: React.FC = () => {
               );
             })}
           </div>
-        </Card>
+        </ErpCard>
+        </DetailCollapsibleSection>
       )}
 
-      {/* ── Reports Table ─────────────────────────────────────────────────── */}
-      <Card className="!p-0 border-none overflow-hidden " title="">
+      {/* â”€â”€ Reports Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <DetailCollapsibleSection title="سجل التقارير" defaultOpen>
+      <ErpCard className="!p-0 border-none overflow-hidden " title="">
         <div className="px-6 py-4 border-b border-[var(--color-border)]">
           <h3 className="text-lg font-bold">سجل التقارير</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse">
+          <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">التاريخ</th>
@@ -1305,7 +1287,8 @@ export const LineDetails: React.FC = () => {
             </span>
           </div>
         )}
-      </Card>
+      </ErpCard>
+      </DetailCollapsibleSection>
 
       {/* View Workers Modal */}
       {viewWorkersData && (
@@ -1356,6 +1339,9 @@ export const LineDetails: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </DetailPageShell>
   );
 };
+
+
+

@@ -35,7 +35,8 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, KPIBox, Button, LoadingSkeleton } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -164,7 +165,7 @@ const ProductDetailsIcon = ({
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
 
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -281,7 +282,7 @@ export const ProductDetails: React.FC = () => {
     const selectedRawMaterial = rawMaterials.find((row) => row.id === materialForm.materialId);
     const cleanName = (selectedRawMaterial?.name || materialForm.materialName || '').trim();
     if (!cleanName) {
-      setMaterialSaveMsg({ type: 'error', text: 'اختر مادة خام من تعريف المواد الخام أولاً.' });
+      setMaterialSaveMsg({ type: 'error', text: 'اختر مادة خام من تعريف المواد الخام أولاظ‹.' });
       return;
     }
 
@@ -1173,7 +1174,7 @@ export const ProductDetails: React.FC = () => {
         />
       </div>
 
-      {/* ── Hidden Printable Report ── */}
+      {/* â”€â”€ Hidden Printable Report â”€â”€ */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
         <div ref={printComponentRef}>
           <ProductionReportPrint
@@ -1191,9 +1192,9 @@ export const ProductDetails: React.FC = () => {
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '3mm', marginBottom: '6mm' }}>
                 {[
-                  { label: 'متوسط تكلفة الوحدة', value: `${formatCost(summaryAverageUnitCost)} ج.م/قطعة`, color: '#0f766e' },
+                  { label: 'متوسط تكلفة الوحدة', value: `${formatCost(summaryAverageUnitCost)} ج.م/وحدة`, color: '#0f766e' },
                   { label: 'إجمالي التكلفة التاريخية', value: `${formatCost(summaryHistoricalTotalCost)} ج.م`, color: '#334155' },
-                  { label: 'إجمالي التكلفة المحسوبة', value: `${formatCost(summaryCalculatedUnitCost)} ج.م/قطعة`, color: '#4338ca' },
+                  { label: 'إجمالي التكلفة المحسوبة', value: `${formatCost(summaryCalculatedUnitCost)} ج.م/وحدة`, color: '#4338ca' },
                   { label: 'إجمالي تكلفة الإنتاج الشهري', value: `${formatCost(summaryMonthlyProductionTotal)} ج.م`, color: '#be123c' },
                 ].map((metric) => (
                   <div key={metric.label} style={{ border: '1px solid #e2e8f0', borderRadius: '3mm', padding: '3mm', background: '#f8fafc' }}>
@@ -1202,7 +1203,7 @@ export const ProductDetails: React.FC = () => {
                   </div>
                 ))}
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5pt', marginBottom: '8mm' }}>
+              <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5pt', marginBottom: '8mm' }}>
                 <thead className="erp-thead">
                   <tr style={{ background: '#f1f5f9' }}>
                     <th style={{ padding: '3mm 4mm', textAlign: 'right', fontWeight: 800, fontSize: '9pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>عنصر التكلفة</th>
@@ -1211,10 +1212,10 @@ export const ProductDetails: React.FC = () => {
                 </thead>
                 <tbody>
                   <tr><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>تكلفة الوحدة الصينية</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{formatCost(costBreakdown.chineseUnitCost)}</td></tr>
-                  <tr style={{ background: '#f8fafc' }}><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>السعر باليوان الصيني</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{chineseUnitCostInCny != null ? `¥ ${formatCost(chineseUnitCostInCny)}` : '—'}</td></tr>
+                  <tr style={{ background: '#f8fafc' }}><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>السعر باليوان الصيني</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{chineseUnitCostInCny != null ? `آ¥ ${formatCost(chineseUnitCostInCny)}` : '—'}</td></tr>
                   <tr style={{ background: '#f8fafc' }}><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>تكلفة المواد الخام ({materials.length} مادة)</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{formatCost(costBreakdown.rawMaterialCost)}</td></tr>
                   <tr><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>تكلفة العلبة الداخلية</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{formatCost(costBreakdown.innerBoxCost)}</td></tr>
-                  <tr style={{ background: '#f8fafc' }}><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>نصيب الكرتونة ({costBreakdown.unitsPerCarton > 0 ? `${formatCost(costBreakdown.outerCartonCost)} ÷ ${costBreakdown.unitsPerCarton}` : '—'})</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{formatCost(costBreakdown.cartonShare)}</td></tr>
+                  <tr style={{ background: '#f8fafc' }}><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>نصيب الكرتونة ({costBreakdown.unitsPerCarton > 0 ? `${formatCost(costBreakdown.outerCartonCost)} أ· ${costBreakdown.unitsPerCarton}` : '—'})</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{formatCost(costBreakdown.cartonShare)}</td></tr>
                   <tr><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', fontWeight: 600 }}>نصيب المصاريف الصناعية (متوسط شهري)</td><td style={{ padding: '2.5mm 4mm', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 600 }}>{formatCost(costBreakdown.productionOverheadShare)}</td></tr>
                 </tbody>
                 <tfoot>
@@ -1228,7 +1229,7 @@ export const ProductDetails: React.FC = () => {
               {materials.length > 0 && (
                 <>
                   <h3 style={{ margin: '0 0 4mm', fontSize: '13pt', fontWeight: 800, color: '#334155' }}>المواد الخام المستخدمة</h3>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
+                  <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
                     <thead className="erp-thead">
                       <tr style={{ background: '#f1f5f9' }}>
                         <th style={{ padding: '2.5mm 4mm', textAlign: 'right', fontWeight: 800, fontSize: '8.5pt', color: '#475569', borderBottom: '2px solid #cbd5e1' }}>اسم المادة</th>
@@ -1356,7 +1357,7 @@ export const ProductDetails: React.FC = () => {
               <ProductDetailsIcon name="emoji_events" className="text-emerald-600 text-2xl" />
             </div>
             <div>
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">أفضل خط إنتاج أداءً</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-0.5">أفضل خط إنتاج أدا،ظ‹</p>
               <p className="text-lg font-bold text-[var(--color-text)]">{bestLine}</p>
             </div>
           </div>
@@ -1410,7 +1411,7 @@ export const ProductDetails: React.FC = () => {
         </div>
       )}
 
-      {/* ── Monthly Average Production Cost ── */}
+      {/* â”€â”€ Monthly Average Production Cost â”€â”€ */}
       {canViewCosts && (
         <Card>
           <div className="flex items-center justify-between mb-4">
@@ -1453,7 +1454,7 @@ export const ProductDetails: React.FC = () => {
                   <p className="text-xl font-bold text-indigo-600">{formatCost(currentMonthCost.averageUnitCost)}</p>
                   <span className="text-[10px] font-medium text-slate-400">ج.م / وحدة</span>
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                    {formatCost(currentMonthCost.totalProductionCost)} ج.م ÷ {currentMonthCost.totalProducedQty.toLocaleString('en-US')} وحدة
+                    {formatCost(currentMonthCost.totalProductionCost)} ج.م أ· {currentMonthCost.totalProducedQty.toLocaleString('en-US')} وحدة
                   </p>
                 </>
               ) : (
@@ -1469,7 +1470,7 @@ export const ProductDetails: React.FC = () => {
                   <p className="text-xl font-bold text-[var(--color-text)]">{formatCost(previousMonthCost.averageUnitCost)}</p>
                   <span className="text-[10px] font-medium text-slate-400">ج.م / وحدة</span>
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                    {formatCost(previousMonthCost.totalProductionCost)} ج.م ÷ {previousMonthCost.totalProducedQty.toLocaleString('en-US')} وحدة
+                    {formatCost(previousMonthCost.totalProductionCost)} ج.م أ· {previousMonthCost.totalProducedQty.toLocaleString('en-US')} وحدة
                   </p>
                 </>
               ) : (
@@ -1509,7 +1510,7 @@ export const ProductDetails: React.FC = () => {
         </Card>
       )}
 
-      {/* ── Structured Cost Breakdown ── */}
+      {/* â”€â”€ Structured Cost Breakdown â”€â”€ */}
       {canViewCosts && rawProduct && (
         <Card>
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1524,9 +1525,9 @@ export const ProductDetails: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-2 w-full lg:w-auto lg:min-w-[520px]">
               {[
-                { label: 'متوسط تكلفة الوحدة', value: `${formatCost(summaryAverageUnitCost)} ج.م/قطعة`, tone: 'text-primary' },
+                { label: 'متوسط تكلفة الوحدة', value: `${formatCost(summaryAverageUnitCost)} ج.م/وحدة`, tone: 'text-primary' },
                 { label: 'إجمالي التكلفة التاريخية', value: `${formatCost(summaryHistoricalTotalCost)} ج.م`, tone: 'text-slate-700' },
-                { label: 'إجمالي التكلفة المحسوبة', value: `${formatCost(summaryCalculatedUnitCost)} ج.م/قطعة`, tone: 'text-indigo-700' },
+                { label: 'إجمالي التكلفة المحسوبة', value: `${formatCost(summaryCalculatedUnitCost)} ج.م/وحدة`, tone: 'text-indigo-700' },
                 { label: 'إجمالي تكلفة الإنتاج الشهري', value: `${formatCost(summaryMonthlyProductionTotal)} ج.م`, tone: 'text-rose-700' },
               ].map((metric) => (
                 <div key={metric.label} className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]/70 px-3 py-2 text-right">
@@ -1539,7 +1540,7 @@ export const ProductDetails: React.FC = () => {
 
           {/* Cost Items Table */}
           <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)] mb-4">
-            <table className="w-full text-right border-collapse">
+            <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">عنصر التكلفة</th>
@@ -1547,7 +1548,7 @@ export const ProductDetails: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {/* ── تكاليف المنتج (مواد + تغليف) ── */}
+                {/* â”€â”€ تكاليف المنتج (مواد + تغليف) â”€â”€ */}
                 <tr className="bg-teal-50/50 dark:bg-teal-900/10">
                   <td colSpan={2} className="px-5 py-2 text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
@@ -1572,13 +1573,13 @@ export const ProductDetails: React.FC = () => {
                       السعر باليوان الصيني
                       {chineseRate > 0 && (
                         <span className="text-[10px] text-[var(--color-text-muted)] font-medium">
-                          ({formatCost(costBreakdown?.chineseUnitCost ?? 0)} ÷ {chineseRate})
+                          ({formatCost(costBreakdown?.chineseUnitCost ?? 0)} أ· {chineseRate})
                         </span>
                       )}
                     </div>
                   </td>
                   <td className="px-5 py-3 text-center text-sm font-bold">
-                    {chineseUnitCostInCny != null ? `¥ ${formatCost(chineseUnitCostInCny)}` : '—'}
+                    {chineseUnitCostInCny != null ? `آ¥ ${formatCost(chineseUnitCostInCny)}` : '—'}
                   </td>
                 </tr>
                 <tr className="hover:bg-[#f8f9fa]/50">
@@ -1607,7 +1608,7 @@ export const ProductDetails: React.FC = () => {
                       نصيب الكرتونة
                       {(costBreakdown?.unitsPerCarton ?? 0) > 0 && (
                         <span className="text-[10px] text-[var(--color-text-muted)] font-medium">
-                          ({formatCost(costBreakdown?.outerCartonCost ?? 0)} ÷ {costBreakdown?.unitsPerCarton})
+                          ({formatCost(costBreakdown?.outerCartonCost ?? 0)} أ· {costBreakdown?.unitsPerCarton})
                         </span>
                       )}
                     </div>
@@ -1615,7 +1616,7 @@ export const ProductDetails: React.FC = () => {
                   <td className="px-5 py-3 text-center text-sm font-bold">{formatCost(costBreakdown?.cartonShare ?? 0)} ج.م</td>
                 </tr>
 
-                {/* ── تكاليف صناعية (م. وغ.م) ── */}
+                {/* â”€â”€ تكاليف صناعية (م. وغ.م) â”€â”€ */}
                 <tr className="bg-rose-50/50 dark:bg-rose-900/10">
                   <td colSpan={2} className="px-5 py-2 text-xs font-bold text-rose-600 uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
@@ -1657,7 +1658,7 @@ export const ProductDetails: React.FC = () => {
                   </td>
                   <td className="px-5 py-3 text-center text-sm font-black text-indigo-700 dark:text-indigo-300">
                     <div className="flex flex-col items-center leading-5">
-                      <span>{formatCost(monthlyIndustrialTotal.perUnit)} ج.م/قطعة</span>
+                      <span>{formatCost(monthlyIndustrialTotal.perUnit)} ج.م/وحدة</span>
                       <span className="text-[11px] font-medium text-[var(--color-text-muted)]">
                         {formatCost(monthlyIndustrialTotal.monthlyTotal)} ج.م (إجمالي شهري مرجعي)
                       </span>
@@ -1680,7 +1681,7 @@ export const ProductDetails: React.FC = () => {
                         </td>
                         <td className="px-5 py-3 text-center text-sm font-bold">
                           <div className="flex flex-col items-center leading-5">
-                            <span>{formatCost(qty > 0 ? totalShare / qty : 0)} ج.م/قطعة</span>
+                            <span>{formatCost(qty > 0 ? totalShare / qty : 0)} ج.م/وحدة</span>
                             <span className="text-[11px] text-[var(--color-text-muted)] font-medium">
                               {formatCost(totalShare)} ج.م (إجمالي شهري للمنتج)
                             </span>
@@ -1767,7 +1768,7 @@ export const ProductDetails: React.FC = () => {
                 <p className="text-sm font-bold">لا توجد مواد خام مسجلة</p>
               </div>
             ) : (
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">اسم المادة</th>
@@ -1852,7 +1853,7 @@ export const ProductDetails: React.FC = () => {
           {costByLine.length > 0 && (
             <Card title="تكلفة الإنتاج حسب خط الإنتاج">
               <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse">
+                <table className="erp-table w-full text-right border-collapse">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">خط الإنتاج</th>
@@ -1976,12 +1977,12 @@ export const ProductDetails: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse">
+            <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">التاريخ</th>
                   <th className="erp-th">خط الإنتاج</th>
-                  <th className="erp-th">الموظف</th>
+                  <th className="erp-th">المشرف</th>
                   <th className="erp-th text-center">الكمية</th>
                   <th className="erp-th text-center">الهالك</th>
                   <th className="erp-th text-center">عمال</th>
@@ -2034,7 +2035,7 @@ export const ProductDetails: React.FC = () => {
         )}
       </Card>
 
-      {/* ── Material Add/Edit Modal ── */}
+      {/* â”€â”€ Material Add/Edit Modal â”€â”€ */}
       {showMaterialModal && canManageProductMaterials && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowMaterialModal(false); setMaterialSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
@@ -2082,7 +2083,7 @@ export const ProductDetails: React.FC = () => {
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-slate-400">
-                  المواد هنا من تعريف "المواد الخام" فقط، ولن تظهر في بحث المنتجات.
+                  المواد هنا من تعريف "المواد الخام" فقططŒ ولن تظهر في بحث المنتجات.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2134,3 +2135,6 @@ export const ProductDetails: React.FC = () => {
     </div>
   );
 };
+
+
+

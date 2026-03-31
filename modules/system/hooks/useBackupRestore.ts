@@ -6,24 +6,9 @@ import {
   validateBackupFile,
   type BackupFile,
   type BackupHistoryEntry,
-  type FirebaseUsageEstimate,
   type RestoreMode,
 } from '../../../services/backupService';
-
-const FIRESTORE_SPARK_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GiB
-const FIRESTORE_SPARK_DAILY = {
-  reads: 50000,
-  writes: 20000,
-  deletes: 20000,
-};
-
-const formatBytes = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / Math.pow(1024, idx);
-  return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
-};
+import { importTenantBackupCallable } from '../../../modules/auth/services/firebase';
 
 const RESTORE_MODES: { value: RestoreMode; label: string; icon: string; description: string; color: string }[] = [
   { value: 'merge', label: 'دمج', icon: 'merge', description: 'دمج البيانات الجديدة مع البيانات الحالية — لا يتم حذف أي شيء', color: 'emerald' },
@@ -42,9 +27,6 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
   const [backupMessage, setBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [backupHistory, setBackupHistory] = useState<BackupHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [firebaseUsage, setFirebaseUsage] = useState<FirebaseUsageEstimate | null>(null);
-  const [firebaseUsageLoading, setFirebaseUsageLoading] = useState(false);
-  const [firebaseUsageError, setFirebaseUsageError] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -54,10 +36,15 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
   const [importValidation, setImportValidation] = useState<{ valid: boolean; error?: string } | null>(null);
   const [restoreMode, setRestoreMode] = useState<RestoreMode>('merge');
   const [showConfirmRestore, setShowConfirmRestore] = useState(false);
+  const [skipAutoBackupBeforeRestore, setSkipAutoBackupBeforeRestore] = useState(false);
+  const [useServerImport, setUseServerImport] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const userEmail = useAppStore((s) => s.userEmail);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const userProfile = useAppStore((s) => s.userProfile);
+  const isSuperAdmin = Boolean(userProfile?.isSuperAdmin);
+  const tenantIdForHistory = userProfile?.tenantId || undefined;
   const _loadAppData = useAppStore((s) => s._loadAppData);
   const fetchSystemSettings = useAppStore((s) => s.fetchSystemSettings);
   const addJob = useJobsStore((s) => s.addJob);
@@ -75,26 +62,17 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     setHistoryLoading(false);
   }, []);
 
-  const loadFirebaseUsage = useCallback(async () => {
-    setFirebaseUsageLoading(true);
-    setFirebaseUsageError('');
-    try {
-      const usage = await backupService.getUsageEstimate();
-      setFirebaseUsage(usage);
-    } catch (err: any) {
-      setFirebaseUsageError(err?.message || 'تعذر تحميل استهلاك Firebase');
-    }
-    setFirebaseUsageLoading(false);
-  }, []);
-
   useEffect(() => {
     if (activeTab === 'backup' && isAdmin) {
       loadBackupHistory();
-      if (!firebaseUsage && !firebaseUsageLoading) {
-        loadFirebaseUsage();
-      }
     }
-  }, [activeTab, isAdmin, loadBackupHistory, loadFirebaseUsage, firebaseUsage, firebaseUsageLoading]);
+  }, [activeTab, isAdmin, loadBackupHistory]);
+
+  useEffect(() => {
+    if (!isSuperAdmin && useServerImport) {
+      setUseServerImport(false);
+    }
+  }, [isSuperAdmin, useServerImport]);
 
   const handleExportFull = useCallback(async () => {
     setBackupLoading(true);
@@ -183,20 +161,51 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     startJob(jobId, 'Saving to database...');
     clearImportSelection();
 
-    const result = await backupService.importBackup(
-      currentImportFile,
-      restoreMode,
-      userEmail || 'admin',
-      (step, percent) => {
-        setBackupProgress({ step, percent });
+    const runServer = useServerImport && isSuperAdmin;
+    let result: { success: boolean; error?: string; restored: number };
+
+    if (runServer) {
+      setBackupProgress({ step: 'استعادة عبر الخادم (Admin SDK)...', percent: 40 });
+      setJobProgress(jobId, {
+        processedRows: 40,
+        totalRows: 100,
+        statusText: 'استعادة عبر الخادم...',
+        status: 'processing',
+      });
+      try {
+        const r = await importTenantBackupCallable(
+          currentImportFile as unknown as Record<string, unknown>,
+          restoreMode,
+          tenantIdForHistory,
+        );
+        result = { success: true, restored: r.restored };
         setJobProgress(jobId, {
-          processedRows: Math.max(0, Math.min(percent, 100)),
+          processedRows: 100,
           totalRows: 100,
-          statusText: step || 'Saving to database...',
+          statusText: 'اكتمل',
           status: 'processing',
         });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'فشلت الاستعادة';
+        result = { success: false, error: msg, restored: 0 };
       }
-    );
+    } else {
+      result = await backupService.importBackup(
+        currentImportFile,
+        restoreMode,
+        userEmail || 'admin',
+        (step, percent) => {
+          setBackupProgress({ step, percent });
+          setJobProgress(jobId, {
+            processedRows: Math.max(0, Math.min(percent, 100)),
+            totalRows: 100,
+            statusText: step || 'Saving to database...',
+            status: 'processing',
+          });
+        },
+        { skipAutoBackupBeforeRestore },
+      );
+    }
 
     setBackupProgress(null);
 
@@ -236,15 +245,11 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     fetchSystemSettings,
     loadBackupHistory,
     failJob,
+    skipAutoBackupBeforeRestore,
+    useServerImport,
+    isSuperAdmin,
+    tenantIdForHistory,
   ]);
-
-  const projectId = (import.meta as any)?.env?.VITE_FIREBASE_PROJECT_ID || '';
-  const firestoreUsagePercent = firebaseUsage
-    ? Math.min((firebaseUsage.estimatedBytes / FIRESTORE_SPARK_LIMIT_BYTES) * 100, 100)
-    : 0;
-  const firestoreRemainingBytes = firebaseUsage
-    ? Math.max(FIRESTORE_SPARK_LIMIT_BYTES - firebaseUsage.estimatedBytes, 0)
-    : FIRESTORE_SPARK_LIMIT_BYTES;
 
   return {
     backupLoading,
@@ -253,9 +258,6 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     setBackupMessage,
     backupHistory,
     historyLoading,
-    firebaseUsage,
-    firebaseUsageLoading,
-    firebaseUsageError,
     selectedMonth,
     setSelectedMonth,
     importFile,
@@ -266,18 +268,17 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     showConfirmRestore,
     setShowConfirmRestore,
     importInputRef,
-    loadFirebaseUsage,
     handleExportFull,
     handleExportMonthly,
     handleExportSettings,
     handleFileSelect,
     clearImportSelection,
     handleRestore,
-    projectId,
-    firestoreUsagePercent,
-    firestoreRemainingBytes,
-    sparkDaily: FIRESTORE_SPARK_DAILY,
     restoreModes: RESTORE_MODES,
-    formatBytes,
+    skipAutoBackupBeforeRestore,
+    setSkipAutoBackupBeforeRestore,
+    useServerImport,
+    setUseServerImport,
+    isSuperAdmin,
   };
 };

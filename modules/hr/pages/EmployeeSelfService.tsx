@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
@@ -86,7 +86,7 @@ function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
 }
 
 export const EmployeeSelfService: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const uid = useAppStore((s) => s.uid);
@@ -192,7 +192,9 @@ export const EmployeeSelfService: React.FC = () => {
   useEffect(() => {
     if (!employeeId) return;
     if (activeTab !== 'leave' && activeTab !== 'requests') return;
-    void refreshLeaveData();
+    void refreshLeaveData().catch((err) => {
+      console.error('Employee self-service leave refresh error:', err);
+    });
   }, [activeTab, employeeId, refreshLeaveData]);
 
   const attendanceStats = useMemo(() => {
@@ -258,7 +260,7 @@ export const EmployeeSelfService: React.FC = () => {
       return;
     }
     if (!currentEmployee) {
-      setLeaveSubmitError('لم يتم العثور على بيانات الموظف — تأكد من ربط حسابك بموظف');
+      setLeaveSubmitError('لم يتم العثور على بيانات الموظف — تأكد من ربط حسابك بسجل موظف');
       return;
     }
     setLeaveSubmitError(null);
@@ -499,7 +501,7 @@ export const EmployeeSelfService: React.FC = () => {
           </div>
           <Card title="سجل الحضور الأخير">
             <div className="overflow-x-auto">
-              <table className="w-full text-right">
+              <table className="erp-table w-full text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">التاريخ</th>
@@ -544,12 +546,12 @@ export const EmployeeSelfService: React.FC = () => {
       )}
 
       {!loading && activeTab === 'approvals' && canViewApprovals && (
-        <Card title="طلبات بانتظار إجراءك">
+        <Card title="طلبات تتطلب إجراءك">
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8fafc] p-4">
               <div>
                 <p className="text-sm font-bold text-[var(--color-text)]">
-                  لديك {formatNumber(managerPendingApprovals.length)} طلب بانتظار اعتمادك
+                  لديك {formatNumber(managerPendingApprovals.length)} طلب يتطلب اعتمادك
                 </p>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">
                   عرض مختصر هنا — المتابعة الكاملة داخل مركز الموافقات
@@ -562,7 +564,7 @@ export const EmployeeSelfService: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right">
+              <table className="erp-table w-full text-right">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">النوع</th>
@@ -575,7 +577,7 @@ export const EmployeeSelfService: React.FC = () => {
                   {managerPendingApprovals.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-8 text-center text-[var(--color-text-muted)]">
-                        لا توجد طلبات بانتظار إجراءك حالياً
+                        لا توجد طلبات تتطلب إجراءك حالياً
                       </td>
                     </tr>
                   )}
@@ -609,7 +611,7 @@ export const EmployeeSelfService: React.FC = () => {
           {leaveBalance && (
             <Card title="رصيد الإجازات (المستخدم والمتاح)">
               <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-                <table className="w-full text-sm text-right">
+                <table className="erp-table w-full text-sm text-right">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">النوع</th>
@@ -724,7 +726,7 @@ export const EmployeeSelfService: React.FC = () => {
           {loans.length > 0 && (
             <Card title="السُلف">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-right">
+                <table className="erp-table w-full text-sm text-right">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">النوع</th>
@@ -748,7 +750,7 @@ export const EmployeeSelfService: React.FC = () => {
                         <td className="p-3 font-mono text-xs" dir="ltr">{loan.month || loan.startMonth}</td>
                         <td className="p-3">
                           <Badge variant={loan.status === 'active' ? 'success' : loan.status === 'pending' ? 'warning' : 'neutral'}>
-                            {loan.status === 'active' ? 'نشطة' : loan.status === 'pending' ? 'قيد المراجعة' : 'مغلقة'}
+                            {loan.status === 'active' ? 'نشط' : loan.status === 'pending' ? 'قيد المراجعة' : 'مغلقة'}
                           </Badge>
                         </td>
                         <td className="p-3">
@@ -848,14 +850,14 @@ export const EmployeeSelfService: React.FC = () => {
               <div className="rounded-[var(--border-radius-base)] border border-emerald-200 bg-emerald-50 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold text-emerald-800">سركي الراتب المتاح</p>
+                    <p className="text-sm font-bold text-emerald-800">كشف الراتب المتاح</p>
                     <p className="text-xs text-emerald-700">
                       {formatPayrollMonthLabel(lockedPayslip.month)} (شهر مقفول)
                     </p>
                   </div>
                   <Button onClick={handlePrintLockedPayslip}>
                     <span className="material-icons-round text-sm">print</span>
-                    طباعة السركي
+                    طباعة الكشف
                   </Button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -864,7 +866,7 @@ export const EmployeeSelfService: React.FC = () => {
                     <p className="font-bold">{formatNumber(lockedPayslip.record.grossSalary)} ج.م</p>
                   </div>
                   <div>
-                    <p className="text-[var(--color-text-muted)]">إجمالي الاستقطاعات</p>
+                    <p className="text-[var(--color-text-muted)]">إجمالي الخصومات</p>
                     <p className="font-bold">{formatNumber(lockedPayslip.record.totalDeductions)} ج.م</p>
                   </div>
                   <div>
@@ -881,7 +883,7 @@ export const EmployeeSelfService: React.FC = () => {
               </div>
             ) : (
               <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-base)] p-3">
-                لا يتوفر سركي راتب الآن. سيظهر بعد قفل كشف الرواتب.
+                لا يتوفر كشف راتب الآن. سيظهر بعد قفل كشف الرواتب.
               </p>
             )}
             {canAccessPayroll && (
@@ -908,7 +910,7 @@ export const EmployeeSelfService: React.FC = () => {
       {!loading && activeTab === 'requests' && (
         <Card title="طلباتي (إجازات وسُلف)">
           <div className="overflow-x-auto">
-            <table className="w-full text-right">
+            <table className="erp-table w-full text-right">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">النوع</th>
@@ -965,3 +967,7 @@ export const EmployeeSelfService: React.FC = () => {
     </div>
   );
 };
+
+
+
+

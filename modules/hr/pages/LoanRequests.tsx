@@ -141,7 +141,7 @@ export const LoanRequests: React.FC = () => {
 
     const targetEmpId = isHR && formEmployeeId ? formEmployeeId : employeeId;
     const emp = employeeMap.get(targetEmpId);
-    if (!emp) { setToast({ message: 'يرجى اختيار الموظف', type: 'error' }); return; }
+    if (!emp) { setToast({ message: 'يرجى اختيار موظف', type: 'error' }); return; }
 
     setSubmitting(true);
     try {
@@ -198,7 +198,7 @@ export const LoanRequests: React.FC = () => {
       );
       if (!approvalResult.success) {
         await loanService.delete(loanId);
-        throw new Error(approvalResult.error || 'تعذر إنشاء طلب الموافقة');
+        throw new Error(approvalResult.error || 'تعذر إنشاء سلسلة الموافقة');
       }
 
       setShowForm(false);
@@ -356,7 +356,7 @@ export const LoanRequests: React.FC = () => {
         ) : (
           <>
             <StatCard icon="receipt_long" color="text-blue-500" label="إجمالي السلف" value={stats.total} />
-            <StatCard icon="trending_up" color="text-emerald-500" label="سلف نشطة" value={stats.disbursed} />
+            <StatCard icon="trending_up" color="text-emerald-500" label="سلف مصروفة" value={stats.disbursed} />
             <StatCard icon="account_balance" color="text-amber-500" label="إجمالي المتبقي" value={formatCurrency(stats.amount)} />
             <StatCard icon="payments" color="text-rose-500" label="القسط الشهري" value={formatCurrency(stats.monthly)} />
           </>
@@ -379,7 +379,7 @@ export const LoanRequests: React.FC = () => {
                     options={employeeOptions}
                     value={formEmployeeId}
                     onChange={setFormEmployeeId}
-                    placeholder="اختر الموظف..."
+                    placeholder="اختر موظفاً..."
                   />
                 </div>
               )}
@@ -545,7 +545,7 @@ const MonthlyAdvanceTable: React.FC<{
   onDelete: (id: string) => void;
 }> = ({ loans, employeeMap, canDisburse, canDelete, actionLoading, onDisburse, onDelete }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-sm">
+    <table className="erp-table w-full text-sm">
       <thead className="erp-thead">
         <tr>
           <th className="erp-th">الكود</th>
@@ -628,7 +628,7 @@ const InstallmentTable: React.FC<{
   onDelete: (id: string) => void;
 }> = ({ loans, employeeMap, expandedLoan, setExpandedLoan, canDisburse, canDelete, actionLoading, onDisburse, onDelete }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-sm">
+    <table className="erp-table w-full text-sm">
       <thead className="erp-thead">
         <tr>
           <th className="erp-th">الكود</th>

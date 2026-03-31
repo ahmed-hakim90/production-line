@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { getDocs } from 'firebase/firestore';
 import { Card, Button, Badge } from '../../../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
@@ -22,7 +23,7 @@ import { getPayrollMonth, getPayrollRecords } from '../../hr/payroll/payrollEngi
 
 export const CostCenterDistribution: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canManage = can('costs.manage');
 
@@ -57,8 +58,8 @@ export const CostCenterDistribution: React.FC = () => {
   const parseLocaleNumber = React.useCallback((value: string): number => {
     const normalized = String(value ?? '')
       .trim()
-      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
-      .replace(/[٫,]/g, '.')
+      .replace(/[٠-٩]/g, (digit) => String('ظ ١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/[ظ«,]/g, '.')
       .replace(/[^\d.-]/g, '');
     if (!normalized) return 0;
     const parsed = Number(normalized);
@@ -548,11 +549,11 @@ export const CostCenterDistribution: React.FC = () => {
                   disabled={availableSourceMonths.length === 0}
                 >
                   <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] rounded-lg border border-slate-200 bg-white text-sm">
-                    <SelectValue placeholder="اختر شهرًا سابقًا" />
+                    <SelectValue placeholder="اختر شهرظ‹ا سابقًا" />
                   </SelectTrigger>
                   <SelectContent>
                     {availableSourceMonths.length === 0 ? (
-                      <SelectItem value="none">لا توجد بيانات محفوظة في شهور سابقة</SelectItem>
+                      <SelectItem value="none">لا توجد بيانات مرجعية في شهور سابقة</SelectItem>
                     ) : (
                       availableSourceMonths.map((m) => (
                         <SelectItem key={m} value={m}>
@@ -600,7 +601,7 @@ export const CostCenterDistribution: React.FC = () => {
           )}
           {center.type === 'indirect' && (
             <p className="text-xs mt-1 text-[var(--color-text-muted)]">
-              الأساس: <span className="font-bold text-primary">{isQtyAllocation ? 'حسب كمية الإنتاج' : 'حسب نسب الخطوط'}</span>
+              الأساس: <span className="font-bold text-primary">{isQtyAllocation ? 'حسب كمية الإنتاج' : 'حسب نسب مرجعية'}</span>
               {' • '}
               نطاق المنتجات: <span className="font-bold text-primary">{center.productScope === 'selected' ? 'منتجات محددة' : center.productScope === 'category' ? 'فئة منتجات' : 'كل المنتجات'}</span>
               {' • '}
@@ -651,7 +652,7 @@ export const CostCenterDistribution: React.FC = () => {
               {(center.valueSource === 'salaries' || center.valueSource === 'combined') && (
                 <div className="space-y-2">
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    إجمالي المرتبات {existingValue ? 'المحفوظة' : 'المحسوبة'} للشهر: <span className="font-bold text-primary">{formatCost(salariesAmount)} ج.م</span>
+                    إجمالي المرتبات {existingValue ? 'المدخلة' : 'المحسوبة'} للشهر: <span className="font-bold text-primary">{formatCost(salariesAmount)} ج.م</span>
                     {center.valueSource === 'combined' && (
                       <>
                         {' '}+ تعديل ثابت: <span className="font-bold text-primary">{formatCost(fixedAdjustment)} ج.م</span>
@@ -759,7 +760,7 @@ export const CostCenterDistribution: React.FC = () => {
             {(center.valueSource === 'salaries' || center.valueSource === 'combined') && (
               <div className="space-y-2">
                 <p className="text-sm font-bold text-[var(--color-text)]">
-                  {center.employeeScope === 'department' ? 'الأقسام المرتبطة بالمركز' : 'العمالة المرتبطة بالمركز'}
+                  {center.employeeScope === 'department' ? 'الأقسام مرجعية بالمركز' : 'العمالة مرجعية بالمركز'}
                 </p>
                 {center.employeeScope === 'department' ? (
                   <div className="flex items-center gap-2 flex-wrap">
@@ -817,7 +818,7 @@ export const CostCenterDistribution: React.FC = () => {
                     checked={showAllocatedOnly}
                     onChange={(e) => setShowAllocatedOnly(e.target.checked)}
                   />
-                  عرض الخطوط ذات نسبة فقط
+                  عرض الخطوط ذات النسبة فقط
                 </label>
                 {canManage && (
                   <>
@@ -836,7 +837,7 @@ export const CostCenterDistribution: React.FC = () => {
                 <DataTable
                   columns={allocationColumns}
                   data={visibleLines}
-                  emptyMessage="لا توجد خطوط مطابقة للفلاتر الحالية."
+                  emptyMessage="لا توجد خطوط مرجعية للفلاتر الحالية."
                 />
               </div>
 
@@ -854,3 +855,6 @@ export const CostCenterDistribution: React.FC = () => {
     </div>
   );
 };
+
+
+

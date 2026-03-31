@@ -31,7 +31,7 @@ export const GeneralAlertsSection: React.FC<GeneralAlertsSectionProps> = ({
     <Card title="إعدادات التنبيهات">
       <div className="space-y-4">
         {([
-          { key: 'enablePlanDelayAlert' as keyof AlertToggleSettings, label: 'تنبيه تأخر الخطط', icon: 'schedule', desc: 'إرسال تنبيه عند تأخر خطة الإنتاج عن الموعد المحدد' },
+          { key: 'enablePlanDelayAlert' as keyof AlertToggleSettings, label: 'تنبيه تأخر الخطة', icon: 'schedule', desc: 'إرسال تنبيه عند تأخر خطة الإنتاج عن الموعد المحدد' },
           { key: 'enableCapacityAlert' as keyof AlertToggleSettings, label: 'تنبيه السعة الإنتاجية', icon: 'production_quantity_limits', desc: 'تنبيه عند اقتراب خط الإنتاج من الحد الأقصى للسعة' },
           { key: 'enableCostVarianceAlert' as keyof AlertToggleSettings, label: 'تنبيه انحراف التكلفة', icon: 'compare_arrows', desc: 'تنبيه عند تجاوز التكلفة الفعلية للتكلفة المعيارية' },
         ]).map((alert) => (

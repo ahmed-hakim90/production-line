@@ -4,6 +4,7 @@
  */
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -11,9 +12,12 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  query,
+  where,
 } from 'firebase/firestore';
 import { db, isConfigured } from './firebase';
 import type { FirestoreUser } from '../types';
+import { getCurrentTenantId } from '../lib/currentTenant';
 
 const COLLECTION = 'users';
 
@@ -34,10 +38,26 @@ export const userService = {
   async getAll(): Promise<FirestoreUser[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(
+        query(collection(db, COLLECTION), where('tenantId', '==', getCurrentTenantId())),
+      );
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreUser));
     } catch (error) {
       console.error('userService.getAll error:', error);
+      throw error;
+    }
+  },
+
+  /** Super-admin / cross-tenant: users belonging to a specific tenant (doc id = Firebase Auth uid). */
+  async listByTenantId(tenantId: string): Promise<FirestoreUser[]> {
+    if (!isConfigured || !tenantId.trim()) return [];
+    try {
+      const snap = await getDocs(
+        query(collection(db, COLLECTION), where('tenantId', '==', tenantId)),
+      );
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreUser));
+    } catch (error) {
+      console.error('userService.listByTenantId error:', error);
       throw error;
     }
   },
@@ -48,6 +68,7 @@ export const userService = {
     try {
       await setDoc(doc(db, COLLECTION, uid), {
         ...data,
+        tenantId: data.tenantId || getCurrentTenantId(),
         createdAt: serverTimestamp(),
       });
     } catch (error) {
@@ -74,6 +95,18 @@ export const userService = {
     } catch (error) {
       console.error('userService.update error:', error);
       throw error;
+    }
+  },
+
+  /** Remove deprecated minimized-modal workspace prefs (one-time migration helper). */
+  async clearModalWorkspacePreference(uid: string): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await updateDoc(doc(db, COLLECTION, uid), {
+        'uiPreferences.modalWorkspace': deleteField(),
+      });
+    } catch (error) {
+      console.warn('userService.clearModalWorkspacePreference:', error);
     }
   },
 

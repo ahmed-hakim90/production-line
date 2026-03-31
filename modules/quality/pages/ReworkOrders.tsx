@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -117,7 +117,7 @@ export const ReworkOrders: React.FC = () => {
         )}
         <div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr className="border-b border-[var(--color-border)] text-slate-500">
                 <th className="erp-th">أمر الشغل</th>

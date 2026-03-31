@@ -385,7 +385,7 @@ const AttendanceForm: React.FC<TabFormProps<'attendance'>> = ({ config, onChange
     <FormField label="فترة السماح للتأخير (دقائق)" error={getError(errors, 'lateGraceMinutes')}>
       <NumberInput value={config.lateGraceMinutes} onChange={(v) => onChange({ ...config, lateGraceMinutes: v })} min={0} disabled={readOnly} />
     </FormField>
-    <FormField label="تسجيل غياب تلقائي بعد (دقائق)" error={getError(errors, 'autoMarkAbsentAfterMinutes')} hint="0 لتعطيل الغياب التلقائي">
+    <FormField label="تسجيل غياب تلقائي بعد (دقائق)" error={getError(errors, 'autoMarkAbsentAfterMinutes')} hint="0 يعطل الغياب التلقائي">
       <NumberInput value={config.autoMarkAbsentAfterMinutes} onChange={(v) => onChange({ ...config, autoMarkAbsentAfterMinutes: v })} min={0} disabled={readOnly} />
     </FormField>
     <FormField label="الحد الأدنى لساعات الحضور" error={getError(errors, 'minimumWorkHoursForPresent')}>
@@ -397,7 +397,7 @@ const AttendanceForm: React.FC<TabFormProps<'attendance'>> = ({ config, onChange
       <Toggle checked={config.allowManualEntry} onChange={(v) => onChange({ ...config, allowManualEntry: v })} disabled={readOnly} />
     </div>
     <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
-      <span className="text-sm font-bold text-[var(--color-text)]">يتطلب تسجيل الخروج</span>
+      <span className="text-sm font-bold text-[var(--color-text)]">إلزام تسجيل الخروج</span>
       <Toggle checked={config.requireCheckOut} onChange={(v) => onChange({ ...config, requireCheckOut: v })} disabled={readOnly} />
     </div>
   </div>
@@ -421,7 +421,7 @@ const OvertimeForm: React.FC<TabFormProps<'overtime'>> = ({ config, onChange, er
       <NumberInput value={config.maxOvertimeHoursPerMonth} onChange={(v) => onChange({ ...config, maxOvertimeHoursPerMonth: v })} min={0} disabled={readOnly} />
     </FormField>
     <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
-      <span className="text-sm font-bold text-[var(--color-text)]">يتطلب موافقة مسبقة</span>
+      <span className="text-sm font-bold text-[var(--color-text)]">طلب موافقة مسبقة</span>
       <Toggle checked={config.requireApproval} onChange={(v) => onChange({ ...config, requireApproval: v })} disabled={readOnly} />
     </div>
   </div>
@@ -459,7 +459,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
         <FormField label="الحد الأقصى للإجازات المتتالية (أيام)" error={getError(errors, 'maxConsecutiveDays')}>
           <NumberInput value={config.maxConsecutiveDays} onChange={(v) => onChange({ ...config, maxConsecutiveDays: v })} min={0} disabled={readOnly} />
         </FormField>
-        <FormField label="التقرير الطبي مطلوب بعد (أيام)" error={getError(errors, 'sickDocumentThresholdDays')}>
+        <FormField label="التقرير الطبي بعد (أيام)" error={getError(errors, 'sickDocumentThresholdDays')}>
           <NumberInput value={config.sickDocumentThresholdDays} onChange={(v) => onChange({ ...config, sickDocumentThresholdDays: v })} min={1} disabled={readOnly} />
         </FormField>
         <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
@@ -467,7 +467,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
           <Toggle checked={config.allowNegativeBalance} onChange={(v) => onChange({ ...config, allowNegativeBalance: v })} disabled={readOnly} />
         </div>
         <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
-          <span className="text-sm font-bold text-[var(--color-text)]">التقرير الطبي مطلوب</span>
+          <span className="text-sm font-bold text-[var(--color-text)]">التقرير الطبي إلزامي</span>
           <Toggle checked={config.requireDocumentForSick} onChange={(v) => onChange({ ...config, requireDocumentForSick: v })} disabled={readOnly} />
         </div>
       </div>
@@ -695,13 +695,13 @@ const PayrollPreviewPanel: React.FC = () => {
 
       <Card title="معاينة كشف المرتبات">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الموظف</th>
                 <th className="erp-th">الأساسي</th>
                 <th className="erp-th">المستحقات</th>
-                <th className="erp-th">الاستقطاعات</th>
+                <th className="erp-th">الخصومات</th>
                 <th className="erp-th">الصافي</th>
                 <th className="erp-th text-center">الحالة</th>
               </tr>
@@ -724,7 +724,7 @@ const PayrollPreviewPanel: React.FC = () => {
         </div>
       </Card>
 
-      <Card title="معاينة السركي (كشف راتب موظف)">
+      <Card title="معاينة الكشف (كشف راتب تجريبي)">
         <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/40 p-4 space-y-4">
           <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
             <div>
@@ -763,7 +763,7 @@ const PayrollPreviewPanel: React.FC = () => {
               </div>
             </div>
             <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/70 p-3">
-              <p className="text-sm font-bold text-rose-700 mb-2">الاستقطاعات</p>
+              <p className="text-sm font-bold text-rose-700 mb-2">الخصومات</p>
               <div className="space-y-1.5 text-sm">
                 <div className="flex items-center justify-between"><span>خصم غياب</span><span className="font-mono font-bold text-rose-600">120.00</span></div>
                 <div className="flex items-center justify-between"><span>خصم تأخير</span><span className="font-mono font-bold text-rose-600">40.00</span></div>
@@ -784,7 +784,7 @@ const PayrollPreviewPanel: React.FC = () => {
 
 const ApprovalForm: React.FC<TabFormProps<'approval'>> = ({ config, onChange, errors, readOnly }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <FormField label="حد الموافقة التلقائية (المبلغ)" error={getError(errors, 'autoApproveBelow')} hint="0 لتعطيل الموافقة التلقائية">
+    <FormField label="حد الموافقة التلقائية (المبلغ)" error={getError(errors, 'autoApproveBelow')} hint="0 يعطل الموافقة التلقائية">
       <NumberInput value={config.autoApproveBelow} onChange={(v) => onChange({ ...config, autoApproveBelow: v })} min={0} disabled={readOnly} />
     </FormField>
     <FormField label="التصعيد بعد (أيام)" error={getError(errors, 'escalationAfterDays')}>
@@ -795,11 +795,11 @@ const ApprovalForm: React.FC<TabFormProps<'approval'>> = ({ config, onChange, er
     </FormField>
     <div />
     <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
-      <span className="text-sm font-bold text-[var(--color-text)]">يتطلب موافقة المدير</span>
+      <span className="text-sm font-bold text-[var(--color-text)]">إلزام موافقة المدير</span>
       <Toggle checked={config.requireManagerApproval} onChange={(v) => onChange({ ...config, requireManagerApproval: v })} disabled={readOnly} />
     </div>
     <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
-      <span className="text-sm font-bold text-[var(--color-text)]">إشعار عند الانتظار</span>
+      <span className="text-sm font-bold text-[var(--color-text)]">إشعار عند وجود طلبات معلقة</span>
       <Toggle checked={config.notifyOnPending} onChange={(v) => onChange({ ...config, notifyOnPending: v })} disabled={readOnly} />
     </div>
     <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
@@ -1151,7 +1151,7 @@ export const HRSettings: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold">إعدادات الموارد البشرية</h1>
-            <p className="text-sm text-slate-400">مركز التحكم المتقدم — إدارة جميع إعدادات النظام</p>
+            <p className="text-sm text-slate-400">مركز التحكم المتقدم — إدارة جميع إعدادات الموارد البشرية</p>
           </div>
         </div>
         {readOnly && (

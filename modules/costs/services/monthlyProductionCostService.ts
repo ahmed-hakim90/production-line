@@ -5,13 +5,14 @@ import {
   getDoc,
   setDoc,
   writeBatch,
-  query,
   where,
   limit,
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { IPayrollProvider, MonthlyPayrollData } from '../../shared/contracts/IPayrollProvider';
 import type { IProductionProvider, ProductionReportData } from '../../shared/contracts/IProductionProvider';
 import { payrollAdapter } from '../adapters/PayrollAdapter';
@@ -146,6 +147,7 @@ async function persistResolvedCenterValues(
   centerValues: Map<string, CenterResolvedValue>,
   existingValues: CostCenterValue[],
 ): Promise<void> {
+  const tenantId = getCurrentTenantId();
   const existingByCenterId = new Map<string, CostCenterValue>();
   existingValues.forEach((value) => {
     if (value.month !== month) return;
@@ -187,7 +189,7 @@ async function persistResolvedCenterValues(
     const ref = existing?.id
       ? doc(db, 'cost_center_values', String(existing.id))
       : doc(collection(db, 'cost_center_values'));
-    batch.set(ref, payload, { merge: true });
+    batch.set(ref, { ...payload, tenantId }, { merge: true });
     pendingOps += 1;
     if (pendingOps >= 450) {
       await commitChunk();
@@ -342,8 +344,9 @@ async function resolveCenterValuesForMonth(
 }
 
 async function isMonthClosedForAnyProduct(month: string): Promise<boolean> {
-  const monthClosedQuery = query(
-    collection(db, COLLECTION),
+  const monthClosedQuery = tenantQuery(
+    db,
+    COLLECTION,
     where('month', '==', month),
     where('isClosed', '==', true),
     limit(1),
@@ -439,8 +442,9 @@ export const monthlyProductionCostService = {
   async getByProduct(productId: string): Promise<MonthlyProductionCost[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('productId', '==', productId),
         orderBy('month', 'desc'),
       );
@@ -455,8 +459,9 @@ export const monthlyProductionCostService = {
   async getByMonth(month: string): Promise<MonthlyProductionCost[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('month', '==', month),
       );
       const snap = await getDocs(q);
@@ -581,6 +586,7 @@ export const monthlyProductionCostService = {
     const centerValues = context.centerValues;
 
     if (productReports.length === 0) {
+      const tenantId = getCurrentTenantId();
       const emptyDoc: Omit<MonthlyProductionCost, 'id'> = {
         productId,
         month,
@@ -592,7 +598,7 @@ export const monthlyProductionCostService = {
         isClosed: false,
         calculatedAt: serverTimestamp(),
       };
-      await setDoc(doc(db, COLLECTION, docId(productId, month)), emptyDoc);
+      await setDoc(doc(db, COLLECTION, docId(productId, month)), { ...emptyDoc, tenantId });
       return { id: docId(productId, month), ...emptyDoc };
     }
 
@@ -674,7 +680,10 @@ export const monthlyProductionCostService = {
       calculatedAt: serverTimestamp(),
     };
 
-    await setDoc(doc(db, COLLECTION, docId(productId, month)), record);
+    await setDoc(doc(db, COLLECTION, docId(productId, month)), {
+      ...record,
+      tenantId: getCurrentTenantId(),
+    });
     return { id: docId(productId, month), ...record };
   },
 
@@ -740,7 +749,7 @@ export const monthlyProductionCostService = {
     if (!existing) return;
     await setDoc(
       doc(db, COLLECTION, id),
-      { ...existing, isClosed: true, calculatedAt: serverTimestamp() },
+      { ...existing, isClosed: true, calculatedAt: serverTimestamp(), tenantId: getCurrentTenantId() },
       { merge: true },
     );
   },
@@ -759,7 +768,13 @@ export const monthlyProductionCostService = {
     for (const pid of uniqueProductIds) {
       batch.set(
         doc(db, COLLECTION, docId(pid, month)),
-        { productId: pid, month, isClosed: true, calculatedAt: serverTimestamp() },
+        {
+          productId: pid,
+          month,
+          isClosed: true,
+          calculatedAt: serverTimestamp(),
+          tenantId: getCurrentTenantId(),
+        },
         { merge: true },
       );
       pendingOps += 1;

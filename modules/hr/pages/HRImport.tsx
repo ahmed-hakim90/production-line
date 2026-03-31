@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
@@ -19,7 +19,7 @@ type ImportStep = 'upload' | 'preview' | 'importing' | 'done';
 type PreviewTab = 'employees' | 'departments' | 'positions';
 
 export const HRImport: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const addJob = useJobsStore((s) => s.addJob);
@@ -191,7 +191,7 @@ export const HRImport: React.FC = () => {
         deptCount++;
         setImportProgress((p) => ({ ...p, depts: deptCount }));
       } catch (err) {
-        errors.push(`خطأ في إنشاء القسم "${dept.name}": ${err instanceof Error ? err.message : 'خطأ'}`);
+        errors.push(`خطأ في إنشاء القسم "${dept.name}": ${err instanceof Error ? err.message : 'غير معروف'}`);
       }
       doneOps++;
       setJobProgress(jobId, { processedRows: doneOps, totalRows: totalOps || 1, statusText: 'Saving to database...', status: 'processing' });
@@ -254,7 +254,7 @@ export const HRImport: React.FC = () => {
         posCount++;
         setImportProgress((p) => ({ ...p, positions: posCount }));
       } catch (err) {
-        errors.push(`خطأ في إنشاء المنصب "${pos.title}": ${err instanceof Error ? err.message : 'خطأ'}`);
+        errors.push(`خطأ في إنشاء المنصب "${pos.title}": ${err instanceof Error ? err.message : 'غير معروف'}`);
       }
       doneOps++;
       setJobProgress(jobId, { processedRows: doneOps, totalRows: totalOps || 1, statusText: 'Saving to database...', status: 'processing' });
@@ -335,7 +335,7 @@ export const HRImport: React.FC = () => {
         }
       } catch (err) {
         const action = emp.existingId ? 'تحديث' : 'إنشاء';
-        errors.push(`خطأ في ${action} الموظف "${emp.name}": ${err instanceof Error ? err.message : 'خطأ'}`);
+        errors.push(`خطأ في ${action} الموظف "${emp.name}": ${err instanceof Error ? err.message : 'غير معروف'}`);
       }
       doneOps++;
       setJobProgress(jobId, { processedRows: doneOps, totalRows: totalOps || 1, statusText: 'Saving to database...', status: 'processing' });
@@ -525,7 +525,7 @@ export const HRImport: React.FC = () => {
                 <p className="text-xl font-bold text-[var(--color-text)]">{lookups.shifts.length}</p>
               </div>
               <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفين حاليين</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفون حاليون</p>
                 <p className="text-xl font-bold text-[var(--color-text)]">{lookups.employees.length}</p>
               </div>
             </div>
@@ -567,7 +567,7 @@ export const HRImport: React.FC = () => {
           {/* Tabs */}
           <div className="flex gap-1 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1">
             {([
-              { key: 'employees' as PreviewTab, label: 'الموظفين', count: result.employees.rows.length, icon: 'groups' },
+              { key: 'employees' as PreviewTab, label: 'الموظفون', count: result.employees.rows.length, icon: 'groups' },
               { key: 'departments' as PreviewTab, label: 'الأقسام', count: result.departments.rows.length, icon: 'business' },
               { key: 'positions' as PreviewTab, label: 'المناصب', count: result.positions.rows.length, icon: 'work' },
             ]).map((t) => (
@@ -595,12 +595,12 @@ export const HRImport: React.FC = () => {
 
           {/* Department preview */}
           {tab === 'departments' && (
-            <Card title={`الأقسام — ${result.departments.valid} صالح، ${result.departments.errors} خطأ`}>
+            <Card title={`الأقسام — ${result.departments.valid} صالح، ${result.departments.errors} أخطاء`}>
               {result.departments.rows.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات أقسام في الملف (ورقة "الأقسام")</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="erp-table w-full text-sm">
                     <thead className="erp-thead">
                       <tr>
                         <th className="erp-th">#</th>
@@ -650,12 +650,12 @@ export const HRImport: React.FC = () => {
 
           {/* Position preview */}
           {tab === 'positions' && (
-            <Card title={`المناصب — ${result.positions.valid} صالح، ${result.positions.errors} خطأ`}>
+            <Card title={`المناصب — ${result.positions.valid} صالح، ${result.positions.errors} أخطاء`}>
               {result.positions.rows.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات مناصب في الملف (ورقة "المناصب")</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="erp-table w-full text-sm">
                     <thead className="erp-thead">
                       <tr>
                         <th className="erp-th">#</th>
@@ -707,7 +707,7 @@ export const HRImport: React.FC = () => {
 
           {/* Employee preview */}
           {tab === 'employees' && (
-            <Card title={`الموظفين — ${result.employees.valid - result.employees.updates} جديد، ${result.employees.updates} تحديث، ${result.employees.errors} خطأ`}>
+            <Card title={`الموظفون — ${result.employees.valid - result.employees.updates} جديد، ${result.employees.updates} تحديث، ${result.employees.errors} أخطاء`}>
               {result.employees.rows.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات موظفين في الملف (ورقة "الموظفين")</p>
               ) : (
@@ -727,12 +727,12 @@ export const HRImport: React.FC = () => {
                       <span className="material-icons-round text-amber-500 text-lg mt-0.5">info</span>
                       <div className="text-xs text-amber-700 font-medium">
                         <p className="font-bold mb-0.5">تم اكتشاف موظفين حاليين</p>
-                        <p>الصفوف المميزة بـ "تحديث" سيتم تحديث بياناتها فقط بالأعمدة الموجودة في الملف — لن يتم مسح أي بيانات قديمة.</p>
+                        <p>الصفوف المميزة بظ€ "تحديث" سيتم تحديث بياناتها فقط بالأعمدة الموجودة في الملف — لن يتم مسح أي بيانات قديمة.</p>
                       </div>
                     </div>
                   )}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="erp-table w-full text-sm">
                       <thead className="erp-thead">
                         <tr>
                           <th className="erp-th">#</th>
@@ -748,7 +748,7 @@ export const HRImport: React.FC = () => {
                           <th className="erp-th">المركبة</th>
                           <th className="erp-th">البريد</th>
                           <th className="erp-th">نشط</th>
-                          <th className="erp-th">الأخطاء</th>
+                          <th className="erp-th">الملاحظات</th>
                           <th className="erp-th">إجراء</th>
                         </tr>
                       </thead>
@@ -866,7 +866,7 @@ export const HRImport: React.FC = () => {
                 )}
                 {result && (result.employees.valid - result.employees.updates) > 0 && (
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">موظفين جدد</span>
+                    <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">موظفون جدد</span>
                     <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
@@ -910,7 +910,7 @@ export const HRImport: React.FC = () => {
             </div>
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
               <span className="material-icons-round text-emerald-500 text-3xl mb-2 block">person_add</span>
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفين جدد</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفون جدد</p>
               <p className="text-2xl font-bold text-emerald-600">{importDone.employees}</p>
             </div>
             {importDone.updated > 0 && (
@@ -934,8 +934,8 @@ export const HRImport: React.FC = () => {
                 تم الاستيراد بنجاح!
                 {importDone.depts > 0 && ` تمت إضافة ${importDone.depts} قسم`}
                 {importDone.positions > 0 && ` و${importDone.positions} منصب`}
-                {importDone.employees > 0 && ` و${importDone.employees} موظف جديد`}
-                {importDone.updated > 0 && ` وتحديث ${importDone.updated} موظف حالي`}
+                {importDone.employees > 0 && ` و${importDone.employees} مو?? جديد`}
+                {importDone.updated > 0 && ` وتحديث ${importDone.updated} مو?? حالي`}
                 .
               </p>
             </div>
@@ -969,4 +969,8 @@ export const HRImport: React.FC = () => {
     </div>
   );
 };
+
+
+
+
 

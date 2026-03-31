@@ -91,6 +91,7 @@ export interface FirestoreProduct {
 
 export interface ProductMaterial {
   id?: string;
+  tenantId?: string;
   productId: string;
   materialId?: string;
   materialName: string;
@@ -244,6 +245,7 @@ export type SupervisorLineAssignmentReason = 'assign' | 'reassign' | 'remove' | 
 
 export interface SupervisorLineAssignment {
   id?: string;
+  tenantId?: string;
   lineId: string;
   supervisorId: string;
   effectiveFrom: string;
@@ -838,6 +840,13 @@ export interface ThemeSettings {
   sidebarIconStyle: SidebarIconStyle;
   textColor?: string;
   mutedTextColor?: string;
+  /** عرض أقصى لحاوية المحتوى الرئيسي (قيمة CSS، مثل 1536px أو 100%). */
+  contentMaxWidth?: string;
+  /**
+   * تخصيص عرض المحتوى حسب بادئة المسار (مفتاح = بداية المسار، قيمة = max-width CSS).
+   * مثال: { "/inventory": "1200px" }
+   */
+  pageLayoutOverrides?: Record<string, string>;
 }
 
 export interface DashboardDisplaySettings {
@@ -906,6 +915,45 @@ export interface SystemSettings {
   quickActions?: QuickActionItem[];
   exportImport?: ExportImportSettings;
   attendanceIntegration?: AttendanceIntegrationSettings;
+  /** أقل إصدار عميل مسموح (صيغة x.y.z) عند تفعيل forceClientUpdate */
+  minimumClientVersion?: string;
+  /** عند true مع minimumClientVersion أقل من إصدار البناء، يُمنع استخدام التطبيق حتى التحديث */
+  forceClientUpdate?: boolean;
+  /** رسالة تظهر على شاشة التحديث الإجباري */
+  clientUpdateMessageAr?: string;
+}
+
+// ─── Multi-tenant ────────────────────────────────────────────────────────────
+
+export interface FirestoreTenant {
+  id?: string;
+  slug: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  theme?: ThemeSettings;
+  status: 'pending' | 'active' | 'suspended';
+  createdAt?: any;
+  approvedAt?: any;
+  approvedBy?: string;
+}
+
+export interface TenantSlugDoc {
+  tenantId: string;
+}
+
+export interface PendingTenant {
+  id?: string;
+  slug: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  adminEmail: string;
+  adminDisplayName: string;
+  requestedAt?: any;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  adminUid?: string;
 }
 
 // ─── Dynamic Roles & Permissions ─────────────────────────────────────────────
@@ -913,11 +961,22 @@ export interface SystemSettings {
 /** @deprecated use FirestoreRole + dynamic permissions instead */
 export type UserRole = 'admin' | 'factory_manager' | 'hall_supervisor' | 'supervisor';
 
+/** Stable key for defaults and Cloud Functions (e.g. admin, factory_manager) */
+export type FirestoreRoleKey =
+  | 'admin'
+  | 'factory_manager'
+  | 'hall_supervisor'
+  | 'supervisor'
+  | 'hr_manager'
+  | 'accountant';
+
 export interface FirestoreRole {
   id?: string;
   name: string;
   color: string;
   permissions: Record<string, boolean>;
+  tenantId?: string;
+  roleKey?: FirestoreRoleKey;
 }
 
 export interface FirestoreUser {
@@ -927,7 +986,8 @@ export interface FirestoreUser {
   code?: string;
   roleId: string;
   role?: string;
-  tenantId?: string;
+  tenantId: string;
+  isSuperAdmin?: boolean;
   isActive: boolean;
   notifications?: {
     productionReports?: boolean;
@@ -935,17 +995,9 @@ export interface FirestoreUser {
     stockAlerts?: boolean;
   };
   uiPreferences?: {
-    modalWorkspace?: {
-      items: Array<{
-        id: string;
-        title: string;
-        route: string;
-        favorite: boolean;
-        openerText?: string;
-        modalKey?: string;
-        openerSelector?: string;
-      }>;
-    };
+    /** UI language preference stored per user. */
+    language?: 'ar' | 'en';
+    [key: string]: unknown;
   };
   createdAt?: any;
   createdBy?: string;

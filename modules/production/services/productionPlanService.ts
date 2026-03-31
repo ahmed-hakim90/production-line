@@ -13,6 +13,8 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { ProductionPlan } from '../../../types';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 
 const COLLECTION = 'production_plans';
 
@@ -20,7 +22,7 @@ export const productionPlanService = {
   async getAll(): Promise<ProductionPlan[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionPlan));
     } catch (error) {
       console.error('productionPlanService.getAll error:', error);
@@ -44,7 +46,7 @@ export const productionPlanService = {
     if (!isConfigured) return [];
     try {
       const q = query(
-        collection(db, COLLECTION),
+        tenantQuery(db, COLLECTION),
         where('lineId', '==', lineId),
         where('status', 'in', ['planned', 'in_progress']),
       );
@@ -62,6 +64,7 @@ export const productionPlanService = {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
         createdAt: serverTimestamp(),
+        tenantId: getCurrentTenantId(),
       });
       return ref.id;
     } catch (error) {
@@ -108,7 +111,7 @@ export const productionPlanService = {
     if (!isConfigured) return [];
     try {
       const q = query(
-        collection(db, COLLECTION),
+        tenantQuery(db, COLLECTION),
         where('lineId', '==', lineId),
         where('productId', '==', productId),
         where('status', 'in', ['planned', 'in_progress']),

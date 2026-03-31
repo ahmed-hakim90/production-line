@@ -392,7 +392,7 @@ export const SupervisorLineAssignment: React.FC = () => {
               <span className="text-sm">#</span>
             </div>
             <div>
-              <p className="text-xs font-normal text-gray-500">إجمالي الخطوط</p>
+              <p className="text-xs font-normal text-gray-500">إجمالي التعيينات</p>
               <p className="text-xl font-medium text-gray-800">{toAr(totalLines)}</p>
             </div>
           </div>

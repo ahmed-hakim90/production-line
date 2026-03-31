@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ALL_MENU_ITEMS, MENU_CONFIG, type MenuItem } from '@/config/menu.config';
+import { logicalPathnameFromLocation } from '@/lib/tenantPaths';
 
 const SIDEBAR_COLLAPSE_KEY = 'ui.sidebar.collapsed';
 const BADGE_REFRESH_INTERVAL = 60_000;
@@ -99,16 +100,17 @@ export function useSidebarActiveRoute() {
 
   const isActiveItem = useCallback(
     (item: MenuItem) => {
+      const logicalPath = logicalPathnameFromLocation(pathname);
       if (item.path.includes('?')) {
         const [itemPath, itemQuery = ''] = item.path.split('?');
-        if (pathname !== itemPath) return false;
+        if (logicalPath !== itemPath) return false;
         const currentParams = new URLSearchParams(search);
         const targetParams  = new URLSearchParams(itemQuery);
         return Array.from(targetParams.entries()).every(([k, v]) => currentParams.get(k) === v);
       }
-      if (pathname === item.path) return true;
-      if (item.activePatterns?.some((p) => pathname.startsWith(p))) return true;
-      return item.path !== '/' && pathname.startsWith(`${item.path}/`);
+      if (logicalPath === item.path) return true;
+      if (item.activePatterns?.some((p) => logicalPath.startsWith(p))) return true;
+      return item.path !== '/' && logicalPath.startsWith(`${item.path}/`);
     },
     [pathname, search],
   );

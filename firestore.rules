@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -21,10 +22,25 @@ service cloud.firestore {
       return get(currentRolePath());
     }
 
+    function isSuperAdmin() {
+      return isAuthenticated()
+        && exists(currentUserPath())
+        && currentUserDoc().data.isSuperAdmin == true;
+    }
+
+    function roleBelongsToTenant() {
+      let rid = currentUserDoc().data.roleId;
+      return rid != null && rid != ''
+        && exists(/databases/$(database)/documents/roles/$(rid))
+        && get(/databases/$(database)/documents/roles/$(rid)).data.tenantId
+          == currentUserDoc().data.tenantId;
+    }
+
     function hasPermission(permissionKey) {
       return isAuthenticated()
         && exists(currentUserPath())
         && exists(currentRolePath())
+        && roleBelongsToTenant()
         && currentRoleDoc().data.permissions[permissionKey] == true;
     }
 
@@ -38,8 +54,149 @@ service cloud.firestore {
       return isAuthenticated() && !exists(currentUserPath());
     }
 
+    function sameTenant() {
+      return isActiveUser()
+        && resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    function sameTenantWrite() {
+      return isActiveUser()
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    function sameTenantUpdate() {
+      return isActiveUser()
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    /** During migration, docs may lack tenantId; treat as single-tenant legacy (backfill tenantId for strict multi-tenant isolation). */
+    function sameTenantOrLegacyRead() {
+      return isActiveUser()
+        && (
+          resource == null
+          || !('tenantId' in resource.data)
+          || resource.data.tenantId == currentUserDoc().data.tenantId
+        );
+    }
+
+    function sameTenantOrLegacyWrite() {
+      return isActiveUser()
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    function sameTenantOrLegacyUpdate() {
+      return isActiveUser()
+        && (!('tenantId' in resource.data)
+          || resource.data.tenantId == currentUserDoc().data.tenantId)
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    /**
+     * Gradual hardening (after backfillTenantId / data audit):
+     * 1. Ensure all business docs in production have tenantId set.
+     * 2. Replace sameTenantOrLegacyRead with sameTenant on read for isBusinessCollection.
+     * 3. Replace sameTenantOrLegacyUpdate with sameTenantUpdate where legacy reads are no longer needed.
+     * 4. Keep payroll_* on legacy helpers until those collections are fully migrated.
+     */
+
+    function isBusinessCollection(coll) {
+      return coll in [
+        'products', 'production_lines', 'productionLines', 'employees', 'production_reports',
+        'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
+        'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
+        'work_orders', 'notifications', 'scan_events', 'product_materials', 'monthly_production_costs',
+        'line_worker_assignments', 'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
+        'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',
+        'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations', 'system_settings',
+        'activity_logs', 'audit_logs', 'departments', 'job_positions', 'shifts', 'hr_settings',
+        'penalty_rules', 'late_rules', 'allowance_types', 'attendance_raw_logs', 'attendance_logs',
+        'attendance_records', 'attendance_monthly_summaries', 'attendance_import_history',
+        'leave_requests', 'leave_balances', 'employee_loans', 'employee_allowances', 'employee_deductions',
+        'vehicles', 'approval_requests', 'approval_settings', 'approval_delegations', 'approval_audit_logs',
+        'hr_notifications', 'employee_performance', 'employee_bonuses', 'hr_config_modules',
+        'hr_config_audit_logs', 'quality_settings', 'quality_reason_catalog', 'quality_workers_assignments',
+        'quality_inspections', 'quality_defects', 'quality_rework_orders', 'quality_capa', 'quality_print_logs',
+        'production_report_uniques', 'product_categories', 'automation_runs', 'backups'
+      ];
+    }
+
     function isPresenceOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /tenant_slugs/{slug} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow read: if isSuperAdmin();
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin()
+        || (isActiveUser()
+          && currentUserDoc().data.tenantId == tenantId
+          && hasPermission('settings.edit')
+          && request.resource.data.slug == resource.data.slug
+          && request.resource.data.status == resource.data.status);
+    }
+
+    match /pending_tenants/{id} {
+      allow create: if isAuthenticated();
+      allow read, update: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId
+        || isSuperAdmin()
+        || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
+          && (hasPermission('users.manage') || hasPermission('roles.manage')))
+      );
+      allow create: if (isAuthenticated()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']))
+        || (isSuperAdmin()
+        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']));
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == userId && resource.data.tenantId == currentUserDoc().data.tenantId)
+        || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
+          && (hasPermission('users.manage') || hasPermission('roles.manage')))
+        || isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin()
+        || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
+          && hasPermission('users.manage'));
+    }
+
+    match /users/{userId}/fcmTokens/{tokenId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/preferences/{prefId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /roles/{roleId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin()
+        || (exists(currentUserPath()) && resource.data.tenantId == currentUserDoc().data.tenantId)
+      );
+      /* Super-admin approves pending companies: seedIfEmpty() creates roles for the NEW tenantId — tenant admins use roles.manage on their own tenant. */
+      allow create: if isSuperAdmin()
+        || (isActiveUser() && hasPermission('roles.manage') && sameTenantWrite());
+      allow update, delete: if isSuperAdmin()
+        || (isActiveUser() && hasPermission('roles.manage') && sameTenantUpdate());
+    }
+
+    match /dashboardStats/{tenantId}/daily/{dayId} {
+      allow read, write: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+    }
+
+    match /dashboardStats/{tenantId}/monthly/{monthId} {
+      allow read, write: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
     }
 
     match /user_presence/{userId} {
@@ -55,56 +212,58 @@ service cloud.firestore {
         && (resource.data.userId == request.auth.uid || hasPermission('roles.manage'));
     }
 
-    match /users/{userId}/fcmTokens/{tokenId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Payroll hardening (Phase 1): explicit least-privilege rules for sensitive writes.
     match /payroll_months/{monthId} {
-      allow read: if isActiveUser();
-      allow create, delete: if hasPermission('payroll.generate');
-      allow update: if hasPermission('payroll.generate')
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow create: if hasPermission('payroll.generate') && sameTenantOrLegacyWrite();
+      allow delete: if hasPermission('payroll.generate') && sameTenantOrLegacyRead();
+      allow update: if (hasPermission('payroll.generate')
         || hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock');
+        || hasPermission('payroll.lock'))
+        && sameTenantOrLegacyUpdate();
     }
 
     match /payroll_records/{recordId} {
-      allow read: if isActiveUser();
-      allow create, delete: if hasPermission('payroll.generate');
-      allow update: if hasPermission('payroll.generate')
-        || hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock')
-        || hasPermission('payroll.accounts.disburse');
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow create: if hasPermission('payroll.generate') && sameTenantOrLegacyWrite();
+      allow delete: if hasPermission('payroll.generate') && sameTenantOrLegacyRead();
+      allow update: if (
+          hasPermission('payroll.generate')
+          || hasPermission('payroll.finalize')
+          || hasPermission('payroll.lock')
+          || hasPermission('payroll.accounts.disburse')
+        )
+        && sameTenantOrLegacyUpdate();
     }
 
     match /payroll_audit_logs/{logId} {
-      allow read: if isActiveUser();
-      allow create: if hasPermission('payroll.generate')
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow create: if (hasPermission('payroll.generate')
         || hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock');
+        || hasPermission('payroll.lock'))
+        && sameTenantOrLegacyWrite();
     }
 
     match /payroll_cost_summary/{summaryId} {
-      allow read: if isActiveUser();
-      allow create, update, delete: if hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock');
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow create, update: if (hasPermission('payroll.finalize')
+        || hasPermission('payroll.lock'))
+        && sameTenantOrLegacyWrite();
+      allow delete: if (hasPermission('payroll.finalize')
+        || hasPermission('payroll.lock'))
+        && sameTenantOrLegacyRead();
     }
 
     match /payroll_distributions/{distributionId} {
-      allow read: if hasPermission('payroll.view') || hasPermission('payroll.accounts.view');
-      allow create, update, delete: if hasPermission('payroll.accounts.disburse');
+      allow read: if (hasPermission('payroll.view') || hasPermission('payroll.accounts.view')) && sameTenantOrLegacyRead();
+      allow create, update: if hasPermission('payroll.accounts.disburse') && sameTenantOrLegacyWrite();
+      allow delete: if hasPermission('payroll.accounts.disburse') && sameTenantOrLegacyRead();
     }
 
-    match /{document=**} {
-      // Temporary baseline hardening:
-      // - Active users can continue working.
-      // - Bootstrap users (before user doc creation) can complete setup.
-      allow read, write: if (isActiveUser() || isBootstrap())
-        && !document.matches('payroll_months/.*')
-        && !document.matches('payroll_records/.*')
-        && !document.matches('payroll_audit_logs/.*')
-        && !document.matches('payroll_cost_summary/.*')
-        && !document.matches('payroll_distributions/.*');
+    match /{coll}/{docId} {
+      allow read: if isBusinessCollection(coll) && sameTenantOrLegacyRead();
+      allow create: if isBusinessCollection(coll) && sameTenantOrLegacyWrite();
+      allow update: if isBusinessCollection(coll) && sameTenantOrLegacyUpdate();
+      allow delete: if isBusinessCollection(coll) && sameTenantOrLegacyRead();
     }
   }
 }

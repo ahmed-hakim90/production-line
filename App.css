@@ -8,46 +8,7 @@
   box-sizing: border-box;
 }
 
-:root {
-  /* Typography scale */
-  --font-size-base: 13px;
-  --font-size-sm: 12px;
-  --font-size-xs: 11px;
-  --font-size-2xs: 10px;
-
-  /* Surfaces */
-  --color-bg:           #f0f2f5;
-  --color-card:         #ffffff;
-  --color-border:       #d1d8dd;
-  --color-text:         #1a1a1a;
-  --color-text-muted:   #8d99a6;
-
-  /* Sidebar */
-  --color-sidebar-bg:     #ffffff;
-  --color-sidebar-text:   #1f272e;
-  --color-sidebar-border: #e8e8e8;
-
-  /* Geometry */
-  --border-radius-sm:  4px;
-  --border-radius-base: 6px;
-  --border-radius-lg:  8px;
-  --border-radius-xl:  12px;
-
-  /* Elevation */
-  --shadow-card: none;
-  --shadow-dropdown: none;
-  --shadow-modal: none;
-
-  /* Chart palette */
-  --chart-1: #1392ec;
-  --chart-2: #10b981;
-  --chart-3: #f59e0b;
-  --chart-4: #ef4444;
-  --chart-5: #8b5cf6;
-  --chart-6: #ec4899;
-  --chart-7: #06b6d4;
-  --chart-8: #84cc16;
-}
+/* Design tokens live in src/index.css (:root). Chart palette + radii are defined there. */
 
 html, body, #root { height: 100%; }
 html, body { overscroll-behavior-y: none; }
@@ -63,7 +24,7 @@ body {
 
 /* ── Focus ──────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid rgb(var(--color-primary) / 0.4);
+  outline: 2px solid rgb(var(--color-primary) / 0.55);
   outline-offset: 2px;
 }
 
@@ -75,22 +36,23 @@ body {
 
 /* ══════════════════════════════════════════════════════════
    ERPNext Table System
-   Targets <table> elements used in DataTable + all pages
+   Scoped to .erp-table so shadcn/Radix tables are not double-styled.
+   Add className="erp-table" (or use components/ui/table which sets it).
    ══════════════════════════════════════════════════════════ */
 
-table {
+table.erp-table {
   border-collapse: collapse;
   width: 100%;
   font-size: 14px;
 }
 
 /* Header row */
-table thead tr {
-  background-color: #f8f9fa !important;
+table.erp-table thead tr {
+  background-color: var(--color-bg) !important;
   border-bottom: 1px solid var(--color-border) !important;
 }
 
-table thead th {
+table.erp-table thead th {
   padding: 8px 12px !important;
   font-size: 12px !important;
   font-weight: 600 !important;
@@ -101,16 +63,16 @@ table thead th {
 }
 
 /* Body rows */
-table tbody tr {
-  border-bottom: 1px solid #f0f2f5 !important;
+table.erp-table tbody tr {
+  border-bottom: 1px solid var(--color-border) !important;
   transition: background-color 100ms ease !important;
 }
 
-table tbody tr:hover {
-  background-color: #f8f9fa !important;
+table.erp-table tbody tr:hover {
+  background-color: var(--color-bg) !important;
 }
 
-table tbody td {
+table.erp-table tbody td {
   padding: 9px 12px !important;
   font-size: 13.5px !important;
   color: var(--color-text) !important;
@@ -131,12 +93,14 @@ input[type="time"],
 input[type="datetime-local"],
 textarea,
 select {
-  background-color: #f8f9fa !important;
+  background-color: var(--color-card) !important;
   border: 1px solid var(--color-border) !important;
   border-radius: var(--border-radius-base) !important;
   font-size: 14px !important;
   color: var(--color-text) !important;
-  transition: border-color 150ms, box-shadow 150ms !important;
+  transition:
+    border-color var(--motion-duration, 150ms) var(--motion-ease, ease),
+    box-shadow var(--motion-duration, 150ms) var(--motion-ease, ease) !important;
   font-family: var(--font-family-base) !important;
 }
 
@@ -151,7 +115,7 @@ input[type="datetime-local"]:focus,
 textarea:focus,
 select:focus {
   outline: none !important;
-  background-color: #ffffff !important;
+  background-color: var(--color-card) !important;
   border-color: rgb(var(--color-primary)) !important;
   box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.12) !important;
 }
@@ -200,7 +164,7 @@ input[type="checkbox"] {
 .section-head {
   padding: 10px 16px;
   border-bottom: 1px solid var(--color-border);
-  background: #f8f9fa;
+  background: var(--color-bg);
   font-size: 12px;
   font-weight: 600;
   color: var(--color-text-muted);
@@ -371,14 +335,14 @@ button {
    ═══════════════════════════════════════════════════════════ */
 
 .erp-auth-page {
-  /* ── Fixed indigo brand colors — independent of system theme ── */
+  /* Auth shell now follows semantic tokens with indigo defaults. */
   --color-primary: 79 70 229;        /* indigo-600 */
   --color-primary-hover: 67 56 202;  /* indigo-700 */
-  --color-bg: #f1f2fe;
-  --color-card: #ffffff;
-  --color-border: #e2e3f0;
-  --color-text: #1e1b4b;
-  --color-text-muted: #6b7280;
+  --color-bg: var(--background-auth, #f1f2fe);
+  --color-card: var(--card-auth, var(--color-card, #ffffff));
+  --color-border: var(--border-auth, var(--color-border, #e2e3f0));
+  --color-text: var(--text-auth, var(--color-text, #1e1b4b));
+  --color-text-muted: var(--text-muted-auth, var(--color-text-muted, #6b7280));
 
   min-height: 100vh;
   background: var(--color-bg);
@@ -406,6 +370,34 @@ button {
 
 @media (min-width: 900px) {
   .erp-auth-panel { display: flex; }
+}
+
+/* Public marketing landing (`/`) — standalone shell, not auth layout */
+.landing-marketing {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 120% 80% at 100% -20%, rgb(var(--color-primary) / 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 50% at 0% 100%, rgb(99 102 241 / 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #eef2ff 100%);
+  color: var(--color-text);
+}
+
+.landing-marketing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: rgba(248, 250, 252, 0.82);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+}
+
+.landing-marketing-hero-img {
+  border-radius: var(--border-radius-xl);
+  box-shadow:
+    0 24px 48px -12px rgb(15 23 42 / 0.18),
+    0 0 0 1px rgb(15 23 42 / 0.06);
 }
 
 .erp-auth-panel::before {
@@ -641,6 +633,19 @@ button {
   margin-bottom: 16px;
 }
 
+.erp-auth-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .erp-auth-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
 .erp-auth-field label {
   display: block;
   font-size: 12px !important;
@@ -648,6 +653,20 @@ button {
   color: var(--color-text) !important;
   margin-bottom: 6px !important;
   letter-spacing: 0;
+}
+
+.erp-auth-field-hint {
+  margin: 7px 0 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.erp-auth-field-hint span {
+  display: inline-block;
+  margin-top: 2px;
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .erp-auth-input-wrap {
@@ -753,6 +772,27 @@ button {
 .erp-auth-link-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.register-company-tip {
+  margin-top: 6px;
+}
+
+/* Register company — branded panel background (imagegen asset in public/landing/) */
+.register-company-auth-panel.erp-auth-panel {
+  background:
+    linear-gradient(
+      155deg,
+      rgb(var(--color-primary) / 0.91) 0%,
+      rgb(30 27 75 / 0.88) 55%,
+      rgb(49 46 129 / 0.86) 100%
+    ),
+    url('/landing/register-panel-bg.png') center / cover no-repeat;
+}
+
+.register-company-auth-panel.erp-auth-panel::before,
+.register-company-auth-panel.erp-auth-panel::after {
+  display: none;
 }
 
 /* Footer link */
@@ -1383,9 +1423,9 @@ html.dark {
   --color-sidebar-border: #1e2a38;
 }
 
-html.dark table thead tr { background-color: #1a2433 !important; }
-html.dark table tbody tr:hover { background-color: #1a2433 !important; }
-html.dark table tbody tr { border-bottom-color: #1e2a38 !important; }
+html.dark table.erp-table thead tr { background-color: #1a2433 !important; }
+html.dark table.erp-table tbody tr:hover { background-color: #1a2433 !important; }
+html.dark table.erp-table tbody tr { border-bottom-color: #1e2a38 !important; }
 html.dark input, html.dark textarea, html.dark select {
   background-color: #1e2a38 !important;
   border-color: #1e2a38 !important;
@@ -1416,6 +1456,7 @@ html.dark [class*="text-slate-500"] {
 
 /* Modal overlay backdrop */
 .erp-modal-overlay {
+  margin-top: -50px!important;
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.45);
@@ -1682,8 +1723,8 @@ select {
    ══════════════════════════════════════════════════════════ */
 
 /* Selected row highlight */
-table tbody tr.row-selected,
-table tbody tr[data-selected="true"] {
+table.erp-table tbody tr.row-selected,
+table.erp-table tbody tr[data-selected="true"] {
   background-color: rgb(var(--color-primary) / 0.05) !important;
 }
 
@@ -2105,47 +2146,6 @@ table tbody tr[data-selected="true"] {
   background: rgb(var(--color-primary));
   flex-shrink: 0;
   margin-top: 5px;
-}
-
-/* ══════════════════════════════════════════════════════════
-   ERPNext MINIMIZED WINDOWS (GlobalModalEnhancer)
-   ══════════════════════════════════════════════════════════ */
-
-.erp-minimized-btn {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-base);
-  padding: 8px 10px;
-  box-shadow: var(--shadow-card);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 120ms;
-}
-.erp-minimized-btn:hover { border-color: rgb(var(--color-primary) / 0.4); color: rgb(var(--color-primary)); }
-
-.erp-minimized-panel {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-dropdown);
-  padding: 12px;
-  min-width: 240px;
-  max-width: 300px;
-}
-
-.erp-minimized-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--color-border);
-  background: #f8f9fa;
-  margin-bottom: 6px;
-  font-size: 12.5px;
 }
 
 /* ══════════════════════════════════════════════════════════

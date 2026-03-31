@@ -47,6 +47,7 @@ import {
   auth,
   runAssetDepreciationCallable,
 } from '../services/firebase';
+import { getCurrentTenantId, setCurrentTenant } from '../lib/currentTenant';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
@@ -65,6 +66,7 @@ import { laborSettingsService } from '../modules/costs/services/laborSettingsSer
 import { monthlyProductionCostService } from '../modules/costs/services/monthlyProductionCostService';
 import { roleService } from '../modules/system/services/roleService';
 import { userService } from '../services/userService';
+import { tenantService } from '../services/tenantService';
 import { activityLogService } from '../modules/system/services/activityLogService';
 import { systemSettingsService } from '../modules/system/services/systemSettingsService';
 import { scanEventService } from '../modules/production/services/scanEventService';
@@ -72,15 +74,21 @@ import { stockService } from '../modules/inventory/services/stockService';
 import { transferApprovalService } from '../modules/inventory/services/transferApprovalService';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { catalogRawMaterialService as rawMaterialService } from '../modules/catalog/services/catalogRawMaterialService';
-import type { StockItemBalance } from '../modules/inventory/types';
+import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
 import { productMaterialService } from '../modules/production/services/productMaterialService';
 import { categoryService } from '../modules/catalog/services/categoryService';
 import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
-import { DEFAULT_SYSTEM_SETTINGS } from '../utils/dashboardConfig';
-import { applyTheme, setupAutoThemeListener } from '../utils/themeEngine';
+import { DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
+import {
+  applyAppTheme,
+  cacheTenantTheme,
+  loadTenantTheme,
+  mergeTenantThemeForApply,
+  syncTenantThemeSnapshot,
+} from '../core/ui-engine/theme/tenantTheme';
 import {
   buildProducts,
   buildProductionLines,
@@ -456,6 +464,23 @@ async function ensureCategoryFromModel(model: string | undefined): Promise<void>
   }
 }
 
+export type ReportsUiRawMaterialOption = {
+  id: string;
+  name: string;
+  code: string;
+  categoryName?: string;
+};
+
+export type ReportsUiReferenceSnapshot = {
+  stockBalances: StockItemBalance[];
+  warehouses: Warehouse[];
+  rawMaterialOptions: ReportsUiRawMaterialOption[];
+  categoryOptions: string[];
+  fetchedAt: number;
+};
+
+type ProductionReportsRangeCacheEntry = { rows: ProductionReport[]; fetchedAt: number };
+
 // ─── State Shape ────────────────────────────────────────────────────────────
 
 interface AppState {
@@ -515,6 +540,8 @@ interface AppState {
   userEmail: string | null;
   userDisplayName: string | null;
   userProfile: FirestoreUser | null;
+  /** من مستند tenants/{id}.name — بيانات الشركة */
+  tenantCompanyName: string;
 
   // Dynamic RBAC
   roles: FirestoreRole[];
@@ -726,10 +753,95 @@ interface AppState {
   setProducts: (products: Product[]) => void;
   setEmployees: (employees: Employee[]) => void;
   setLoading: (loading: boolean) => void;
+
+  /** Cached production reports by date range (shared across dashboards / reports). */
+  productionReportsRangeCache: Record<string, ProductionReportsRangeCacheEntry>;
+  ensureProductionReportsForRange: (
+    startDate: string,
+    endDate: string,
+    options?: { maxAgeMs?: number; force?: boolean },
+  ) => Promise<ProductionReport[]>;
+  upsertProductionReportsRangeCache: (
+    startDate: string,
+    endDate: string,
+    rows: ProductionReport[],
+  ) => void;
+
+  reportsUiReferenceCache: ReportsUiReferenceSnapshot | null;
+  reportsUiReferenceLoading: boolean;
+  ensureReportsUiReferenceData: (options?: { maxAgeMs?: number; force?: boolean }) => Promise<void>;
+  /** Clears shared Reports-page reference cache (stock/warehouses/raw materials) so next load refetches. */
+  invalidateReportsUiReferenceCache: () => void;
+}
+
+export function getProductionReportsRangeCacheKey(startDate: string, endDate: string): string {
+  return `${String(startDate || '').trim()}|${String(endDate || '').trim()}`;
+}
+
+function parseProductionReportsRangeCacheKey(key: string): { start: string; end: string } {
+  const i = key.indexOf('|');
+  if (i < 0) return { start: '', end: '' };
+  return { start: key.slice(0, i), end: key.slice(i + 1) };
+}
+
+function dateInIsoRangeInclusive(date: string, rangeStart: string, rangeEnd: string): boolean {
+  const d = String(date || '').trim();
+  const a = String(rangeStart || '').trim();
+  const b = String(rangeEnd || '').trim();
+  if (!d || !a || !b) return false;
+  return d >= a && d <= b;
+}
+
+function pruneProductionReportsRangeCache(
+  cache: Record<string, ProductionReportsRangeCacheEntry>,
+  affectedDates: string[],
+): Record<string, ProductionReportsRangeCacheEntry> {
+  const dates = Array.from(new Set(affectedDates.map((x) => String(x || '').trim()).filter(Boolean)));
+  if (dates.length === 0) return cache;
+  const next: Record<string, ProductionReportsRangeCacheEntry> = { ...cache };
+  for (const key of Object.keys(next)) {
+    const { start, end } = parseProductionReportsRangeCacheKey(key);
+    if (dates.some((dt) => dateInIsoRangeInclusive(dt, start, end))) {
+      delete next[key];
+    }
+  }
+  return next;
+}
+
+const DEFAULT_REPORTS_RANGE_STALE_MS = 5 * 60 * 1000;
+const DEFAULT_REPORTS_UI_REF_STALE_MS = 10 * 60 * 1000;
+
+let _productionReportsRangeInFlight = new Map<string, Promise<ProductionReport[]>>();
+let _reportsUiReferenceInFlight: Promise<void> | null = null;
+
+function invalidateProductionReportsRangeCacheForDates(
+  dates: string[],
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+) {
+  const prev = get().productionReportsRangeCache;
+  const next = pruneProductionReportsRangeCache(prev, dates);
+  for (const key of Object.keys(prev)) {
+    if (!(key in next)) _productionReportsRangeInFlight.delete(key);
+  }
+  set({ productionReportsRangeCache: next });
 }
 
 // Flag to prevent onAuthStateChanged from running initializeApp during admin user creation
 let _creatingUser = false;
+
+function reapplyThemeFromAppStore(get: () => AppState, options?: { syncTenantDoc?: boolean }) {
+  const theme = get().systemSettings?.theme ?? DEFAULT_THEME;
+  const tenantId = get().userProfile?.tenantId;
+  if (options?.syncTenantDoc) {
+    void syncTenantThemeSnapshot(tenantId, theme);
+  }
+  void loadTenantTheme(tenantId).then((tt) => {
+    const m = mergeTenantThemeForApply(tt, theme);
+    applyAppTheme(m, theme);
+    cacheTenantTheme(m);
+  });
+}
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
@@ -773,6 +885,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   productsLoading: false,
   linesLoading: false,
   reportsLoading: false,
+  productionReportsRangeCache: {},
+  reportsUiReferenceCache: null,
+  reportsUiReferenceLoading: false,
   error: null,
   authError: null,
   isAuthenticated: false,
@@ -781,6 +896,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   userEmail: null,
   userDisplayName: null,
   userProfile: null,
+  tenantCompanyName: '',
 
   // Dynamic RBAC defaults (empty until login)
   roles: [],
@@ -827,6 +943,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         email,
         displayName,
         roleId: defaultRole.id!,
+        tenantId: getCurrentTenantId(),
         isActive: false,
         createdBy: 'self-register',
       });
@@ -837,7 +954,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         uid,
         userEmail: email,
         userDisplayName: displayName,
-        userProfile: { id: uid, email, displayName, roleId: defaultRole.id!, isActive: false },
+        userProfile: {
+          id: uid,
+          email,
+          displayName,
+          roleId: defaultRole.id!,
+          tenantId: getCurrentTenantId(),
+          isActive: false,
+        },
         loading: false,
       });
     } catch (error: any) {
@@ -875,12 +999,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Auth: Logout ──────────────────────────────────────────────────────────
 
   logout: async () => {
+    setCurrentTenant(null);
     const { uid, userEmail } = get();
     if (uid && userEmail) {
       activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج');
     }
     await signOut();
     useJobsStore.getState().resetUiState();
+    _productionReportsRangeInFlight.clear();
+    _reportsUiReferenceInFlight = null;
     set({
       isAuthenticated: false,
       isPendingApproval: false,
@@ -888,6 +1015,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       userEmail: null,
       userDisplayName: null,
       userProfile: null,
+      tenantCompanyName: '',
       userRoleId: '',
       userRoleName: '',
       userRoleColor: '',
@@ -902,6 +1030,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       productionReports: [],
       todayReports: [],
       monthlyReports: [],
+      productionReportsRangeCache: {},
+      reportsUiReferenceCache: null,
+      reportsUiReferenceLoading: false,
       lineStatuses: [],
       lineProductConfigs: [],
       productionPlans: [],
@@ -934,6 +1065,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       displayName,
       roleId,
       createdBy: get().uid ?? '',
+      tenantId: getCurrentTenantId(),
     });
 
     get()._logActivity('CREATE_USER', `إنشاء مستخدم: ${displayName} (${email})`, { newUid, roleId });
@@ -964,16 +1096,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, authError: null });
     try {
       const uid = currentUser.uid;
-
-      const roles = await roleService.seedIfEmpty();
-      set({ roles });
 
       const userDoc = await userService.get(uid);
       if (!userDoc) {
         await signOut();
+        setCurrentTenant(null);
         set({
           loading: false,
           isAuthenticated: false,
@@ -981,6 +1111,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         return;
       }
+
+      setCurrentTenant(userDoc.tenantId);
 
       if (!userDoc.isActive) {
         set({
@@ -994,6 +1126,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         return;
       }
+
+      const roles = await roleService.seedIfEmpty();
+      set({ roles });
 
       const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
 
@@ -1024,6 +1159,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const userDoc = await userService.get(uid);
       if (!userDoc) return false;
       if (!userDoc.isActive) return false;
+
+      setCurrentTenant(userDoc.tenantId);
 
       const roles = get().roles.length > 0 ? get().roles : await roleService.seedIfEmpty();
       if (roles.length > 0 && get().roles.length === 0) set({ roles });
@@ -1065,14 +1202,51 @@ export const useAppStore = create<AppState>((set, get) => ({
         assetDepreciationService.getByPeriod(currentMonth),
         systemSettingsService.get(),
       ]);
+    const tenantId = get().userProfile?.tenantId;
+    const [
+      rawProducts,
+      rawLines,
+      rawEmployees,
+      configs,
+      productionPlans,
+      productionPlanFollowUps,
+      workOrders,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      laborSettings,
+      assets,
+      assetDepreciations,
+      systemSettingsRaw,
+      tenantDoc,
+    ] = await Promise.all([
+      productService.getAll(),
+      lineService.getAll(),
+      employeeService.getAll(),
+      lineProductConfigService.getAll(),
+      productionPlanService.getAll(),
+      productionPlanFollowUpService.getAll(),
+      workOrderService.getAll(),
+      costCenterService.getAll(),
+      costCenterValueService.getAll(),
+      costAllocationService.getAll(),
+      laborSettingsService.get(),
+      assetService.getAll(),
+      assetDepreciationService.getByPeriod(currentMonth),
+      systemSettingsService.get(),
+      tenantId ? tenantService.getById(tenantId) : Promise.resolve(null),
+    ]);
 
     const today = getOperationalDateString(8);
-    const [todayPage, lineStatuses] = await Promise.all([
-      reportService.listByDateRangePaged({ startDate: today, endDate: today, limit: 100 }),
+    const { start: monthStart, end: monthEnd } = getMonthDateRange();
+    const [todayReports, monthlyReports, lineStatuses] = await Promise.all([
+      reportService.getByDateRange(today, today),
+      reportService.getByDateRange(monthStart, monthEnd),
       lineStatusService.getAll(),
     ]);
-    const todayReports = todayPage.items;
-    const monthlyReports: ProductionReport[] = [];
+    const rangeCacheNow = Date.now();
+    const rkToday = getProductionReportsRangeCacheKey(today, today);
+    const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
 
     const activePlans = productionPlans.filter(
       (p) => p.status === 'in_progress' || p.status === 'planned'
@@ -1136,6 +1310,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       todayReports,
       monthlyReports,
       productionReports: [],
+      productionReportsRangeCache: {
+        ...get().productionReportsRangeCache,
+        [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+        [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+      },
       lineStatuses,
       productionPlans,
       productionPlanFollowUps,
@@ -1150,10 +1329,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       assets,
       assetDepreciations,
       systemSettings: mergedSettings,
+      tenantCompanyName: tenantDoc?.name?.trim() ?? '',
     });
 
-    applyTheme(mergedSettings.theme);
-    setupAutoThemeListener(mergedSettings.theme);
+    reapplyThemeFromAppStore(get);
 
     const allReports = todayReports;
     const products = buildProducts(rawProducts, allReports, configs);
@@ -1585,22 +1764,131 @@ export const useAppStore = create<AppState>((set, get) => ({
       const to = endDate || today;
       const reports: ProductionReport[] = [];
       let cursor: any = null;
-      const maxPages = 5;
+      const maxPages = 200;
       for (let pageIdx = 0; pageIdx < maxPages; pageIdx += 1) {
         const page = await reportService.listByDateRangePaged({
           startDate: from,
           endDate: to,
-          limit: 100,
+          limit: 500,
           cursor,
         });
         reports.push(...page.items);
         if (!page.hasMore || !page.nextCursor) break;
         cursor = page.nextCursor;
       }
-      set({ productionReports: reports, reportsLoading: false });
+      const cacheKey = getProductionReportsRangeCacheKey(from, to);
+      set((state) => ({
+        productionReports: reports,
+        reportsLoading: false,
+        productionReportsRangeCache: {
+          ...state.productionReportsRangeCache,
+          [cacheKey]: { rows: reports, fetchedAt: Date.now() },
+        },
+      }));
     } catch (error) {
       set({ error: (error as Error).message, reportsLoading: false });
     }
+  },
+
+  ensureProductionReportsForRange: async (startDate, endDate, options = {}) => {
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_REPORTS_RANGE_STALE_MS;
+    const force = options.force ?? false;
+    const key = getProductionReportsRangeCacheKey(startDate, endDate);
+    const cached = get().productionReportsRangeCache[key];
+    const now = Date.now();
+    if (!force && cached && now - cached.fetchedAt < maxAgeMs) {
+      return cached.rows;
+    }
+    let pending = _productionReportsRangeInFlight.get(key);
+    if (!pending) {
+      pending = (async () => {
+        try {
+          const raw = await reportService.getByDateRange(startDate, endDate);
+          const rows = Array.isArray(raw) ? raw : [];
+          set((state) => ({
+            productionReportsRangeCache: {
+              ...state.productionReportsRangeCache,
+              [key]: { rows, fetchedAt: Date.now() },
+            },
+          }));
+          return rows;
+        } finally {
+          _productionReportsRangeInFlight.delete(key);
+        }
+      })();
+      _productionReportsRangeInFlight.set(key, pending);
+    }
+    return pending;
+  },
+
+  upsertProductionReportsRangeCache: (startDate, endDate, rows) => {
+    const key = getProductionReportsRangeCacheKey(startDate, endDate);
+    set((state) => ({
+      productionReportsRangeCache: {
+        ...state.productionReportsRangeCache,
+        [key]: { rows, fetchedAt: Date.now() },
+      },
+    }));
+  },
+
+  ensureReportsUiReferenceData: async (options = {}) => {
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_REPORTS_UI_REF_STALE_MS;
+    const force = options.force ?? false;
+    const cached = get().reportsUiReferenceCache;
+    const now = Date.now();
+    if (!force && cached && now - cached.fetchedAt < maxAgeMs) {
+      return;
+    }
+    if (_reportsUiReferenceInFlight) {
+      await _reportsUiReferenceInFlight;
+      return;
+    }
+    const needSpinner = !cached;
+    if (needSpinner) set({ reportsUiReferenceLoading: true });
+    const run = (async () => {
+      try {
+        const [balances, warehousesRows] = await Promise.all([
+          stockService.getBalances(),
+          warehouseService.getAll(),
+        ]);
+        const rawRows = await rawMaterialService.getAll();
+        await categoryService.seedFromProductsModel();
+        const catRows = await categoryService.getByType('product');
+        const names = catRows
+          .filter((row) => row.isActive !== false)
+          .map((row) => String(row.name || '').trim())
+          .filter(Boolean);
+        const rawMaterialOptions: ReportsUiRawMaterialOption[] = rawRows
+          .filter((row) => Boolean(row.id))
+          .map((row) => ({
+            id: String(row.id),
+            name: String(row.name || '').trim(),
+            code: String(row.code || '').trim(),
+            categoryName: String(row.categoryName || '').trim(),
+          }));
+        set({
+          reportsUiReferenceCache: {
+            stockBalances: balances || [],
+            warehouses: warehousesRows || [],
+            rawMaterialOptions,
+            categoryOptions: Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')),
+            fetchedAt: Date.now(),
+          },
+          reportsUiReferenceLoading: false,
+        });
+      } catch {
+        set({ reportsUiReferenceLoading: false });
+      } finally {
+        _reportsUiReferenceInFlight = null;
+      }
+    })();
+    _reportsUiReferenceInFlight = run;
+    await run;
+  },
+
+  invalidateReportsUiReferenceCache: () => {
+    _reportsUiReferenceInFlight = null;
+    set({ reportsUiReferenceCache: null });
   },
 
   fetchLineStatuses: async () => {
@@ -2087,7 +2375,19 @@ export const useAppStore = create<AppState>((set, get) => ({
             reportService.getByDateRange(today, today),
             reportService.getByDateRange(monthStart, monthEnd),
           ]);
-          set({ todayReports, monthlyReports, productionReports: monthlyReports });
+          const rangeCacheNow = Date.now();
+          const rkToday = getProductionReportsRangeCacheKey(today, today);
+          const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+          set((state) => ({
+            todayReports,
+            monthlyReports,
+            productionReports: monthlyReports,
+            productionReportsRangeCache: {
+              ...state.productionReportsRangeCache,
+              [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+              [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+            },
+          }));
           get()._rebuildProducts();
           get()._rebuildLines();
         }
@@ -2751,7 +3051,21 @@ export const useAppStore = create<AppState>((set, get) => ({
           reportService.getByDateRange(monthStart, monthEnd),
           workOrderService.getAll(),
         ]);
-        set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders });
+        invalidateProductionReportsRangeCacheForDates([data.date], get, set);
+        const rangeCacheNow = Date.now();
+        const rkToday = getProductionReportsRangeCacheKey(today, today);
+        const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+        set((state) => ({
+          todayReports,
+          monthlyReports,
+          productionReports: monthlyReports,
+          workOrders,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+            [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+          },
+        }));
         get()._rebuildProducts();
         get()._rebuildLines();
         if (activePlan) await get().fetchProductionPlans();
@@ -2797,6 +3111,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       }
 
+      get().invalidateReportsUiReferenceCache();
       return id;
     } catch (error) {
       if (trackedOperation) {
@@ -2864,7 +3179,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportService.getByDateRange(today, today),
         reportService.getByDateRange(monthStart, monthEnd),
       ]);
-      set({ todayReports, monthlyReports, productionReports: monthlyReports });
+      const touchedDates = [existingReport?.date, data.date].filter(
+        (d): d is string => Boolean(d && String(d).trim()),
+      );
+      invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
+      const rangeCacheNow = Date.now();
+      const rkToday = getProductionReportsRangeCacheKey(today, today);
+      const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+      set((state) => ({
+        todayReports,
+        monthlyReports,
+        productionReports: monthlyReports,
+        productionReportsRangeCache: {
+          ...state.productionReportsRangeCache,
+          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+        },
+      }));
       get()._rebuildProducts();
       get()._rebuildLines();
 
@@ -2889,6 +3220,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           changedFields: Object.keys(data || {}),
         },
       });
+      get().invalidateReportsUiReferenceCache();
     } catch (error) {
       actionTrackerService.failOperation(trackedOperation, {
         error,
@@ -2995,7 +3327,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportService.getByDateRange(monthStart, monthEnd),
         workOrderService.getAll(),
       ]);
-      set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders });
+      invalidateProductionReportsRangeCacheForDates(
+        [reportToDelete.date].filter((d) => Boolean(d && String(d).trim())),
+        get,
+        set,
+      );
+      const rangeCacheNow = Date.now();
+      const rkToday = getProductionReportsRangeCacheKey(today, today);
+      const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+      set((state) => ({
+        todayReports,
+        monthlyReports,
+        productionReports: monthlyReports,
+        workOrders,
+        productionReportsRangeCache: {
+          ...state.productionReportsRangeCache,
+          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+        },
+      }));
       get()._rebuildProducts();
       get()._rebuildLines();
 
@@ -3020,6 +3370,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           productId: reportToDelete.productId,
         },
       });
+      get().invalidateReportsUiReferenceCache();
     } catch (error) {
       actionTrackerService.failOperation(trackedOperation, {
         error,
@@ -3216,6 +3567,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       }
 
+      const touchedDates = candidates
+        .map((r) => String(r.date || '').trim())
+        .filter(Boolean);
+      invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
       const today = getOperationalDateString(8);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
@@ -3223,7 +3578,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportService.getByDateRange(monthStart, monthEnd),
         workOrderService.getAll(),
       ]);
-      set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders: latestWorkOrders });
+      const rangeCacheNow = Date.now();
+      const rkToday = getProductionReportsRangeCacheKey(today, today);
+      const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+      set((state) => ({
+        todayReports,
+        monthlyReports,
+        productionReports: monthlyReports,
+        workOrders: latestWorkOrders,
+        productionReportsRangeCache: {
+          ...state.productionReportsRangeCache,
+          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+        },
+      }));
       get()._rebuildProducts();
       get()._rebuildLines();
 
@@ -3324,6 +3692,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       }
 
+      const touchedDates = candidates
+        .map((r) => String(r.date || '').trim())
+        .filter(Boolean);
+      invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
       const today = getOperationalDateString(8);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
@@ -3331,7 +3703,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportService.getByDateRange(monthStart, monthEnd),
         workOrderService.getAll(),
       ]);
-      set({ todayReports, monthlyReports, productionReports: monthlyReports, workOrders: latestWorkOrders });
+      const rangeCacheNow = Date.now();
+      const rkToday = getProductionReportsRangeCacheKey(today, today);
+      const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+      set((state) => ({
+        todayReports,
+        monthlyReports,
+        productionReports: monthlyReports,
+        workOrders: latestWorkOrders,
+        productionReportsRangeCache: {
+          ...state.productionReportsRangeCache,
+          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+        },
+      }));
       get()._rebuildProducts();
       get()._rebuildLines();
 
@@ -3585,9 +3970,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         };
         set({ systemSettings: merged });
+        reapplyThemeFromAppStore(get);
         await get().fetchProducts();
-        applyTheme(merged.theme);
-        setupAutoThemeListener(merged.theme);
       }
     } catch (error) {
       console.error('fetchSystemSettings error:', error);
@@ -3606,11 +3990,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
       await systemSettingsService.set(merged);
       set({ systemSettings: merged });
+      reapplyThemeFromAppStore(get, { syncTenantDoc: true });
       await get().fetchProducts();
-      applyTheme(merged.theme);
-      setupAutoThemeListener(merged.theme);
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = (error as Error).message;
+      set({ error: message });
+      throw error;
     }
   },
 

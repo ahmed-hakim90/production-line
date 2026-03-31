@@ -4,6 +4,8 @@ export interface AuditMetadata {
 
 export interface AuditRecord {
   id?: string;
+  /** Scoped to tenant; required for Firestore rules after multi-tenant migration. */
+  tenantId?: string;
   event: string;
   entityType: string;
   entityId: string;

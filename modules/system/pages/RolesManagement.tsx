@@ -53,7 +53,7 @@ export const RolesManagement: React.FC = () => {
           <div className="text-center py-16 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-20">admin_panel_settings</span>
             <p className="font-bold text-base">لا توجد أدوار بعد</p>
-            <p className="text-sm mt-1">ابدأ بإنشاء أول دور للنظام</p>
+            <p className="text-sm mt-1">ابدأ بإنشاء أول دور للمؤسسة</p>
           </div>
         </Card>
       ) : (

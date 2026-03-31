@@ -198,7 +198,7 @@ export const ActivityLogPage: React.FC = () => {
         recipientEmployeeIds: targetMode === 'single' ? selectedEmployeeIds.slice(0, 1) : selectedEmployeeIds,
         roleIds: selectedRoleIds,
       });
-      setSendResult(sent > 0 ? `تم إرسال ${sent} إشعار.` : 'لا يوجد مستلمين مطابقين.');
+      setSendResult(sent > 0 ? `تم إرسال ${sent} إشعار.` : 'لا يوجد مستلمون مطابقون.');
       setMessage('');
     } catch (error) {
       console.error('manual send failed', error);
@@ -213,7 +213,7 @@ export const ActivityLogPage: React.FC = () => {
       <div className="erp-page-head">
         <div className="erp-page-title-block">
           <h1 className="page-title">سجل النشاط</h1>
-          <p className="page-subtitle">تتبع جميع الأنشطة والعمليات في النظام</p>
+          <p className="page-subtitle">تتبع جميع الأحداث والعمليات في النظام</p>
         </div>
         <div className="erp-page-actions">
           <button
@@ -288,7 +288,7 @@ export const ActivityLogPage: React.FC = () => {
                         );
                       })}
                       {filteredEmployeesForMulti.length === 0 && (
-                        <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">لا يوجد نتائج مطابقة.</p>
+                        <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">لا توجد نتائج مطابقة.</p>
                       )}
                     </div>
                     {selectedEmployeeIds.length > 0 && (
@@ -354,10 +354,10 @@ export const ActivityLogPage: React.FC = () => {
         </Card>
       )}
 
-      <Card title="المستخدمون النشطون الآن">
+      <Card title="المستخدمون المتصلون الآن">
         {activeRows.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
-            لا يوجد مستخدمون نشطون حاليًا.
+            لا يوجد مستخدمون متصلون حاليًا.
           </div>
         ) : (
           <div className="space-y-2">
@@ -426,7 +426,7 @@ export const ActivityLogPage: React.FC = () => {
             {visibleLogs.length === 0 && (
               <div className="py-16 text-center text-slate-400">
                 <span className="material-icons-round text-5xl block mb-3">history</span>
-                <p className="font-bold">لا توجد أنشطة مسجلة</p>
+                <p className="font-bold">لا توجد أحداث مسجلة</p>
               </div>
             )}
           </div>

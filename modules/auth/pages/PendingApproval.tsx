@@ -14,7 +14,7 @@ export const PendingApproval: React.FC = () => {
     setChecking(true);
     setCheckedMsg('');
     const approved = await checkApprovalStatus();
-    if (!approved) setCheckedMsg('حسابك لا يزال قيد المراجعة. يرجى الانتظار.');
+    if (!approved) setCheckedMsg('حسابك لا يزال قيد المراجعة. يرجى المحاولة لاحقًا.');
     setChecking(false);
   };
 
@@ -44,10 +44,11 @@ export const PendingApproval: React.FC = () => {
                 <span className="material-icons-round" style={{ fontSize: 32, color: '#d97706' }}>hourglass_top</span>
               </div>
               <h1 className="text-[16px] font-bold text-[var(--color-text)]">
-                في انتظار موافقة المسؤول
+                شركة قيد اعتماد المنصة
               </h1>
               <p className="text-[12.5px] text-[var(--color-text-muted)] mt-2 leading-relaxed">
-                تم إنشاء حسابك بنجاح. يرجى انتظار موافقة مسؤول النظام حتى تتمكن من الوصول إليه.
+                تم إنشاء حسابك وتسجيل الشركة بنجاح. يرجى انتظار موافقة إدارة المنصة على تفعيل الشركة؛ بعدها يمكنك
+                استخدام النظام بالكامل.
               </p>
             </div>
 
@@ -129,7 +130,7 @@ export const PendingApproval: React.FC = () => {
           className="mt-4 rounded-[var(--border-radius-lg)] border p-4"
           style={{ background: 'var(--color-card)', borderColor: 'var(--color-border)' }}
         >
-          <p className="text-[11.5px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide mb-3">خطوات التفعيل</p>
+          <p className="text-[11.5px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide mb-3">مراحل التفعيل</p>
           {[
             { icon: 'check_circle', label: 'تم إنشاء الحساب بنجاح', done: true },
             { icon: 'pending', label: 'مراجعة الطلب من المسؤول', done: false },

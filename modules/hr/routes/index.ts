@@ -1,22 +1,24 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { HRDashboard } from '../pages/HRDashboard';
-import { Employees } from '../pages/Employees';
-import { EmployeeProfile } from '../pages/EmployeeProfile';
-import { HRImport } from '../pages/HRImport';
-import { Organization } from '../pages/Organization';
-import { EmployeeSelfService } from '../pages/EmployeeSelfService';
-import { LeaveRequests } from '../pages/LeaveRequests';
-import { LoanRequests } from '../pages/LoanRequests';
-import { ApprovalCenter } from '../pages/ApprovalCenter';
-import { DelegationManagement } from '../pages/DelegationManagement';
-import { Payroll } from '../pages/Payroll';
-import { PayrollAccounts } from '../pages/PayrollAccounts';
-import { EmployeeEvaluation } from '../pages/EmployeeEvaluation';
-import { EmployeeFinancials } from '../pages/EmployeeFinancials';
-import { EmployeeFinancialOverview } from '../pages/EmployeeFinancialOverview';
-import { HRTransactions } from '../pages/HRTransactions';
-import { Vehicles } from '../pages/Vehicles';
-import { HRSettings } from '../pages/HRSettings';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const HRDashboard = lazyNamed(() => import('../pages/HRDashboard'), 'HRDashboard');
+const Employees = lazyNamed(() => import('../pages/Employees'), 'Employees');
+const EmployeeProfile = lazyNamed(() => import('../pages/EmployeeProfile'), 'EmployeeProfile');
+const HRImport = lazyNamed(() => import('../pages/HRImport'), 'HRImport');
+const Organization = lazyNamed(() => import('../pages/Organization'), 'Organization');
+const EmployeeSelfService = lazyNamed(() => import('../pages/EmployeeSelfService'), 'EmployeeSelfService');
+const LeaveRequests = lazyNamed(() => import('../pages/LeaveRequests'), 'LeaveRequests');
+const LoanRequests = lazyNamed(() => import('../pages/LoanRequests'), 'LoanRequests');
+const ApprovalCenter = lazyNamed(() => import('../pages/ApprovalCenter'), 'ApprovalCenter');
+const DelegationManagement = lazyNamed(() => import('../pages/DelegationManagement'), 'DelegationManagement');
+const Payroll = lazyNamed(() => import('../pages/Payroll'), 'Payroll');
+const PayrollAccounts = lazyNamed(() => import('../pages/PayrollAccounts'), 'PayrollAccounts');
+const EmployeeEvaluation = lazyNamed(() => import('../pages/EmployeeEvaluation'), 'EmployeeEvaluation');
+const EmployeeFinancials = lazyNamed(() => import('../pages/EmployeeFinancials'), 'EmployeeFinancials');
+const EmployeeFinancialOverview = lazyNamed(() => import('../pages/EmployeeFinancialOverview'), 'EmployeeFinancialOverview');
+const HRTransactions = lazyNamed(() => import('../pages/HRTransactions'), 'HRTransactions');
+const Vehicles = lazyNamed(() => import('../pages/Vehicles'), 'Vehicles');
+const HRSettings = lazyNamed(() => import('../pages/HRSettings'), 'HRSettings');
 
 export const HR_ROUTES: AppRouteDef[] = [
   { path: '/hr-dashboard', permission: 'hrDashboard.view', component: HRDashboard },
@@ -40,6 +42,3 @@ export const HR_ROUTES: AppRouteDef[] = [
   { path: '/vehicles', permission: 'vehicles.view', component: Vehicles },
   { path: '/hr-settings', permission: 'hrSettings.view', component: HRSettings },
 ];
-
-
-

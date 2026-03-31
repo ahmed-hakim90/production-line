@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, KPIBox, LoadingSkeleton, Badge, Button, SearchableSelect } from '../components/UI';
 import { getDocs } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
@@ -47,7 +47,7 @@ const STATUS_LABELS: Record<string, string> = {
   approved: 'مُعتمد',
   rejected: 'مرفوض',
   active: 'نشط',
-  closed: 'مُقفل',
+  closed: 'مقفل',
 };
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'danger' | 'info' | 'neutral'> = {
@@ -80,10 +80,12 @@ function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
 }
 
 export const HRDashboard: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { openModal } = useGlobalModalManager();
   const uid = useAppStore((s) => s.uid);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const permissions = useAppStore((s) => s.userPermissions);
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
@@ -461,7 +463,7 @@ export const HRDashboard: React.FC = () => {
       });
       if (!rows || rows.length === 0) return [];
       const firstRow = (rows[0] || []).map((v) => normalizeEmpCode(String(v || '')));
-      const possibleHeaders = new Set(['CODE', 'EMPLOYEECODE', 'EMPLOYEE_CODE', 'EMPLOYEE CODE', 'EMPCODE', 'كود', 'كودالموظف', 'الكود']);
+      const possibleHeaders = new Set(['CODE', 'EMPLOYEECODE', 'EMPLOYEE_CODE', 'EMPLOYEE CODE', 'EMPCODE', 'كود', 'كود الموظف', 'الكود']);
       let codeColIdx = firstRow.findIndex((cell) => possibleHeaders.has(cell.replace(/\s+/g, '')));
       let startIndex = 0;
       if (codeColIdx >= 0) startIndex = 1;
@@ -502,7 +504,7 @@ export const HRDashboard: React.FC = () => {
     try {
       const codes = await extractCodesFromFile(file);
       if (codes.length === 0) {
-        setQaLoanImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+        setQaLoanImportMsg({ type: 'error', text: 'تعذر استخراج أكواد الموظفين من الملف.' });
       } else {
         importEmployeesByCodes(codes, setQaLoanImportMsg);
       }
@@ -520,7 +522,7 @@ export const HRDashboard: React.FC = () => {
     try {
       const codes = await extractCodesFromFile(file);
       if (codes.length === 0) {
-        setQaLeaveImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+        setQaLeaveImportMsg({ type: 'error', text: 'تعذر استخراج أكواد الموظفين من الملف.' });
       } else {
         importEmployeesByCodes(codes, setQaLeaveImportMsg);
       }
@@ -549,7 +551,7 @@ export const HRDashboard: React.FC = () => {
       const codes = await extractCodesFromFile(file);
 
       if (codes.length === 0) {
-        setQaAllowImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+        setQaAllowImportMsg({ type: 'error', text: 'تعذر استخراج أكواد الموظفين من الملف.' });
       } else {
         importEmployeesByCodes(codes, setQaAllowImportMsg);
       }
@@ -602,7 +604,7 @@ export const HRDashboard: React.FC = () => {
     try {
       const codes = await extractCodesFromFile(file);
       if (codes.length === 0) {
-        setQaPenaltyImportMsg({ type: 'error', text: 'تعذّر استخراج أكواد موظفين من الملف.' });
+        setQaPenaltyImportMsg({ type: 'error', text: 'تعذر استخراج أكواد الموظفين من الملف.' });
       } else {
         importEmployeesByCodes(codes, setQaPenaltyImportMsg);
       }
@@ -735,7 +737,7 @@ export const HRDashboard: React.FC = () => {
     resetQa();
   };
 
-  // ── Computed data ──────────────────────────────────────────────────────────
+  // â”€â”€ Computed data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const empKpis = useMemo(() => {
     const active = employees.filter((e) => e.isActive);
@@ -747,10 +749,15 @@ export const HRDashboard: React.FC = () => {
   }, [employees]);
 
   const deptBreakdown = useMemo(() => {
-    const map = new Map<string, { name: string; count: number }>();
-    departments.forEach((d) => map.set(d.id!, { name: d.name, count: 0 }));
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    departments.forEach((d) => {
+      const id = String(d.id || '').trim();
+      if (!id) return;
+      map.set(id, { id, name: d.name, count: 0 });
+    });
     employees.filter((e) => e.isActive).forEach((e) => {
-      const entry = map.get(e.departmentId);
+      const deptId = String(e.departmentId || '').trim();
+      const entry = map.get(deptId);
       if (entry) entry.count += 1;
     });
     return [...map.values()].sort((a, b) => b.count - a.count);
@@ -817,7 +824,7 @@ export const HRDashboard: React.FC = () => {
     daily: 'يومي',
   };
 
-  // ── Alert bar items ────────────────────────────────────────────────────────
+  // â”€â”€ Alert bar items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const alertItems = useMemo(() => {
     const items: { icon: string; text: string; color: string; path: string }[] = [];
 
@@ -864,7 +871,7 @@ export const HRDashboard: React.FC = () => {
     return items;
   }, [leaveKpis, loanKpis, payrollStatus]);
 
-  // ── Quick action buttons ──────────────────────────────────────────────────
+  // â”€â”€ Quick action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const qaActions = [
     { key: 'loan' as const, label: 'سلفة', icon: 'payments', color: 'violet' },
     { key: 'allowance' as const, label: 'بدل', icon: 'card_giftcard', color: 'emerald' },
@@ -885,9 +892,9 @@ export const HRDashboard: React.FC = () => {
   return (
     <div className="space-y-8">
 
-      {/* ═══════════════════════════════════════════════════════════════════════
+      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
           HEADER — Title + Search + Quick Action Toolbar
-      ═══════════════════════════════════════════════════════════════════════ */}
+      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           {/* Title */}
@@ -954,12 +961,12 @@ export const HRDashboard: React.FC = () => {
 
       </div>
 
-      {/* ── Quick Action Dialogs ─────────────────────────────────────────── */}
+      {/* â”€â”€ Quick Action Dialogs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {qaOpen && (
         <div className="erp-modal-overlay" onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }}>
           <div className="erp-modal-panel relative w-[96vw] max-w-3xl max-h-[92dvh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
 
-            {/* ── Saving overlay ── */}
+            {/* â”€â”€ Saving overlay â”€â”€ */}
             {qaSaving && (
               <div className="absolute inset-0 bg-white/80/80 backdrop-blur-sm z-10 rounded-[var(--border-radius-xl)] flex flex-col items-center justify-center gap-4">
                 <span className="material-icons-round text-5xl text-primary animate-spin">sync</span>
@@ -976,7 +983,7 @@ export const HRDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* ── Dialog Header ── */}
+            {/* â”€â”€ Dialog Header â”€â”€ */}
             <div className="erp-modal-head">
               <h3 className="erp-modal-title flex items-center gap-2.5">
                 <span className={`material-icons-round text-lg ${
@@ -987,7 +994,7 @@ export const HRDashboard: React.FC = () => {
                 }`}>
                   {qaOpen === 'loan' ? 'payments' : qaOpen === 'leave' ? 'beach_access' : qaOpen === 'allowance' ? 'card_giftcard' : 'gavel'}
                 </span>
-                {qaOpen === 'loan' ? 'إنشاء سلفة' : qaOpen === 'leave' ? 'إنشاء إجازة' : qaOpen === 'allowance' ? 'ربط بدل بموظفين' : 'إنشاء جزاء'}
+                {qaOpen === 'loan' ? 'إنشاء سلفة' : qaOpen === 'leave' ? 'إنشاء إجازة' : qaOpen === 'allowance' ? 'ربط بدل بالموظفين' : 'إنشاء جزاء'}
                 {qaStaged.length > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-black">{qaStaged.length}</span>
                 )}
@@ -997,10 +1004,10 @@ export const HRDashboard: React.FC = () => {
               </button>
             </div>
 
-            {/* ── Dialog Body ── */}
+            {/* â”€â”€ Dialog Body â”€â”€ */}
             <div className="erp-modal-body space-y-4">
 
-              {/* ─── LOAN — inline form ─── */}
+              {/* â”€â”€â”€ LOAN — inline form â”€â”€â”€ */}
               {qaOpen === 'loan' && (
                 <div className="space-y-2">
                   <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
@@ -1047,7 +1054,7 @@ export const HRDashboard: React.FC = () => {
                       <label className="erp-filter-label mb-1 block">النوع</label>
                       <select className="erp-filter-select w-full" value={qaLoanType} onChange={(e) => setQaLoanType(e.target.value as any)}>
                         <option value="monthly_advance">شهرية</option>
-                        <option value="installment">مقسطة</option>
+                        <option value="installment">مقسط</option>
                       </select>
                     </div>
                     <div className="min-w-[120px]">
@@ -1145,7 +1152,7 @@ export const HRDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* ─── LEAVE — inline form ─── */}
+              {/* â”€â”€â”€ LEAVE — inline form â”€â”€â”€ */}
               {qaOpen === 'leave' && (
                 <div className="space-y-2">
                   <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
@@ -1283,7 +1290,7 @@ export const HRDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* ─── ALLOWANCE — inline form ─── */}
+              {/* â”€â”€â”€ ALLOWANCE — inline form â”€â”€â”€ */}
               {qaOpen === 'allowance' && (
                 <>
                   <div className="space-y-2">
@@ -1424,7 +1431,7 @@ export const HRDashboard: React.FC = () => {
                 </>
               )}
 
-              {/* ─── PENALTY — inline form ─── */}
+              {/* â”€â”€â”€ PENALTY — inline form â”€â”€â”€ */}
               {qaOpen === 'penalty' && (
                 <div className="space-y-2">
                   <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
@@ -1565,10 +1572,10 @@ export const HRDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* ─── STAGED ITEMS TABLE ─── */}
+              {/* â”€â”€â”€ STAGED ITEMS TABLE â”€â”€â”€ */}
               {qaStaged.length > 0 ? (
                 <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
-                  <table className="w-full text-sm">
+                  <table className="erp-table w-full text-sm">
                     <thead className="erp-thead">
                       <tr>
                         <th className="erp-th">#</th>
@@ -1611,7 +1618,7 @@ export const HRDashboard: React.FC = () => {
               ) : null}
             </div>
 
-            {/* ── Dialog Footer ── */}
+            {/* â”€â”€ Dialog Footer â”€â”€ */}
             <div className="erp-modal-footer !justify-between !bg-[var(--color-card)]">
               <Button variant="outline" size="sm" onClick={() => { setQaOpen(''); resetQa(); setQaStaged([]); }} disabled={qaSaving}>
                 إلغاء
@@ -1625,9 +1632,9 @@ export const HRDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════
+      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
           CRITICAL ALERTS ROW
-      ═══════════════════════════════════════════════════════════════════════ */}
+      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <button
           onClick={() => navigate('/approval-center')}
@@ -1685,7 +1692,7 @@ export const HRDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* ── Alert Bar ─────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Alert Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {alertItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {alertItems.map((a, i) => (
@@ -1705,9 +1712,9 @@ export const HRDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════
+      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
           SECTION 1 — الحالة اليومية (Daily Status)
-      ═══════════════════════════════════════════════════════════════════════ */}
+      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
       <section>
         <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
           <span className="material-icons-round text-primary text-xl">today</span>
@@ -1721,13 +1728,13 @@ export const HRDashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 2 — نظرة شهرية (Monthly Overview)
-      ═══════════════════════════════════════════════════════════════════════ */}
+      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
+          SECTION 2 — مؤشرات شهرية (Monthly Overview)
+      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
       <section>
         <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
           <span className="material-icons-round text-primary text-xl">calendar_month</span>
-          النظرة الشهرية — {getMonthKey()}
+          مؤشرات شهرية — {getMonthKey()}
         </h3>
 
         {/* Monthly KPIs */}
@@ -1754,7 +1761,7 @@ export const HRDashboard: React.FC = () => {
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center">
             <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{loanKpis.activeCount}</p>
-            <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">سُلف نشطة</p>
+            <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">سلف نشطة</p>
           </div>
         </div>
 
@@ -1765,7 +1772,7 @@ export const HRDashboard: React.FC = () => {
               <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد طلبات</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">الموظف</th>
@@ -1803,7 +1810,7 @@ export const HRDashboard: React.FC = () => {
               <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد سُلف</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">الموظف</th>
@@ -1835,7 +1842,7 @@ export const HRDashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* ═══ SECTION 3 — إجراءات معلقة ═══ */}
+      {/* â•گâ•گâ•گ SECTION 3 — إجراءات معلقة â•گâ•گâ•گ */}
       <section>
         <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
           <span className="material-icons-round text-amber-500 text-lg">pending_actions</span>
@@ -1877,7 +1884,7 @@ export const HRDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-sm font-bold text-[var(--color-text)]">
-                {payrollStatus === 'locked' ? 'مُقفل ✓' :
+                {payrollStatus === 'locked' ? 'مقفل ✓' :
                  payrollStatus === 'finalized' ? 'معتمد' :
                  payrollStatus === 'draft' ? 'مسودة' : 'لم يُحتسب'}
               </p>
@@ -1887,7 +1894,7 @@ export const HRDashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* ═══ SECTION 4 — Top 5 متأخرين ═══ */}
+      {/* â•گâ•گâ•گ SECTION 4 — Top 5 متأخرين â•گâ•گâ•گ */}
       <section>
         <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
           <span className="material-icons-round text-rose-500 text-lg">schedule</span>
@@ -1901,7 +1908,7 @@ export const HRDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-border)]">
                     <th className="text-right pb-2 text-xs text-[var(--color-text-muted)] font-bold px-2">#</th>
@@ -1932,15 +1939,15 @@ export const HRDashboard: React.FC = () => {
         </Card>
       </section>
 
-      {/* ═══ SECTION 5 — محفظة السُلف ═══ */}
+      {/* SECTION 5 — ملخص السُلف */}
       <section>
         <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
           <span className="material-icons-round text-violet-500 text-lg">account_balance_wallet</span>
-          محفظة السُلف
+          ملخص السُلف
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي السُلف النشطة</p>
+            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي السُلف المستحقة</p>
             <p className="text-xl font-bold text-violet-600">{formatNumber(loanPortfolio.totalOutstanding)} ج.م</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
@@ -1954,7 +1961,7 @@ export const HRDashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* ═══ SECTION 6 — تنبيهات التقييم ═══ */}
+      {/* â•گâ•گâ•گ SECTION 6 — تنبيهات التقييم â•گâ•گâ•گ */}
       <section>
         <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
           <span className="material-icons-round text-cyan-500 text-lg">stars</span>
@@ -1987,9 +1994,9 @@ export const HRDashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
+      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
           SECTION 3 — تحليلات (Analytics)
-      ═══════════════════════════════════════════════════════════════════════ */}
+      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
       <section>
         <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
           <span className="material-icons-round text-primary text-xl">analytics</span>
@@ -2003,10 +2010,10 @@ export const HRDashboard: React.FC = () => {
               <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد أقسام</p>
             ) : (
               <div className="space-y-3">
-                {deptBreakdown.map((d) => {
+                {deptBreakdown.map((d, index) => {
                   const pct = empKpis.active > 0 ? (d.count / empKpis.active) * 100 : 0;
                   return (
-                    <div key={d.name} className="flex items-center gap-3">
+                    <div key={d.id || `dept-${index}`} className="flex items-center gap-3">
                       <span className="text-sm font-medium text-[var(--color-text)] w-28 truncate">{d.name}</span>
                       <div className="flex-1 bg-[#f0f2f5] rounded-full h-4 overflow-hidden">
                         <div
@@ -2073,4 +2080,8 @@ export const HRDashboard: React.FC = () => {
     </div>
   );
 };
+
+
+
+
 

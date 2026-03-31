@@ -744,7 +744,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
       {tab === 'history' && (
         <div className="card p-4 space-y-3">
           <p className="text-xs text-[var(--color-text-muted)]">
-            الحذف الجزئي يطبق نطاق التاريخ على الدفعة المحددة فقط.
+            الحذف الجزئي حسب نطاق التاريخ على الدفعة المحددة فقط.
           </p>
           {historyLoading ? (
             <div className="text-sm text-[var(--color-text-muted)]">جار التحميل...</div>
@@ -844,7 +844,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
         </div>
         <div className="text-xs text-[var(--color-text-muted)]">
           يتم حفظ المعاينة محليًا تلقائيًا حتى لا تضيع التعديلات عند انقطاع الإنترنت أو إغلاق المتصفح.
-          {draftRestored && ' (تم استرجاع مسودة محفوظة)'}
+          {draftRestored && ' (تم استرجاع مسودة سابقة)'}
         </div>
         {busy && progress.total > 0 && (
           <div className="space-y-2">
@@ -877,7 +877,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
               <div className="text-sm font-bold text-rose-700">{(previewMeta?.skippedRows || 0) + (previewMeta?.parseErrors.length || 0)}</div>
             </div>
             <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/60 px-3 py-2">
-              <div className="text-[11px] text-rose-700">فشل مطابقة موظف</div>
+              <div className="text-[11px] text-rose-700">فشل مطابقة الموظف</div>
               <div className="text-sm font-bold text-rose-700">{previewDiagnostics.missingEmployeeCount}</div>
             </div>
             <div className="rounded-[var(--border-radius-base)] border border-orange-200 bg-orange-50/60 px-3 py-2">
@@ -904,7 +904,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
 
           {previewDiagnostics.missingEmployeeCount > 0 && (
             <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/60 px-3 py-2 text-xs text-rose-700 space-y-1">
-              <div className="font-bold">أكواد غير مربوطة بموظف (ستفشل عند الرفع):</div>
+              <div className="font-bold">أكواد غير مرتبطة بموظف (ستفشل عند الرفع):</div>
               <div>{previewDiagnostics.missingEmployeeExamples.join(' ، ')}</div>
             </div>
           )}

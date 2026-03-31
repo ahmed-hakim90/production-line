@@ -68,7 +68,7 @@ export const IPQC: React.FC = () => {
   const saveDisabledReason = useMemo(() => {
     if (!canInspect) return 'لا تملك صلاحية تنفيذ فحص IPQC.';
     if (!workOrderId) return 'اختر أمر شغل أولاً.';
-    if (!inspectorId) return 'هذا المستخدم غير مرتبط بموظف. راجع بيانات الموظفين/المستخدمين.';
+    if (!inspectorId) return 'هذا المستخدم غير مرتبط بمفتش. راجع بيانات الموظفين/المستخدمين.';
     if (busy) return 'جاري الحفظ...';
     return '';
   }, [canInspect, workOrderId, inspectorId, busy]);
@@ -414,7 +414,7 @@ export const IPQC: React.FC = () => {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             disabled={!canInspect}
-            placeholder="ملاحظات"
+            placeholder="ملاحظات إضافية"
             className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm min-h-[90px]"
           />
           <div className="md:col-span-2 space-y-2">

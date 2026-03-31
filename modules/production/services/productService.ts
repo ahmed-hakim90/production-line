@@ -9,6 +9,8 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { FirestoreProduct } from '../../../types';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 
 const COLLECTION = 'products';
 
@@ -16,7 +18,7 @@ export const productService = {
   async getAll(): Promise<FirestoreProduct[]> {
     if (!isConfigured) return [];
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreProduct));
     } catch (error) {
       console.error('productService.getAll error:', error);
@@ -39,7 +41,10 @@ export const productService = {
   async create(data: Omit<FirestoreProduct, 'id'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
-      const ref = await addDoc(collection(db, COLLECTION), data);
+      const ref = await addDoc(collection(db, COLLECTION), {
+        ...(data as Record<string, unknown>),
+        tenantId: getCurrentTenantId(),
+      });
       return ref.id;
     } catch (error) {
       console.error('productService.create error:', error);

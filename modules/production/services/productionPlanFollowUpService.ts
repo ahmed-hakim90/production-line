@@ -2,7 +2,6 @@ import {
   addDoc,
   collection,
   getDocs,
-  query,
   serverTimestamp,
   updateDoc,
   where,
@@ -10,19 +9,21 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { ProductionPlanFollowUp } from '../../../types';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 
 const COLLECTION = 'production_plan_followups';
 
 export const productionPlanFollowUpService = {
   async getAll(): Promise<ProductionPlanFollowUp[]> {
     if (!isConfigured) return [];
-    const snap = await getDocs(collection(db, COLLECTION));
+    const snap = await getDocs(tenantQuery(db, COLLECTION));
     return snap.docs.map((row) => ({ id: row.id, ...row.data() } as ProductionPlanFollowUp));
   },
 
   async getByPlan(planId: string): Promise<ProductionPlanFollowUp[]> {
     if (!isConfigured || !planId) return [];
-    const q = query(collection(db, COLLECTION), where('planId', '==', planId));
+    const q = tenantQuery(db, COLLECTION, where('planId', '==', planId));
     const snap = await getDocs(q);
     return snap.docs.map((row) => ({ id: row.id, ...row.data() } as ProductionPlanFollowUp));
   },
@@ -32,7 +33,8 @@ export const productionPlanFollowUpService = {
   ): Promise<string | null> {
     if (!isConfigured) return null;
     const ref = await addDoc(collection(db, COLLECTION), {
-      ...data,
+      ...(data as Record<string, unknown>),
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

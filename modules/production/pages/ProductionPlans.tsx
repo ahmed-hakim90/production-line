@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button, KPIBox, LoadingSkeleton } from '../components/UI';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import {
@@ -36,7 +37,7 @@ import {
 import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ─── Config ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STATUS_CONFIG: Record<PlanStatus, { label: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger' }> = {
   planned: { label: 'مخطط', variant: 'info' },
@@ -84,12 +85,12 @@ type PlanGroupSection = {
   plans: EnrichedPlan[];
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const ProductionPlans: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
 
   const {
     products, _rawLines, _rawProducts, productionPlans, planReports,
@@ -127,7 +128,7 @@ export const ProductionPlans: React.FC = () => {
   const canImport = can('import');
   const planSettings = systemSettings.planSettings ?? { allowMultipleActivePlans: true, allowReportWithoutPlan: true, allowOverProduction: true };
 
-  // ── View / Filter state ──
+  // â”€â”€ View / Filter state â”€â”€
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterLine, setFilterLine] = useState('');
@@ -142,7 +143,7 @@ export const ProductionPlans: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [activeDrawerPlanId, setActiveDrawerPlanId] = useState<string | null>(null);
 
-  // ── Form state ──
+  // â”€â”€ Form state â”€â”€
   const [formProductId, setFormProductId] = useState(searchParams.get('productId') || '');
   const [formProductInput, setFormProductInput] = useState('');
   const [formLineId, setFormLineId] = useState('');
@@ -159,29 +160,29 @@ export const ProductionPlans: React.FC = () => {
     }
   }, [can, canManageComponentInjectionPlans]);
 
-  // ── Capacity warning ──
+  // â”€â”€ Capacity warning â”€â”€
   const [capacityWarning, setCapacityWarning] = useState<{ show: boolean; load: number; capacity: number }>({ show: false, load: 0, capacity: 0 });
 
-  // ── Edit modal ──
+  // â”€â”€ Edit modal â”€â”€
   const [editPlan, setEditPlan] = useState<ProductionPlan | null>(null);
   const [editForm, setEditForm] = useState({ plannedQuantity: 0, startDate: '', lineId: '', priority: 'medium' as PlanPriority });
   const [editSaving, setEditSaving] = useState(false);
 
-  // ── Status modal ──
+  // â”€â”€ Status modal â”€â”€
   const [statusPlan, setStatusPlan] = useState<ProductionPlan | null>(null);
   const [newStatus, setNewStatus] = useState<PlanStatus>('planned');
   const [statusSaving, setStatusSaving] = useState(false);
 
-  // ── Delete confirm ──
+  // â”€â”€ Delete confirm â”€â”€
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // ── Bulk date shift ──
+  // â”€â”€ Bulk date shift â”€â”€
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
   const [bulkStartDate, setBulkStartDate] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
 
-  // ── Reports for calculations ──
+  // â”€â”€ Reports for calculations â”€â”€
   const [productReports, setProductReports] = useState<ProductionReport[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
 
@@ -210,7 +211,7 @@ export const ProductionPlans: React.FC = () => {
     if (formProductInput !== label) setFormProductInput(label);
   }, [formProductId, products]);
 
-  // ── Dynamic calculations ──
+  // â”€â”€ Dynamic calculations â”€â”€
   const calculations = useMemo(() => {
     if (!formProductId || formQuantity <= 0) return null;
 
@@ -266,7 +267,7 @@ export const ProductionPlans: React.FC = () => {
     });
   }, [products, formProductInput]);
 
-  // ── Enriched plans with computed metrics ──
+  // â”€â”€ Enriched plans with computed metrics â”€â”€
   const enrichedPlans = useMemo<EnrichedPlan[]>(() => {
     return productionPlans.map((plan) => {
       const key = `${plan.lineId}_${plan.productId}`;
@@ -304,7 +305,7 @@ export const ProductionPlans: React.FC = () => {
     });
   }, [productionPlans, planReports]);
 
-  // ── Filtered plans ──
+  // â”€â”€ Filtered plans â”€â”€
   const filteredPlans = useMemo(() => {
     return enrichedPlans.filter((p) => {
       const searchQuery = filterSearch.trim().toLowerCase();
@@ -381,7 +382,7 @@ export const ProductionPlans: React.FC = () => {
 
   const groupedPlanSections = useMemo<PlanGroupSection[]>(() => {
     if (groupBy === 'none') {
-      return [{ key: 'all', label: 'كل الخطط', plans: sortedPlans }];
+      return [{ key: 'all', label: 'الكل', plans: sortedPlans }];
     }
 
     const groupedMap = new Map<string, PlanGroupSection>();
@@ -464,7 +465,7 @@ export const ProductionPlans: React.FC = () => {
     setSelectedPlanIds(ids);
   };
 
-  // ── KPIs ──
+  // â”€â”€ KPIs â”€â”€
   const kpis = useMemo(() => {
     const active = enrichedPlans.filter((p) => p.effectiveStatus === 'in_progress' || p.effectiveStatus === 'planned');
     const delayed = enrichedPlans.filter((p) => p.smartStatus === 'delayed' || p.smartStatus === 'critical');
@@ -475,7 +476,7 @@ export const ProductionPlans: React.FC = () => {
     return { activeCount: active.length, delayedCount: delayed.length, totalRemaining, avgCompletion };
   }, [enrichedPlans]);
 
-  // ── Handlers ──
+  // â”€â”€ Handlers â”€â”€
 
   const handleCreate = async () => {
     if (!formProductId || !formLineId || formQuantity <= 0 || !uid || !calculations) return;
@@ -965,7 +966,7 @@ export const ProductionPlans: React.FC = () => {
               { value: 'priority', label: 'الأولوية' },
               { value: 'plannedQuantity', label: 'الكمية' },
               { value: 'progress', label: 'التقدم' },
-              { value: 'startDate', label: 'تاريخ البدء' },
+              { value: 'startDate', label: 'تاريخ البد،' },
             ],
           },
           {
@@ -1244,7 +1245,7 @@ export const ProductionPlans: React.FC = () => {
     </div>
   );
 
-  // ─── Table View ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Table View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function TableView({ groups }: { groups: PlanGroupSection[] }) {
     const totalPlans = groups.reduce((sum, group) => sum + group.plans.length, 0);
@@ -1368,7 +1369,7 @@ export const ProductionPlans: React.FC = () => {
               ))}
             </div>
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="erp-table w-full text-right border-collapse">
                 <thead>
                   <tr className="bg-[#f8f9fa]/50 border-b border-[var(--color-border)]">
                     {canEdit && (
@@ -1377,7 +1378,7 @@ export const ProductionPlans: React.FC = () => {
                           type="checkbox"
                           checked={allVisibleSelected}
                           onChange={toggleSelectAllVisible}
-                          aria-label="تحديد كل الخطط الظاهرة"
+                          aria-label="تحديد كل الخطط المرئية"
                         />
                       </th>
                     )}
@@ -1463,7 +1464,7 @@ export const ProductionPlans: React.FC = () => {
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <p className="text-xs font-medium text-slate-500">{plan.plannedStartDate || plan.startDate}</p>
-                              {plan.plannedEndDate && <p className="text-[10px] text-slate-400">→ {plan.plannedEndDate}</p>}
+                              {plan.plannedEndDate && <p className="text-[10px] text-slate-400">â†’ {plan.plannedEndDate}</p>}
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
@@ -1553,7 +1554,7 @@ export const ProductionPlans: React.FC = () => {
     );
   }
 
-  // ─── Kanban View ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ Kanban View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function KanbanView({ plans }: { plans: typeof enrichedPlans }) {
     const columns: PlanStatus[] = ['planned', 'in_progress', 'completed', 'paused', 'cancelled'];
@@ -1624,7 +1625,7 @@ export const ProductionPlans: React.FC = () => {
     );
   }
 
-  // ─── Timeline View ─────────────────────────────────────────────────────────
+  // â”€â”€â”€ Timeline View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function TimelineView({ plans }: { plans: typeof enrichedPlans }) {
     const activePlans = plans.filter((p) => p.plannedStartDate || p.startDate);
@@ -1694,7 +1695,7 @@ export const ProductionPlans: React.FC = () => {
                   <div
                     className={`absolute top-1 bottom-1 rounded-[var(--border-radius-sm)] ${smartColor} opacity-80 flex items-center justify-center`}
                     style={{ right: barStyle.right, width: barStyle.width, minWidth: '20px' }}
-                    title={`${start} → ${end} | ${Math.min(plan.progressRatio, 100)}%`}
+                    title={`${start} â†’ ${end} | ${Math.min(plan.progressRatio, 100)}%`}
                   >
                     {parseFloat(barStyle.width) > 8 && (
                       <span className="text-[10px] font-bold text-white drop-shadow-sm">{Math.min(plan.progressRatio, 100)}%</span>
@@ -1717,3 +1718,6 @@ export const ProductionPlans: React.FC = () => {
     );
   }
 };
+
+
+

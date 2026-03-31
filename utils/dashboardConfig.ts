@@ -66,6 +66,27 @@ export const DASHBOARD_LABELS: Record<string, string> = {
   factoryDashboard: 'لوحة مدير المصنع',
 };
 
+/** Flat lookup for labels/icons when a widget is placed on any dashboard (incl. cross-dashboard moves). */
+export const ALL_DASHBOARD_WIDGET_DEFS: Record<string, WidgetDefinition> = (() => {
+  const map: Record<string, WidgetDefinition> = {};
+  Object.values(DASHBOARD_WIDGETS).forEach((defs) => {
+    defs.forEach((d) => {
+      if (!map[d.id]) map[d.id] = d;
+    });
+  });
+  return map;
+})();
+
+/**
+ * Built-in widget IDs to append once to an existing saved layout (e.g. after an app update).
+ * When empty, saved `dashboardWidgets[dashboardKey]` is the full source of truth for built-ins.
+ */
+export const DASHBOARD_BUILTIN_WIDGET_MIGRATIONS: Record<string, readonly string[]> = {
+  dashboard: [],
+  adminDashboard: [],
+  factoryDashboard: [],
+};
+
 // ─── Quick Actions Registry ─────────────────────────────────────────────────
 
 export interface QuickActionDefinition {
@@ -80,6 +101,7 @@ export interface QuickActionDefinition {
 
 export const AVAILABLE_QUICK_ACTIONS: QuickActionDefinition[] = [
   { key: 'quick_action', label: 'إدخال سريع', icon: 'bolt', color: 'amber', actionType: 'navigate', target: '/quick-action', permission: 'quickAction.view' },
+  { key: 'quick_inventory_transfer', label: 'تحويل مخزن سريع', icon: 'swap_horiz', color: 'emerald', actionType: 'navigate', target: '/quick-inventory-transfer', permission: 'inventory.transactions.create' },
   { key: 'transfer_approvals', label: 'اعتماد التحويلات', icon: 'verified_user', color: 'amber', actionType: 'navigate', target: '/inventory/transfer-approvals', permission: 'inventory.view' },
   { key: 'reports', label: 'التقارير', icon: 'bar_chart', color: 'primary', actionType: 'navigate', target: '/reports', permission: 'reports.view' },
   { key: 'quality_final', label: 'الفحص النهائي', icon: 'task_alt', color: 'emerald', actionType: 'navigate', target: '/quality/final-inspection', permission: 'quality.finalInspection.view' },
@@ -235,6 +257,8 @@ export const DEFAULT_THEME: ThemeSettings = {
   sidebarIconStyle: 'colorful',
   textColor: '#1a1a1a',
   mutedTextColor: '#8d99a6',
+  contentMaxWidth: '1536px',
+  pageLayoutOverrides: {},
 };
 
 export const DEFAULT_DASHBOARD_DISPLAY: DashboardDisplaySettings = {
@@ -321,10 +345,13 @@ export function getWidgetOrder(
   }
 
   const knownIds = new Set(savedOrder.map((widget) => widget.id));
-  const missingBase = baseDefaults.filter((widget) => !knownIds.has(widget.id));
+  const migrationIds = new Set(DASHBOARD_BUILTIN_WIDGET_MIGRATIONS[dashboardKey] ?? []);
+  const missingMigrated = baseDefaults.filter(
+    (widget) => !knownIds.has(widget.id) && migrationIds.has(widget.id),
+  );
   const missingCustom = customDefaults.filter((widget) => !knownIds.has(widget.id));
 
-  return [...savedOrder, ...missingBase, ...missingCustom];
+  return [...savedOrder, ...missingMigrated, ...missingCustom];
 }
 
 export function isWidgetVisible(
@@ -334,7 +361,8 @@ export function isWidgetVisible(
 ): boolean {
   const widgets = getWidgetOrder(settings, dashboardKey);
   const found = widgets.find((w) => w.id === widgetId);
-  return found ? found.visible : true;
+  if (!found) return false;
+  return found.visible;
 }
 
 export function getAlertSettings(settings: SystemSettings | null): AlertSettings {

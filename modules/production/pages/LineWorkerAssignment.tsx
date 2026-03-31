@@ -163,7 +163,7 @@ export const LineWorkerAssignment: React.FC = () => {
     }
 
     if (employee.isActive === false) {
-      showFeedback('error', `${employee.name} — موظف غير نشط`);
+      showFeedback('error', `${employee.name} — السجل غير نشط`);
       setScanInput('');
       inputRef.current?.focus();
       return;
@@ -436,7 +436,7 @@ export const LineWorkerAssignment: React.FC = () => {
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <span className="material-icons-round text-primary text-xl">qr_code_scanner</span>
-              <h3 className="font-bold text-base">اسم / إدخال كود الموظف</h3>
+              <h3 className="font-bold text-base">اسم / إدخال كود العامل</h3>
             </div>
             <div className="flex gap-2">
               <div className="flex-1 relative">
@@ -549,11 +549,11 @@ export const LineWorkerAssignment: React.FC = () => {
             <div className="text-center py-10">
               <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">person_add</span>
               <p className="page-subtitle">لم يتم تسجيل عمالة على هذا الخط بعد</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">امسح باركود الموظف أو اكتب الكود يدوياً</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">امسح باركود العامل أو اكتب الكود يدوياً</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الكود</th>
@@ -623,7 +623,7 @@ export const LineWorkerAssignment: React.FC = () => {
               </div>
               <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] p-3 text-center">
                 <p className="text-2xl font-bold text-emerald-600">{lineGroups.length}</p>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold">خطوط نشطة</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold">تاريخ اليوم</p>
               </div>
               {lineGroups.slice(0, 2).map((g) => (
                 <div key={g.lineId} className="bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] p-3 text-center">

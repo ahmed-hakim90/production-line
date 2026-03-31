@@ -1,0 +1,102 @@
+{
+  "mode": "report",
+  "root": "D:\\hakim\\dev\\pro-tech-erp-production-management",
+  "scannedFiles": 556,
+  "files": [
+    {
+      "rel": "scripts/fix-modules-arabic-smart.mjs",
+      "safeMatches": [
+        {
+          "label": "emDash_mojibake",
+          "count": 1
+        },
+        {
+          "label": "enDash_mojibake",
+          "count": 1
+        },
+        {
+          "label": "ellipsis_mojibake",
+          "count": 1
+        }
+      ],
+      "arHits": [
+        {
+          "index": 727,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        }
+      ],
+      "arExamples": [
+        {
+          "index": 727,
+          "snippet": "akePairRe = /(ط[اأإآء-ي]|ظ[اأإآء-ي])/g;\nconst hardBadRe = /(ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|â€”|â€“|â€¦|â€|Ã|Â)/g;\n\nfunction"
+        }
+      ]
+    },
+    {
+      "rel": "scripts/fix-mojibake.report.json",
+      "safeMatches": [
+        {
+          "label": "emDash_mojibake",
+          "count": 2
+        },
+        {
+          "label": "enDash_mojibake",
+          "count": 2
+        },
+        {
+          "label": "ellipsis_mojibake",
+          "count": 2
+        }
+      ],
+      "arHits": [
+        {
+          "index": 526,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 714,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 1203,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 1298,
+          "match": "ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|"
+        },
+        {
+          "index": 1393,
+          "match": "ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط"
+        }
+      ],
+      "arExamples": [
+        {
+          "index": 526,
+          "snippet": "s\": [\n        {\n          \"index\": 727,\n          \"match\": \"ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|\"\n        }\n      ],\n      \"arEx"
+        },
+        {
+          "index": 714,
+          "snippet": "kePairRe = /(ط[اأإآء-ي]|ظ[اأإآء-ي])/g;\\nconst hardBadRe = /(ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|â€”|â€“|â€¦|â€|Ã|Â)/g;\\n\\nfuncti"
+        },
+        {
+          "index": 1203,
+          "snippet": "s\": [\n        {\n          \"index\": 526,\n          \"match\": \"ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|\"\n        },\n        {\n         "
+        },
+        {
+          "index": 1298,
+          "snippet": "   },\n        {\n          \"index\": 714,\n          \"match\": \"ط§ظ|ظ„ط|ظ…ط|ط¹ظ|ظ†ط|ظˆط|ط¯ظ|\"\n        },\n        {\n         "
+        },
+        {
+          "index": 1393,
+          "snippet": "   },\n        {\n          \"index\": 955,\n          \"match\": \"ظˆط²يط¹-ظ…ط±ط§ظƒط²-ط\"\n        },\n        {\n          \"index\""
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "safeEdits": 0,
+    "filesEdited": 0,
+    "filesWithArabicMojibake": 2
+  }
+}

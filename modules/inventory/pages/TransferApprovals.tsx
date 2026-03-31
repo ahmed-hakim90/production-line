@@ -45,13 +45,23 @@ export const TransferApprovals: React.FC = () => {
   const finishedReceiveWarehouseId = useAppStore(
     (s) => s.systemSettings.planSettings?.finishedReceiveWarehouseId || '',
   );
+  const defaultProductionWarehouseId = useAppStore(
+    (s) => s.systemSettings.planSettings?.defaultProductionWarehouseId || '',
+  );
+  const decomposedSourceWarehouseId = useAppStore(
+    (s) => s.systemSettings.planSettings?.decomposedSourceWarehouseId || '',
+  );
   const allowNegativeFinishedTransferStock = useAppStore(
     (s) => Boolean(s.systemSettings.planSettings?.allowNegativeFinishedTransferStock),
+  );
+  const allowNegativeDecomposedStock = useAppStore(
+    (s) => Boolean(s.systemSettings.planSettings?.allowNegativeDecomposedStock),
   );
   const [requests, setRequests] = useState<InventoryTransferRequest[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'>('pending');
   const [loading, setLoading] = useState(false);
+  const [bulkApproving, setBulkApproving] = useState(false);
   const [processingId, setProcessingId] = useState<string>('');
   const [selectedRequest, setSelectedRequest] = useState<InventoryTransferRequest | null>(null);
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
@@ -66,17 +76,55 @@ export const TransferApprovals: React.FC = () => {
   const canApproveNegativeFinishedTransfer = can('inventory.finishedStock.allowNegativeApprove');
   const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
 
-  const loadData = async () => {
-    setLoading(true);
+  const isSelfProductionEntryRequest = (request: InventoryTransferRequest | undefined): boolean => {
+    if (!request || (request.requestType || 'transfer') !== 'production_entry') return false;
+    return Boolean(
+      (uid && request.createdByUserId && uid === request.createdByUserId) ||
+      (
+        !request.createdByUserId &&
+        normalizeActor(request.createdBy) !== '' &&
+        normalizeActor(request.createdBy) === normalizeActor(userDisplayName || userEmail || '')
+      ),
+    );
+  };
+
+  const allowNegativeFromSourceFor = (request: InventoryTransferRequest | undefined): boolean => {
+    if (!request || !canApproveNegativeFinishedTransfer) return false;
+    const fromId = String(request.fromWarehouseId || '').trim();
+    if (!fromId) return false;
+    const finishedWarehouseIds = [
+      String(finishedReceiveWarehouseId || '').trim(),
+      String(defaultProductionWarehouseId || '').trim(),
+    ].filter(Boolean);
+    const finishedPath =
+      allowNegativeFinishedTransferStock &&
+      finishedWarehouseIds.length > 0 &&
+      finishedWarehouseIds.includes(fromId);
+    const decomposedPath =
+      allowNegativeDecomposedStock &&
+      Boolean(String(decomposedSourceWarehouseId || '').trim()) &&
+      fromId === String(decomposedSourceWarehouseId || '').trim();
+    return finishedPath || decomposedPath;
+  };
+
+  const loadData = async (opts?: { silent?: boolean; warehouses?: boolean }) => {
+    const silent = Boolean(opts?.silent);
+    const fetchWarehouses = opts?.warehouses ?? !silent;
+    if (!silent) setLoading(true);
     try {
-      const [rows, whs] = await Promise.all([
-        transferApprovalService.getAll(),
-        warehouseService.getAll(),
-      ]);
-      setRequests(rows);
-      setWarehouses(whs);
+      if (fetchWarehouses) {
+        const [rows, whs] = await Promise.all([
+          transferApprovalService.getAll(),
+          warehouseService.getAll(),
+        ]);
+        setRequests(rows);
+        setWarehouses(whs);
+      } else {
+        const rows = await transferApprovalService.getAll();
+        setRequests(rows);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -102,6 +150,11 @@ export const TransferApprovals: React.FC = () => {
     if (statusFilter === 'all') return requests;
     return requests.filter((row) => row.status === statusFilter);
   }, [requests, statusFilter]);
+
+  const bulkApproveEligible = useMemo(
+    () => requests.filter((r) => r.status === 'pending' && r.id && !isSelfProductionEntryRequest(r)),
+    [requests, uid, userDisplayName, userEmail],
+  );
 
   const buildPrintData = (row: InventoryTransferRequest): StockTransferPrintData => ({
     transferNo: row.referenceNo,
@@ -135,35 +188,21 @@ export const TransferApprovals: React.FC = () => {
   const handleApprove = async (requestId?: string) => {
     if (!requestId || !canApprove) return;
     const request = requests.find((row) => row.id === requestId);
-    const isSelfProductionEntryRequest = Boolean(
-      request &&
-      (request.requestType || 'transfer') === 'production_entry' &&
-      (
-        (uid && request.createdByUserId && uid === request.createdByUserId) ||
-        (
-          !request.createdByUserId &&
-          normalizeActor(request.createdBy) !== '' &&
-          normalizeActor(request.createdBy) === normalizeActor(userDisplayName || userEmail || '')
-        )
-      ),
-    );
-    if (isSelfProductionEntryRequest) {
-      toast.warning('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتماد الطلب من مستخدم آخر مخوّل.');
+    if (isSelfProductionEntryRequest(request)) {
+      toast.warning('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتمادها من مستخدم آخر مخوّل.');
       return;
     }
-    const allowNegativeFromSource =
-      Boolean(allowNegativeFinishedTransferStock) &&
-      Boolean(canApproveNegativeFinishedTransfer) &&
-      Boolean(finishedReceiveWarehouseId) &&
-      request?.fromWarehouseId === finishedReceiveWarehouseId;
     setProcessingId(requestId);
     try {
       await transferApprovalService.approveRequest(
         requestId,
         userDisplayName || userEmail || 'Current User',
-        { allowNegativeFromSource, approverUserId: uid || undefined },
+        {
+          allowNegativeFromSource: allowNegativeFromSourceFor(request),
+          approverUserId: uid || undefined,
+        },
       );
-      await loadData();
+      await loadData({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'تعذر اعتماد التحويلة.');
     } finally {
@@ -183,7 +222,7 @@ export const TransferApprovals: React.FC = () => {
         reason || '',
         uid || undefined,
       );
-      await loadData();
+      await loadData({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'تعذر رفض التحويلة.');
     } finally {
@@ -205,11 +244,59 @@ export const TransferApprovals: React.FC = () => {
         reason || '',
         uid || undefined,
       );
-      await loadData();
+      await loadData({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'تعذر إلغاء الحركة.');
     } finally {
       setProcessingId('');
+    }
+  };
+
+  const handleApproveAll = async () => {
+    if (!canApprove || bulkApproving || loading) return;
+    const targets = bulkApproveEligible;
+    if (!targets.length) {
+      toast.info('لا توجد طلبات معلقة يمكن اعتمادها دفعة واحدة.');
+      return;
+    }
+    const pendingSelfSkipped = requests.filter(
+      (r) => r.status === 'pending' && r.id && isSelfProductionEntryRequest(r),
+    ).length;
+    let confirmMsg = `سيتم اعتماد ${targets.length} طلبات.`;
+    if (pendingSelfSkipped > 0) {
+      confirmMsg += ` (${pendingSelfSkipped} طلبات لن يُعتمد تلقائياً لأنها دخول تم الصنع بإنشائك.)`;
+    }
+    confirmMsg += ' هل تريد المتابعة؟';
+    if (!window.confirm(confirmMsg)) return;
+
+    setBulkApproving(true);
+    const actor = userDisplayName || userEmail || 'Current User';
+    let ok = 0;
+    const errors: string[] = [];
+    try {
+      for (const req of targets) {
+        const id = req.id!;
+        try {
+          await transferApprovalService.approveRequest(id, actor, {
+            allowNegativeFromSource: allowNegativeFromSourceFor(req),
+            approverUserId: uid || undefined,
+          });
+          ok += 1;
+        } catch (e: any) {
+          errors.push(`${req.referenceNo || id}: ${e?.message || 'خطأ'}`);
+        }
+      }
+    } finally {
+      setBulkApproving(false);
+    }
+
+    await loadData({ silent: true });
+    if (errors.length === 0) {
+      toast.success(`تم اعتماد ${ok} طلبات.`);
+    } else {
+      toast.warning(
+        `تم اعتماد ${ok} طلبات، وفشل ${errors.length}. ${errors.slice(0, 3).join(' — ')}${errors.length > 3 ? '…' : ''}`,
+      );
     }
   };
 
@@ -220,7 +307,7 @@ export const TransferApprovals: React.FC = () => {
           <h2 className="page-title">اعتماد تحويلات المخازن</h2>
           <p className="page-subtitle">التحويلات ودخول تم الصنع لا تؤثر على المخزون قبل الاعتماد.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
             <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm">
               <SelectValue placeholder="كل الحالات" />
@@ -233,7 +320,17 @@ export const TransferApprovals: React.FC = () => {
               <SelectItem value="cancelled">ملغاة</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => void loadData()} disabled={loading}>
+          {canApprove && bulkApproveEligible.length > 0 && (
+            <Button
+              variant="primary"
+              onClick={() => void handleApproveAll()}
+              disabled={loading || bulkApproving}
+            >
+              <span className="material-icons-round text-sm">done_all</span>
+              اعتماد الكل ({bulkApproveEligible.length})
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => void loadData()} disabled={loading || bulkApproving}>
             <span className="material-icons-round text-sm">refresh</span>
             تحديث
           </Button>
@@ -245,9 +342,11 @@ export const TransferApprovals: React.FC = () => {
           لا تملك صلاحية الاعتماد الحالية: <span dir="ltr">{transferApprovalPermission}</span>
         </div>
       )}
-      {canApprove && allowNegativeFinishedTransferStock && !canApproveNegativeFinishedTransfer && (
+      {canApprove &&
+        (allowNegativeFinishedTransferStock || allowNegativeDecomposedStock) &&
+        !canApproveNegativeFinishedTransfer && (
         <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
-          تم تفعيل التحويل بالسالب لمخزن تم الصنع من الإعدادات، لكن دورك لا يملك صلاحية
+          تم تفعيل التحويل بالسالب من الإعدادات (تم الصنع و/أو مخزن المفكك)، لكن دورك لا يملك صلاحية
           <span dir="ltr" className="mx-1">inventory.finishedStock.allowNegativeApprove</span>
           لذلك الاعتماد بالسالب غير متاح لك.
         </div>
@@ -271,7 +370,7 @@ export const TransferApprovals: React.FC = () => {
                   ? (row.fromWarehouseName || 'تقارير الإنتاج')
                   : (warehouseMap.get(row.fromWarehouseId) || row.fromWarehouseName || row.fromWarehouseId);
                 const toName = warehouseMap.get(row.toWarehouseId) || row.toWarehouseName || row.toWarehouseId;
-                const rowProcessing = processingId === row.id;
+                const rowProcessing = processingId === row.id || bulkApproving;
                 return (
                   <div key={row.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
@@ -304,7 +403,7 @@ export const TransferApprovals: React.FC = () => {
               })}
             </div>
             <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-right border-collapse">
+            <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">رقم المرجع</th>
@@ -318,19 +417,9 @@ export const TransferApprovals: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
                 {filtered.map((row) => {
-                  const rowProcessing = processingId === row.id;
+                  const rowProcessing = processingId === row.id || bulkApproving;
                   const requestType = row.requestType || 'transfer';
-                  const isSelfProductionEntryRequest = Boolean(
-                    requestType === 'production_entry' &&
-                    (
-                      (uid && row.createdByUserId && uid === row.createdByUserId) ||
-                      (
-                        !row.createdByUserId &&
-                        normalizeActor(row.createdBy) !== '' &&
-                        normalizeActor(row.createdBy) === normalizeActor(userDisplayName || userEmail || '')
-                      )
-                    ),
-                  );
+                  const rowIsSelfProductionEntry = isSelfProductionEntryRequest(row);
                   const fromName = requestType === 'production_entry'
                     ? (row.fromWarehouseName || 'تقارير الإنتاج')
                     : (warehouseMap.get(row.fromWarehouseId) || row.fromWarehouseName || row.fromWarehouseId);
@@ -394,8 +483,8 @@ export const TransferApprovals: React.FC = () => {
                               <Button
                                 variant="primary"
                                 onClick={() => void handleApprove(row.id)}
-                                disabled={!canApprove || rowProcessing || isSelfProductionEntryRequest}
-                                title={isSelfProductionEntryRequest ? 'لا يمكن اعتماد طلب تم إنشاؤه بواسطة نفس المستخدم.' : undefined}
+                                disabled={!canApprove || rowProcessing || rowIsSelfProductionEntry}
+                                title={rowIsSelfProductionEntry ? 'لا يمكن اعتماد طلب تم إنشاؤه من نفس المستخدم.' : undefined}
                               >
                                 <span className="material-icons-round text-sm">check_circle</span>
                                 اعتماد
@@ -440,21 +529,33 @@ export const TransferApprovals: React.FC = () => {
       {selectedRequest && (
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          role="presentation"
           onClick={() => setSelectedRequest(null)}
+          onKeyDown={(e) => e.key === 'Escape' && setSelectedRequest(null)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transfer-approval-detail-title"
             className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-3xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold">
+                <h3 id="transfer-approval-detail-title" className="text-lg font-bold">
                   {selectedRequest.requestType === 'production_entry' ? 'تفاصيل طلب دخول تم الصنع' : 'تفاصيل طلب التحويل'}
                 </h3>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">مرجع: {selectedRequest.referenceNo}</p>
               </div>
-              <button onClick={() => setSelectedRequest(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
-                <span className="material-icons-round">close</span>
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                className="text-[var(--color-text-muted)] hover:text-slate-600 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label="إغلاق النافذة"
+              >
+                <span className="material-icons-round" aria-hidden>
+                  close
+                </span>
               </button>
             </div>
             <div className="p-6 overflow-auto flex-1 space-y-4">
@@ -475,7 +576,7 @@ export const TransferApprovals: React.FC = () => {
                 </div>
               </div>
               <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-                <table className="w-full text-right border-collapse">
+                <table className="erp-table w-full text-right border-collapse">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">الصنف</th>
@@ -506,7 +607,7 @@ export const TransferApprovals: React.FC = () => {
               </Button>
               <Button variant="primary" onClick={() => void printRequest(selectedRequest)}>
                 <span className="material-icons-round text-sm">print</span>
-                طباعة الطلب
+                طباعة التحويل
               </Button>
             </div>
           </div>

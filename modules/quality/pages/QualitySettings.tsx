@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -76,7 +76,7 @@ export const QualitySettings: React.FC = () => {
   });
   const [printTemplates, setPrintTemplates] = useState<QualityPrintTemplateSettings>({
     headerText: 'تقرير الجودة',
-    footerText: 'تم الإنشاء بواسطة نظام الإنتاج',
+    footerText: 'تم الإنشاء تلقائياً من الإنتاج',
     showSignatureInspector: true,
     showSignatureSupervisor: true,
     showSignatureQualityManager: true,
@@ -332,7 +332,7 @@ export const QualitySettings: React.FC = () => {
           <div className="space-y-6">
             <div className="flex items-start justify-between gap-4 p-4 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <div>
-                <h3 className="text-sm font-extrabold text-[var(--color-text)]">إغلاق أمر الشغل يتطلب اعتماد الجودة</h3>
+                <h3 className="text-sm font-extrabold text-[var(--color-text)]">إغلاق أمر الشغل باعتماد الجودة</h3>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">
                   عند التفعيل، لن يمكن تحويل أمر الشغل إلى مكتمل إلا إذا كانت حالة الجودة معتمدة.
                 </p>
@@ -384,7 +384,7 @@ export const QualitySettings: React.FC = () => {
                   value={reasonForm.labelAr}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, labelAr: e.target.value }))}
                   className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
-                  placeholder="عيب تشطيب"
+                  placeholder="عيب التجميع"
                   disabled={!canManageCatalog || savingReason}
                 />
               </div>
@@ -447,7 +447,7 @@ export const QualitySettings: React.FC = () => {
 
           <Card className="xl:col-span-2" title="قائمة أسباب العيوب">
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="erp-table min-w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">الكود</th>
@@ -467,7 +467,7 @@ export const QualitySettings: React.FC = () => {
                       <td className="py-2 px-2">{SEVERITY_OPTIONS.find((item) => item.value === reason.severityDefault)?.label}</td>
                       <td className="py-2 px-2">
                         <Badge variant={reason.isActive ? 'success' : 'neutral'}>
-                          {reason.isActive ? 'نشط' : 'معطل'}
+                          {reason.isActive ? 'نشط' : 'معطّل'}
                         </Badge>
                       </td>
                       <td className="py-2 px-2">

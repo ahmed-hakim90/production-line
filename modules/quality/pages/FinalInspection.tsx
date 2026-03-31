@@ -354,7 +354,7 @@ export const FinalInspection: React.FC = () => {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             disabled={!canInspect}
-            placeholder="ملاحظات"
+            placeholder="ملاحظات إضافية"
             className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
           />
           <div className="md:col-span-2 space-y-2">

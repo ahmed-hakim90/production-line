@@ -73,6 +73,24 @@ self.addEventListener('notificationclick', (event) => {
   const targetUrl  = String(data.link || '/#/');
   const notifType  = String(data.notificationType || '');
 
+  const raw = String(event.notification?.data?.link || '/').trim() || '/';
+  let path = '/';
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const u = new URL(raw);
+      path = u.origin === self.location.origin ? `${u.pathname}${u.search}` || '/' : '/';
+    } else if (raw.startsWith('#/')) {
+      path = raw.slice(1);
+    } else if (raw.startsWith('#')) {
+      path = raw.slice(1) || '/';
+    } else {
+      path = raw.startsWith('/') ? raw : `/${raw}`;
+    }
+  } catch {
+    path = '/';
+  }
+  if (!path.startsWith('/')) path = `/${path}`;
+  const fullUrl = new URL(path, self.location.origin).href;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       // Focus an existing window if possible and send a message so the app
@@ -85,6 +103,12 @@ self.addEventListener('notificationclick', (event) => {
       }
       // No existing window — open the app at the target route.
       if (clients.openWindow) return clients.openWindow(targetUrl);
+        if ('focus' in client) {
+          client.postMessage({ type: 'notification-click', targetUrl: path });
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(fullUrl);
       return undefined;
     }),
   );

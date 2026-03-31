@@ -82,7 +82,7 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
             {ps.headerText}
           </h1>
           <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
-            نظام إدارة الجودة - تقارير الجودة
+            قسم إدارة الجودة - تقارير الجودة
           </p>
         </div>
 
@@ -195,7 +195,7 @@ export const SingleIPQCPrint = React.forwardRef<HTMLDivElement, SingleIPQCPrintP
 
     const reportLink =
       typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}#/quality/ipqc`
+        ? `${window.location.origin}/quality/ipqc`
         : `ipqc|${data.workOrderNumber}|${data.date}|${data.statusLabel}`;
 
     return (
@@ -312,7 +312,7 @@ export const SingleFinalInspectionPrint = React.forwardRef<HTMLDivElement, Singl
 
     const reportLink =
       typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}#/quality/final-inspection`
+        ? `${window.location.origin}/quality/final-inspection`
         : `final|${data.workOrderNumber}|${data.date}|${data.statusLabel}`;
 
     return (
@@ -467,7 +467,7 @@ export const QualityDefectsPrint = React.forwardRef<HTMLDivElement, QualityDefec
             </p>
           )}
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
+        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
           <thead>
             <tr style={{ background: 'var(--print-th-bg, #f1f5f9)' }}>
               <Th>#</Th>
@@ -558,7 +558,7 @@ export const ReworkOrdersPrint = React.forwardRef<HTMLDivElement, ReworkOrdersPr
             تقرير أوامر إعادة التشغيل
           </h2>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
+        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: isThermal ? '7pt' : '9.5pt' }}>
           <thead>
             <tr style={{ background: 'var(--print-th-bg, #f1f5f9)' }}>
               <Th>#</Th>

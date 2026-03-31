@@ -15,6 +15,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import {
   leaveRequestsRef,
   leaveBalancesRef,
@@ -111,6 +112,7 @@ export const leaveBalanceService = {
 
     const docRef = await addDoc(leaveBalancesRef(), {
       employeeId,
+      tenantId: getCurrentTenantId(),
       ...DEFAULT_LEAVE_BALANCE,
       lastUpdated: serverTimestamp(),
     });
@@ -229,7 +231,7 @@ export async function syncLeaveApprovalDecision(params: {
 
   const leaveReq = await leaveRequestService.getById(leaveRequestId);
   if (!leaveReq) {
-    return { success: false, error: 'طلب الإجازة المرتبط غير موجود' };
+    return { success: false, error: 'سجل الإجازة المرتبط غير موجود' };
   }
 
   if ((leaveReq as any).balanceImpactApplied) {
@@ -265,6 +267,7 @@ export const leaveRequestService = {
     if (!isConfigured) return '';
     const docRef = await addDoc(leaveRequestsRef(), {
       ...data,
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
     });
     return docRef.id;

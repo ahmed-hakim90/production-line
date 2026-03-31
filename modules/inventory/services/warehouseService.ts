@@ -1,5 +1,7 @@
-import { addDoc, collection, getDocs, orderBy, query, updateDoc, doc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, orderBy, updateDoc } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { Warehouse } from '../types';
 
 const COLLECTION = 'warehouses';
@@ -7,7 +9,7 @@ const COLLECTION = 'warehouses';
 export const warehouseService = {
   async getAll(): Promise<Warehouse[]> {
     if (!isConfigured) return [];
-    const q = query(collection(db, COLLECTION), orderBy('name', 'asc'));
+    const q = tenantQuery(db, COLLECTION, orderBy('name', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
   },
@@ -16,6 +18,7 @@ export const warehouseService = {
     if (!isConfigured) return null;
     const ref = await addDoc(collection(db, COLLECTION), {
       ...payload,
+      tenantId: getCurrentTenantId(),
       createdAt: new Date().toISOString(),
     });
     return ref.id;

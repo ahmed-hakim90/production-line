@@ -15,6 +15,7 @@ interface WorkOrdersTableProps {
   onStatusChange: (id: string, status: WorkOrderStatus) => void;
   onEdit: (order: WorkOrder) => void;
   onCloseOrder: (order: WorkOrder) => void;
+  onReopenCompleted?: (order: WorkOrder) => void;
   onLoadMore: () => void;
 }
 
@@ -72,6 +73,7 @@ export function WorkOrdersTable({
   onStatusChange,
   onEdit,
   onCloseOrder,
+  onReopenCompleted,
   onLoadMore,
 }: WorkOrdersTableProps) {
   const grouped = useMemo(() => groupRows(rows, groupBy), [rows, groupBy]);
@@ -109,7 +111,7 @@ export function WorkOrdersTable({
             </div>
           )}
 
-          <table className={styles.table}>
+          <table className={`${styles.table} erp-table`}>
             <thead>
               <tr>
                 <th>رقم الأمر</th>
@@ -131,6 +133,7 @@ export function WorkOrdersTable({
                   onStatusChange={onStatusChange}
                   onEdit={onEdit}
                   onCloseOrder={onCloseOrder}
+                  onReopenCompleted={onReopenCompleted}
                 />
               ))}
             </tbody>

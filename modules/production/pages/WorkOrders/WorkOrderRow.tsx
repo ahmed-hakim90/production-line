@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit2, Eye, X } from 'lucide-react';
+import { Edit2, Eye, RotateCcw, X } from 'lucide-react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { formatNumber } from '../../../../utils/calculations';
@@ -33,6 +33,7 @@ interface WorkOrderRowProps {
   onStatusChange: (id: string, status: WorkOrderStatus) => void;
   onEdit: (order: WorkOrder) => void;
   onCloseOrder: (order: WorkOrder) => void;
+  onReopenCompleted?: (order: WorkOrder) => void;
 }
 
 const progressColorClass = (progress: number): string => {
@@ -41,7 +42,7 @@ const progressColorClass = (progress: number): string => {
   return styles.progressPrimary;
 };
 
-function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onCloseOrder }: WorkOrderRowProps) {
+function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onCloseOrder, onReopenCompleted }: WorkOrderRowProps) {
   const { order } = row;
   const produced = Number(order.producedQuantity || 0);
   const target = Number(order.quantity || 0);
@@ -60,6 +61,15 @@ function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onClos
       icon: <Edit2 size={14} />,
       onClick: () => onEdit(order),
     },
+    ...(row.storedStatus === 'completed' && onReopenCompleted
+      ? [
+          {
+            label: 'إعادة فتح الأمر',
+            icon: <RotateCcw size={14} />,
+            onClick: () => onReopenCompleted(order),
+          } as RowActionMenuEntry,
+        ]
+      : []),
     { separator: true },
     {
       label: 'إغلاق الأمر',
@@ -127,6 +137,8 @@ export const WorkOrderRow = React.memo(
     prev.onStatusChange === next.onStatusChange &&
     prev.onEdit === next.onEdit &&
     prev.onCloseOrder === next.onCloseOrder &&
+    prev.onReopenCompleted === next.onReopenCompleted &&
+    prev.row.storedStatus === next.row.storedStatus &&
     prev.row.order.id === next.row.order.id &&
     prev.row.order.status === next.row.order.status &&
     prev.row.order.producedQuantity === next.row.order.producedQuantity &&

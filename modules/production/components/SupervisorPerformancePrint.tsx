@@ -186,7 +186,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
         </div>
 
         <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
-          <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تفصيل المنتجات (المطلوب مقابل المحقق)</p>
+          <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تفصيل المنتجات (المخطط مقابل المحقق)</p>
           {data.productRows.length === 0 ? (
             <div style={{ marginTop: '2mm', border: `1px dashed ${palette.border}`, borderRadius: '2.5mm', padding: '3mm', textAlign: 'center', color: palette.mutedText, fontWeight: 700 }}>
               لا توجد بيانات منتجات في الفترة المختارة
@@ -212,7 +212,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
                       عدد التقارير: {row.reportsCount}
                     </p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.8mm', marginTop: '1.1mm' }}>
-                      <MetricLine compact label="المطلوب" value={fmtNum(row.requiredQty)} color={palette.text} />
+                      <MetricLine compact label="المطلوبة" value={fmtNum(row.requiredQty)} color={palette.text} />
                       <MetricLine compact label="المحقق" value={fmtNum(row.achievedQty)} color={palette.success} />
                       <MetricLine compact label="نسبة الأداء" value={`${fmtNum(row.performanceRatio)}%`} color={performanceColor} />
                     </div>
@@ -225,7 +225,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
 
         <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
           <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تقييم تفصيلي لكل خط</p>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '2mm', fontSize: isThermal ? '7pt' : '9.5pt' }}>
+          <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '2mm', fontSize: isThermal ? '7pt' : '9.5pt' }}>
             <thead>
               <tr style={{ background: palette.tableHeaderBg }}>
                 <Th>الخط</Th>
@@ -251,7 +251,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
               ))}
               {data.lineRows.length === 0 && (
                 <tr>
-                  <Td colSpan={7} align="center">لا توجد بيانات خطوط في الفترة المختارة</Td>
+                  <Td colSpan={7} align="center">لا توجد بيانات إنتاج في الفترة المختارة</Td>
                 </tr>
               )}
             </tbody>
@@ -260,7 +260,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
 
         {data.recommendations.length > 0 && (
           <div style={{ border: `1.5px solid ${palette.border}`, borderRadius: '3mm', padding: isThermal ? '2mm' : '4mm', background: PRINT_COLORS.noteBg }}>
-            <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>ملاحظات وتوصيات</p>
+            <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>ملخصات وتوصيات</p>
             <ul style={{ margin: '2mm 0 0', paddingInlineStart: '5mm', color: palette.mutedText, fontWeight: 600 }}>
               {data.recommendations.slice(0, 5).map((item, idx) => (
                 <li key={idx} style={{ marginBottom: '1mm' }}>{item}</li>

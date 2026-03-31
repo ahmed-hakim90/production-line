@@ -1,5 +1,4 @@
 import React from 'react';
-import { GlobalModalEnhancer } from '../GlobalModalEnhancer';
 import { GlobalCreateReportModal } from './modals/GlobalCreateReportModal';
 import { GlobalImportReportsModal } from './modals/GlobalImportReportsModal';
 import { GlobalCreateWorkOrderModal } from './modals/GlobalCreateWorkOrderModal';
@@ -24,15 +23,10 @@ import { GlobalSupervisorAssignmentHistoryModal } from './modals/GlobalSuperviso
 import { GlobalAttendanceShiftRulesModal } from './modals/GlobalAttendanceShiftRulesModal';
 import { GlobalAttendanceSignatureFixModal } from './modals/GlobalAttendanceSignatureFixModal';
 
-/**
- * Central host for modal UX layer.
- * Keeps current enhancer behavior while we migrate pages
- * to key-based GlobalModalManager registrations.
- */
+/** Central host for global modal components (keyed via GlobalModalManager). */
 export const ModalHost: React.FC = () => {
   return (
     <>
-      <GlobalModalEnhancer />
       <GlobalCreateReportModal />
       <GlobalImportReportsModal />
       <GlobalCreateWorkOrderModal />

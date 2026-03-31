@@ -18,11 +18,14 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { ProductionReport } from '../../../types';
+import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import { createReportDuplicateError } from '../utils/reportDuplicateError';
 
 const COLLECTION = 'production_reports';
 const UNIQUE_COLLECTION = 'production_report_uniques';
-const MAX_PAGE_SIZE = 100;
+/** Max docs per query page; callers paginate until hasMore is false. */
+const MAX_PAGE_SIZE = 500;
 
 function isMissingIndexError(error: unknown): boolean {
   const code = String((error as { code?: string })?.code || '').toLowerCase();
@@ -70,7 +73,7 @@ export interface ReportPagedParams {
 async function generateNextReportCode(): Promise<string> {
   const year = new Date().getFullYear();
   try {
-    const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'), limit(1));
+    const q = tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc'), limit(1));
     const snap = await getDocs(q);
     if (snap.empty) return `PR-${year}-0001`;
 
@@ -93,17 +96,18 @@ export const reportService = {
   async listByDateRangePaged(params: ReportPagedParams): Promise<FirestorePageResult<ProductionReport>> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));
+    // startAfter must come before limit (Firestore cursor pagination); limit-before-startAfter only returns the first page.
     const constraints: any[] = [
       where('date', '>=', params.startDate),
       where('date', '<=', params.endDate),
       orderBy('date', 'desc'),
-      limit(pageSize),
     ];
     if (params.lineId) constraints.unshift(where('lineId', '==', params.lineId));
     if (params.productId) constraints.unshift(where('productId', '==', params.productId));
     if (params.employeeId) constraints.unshift(where('employeeId', '==', params.employeeId));
     if (params.cursor) constraints.push(startAfter(params.cursor));
-    const q = query(collection(db, COLLECTION), ...constraints);
+    constraints.push(limit(pageSize));
+    const q = tenantQuery(db, COLLECTION, ...constraints);
     const snap = await getDocs(q);
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
@@ -159,9 +163,9 @@ export const reportService = {
           cursor,
         });
         all.push(...page.items);
+        if (!page.hasMore || !page.nextCursor) break;
         cursor = page.nextCursor;
-        if (!page.hasMore) break;
-      } while (cursor);
+      } while (true);
       return all;
     } catch (error) {
       console.error('reportService.getByDateRange error:', error);
@@ -172,7 +176,7 @@ export const reportService = {
   async existsForLineAndDate(lineId: string, date: string): Promise<boolean> {
     if (!isConfigured) return false;
     try {
-      const q = query(collection(db, COLLECTION), where('lineId', '==', lineId), where('date', '==', date));
+      const q = tenantQuery(db, COLLECTION, where('lineId', '==', lineId), where('date', '==', date));
       const snap = await getDocs(q);
       return !snap.empty;
     } catch (error) {
@@ -219,6 +223,7 @@ export const reportService = {
 
         tx.set(reportRef, {
           ...data,
+          tenantId: getCurrentTenantId(),
           reportType: resolveReportType(data.reportType),
           reportCode,
           workersProductionCount: data.workersProductionCount ?? 0,
@@ -229,6 +234,7 @@ export const reportService = {
           createdAt: serverTimestamp(),
         });
         tx.set(uniqueRef, {
+          tenantId: getCurrentTenantId(),
           reportId: reportRef.id,
           date: data.date,
           lineId: data.lineId,
@@ -278,6 +284,7 @@ export const reportService = {
           tx.set(
             nextUniqueRef,
             {
+              tenantId: getCurrentTenantId(),
               reportId: id,
               date: next.date,
               lineId: next.lineId,
@@ -304,8 +311,9 @@ export const reportService = {
   async updateByReportCode(reportCode: string, fields: Partial<ProductionReport>): Promise<boolean> {
     if (!isConfigured || !reportCode) return false;
     try {
-      const q = query(
-        collection(db, COLLECTION),
+      const q = tenantQuery(
+        db,
+        COLLECTION,
         where('reportCode', '==', reportCode),
         limit(1),
       );
@@ -349,7 +357,7 @@ export const reportService = {
         limit(MAX_PAGE_SIZE),
       ];
       if (fromDate) constraints.unshift(where('date', '>=', fromDate));
-      const q = query(collection(db, COLLECTION), ...constraints);
+      const q = tenantQuery(db, COLLECTION, ...constraints);
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
@@ -362,8 +370,9 @@ export const reportService = {
       // Fallback for live environments where composite index is not yet deployed.
       // Uses index-free query (lineId only), then filters/sorts client-side.
       try {
-        const fallbackQ = query(
-          collection(db, COLLECTION),
+        const fallbackQ = tenantQuery(
+          db,
+          COLLECTION,
           where('lineId', '==', lineId),
           limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
         );
@@ -383,7 +392,7 @@ export const reportService = {
   async getByProduct(productId: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('productId', '==', productId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
+      const q = tenantQuery(db, COLLECTION, where('productId', '==', productId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
@@ -396,8 +405,9 @@ export const reportService = {
       // Fallback for environments where the productId+date index is not deployed yet.
       // Uses index-free query (productId only), then sorts client-side by date.
       try {
-        const fallbackQ = query(
-          collection(db, COLLECTION),
+        const fallbackQ = tenantQuery(
+          db,
+          COLLECTION,
           where('productId', '==', productId),
           limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
         );
@@ -415,7 +425,7 @@ export const reportService = {
   async getByLine(lineId: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('lineId', '==', lineId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
+      const q = tenantQuery(db, COLLECTION, where('lineId', '==', lineId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
@@ -428,8 +438,9 @@ export const reportService = {
       // Fallback for environments where lineId+date index is not deployed yet.
       // Uses index-free query (lineId only), then sorts client-side by date.
       try {
-        const fallbackQ = query(
-          collection(db, COLLECTION),
+        const fallbackQ = tenantQuery(
+          db,
+          COLLECTION,
           where('lineId', '==', lineId),
           limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
         );
@@ -447,7 +458,7 @@ export const reportService = {
   async getByEmployee(employeeId: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('employeeId', '==', employeeId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
+      const q = tenantQuery(db, COLLECTION, where('employeeId', '==', employeeId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
@@ -460,8 +471,9 @@ export const reportService = {
       // Fallback for environments where employeeId+date index is not deployed yet.
       // Uses index-free query (employeeId only), then sorts client-side by date.
       try {
-        const fallbackQ = query(
-          collection(db, COLLECTION),
+        const fallbackQ = tenantQuery(
+          db,
+          COLLECTION,
           where('employeeId', '==', employeeId),
           limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
         );
@@ -479,7 +491,7 @@ export const reportService = {
   async getByWorkOrderId(workOrderId: string): Promise<ProductionReport[]> {
     if (!isConfigured || !workOrderId) return [];
     try {
-      const q = query(collection(db, COLLECTION), where('workOrderId', '==', workOrderId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
+      const q = tenantQuery(db, COLLECTION, where('workOrderId', '==', workOrderId), orderBy('date', 'desc'), limit(MAX_PAGE_SIZE));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     } catch (error) {
@@ -492,8 +504,9 @@ export const reportService = {
       // Fallback for environments where workOrderId+date index is not deployed yet.
       // Uses index-free query (workOrderId only), then sorts client-side by date.
       try {
-        const fallbackQ = query(
-          collection(db, COLLECTION),
+        const fallbackQ = tenantQuery(
+          db,
+          COLLECTION,
           where('workOrderId', '==', workOrderId),
           limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
         );
@@ -600,7 +613,7 @@ export const reportService = {
   async backfillMissingReportCodes(): Promise<number> {
     if (!isConfigured) return 0;
     try {
-      const snap = await getDocs(collection(db, COLLECTION));
+      const snap = await getDocs(tenantQuery(db, COLLECTION));
       if (snap.empty) return 0;
 
       const codeRegex = /^PR-(\d{4})-(\d+)$/;
@@ -683,7 +696,7 @@ export const reportService = {
 
   subscribeToday(todayStr: string, onData: (reports: ProductionReport[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    const q = query(collection(db, COLLECTION), where('date', '==', todayStr));
+    const q = tenantQuery(db, COLLECTION, where('date', '==', todayStr));
     return onSnapshot(q, (snap) => {
       const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
       onData(reports);
