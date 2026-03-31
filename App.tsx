@@ -38,7 +38,6 @@ import { MODAL_KEYS } from './components/modal-manager/modalKeys';
 import { ModalHost } from './components/modal-manager/ModalHost';
 import { toast, ToastContainer } from './components/Toast';
 import { useJobsStore } from './components/background-jobs/useJobsStore';
-import { ErrorBoundary } from './components/ErrorBoundary';
 import { presenceService } from './services/presenceService';
 import { pushService } from './services/pushService';
 import { sessionTrackerService } from './modules/system/audit';
