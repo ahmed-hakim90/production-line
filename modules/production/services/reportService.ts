@@ -521,6 +521,95 @@ export const reportService = {
     }
   },
 
+  /**
+   * Batch-fetch all reports for multiple work orders grouped by workOrderId.
+   * Uses Firestore `in` queries (max 30 IDs per chunk) instead of one query per order.
+   * Reduces N Firestore reads to ceil(N/30) reads.
+   */
+  async getByWorkOrderIds(workOrderIds: string[]): Promise<Record<string, ProductionReport[]>> {
+    if (!isConfigured || workOrderIds.length === 0) return {};
+
+    const uniqueIds = Array.from(new Set(workOrderIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return {};
+
+    const CHUNK_SIZE = 30;
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+      chunks.push(uniqueIds.slice(i, i + CHUNK_SIZE));
+    }
+
+    const result: Record<string, ProductionReport[]> = {};
+
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        try {
+          const q = query(collection(db, COLLECTION), where('workOrderId', 'in', chunk));
+          const snap = await getDocs(q);
+          snap.docs.forEach((d) => {
+            const data = { id: d.id, ...d.data() } as ProductionReport;
+            const woId = String(data.workOrderId || '');
+            if (!woId) return;
+            if (!result[woId]) result[woId] = [];
+            result[woId].push(data);
+          });
+        } catch (error) {
+          console.error('reportService.getByWorkOrderIds chunk error:', error);
+        }
+      }),
+    );
+
+    return result;
+  },
+
+  /**
+   * Batch-fetch report metadata for multiple work orders in a single round-trip.
+   * Uses Firestore `in` queries (max 30 IDs per chunk) instead of one query per order.
+   * Reduces N Firestore reads to ceil(N/30) reads.
+   */
+  async getMetaByWorkOrderIds(
+    workOrderIds: string[],
+  ): Promise<Record<string, { count: number; firstReportDate: string | null; producedQuantity: number }>> {
+    if (!isConfigured || workOrderIds.length === 0) return {};
+
+    const uniqueIds = Array.from(new Set(workOrderIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return {};
+
+    const CHUNK_SIZE = 30;
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+      chunks.push(uniqueIds.slice(i, i + CHUNK_SIZE));
+    }
+
+    const result: Record<string, { count: number; firstReportDate: string | null; producedQuantity: number }> = {};
+
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        try {
+          const q = query(collection(db, COLLECTION), where('workOrderId', 'in', chunk));
+          const snap = await getDocs(q);
+          snap.docs.forEach((d) => {
+            const data = d.data() as ProductionReport;
+            const woId = String(data.workOrderId || '');
+            if (!woId) return;
+            if (!result[woId]) {
+              result[woId] = { count: 0, firstReportDate: null, producedQuantity: 0 };
+            }
+            result[woId].count += 1;
+            result[woId].producedQuantity += Number(data.quantityProduced || 0);
+            const date = String(data.date || '').trim();
+            if (date && (!result[woId].firstReportDate || date < result[woId].firstReportDate!)) {
+              result[woId].firstReportDate = date;
+            }
+          });
+        } catch (error) {
+          console.error('reportService.getMetaByWorkOrderIds chunk error:', error);
+        }
+      }),
+    );
+
+    return result;
+  },
+
   async backfillMissingReportCodes(): Promise<number> {
     if (!isConfigured) return 0;
     try {

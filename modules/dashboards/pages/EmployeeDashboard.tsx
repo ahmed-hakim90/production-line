@@ -132,6 +132,10 @@ export const EmployeeDashboard: React.FC = () => {
   const woPrintRef = useRef<HTMLDivElement>(null);
   const handleWoPrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
 
+  const productByIdMap = useMemo(() => new Map(_rawProducts.map((p) => [p.id ?? '', p])), [_rawProducts]);
+  const lineByIdMap    = useMemo(() => new Map(_rawLines.map((l) => [l.id ?? '', l])), [_rawLines]);
+  const employeeByIdMap = useMemo(() => new Map(_rawEmployees.map((e) => [e.id ?? '', e])), [_rawEmployees]);
+
   const STATUS_LABELS: Record<string, string> = { pending: 'قيد الانتظار', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
   const resolveWorkOrderProducedNow = useCallback((wo: WorkOrder): number => {
     const producedFromOrder = Number(wo.producedQuantity || 0);
@@ -140,9 +144,9 @@ export const EmployeeDashboard: React.FC = () => {
   }, []);
 
   const triggerWOPrint = useCallback(async (wo: WorkOrder) => {
-    const product = _rawProducts.find((p) => p.id === wo.productId);
-    const line = _rawLines.find((l) => l.id === wo.lineId);
-    const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
+    const product = productByIdMap.get(wo.productId);
+    const line = lineByIdMap.get(wo.lineId);
+    const supervisor = employeeByIdMap.get(wo.supervisorId);
     const producedNow = resolveWorkOrderProducedNow(wo);
     setWoPrintData({
       workOrderNumber: wo.workOrderNumber,
@@ -163,7 +167,7 @@ export const EmployeeDashboard: React.FC = () => {
     await new Promise((r) => setTimeout(r, 300));
     handleWoPrint();
     setTimeout(() => setWoPrintData(null), 1000);
-  }, [_rawProducts, _rawLines, _rawEmployees, can, handleWoPrint, resolveWorkOrderProducedNow]);
+  }, [productByIdMap, lineByIdMap, employeeByIdMap, can, handleWoPrint, resolveWorkOrderProducedNow]);
 
   const employee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
@@ -332,8 +336,8 @@ export const EmployeeDashboard: React.FC = () => {
 
     if (!plan) return null;
 
-    const product = _rawProducts.find((p) => p.id === plan.productId);
-    const line = _rawLines.find((l) => l.id === plan.lineId);
+    const product = productByIdMap.get(plan.productId);
+    const line = lineByIdMap.get(plan.lineId);
 
     const key = `${plan.lineId}_${plan.productId}`;
     const historical = planReports[key] || [];
@@ -689,8 +693,8 @@ export const EmployeeDashboard: React.FC = () => {
                   </div>
                     <div className="divide-y divide-[var(--color-border)]">
                       {myWOs.map((wo) => {
-                        const product = _rawProducts.find((p) => p.id === wo.productId);
-                        const line = _rawLines.find((l) => l.id === wo.lineId);
+                        const product = productByIdMap.get(wo.productId);
+                        const line = lineByIdMap.get(wo.lineId);
                         const isSupervisor = wo.supervisorId === employee.id;
                         const producedNow = resolveWorkOrderProducedNow(wo);
                         const reportCount = (wo.id ? workOrderCardMetricsData.reportsByWorkOrderId[wo.id]?.length : 0) || 0;

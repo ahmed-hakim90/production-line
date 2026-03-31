@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 import { PageHeader } from '../../../../components/PageHeader';
@@ -53,7 +54,7 @@ const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
 };
 
 const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
-  const explicit = Number((order as any).estimatedDays ?? (order as any).estimatedDurationDays ?? 0);
+  const explicit = Number(order.estimatedDays ?? order.estimatedDurationDays ?? 0);
   if (explicit > 0) return Math.ceil(explicit);
   if (avgDaily <= 0) return 0;
   return Math.ceil(Math.max(Number(order.quantity || 0), 0) / avgDaily);
@@ -107,7 +108,12 @@ export const WorkOrders: React.FC = () => {
   const [reportMetaByOrderId, setReportMetaByOrderId] = useState<Record<string, WorkOrderReportMeta>>({});
   const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
+  const printTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
+
+  useEffect(() => {
+    return () => { printTimersRef.current.forEach(clearTimeout); };
+  }, []);
   const canCreateWorkOrder = can('workOrders.create') || can('workOrders.componentInjection.manage');
 
   useEffect(() => {
@@ -130,6 +136,14 @@ export const WorkOrders: React.FC = () => {
 
   const supervisorNameMap = useMemo(() => {
     return new Map(_rawEmployees.map((employee) => [employee.id || '', employee.name]));
+  }, [_rawEmployees]);
+
+  const lineDailyHoursMap = useMemo(() => {
+    return new Map(_rawLines.map((line) => [line.id || '', Number((line as any).dailyWorkingHours || 0)]));
+  }, [_rawLines]);
+
+  const employeeHourlyRateMap = useMemo(() => {
+    return new Map(_rawEmployees.map((employee) => [employee.id || '', Number((employee as any).hourlyRate || 0)]));
   }, [_rawEmployees]);
 
   const allOrders = useMemo(() => {
@@ -157,26 +171,13 @@ export const WorkOrders: React.FC = () => {
     }
 
     const loadReportMeta = async () => {
-      const entries = await Promise.all(
-        orderIds.map(async (id) => {
-          try {
-            const reports = await reportService.getByWorkOrderId(id);
-            const firstReportDate = reports.reduce<string | null>((minDate, report) => {
-              const date = String(report.date || '').trim();
-              if (!date) return minDate;
-              if (!minDate || date < minDate) return date;
-              return minDate;
-            }, null);
-            const producedQuantity = reports.reduce((sum, report) => sum + Number(report.quantityProduced || 0), 0);
-            return [id, { count: reports.length, firstReportDate, producedQuantity }] as const;
-          } catch (error) {
-            console.error('work order report meta error', error);
-            return [id, { count: -1, firstReportDate: null, producedQuantity: 0 }] as const;
-          }
-        }),
-      );
-      if (cancelled) return;
-      setReportMetaByOrderId(Object.fromEntries(entries));
+      try {
+        const meta = await reportService.getMetaByWorkOrderIds(orderIds);
+        if (cancelled) return;
+        setReportMetaByOrderId(meta);
+      } catch (error) {
+        console.error('work order report meta error:', error);
+      }
     };
 
     void loadReportMeta();
@@ -242,13 +243,9 @@ export const WorkOrders: React.FC = () => {
               : `${diff} يوم`;
       const remainingQuantity = Math.max(0, quantity - produced);
       const progressPct = quantity > 0 ? Math.min(100, (produced / quantity) * 100) : 0;
-      const lineDailyHours = Number(_rawLines.find((line) => line.id === order.lineId)?.dailyWorkingHours || 0);
+      const lineDailyHours = lineDailyHoursMap.get(order.lineId || '') || 0;
       const baseHourlyRate = Number(laborSettings?.hourlyRate || 0);
-      const supervisorHourlyRate = Number(
-        _rawEmployees.find((employee) => employee.id === order.supervisorId)?.hourlyRate
-        || baseHourlyRate
-        || 0,
-      );
+      const supervisorHourlyRate = employeeHourlyRateMap.get(order.supervisorId || '') || baseHourlyRate || 0;
       const dailyTargetQty = estimatedDays > 0
         ? quantity / Math.max(estimatedDays, 1)
         : dailyAverage;
@@ -320,8 +317,8 @@ export const WorkOrders: React.FC = () => {
     lineNameMap,
     productAvgDailyMap,
     supervisorNameMap,
-    _rawLines,
-    _rawEmployees,
+    lineDailyHoursMap,
+    employeeHourlyRateMap,
     laborSettings,
     costCenters,
     costCenterValues,
@@ -365,7 +362,7 @@ export const WorkOrders: React.FC = () => {
     return { inProgress, completed, overdue };
   }, [counts, rowViews]);
 
-  const handleStatusChange = async (id: string, status: WorkOrderStatus) => {
+  const handleStatusChange = useCallback(async (id: string, status: WorkOrderStatus) => {
     if (!id || !isConfigured || !db) return;
     const previous = orderMap[id]?.status;
     if (!previous || previous === status) return;
@@ -387,9 +384,9 @@ export const WorkOrders: React.FC = () => {
     } finally {
       setSyncingStatus(null);
     }
-  };
+  }, [orderMap, updateOrder]);
 
-  const handleCloseOrder = async (order: WorkOrder) => {
+  const handleCloseOrder = useCallback(async (order: WorkOrder) => {
     if (!order.id) return;
     if (
       !window.confirm(
@@ -399,8 +396,9 @@ export const WorkOrders: React.FC = () => {
       return;
     }
     await handleStatusChange(order.id, 'completed');
-  };
+  }, [handleStatusChange]);
 
+  const handleEditOrder = useCallback((order: WorkOrder) => {
   const handleReopenCompletedOrder = useCallback(
     async (order: WorkOrder) => {
       const id = order.id;
@@ -451,9 +449,11 @@ export const WorkOrders: React.FC = () => {
       mode: 'edit',
       workOrderId: order.id,
     });
+    toast.info('تم فتح نموذج أمر الشغل. دعم التحميل التلقائي لبيانات التعديل سيتم إضافته في خطوة لاحقة.');
+  }, [openModal]);
   };
 
-  const handlePrintOrder = (order: WorkOrder) => {
+  const handlePrintOrder = useCallback((order: WorkOrder) => {
     setPrintData({
       workOrderNumber: order.workOrderNumber,
       productName: productNameMap.get(order.productId || '') || '—',
@@ -470,11 +470,13 @@ export const WorkOrders: React.FC = () => {
       notes: String(order.notes || ''),
       showCosts: true,
     });
-    setTimeout(() => {
+    const t1 = setTimeout(() => {
       handlePrint();
-      setTimeout(() => setPrintData(null), 600);
+      const t2 = setTimeout(() => setPrintData(null), 600);
+      printTimersRef.current.push(t2);
     }, 220);
-  };
+    printTimersRef.current.push(t1);
+  }, [productNameMap, lineNameMap, supervisorNameMap, handlePrint]);
 
   const handleExport = () => {
     const detailedRows: WorkOrderExportRow[] = rowViews.map((row) => ({

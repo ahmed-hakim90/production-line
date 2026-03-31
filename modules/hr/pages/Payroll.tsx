@@ -303,6 +303,11 @@ export const Payroll: React.FC = () => {
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const uid = useAppStore((s) => s.uid);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const _rawEmployees = useAppStore((s) => s._rawEmployees);
+  const employeeUserIdMap = useMemo(
+    () => new Map(_rawEmployees.map((e) => [e.id || '', (e as any).userId as string | undefined])),
+    [_rawEmployees],
+  );
   // State
   const [month, setMonth] = useState(getCurrentMonth());
   const [payrollMonth, setPayrollMonth] = useState<FirestorePayrollMonth | null>(null);
@@ -530,7 +535,8 @@ export const Payroll: React.FC = () => {
 
       const notificationResults = await Promise.allSettled(
         records.map(async (record) => {
-          const userId = await employeeService.getUserIdByEmployeeId(record.employeeId);
+          const userId = employeeUserIdMap.get(record.employeeId)
+            ?? await employeeService.getUserIdByEmployeeId(record.employeeId);
           if (!userId) return false;
           await hrNotificationService.create({
             recipientEmployeeId: record.employeeId,

@@ -1186,6 +1186,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   _loadAppData: async () => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const [rawProducts, rawLines, rawEmployees, configs, productionPlans, productionPlanFollowUps, costCenters, costCenterValues, costAllocations, laborSettings, assets, assetDepreciations, systemSettingsRaw] =
+      await Promise.all([
+        productService.getAll(),
+        lineService.getAll(),
+        employeeService.getAll(),
+        lineProductConfigService.getAll(),
+        productionPlanService.getAll(),
+        productionPlanFollowUpService.getAll(),
+        costCenterService.getAll(),
+        costCenterValueService.getAll(),
+        costAllocationService.getAll(),
+        laborSettingsService.get(),
+        assetService.getAll(),
+        assetDepreciationService.getByPeriod(currentMonth),
+        systemSettingsService.get(),
+      ]);
     const tenantId = get().userProfile?.tenantId;
     const [
       rawProducts,
@@ -1303,7 +1319,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       productionPlans,
       productionPlanFollowUps,
       planReports,
-      workOrders,
+      // workOrders is intentionally omitted here — subscribeToWorkOrders()
+      // fires immediately after initializeApp() and populates active orders
+      // via subscribeActive(), which is far cheaper than a full getAll().
       costCenters,
       costCenterValues,
       costAllocations,
@@ -1318,9 +1336,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const allReports = todayReports;
     const products = buildProducts(rawProducts, allReports, configs);
+    // Pass empty workOrders for the initial build — subscribeToWorkOrders fires
+    // right after and triggers a debounced _rebuildLines() with active orders.
     const productionLines = buildProductionLines(
       rawLines, rawProducts, rawEmployees, todayReports, lineStatuses, configs,
-      productionPlans, planReports, workOrders
+      productionPlans, planReports, []
     );
     const employees: Employee[] = rawEmployees.map((e) => ({
       id: e.id!,
@@ -2676,24 +2696,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         return null;
       }
 
-      const activePlans = await productionPlanService.getActiveByLineAndProduct(data.lineId, data.productId);
-      const activePlan = activePlans.find((plan) => {
-        const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
-        return planType === reportType;
-      }) ?? activePlans[0] ?? null;
-
-      if (!planSettings.allowReportWithoutPlan && !activePlan) {
-        set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
-        return null;
-      }
-
-      if (!planSettings.allowOverProduction && activePlan) {
-        if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
-          set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
-          return null;
-        }
-      }
-
+      // ── Step 1: Detect the best-matching work order ──────────────────────
+      // Done BEFORE plan lookup so that an explicit planId on the work order
+      // can take priority over the line+product auto-match below.
       let activeWO: WorkOrder | null = null;
       if (data.workOrderId) {
         const selectedWO = await workOrderService.getById(data.workOrderId);
@@ -2735,6 +2740,35 @@ export const useAppStore = create<AppState>((set, get) => ({
           supervisorId: data.employeeId,
           reportType,
         });
+      }
+
+      // ── Step 2: Find the production plan ─────────────────────────────────
+      // Priority: explicit planId on the work order → then line+product match.
+      // This ensures reports always update the plan the work order belongs to,
+      // even when that plan lives on a different line or was linked manually.
+      let activePlan: ProductionPlan | null = null;
+      if (activeWO?.planId) {
+        activePlan = await productionPlanService.getById(activeWO.planId);
+      }
+      if (!activePlan) {
+        const activePlans = await productionPlanService.getActiveByLineAndProduct(data.lineId, data.productId);
+        activePlan = activePlans.find((plan) => {
+          const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
+          return planType === reportType;
+        }) ?? activePlans[0] ?? null;
+      }
+
+      // ── Step 3: Validate against plan settings ────────────────────────────
+      if (!planSettings.allowReportWithoutPlan && !activePlan) {
+        set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
+        return null;
+      }
+
+      if (!planSettings.allowOverProduction && activePlan) {
+        if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
+          set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
+          return null;
+        }
       }
 
       const reportData = { ...data, reportType, workOrderId: activeWO?.id || data.workOrderId || '' };
@@ -3984,31 +4018,49 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   subscribeToWorkOrders: () => {
-    return workOrderService.subscribeAll((orders) => {
-      const validWorkOrderIds = new Set(
-        orders
-          .map((order) => order.id)
-          .filter((id): id is string => !!id),
-      );
+    // Subscribe to active (pending + in_progress) orders only — much cheaper than
+    // subscribeAll which streams the entire collection on every change.
+    // Completed/cancelled orders remain available from the initial _loadAppData load.
+    let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const unsub = workOrderService.subscribeActive((activeOrders) => {
       set((state) => {
-        const liveProduction = Object.fromEntries(
-          Object.entries(state.liveProduction).filter(([workOrderId]) =>
-            validWorkOrderIds.has(workOrderId),
-          ),
+        // Keep completed/cancelled from the initial load; replace pending/in_progress
+        // with the live snapshot so we always reflect the latest active state.
+        const rest = state.workOrders.filter(
+          (w) => w.status !== 'pending' && w.status !== 'in_progress',
         );
-        const scanEventsToday = state.scanEventsToday.filter((event) =>
-          validWorkOrderIds.has(event.workOrderId),
+        const merged = [...rest, ...activeOrders];
+        const validWorkOrderIds = new Set(
+          merged.map((o) => o.id).filter((id): id is string => !!id),
         );
 
         return {
-          workOrders: orders,
-          liveProduction,
-          scanEventsToday,
+          workOrders: merged,
+          liveProduction: Object.fromEntries(
+            Object.entries(state.liveProduction).filter(([workOrderId]) =>
+              validWorkOrderIds.has(workOrderId),
+            ),
+          ),
+          scanEventsToday: state.scanEventsToday.filter((event) =>
+            validWorkOrderIds.has(event.workOrderId),
+          ),
         };
       });
-      get()._rebuildLines();
+      // Debounce _rebuildLines so rapid bulk work-order updates trigger only
+      // one expensive rebuild instead of one per incoming document change.
+      if (rebuildTimer) clearTimeout(rebuildTimer);
+      rebuildTimer = setTimeout(() => {
+        get()._rebuildLines();
+        rebuildTimer = null;
+      }, 250);
     });
+    // Clear any pending debounce timer when the subscription is torn down
+    // so _rebuildLines never runs against a partially-cleaned-up store.
+    return () => {
+      if (rebuildTimer) clearTimeout(rebuildTimer);
+      unsub();
+    };
   },
 
   subscribeToScanEventsToday: () => {

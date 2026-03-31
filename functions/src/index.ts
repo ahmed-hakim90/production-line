@@ -433,6 +433,8 @@ export const onProductionReportCreated = onDocumentCreated(
       supervisorName?: string;
       date?: string;
       reportCode?: string;
+      workOrderId?: string;
+      employeeId?: string;
     };
 
     const producedQty = Number(report.quantityProduced ?? report.producedQty ?? 0);
@@ -480,6 +482,33 @@ export const onProductionReportCreated = onDocumentCreated(
         seenTokens.add(token);
         tokenEntries.push({ token, ref: tokenDoc.ref });
       });
+    }
+
+    // ── Also notify the supervisor whose work order received the report ────
+    // Uses employeeId from the report (the supervisor who submitted it).
+    // seenTokens prevents double-sending if the supervisor is also an admin.
+    const supervisorEmployeeId = String(report.employeeId || '').trim();
+    if (supervisorEmployeeId) {
+      const supUserSnap = await db
+        .collection(USERS_COLLECTION)
+        .where('employeeId', '==', supervisorEmployeeId)
+        .where('isActive', '==', true)
+        .limit(1)
+        .get();
+      if (!supUserSnap.empty) {
+        const supUserDoc = supUserSnap.docs[0];
+        const supUserData = supUserDoc.data() as { notifications?: { productionReports?: boolean } };
+        if (supUserData.notifications?.productionReports !== false) {
+          const supTokensSnap = await supUserDoc.ref.collection(FCM_TOKEN_SUBCOLLECTION).get();
+          supTokensSnap.forEach((tokenDoc) => {
+            const tokenData = tokenDoc.data() as { token?: string; enabled?: boolean };
+            const token = String(tokenData.token || '').trim();
+            if (!token || tokenData.enabled === false || seenTokens.has(token)) return;
+            seenTokens.add(token);
+            tokenEntries.push({ token, ref: tokenDoc.ref });
+          });
+        }
+      }
     }
 
     if (tokenEntries.length === 0) return;
@@ -775,6 +804,149 @@ export const runAssetDepreciationJob = onCall(
   },
 );
 
+// ── Work Order Completion Notification ────────────────────────────────────────
+// Fires when a work order's status changes to 'completed'.
+// Sends a push notification to the supervisor responsible for that order.
+export const onWorkOrderCompleted = onDocumentWritten(
+  {
+    document: 'work_orders/{woId}',
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (event) => {
+    const before = event.data?.before.data() as
+      | { status?: string; supervisorId?: string; workOrderNumber?: string }
+      | undefined;
+    const after = event.data?.after.data() as
+      | { status?: string; supervisorId?: string; workOrderNumber?: string }
+      | undefined;
+
+    if (!before || !after) return;
+    if (before.status === after.status) return;
+    if (after.status !== 'completed') return;
+
+    const supervisorId = String(after.supervisorId || '').trim();
+    if (!supervisorId) return;
+
+    const supSnap = await db
+      .collection(USERS_COLLECTION)
+      .where('employeeId', '==', supervisorId)
+      .where('isActive', '==', true)
+      .limit(1)
+      .get();
+    if (supSnap.empty) return;
+
+    const supDoc = supSnap.docs[0];
+    const tokensSnap = await supDoc.ref.collection(FCM_TOKEN_SUBCOLLECTION).get();
+    const tokens: string[] = [];
+    tokensSnap.forEach((td) => {
+      const t = String(td.data().token || '').trim();
+      if (t && td.data().enabled !== false) tokens.push(t);
+    });
+    if (tokens.length === 0) return;
+
+    const woNumber = String(after.workOrderNumber || event.params.woId || '');
+    await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: '✅ اكتمل أمر الشغل',
+        body: `أمر الشغل ${woNumber} اكتمل بنجاح`,
+      },
+      data: {
+        type: 'work_order_completed',
+        workOrderId: String(event.params.woId),
+        url: '/work-orders',
+        clickAction: 'OPEN_WORK_ORDER',
+      },
+      webpush: {
+        headers: { Urgency: 'high' },
+        notification: {
+          icon: '/icons/pwa-icon-192.png',
+          badge: '/icons/pwa-icon-192.png',
+          tag: `wo-completed-${event.params.woId}`,
+          vibrate: [200, 100, 200],
+        },
+        fcmOptions: { link: '/#/work-orders' },
+      },
+    });
+  },
+);
+
+// ── Production Plan Completion Notification ───────────────────────────────────
+// Fires when a production plan's status changes to 'completed'.
+// Sends a push notification to admin and factory_manager roles.
+export const onProductionPlanCompleted = onDocumentWritten(
+  {
+    document: 'production_plans/{planId}',
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (event) => {
+    const before = event.data?.before.data() as { status?: string } | undefined;
+    const after = event.data?.after.data() as
+      | { status?: string; productName?: string; plannedQuantity?: number }
+      | undefined;
+
+    if (!before || !after) return;
+    if (before.status === after.status) return;
+    if (after.status !== 'completed') return;
+
+    const productName = String(after.productName || '').trim();
+    const plannedQty = Number(after.plannedQuantity || 0);
+
+    const usersSnap = await db
+      .collection(USERS_COLLECTION)
+      .where('isActive', '==', true)
+      .get();
+    if (usersSnap.empty) return;
+
+    const seenTokens = new Set<string>();
+    const tokenEntries: Array<{ token: string; ref: FirebaseFirestore.DocumentReference }> = [];
+
+    for (const userDoc of usersSnap.docs) {
+      const userData = userDoc.data() as { roleId?: string; role?: string };
+      const roleCandidate = String(userData.roleId || userData.role || '').trim().toLowerCase();
+      if (!REPORT_NOTIFY_ROLE_IDS.has(roleCandidate)) continue;
+
+      const tSnap = await userDoc.ref.collection(FCM_TOKEN_SUBCOLLECTION).get();
+      tSnap.forEach((td) => {
+        const t = String(td.data().token || '').trim();
+        if (!t || td.data().enabled === false || seenTokens.has(t)) return;
+        seenTokens.add(t);
+        tokenEntries.push({ token: t, ref: td.ref });
+      });
+    }
+
+    if (tokenEntries.length === 0) return;
+
+    const body = [
+      productName || 'منتج',
+      plannedQty > 0 ? `${plannedQty} وحدة` : null,
+    ].filter(Boolean).join(' — ');
+
+    await getMessaging().sendEachForMulticast({
+      tokens: tokenEntries.map((e) => e.token),
+      notification: {
+        title: '🎯 خطة إنتاج مكتملة',
+        body,
+      },
+      data: {
+        type: 'plan_completed',
+        planId: String(event.params.planId),
+        url: '/production-plans',
+        clickAction: 'OPEN_PLAN',
+      },
+      webpush: {
+        headers: { Urgency: 'normal' },
+        notification: {
+          icon: '/icons/pwa-icon-192.png',
+          badge: '/icons/pwa-icon-192.png',
+          tag: `plan-completed-${event.params.planId}`,
+          vibrate: [150, 50, 150],
+        },
+        fcmOptions: { link: '/#/production-plans' },
+      },
+    });
 const TENANT_FOOTPRINT_AVG_DOC_BYTES = 900;
 
 /** Super-admin: aggregate document counts per tenant (for platform insights). */

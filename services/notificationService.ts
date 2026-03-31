@@ -6,6 +6,8 @@ import {
   updateDoc,
   query,
   where,
+  orderBy,
+  limit,
   serverTimestamp,
   onSnapshot,
   writeBatch,
@@ -123,7 +125,10 @@ export const notificationService = {
 
   subscribeAll(callback: (notifications: AppNotification[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
+    // Limit to the 100 most recent notifications to avoid reading the entire collection.
+    const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'), limit(100));
     return onSnapshot(
+      q,
       tenantQuery(db, COLLECTION),
       (snap) => {
         const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
