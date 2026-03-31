@@ -1085,15 +1085,19 @@ export const AdminDashboard: React.FC = () => {
     return sourceRows
       .map(([productId, d]) => {
         const product = _rawProducts.find((p) => p.id === productId);
+        const qty = monthlyCostMode
+          ? Number((d as { producedQty: number }).producedQty || 0)
+          : Number((d as { quantityProduced: number }).quantityProduced || 0);
         return {
           id: productId,
           name: product?.name || productId,
           code: product?.code || '',
           category: product?.model || 'غير مصنفة',
-          qty: monthlyCostMode ? Number((d as { producedQty: number }).producedQty || 0) : Number((d as { quantityProduced: number }).quantityProduced || 0),
+          qty,
           avgCost: monthlyCostMode ? Number((d as { averageUnitCost: number }).averageUnitCost || 0) : Number((d as { costPerUnit: number }).costPerUnit || 0),
         };
       })
+      .filter((row) => row.qty > 0)
       .sort((a, b) => b.qty - a.qty);
   }, [monthlyCostMode, monthlyCostSummary, liveCostComputation.byProduct, _rawProducts]);
 
