@@ -11,6 +11,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import type { ProductMaterial, ReportComponentScrapItem } from '../../../types';
 import type { RawMaterial, StockItemBalance } from '../../../modules/inventory/types';
 import { formatNumber } from '../../../utils/calculations';
+import { useTranslation } from 'react-i18next';
 
 type ModalPayload = {
   productId?: string;
@@ -37,6 +38,7 @@ const normalizeText = (value: string) =>
     .replace(/\s+/g, ' ');
 
 export const GlobalComponentScrapModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.REPORTS_COMPONENT_SCRAP);
   const settings = useAppStore((s) => s.systemSettings.planSettings);
   const [options, setOptions] = useState<MaterialOption[]>([]);
@@ -142,8 +144,8 @@ export const GlobalComponentScrapModal: React.FC = () => {
               <Package2 size={18} className="text-rose-600" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">هالك المكونات</h3>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">اختر المكونات المرتبطة بالمنتج وحدد كمية الهالك لكل مكون.</p>
+              <h3 className="text-lg font-bold">{t('modalManager.componentScrap.title')}</h3>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{t('modalManager.componentScrap.subtitle')}</p>
             </div>
           </div>
           <button onClick={close} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
@@ -154,17 +156,17 @@ export const GlobalComponentScrapModal: React.FC = () => {
           {loading && (
             <div className="text-sm font-bold text-[var(--color-text-muted)] flex items-center gap-2">
               <Loader2 size={16} className="animate-spin" />
-              جاري تحميل مكونات المنتج...
+              {t('modalManager.componentScrap.loading')}
             </div>
           )}
           {!loading && options.length === 0 && (
-            <div className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد مكونات مرتبطة بهذا المنتج.</div>
+            <div className="text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.componentScrap.empty')}</div>
           )}
           {!loading && options.length > 0 && (
             <>
               <div className="flex items-center justify-between">
                 <div className="text-xs text-[var(--color-text-muted)]">
-                  تم اختيار {rows.length} / {options.length} مكون
+                  {t('modalManager.componentScrap.selectedCount', { selected: rows.length, total: options.length })}
                 </div>
                 <Button
                   variant="outline"
@@ -172,7 +174,7 @@ export const GlobalComponentScrapModal: React.FC = () => {
                   disabled={rows.length >= options.length}
                 >
                   <Plus size={14} />
-                  إضافة مكون
+                  {t('modalManager.componentScrap.addComponent')}
                 </Button>
               </div>
               <div className="space-y-3">
@@ -183,7 +185,7 @@ export const GlobalComponentScrapModal: React.FC = () => {
                   return (
                     <div key={`${row.materialId}-${index}`} className="grid grid-cols-1 md:grid-cols-[1fr_160px_auto] gap-3 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3">
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-[var(--color-text-muted)]">المكون</label>
+                        <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.componentScrap.component')}</label>
                         <select
                           className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] text-sm p-2.5 outline-none"
                           value={row.materialId}
@@ -196,7 +198,7 @@ export const GlobalComponentScrapModal: React.FC = () => {
                             });
                           }}
                         >
-                          <option value="">اختر المكون</option>
+                          <option value="">{t('modalManager.componentScrap.selectComponent')}</option>
                           {rowOptions.map((opt) => (
                             <option key={opt.materialId} value={opt.materialId}>
                               {opt.materialName}
@@ -205,12 +207,16 @@ export const GlobalComponentScrapModal: React.FC = () => {
                         </select>
                         {selectedOption && (
                           <p className="text-[11px] text-[var(--color-text-muted)]">
-                            للقطعة: {formatNumber(selectedOption.quantityUsed)} | تكلفة: {formatNumber(selectedOption.unitCost)} | رصيد المفكك: {formatNumber(selectedOption.balanceInDecomposed)}
+                            {t('modalManager.componentScrap.componentMeta', {
+                              quantityUsed: formatNumber(selectedOption.quantityUsed),
+                              unitCost: formatNumber(selectedOption.unitCost),
+                              balanceInDecomposed: formatNumber(selectedOption.balanceInDecomposed),
+                            })}
                           </p>
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-[var(--color-text-muted)]">كمية الهالك</label>
+                        <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.componentScrap.scrapQuantity')}</label>
                         <input
                           type="number"
                           min={0}
@@ -226,7 +232,7 @@ export const GlobalComponentScrapModal: React.FC = () => {
                           className="px-3 py-2.5 rounded-[var(--border-radius-base)] bg-rose-50 text-rose-600 hover:bg-rose-100 text-sm font-bold"
                           onClick={() => removeRow(index)}
                         >
-                          حذف
+                          {t('modalManager.componentScrap.remove')}
                         </button>
                       </div>
                     </div>
@@ -234,21 +240,21 @@ export const GlobalComponentScrapModal: React.FC = () => {
                 })}
               </div>
               {hasDuplicate && (
-                <div className="text-xs font-bold text-rose-600">لا يمكن تكرار نفس المكون أكثر من مرة.</div>
+                <div className="text-xs font-bold text-rose-600">{t('modalManager.componentScrap.duplicateError')}</div>
               )}
               {hasInvalidQty && (
-                <div className="text-xs font-bold text-rose-600">كل كمية هالك يجب أن تكون أكبر من صفر.</div>
+                <div className="text-xs font-bold text-rose-600">{t('modalManager.componentScrap.quantityError')}</div>
               )}
             </>
           )}
         </div>
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={close}>
-            إغلاق
+            {t('ui.close')}
           </Button>
           <Button variant="primary" onClick={handleSave} disabled={!canSave}>
             <Save size={14} />
-            حفظ هالك المكونات
+            {t('modalManager.componentScrap.save')}
           </Button>
         </div>
       </div>

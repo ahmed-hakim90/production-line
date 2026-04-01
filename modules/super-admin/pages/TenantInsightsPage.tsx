@@ -24,13 +24,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 type FootprintState =
   | { kind: 'idle' }

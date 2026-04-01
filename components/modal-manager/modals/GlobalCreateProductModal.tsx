@@ -7,6 +7,7 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreProduct } from '../../../types';
 import { categoryService } from '../../../modules/catalog/services/categoryService';
+import { useTranslation } from 'react-i18next';
 
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
   name: '',
@@ -22,6 +23,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
 };
 
 export const GlobalCreateProductModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.PRODUCTS_CREATE);
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
@@ -86,10 +88,10 @@ export const GlobalCreateProductModal: React.FC = () => {
     try {
       const id = await createProduct(form);
       if (!id) throw new Error('create failed');
-      setMessage({ type: 'success', text: 'تم إضافة المنتج بنجاح' });
+      setMessage({ type: 'success', text: t('modalManager.createProduct.createSuccess') });
       setForm(emptyForm);
     } catch {
-      setMessage({ type: 'error', text: 'تعذر حفظ المنتج. حاول مرة أخرى.' });
+      setMessage({ type: 'error', text: t('modalManager.createProduct.saveError') });
     } finally {
       setSaving(false);
     }
@@ -102,7 +104,7 @@ export const GlobalCreateProductModal: React.FC = () => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">إضافة منتج جديد</h3>
+          <h3 className="text-lg font-bold">{t('modalManager.createProduct.title')}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
@@ -122,18 +124,18 @@ export const GlobalCreateProductModal: React.FC = () => {
           )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم المنتج *</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.productNameRequired')}</label>
             <input
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="مثال: محرك هيدروليكي H-400"
+              placeholder={t('modalManager.createProduct.productNamePlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكود *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.codeRequired')}</label>
               <input
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
                 value={form.code}
@@ -142,13 +144,13 @@ export const GlobalCreateProductModal: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">الفئة / الموديل *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.categoryModelRequired')}</label>
               <input
                 list="global-products-category-options"
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
                 value={form.model}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
-                placeholder="اختر أو اكتب فئة"
+                placeholder={t('modalManager.createProduct.categoryModelPlaceholder')}
               />
               <datalist id="global-products-category-options">
                 {mergedCategoryOptions.map((category) => (
@@ -159,7 +161,7 @@ export const GlobalCreateProductModal: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">سعر البيع (ج.م)</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.sellingPrice')}</label>
             <input
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
               type="number"
@@ -178,26 +180,26 @@ export const GlobalCreateProductModal: React.FC = () => {
                 checked={form.autoDeductComponentScrapFromDecomposed === true}
                 onChange={(e) => setForm({ ...form, autoDeductComponentScrapFromDecomposed: e.target.checked })}
               />
-              خصم هالك المكونات تلقائياً من مخزن المفكك أثناء تقرير الإنتاج
+              {t('modalManager.createProduct.autoDeductScrap')}
             </label>
           </div>
 
           {canViewCosts && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة الوحدة الصينية (ج.م)</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.chineseUnitCost')}</label>
                 <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step="any" placeholder="0" value={form.chineseUnitCost ?? ''} onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })} />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة العلبة الداخلية (ج.م)</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.innerBoxCost')}</label>
                 <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step="any" placeholder="0" value={form.innerBoxCost ?? ''} onChange={(e) => setForm({ ...form, innerBoxCost: Number(e.target.value) })} />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة الكرتونة الخارجية (ج.م)</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.outerCartonCost')}</label>
                 <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step="any" placeholder="0" value={form.outerCartonCost ?? ''} onChange={(e) => setForm({ ...form, outerCartonCost: Number(e.target.value) })} />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">عدد الوحدات في الكرتونة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.unitsPerCarton')}</label>
                 <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step={1} placeholder="0" value={form.unitsPerCarton ?? ''} onChange={(e) => setForm({ ...form, unitsPerCarton: Number(e.target.value) })} />
               </div>
             </div>
@@ -205,10 +207,10 @@ export const GlobalCreateProductModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.name || !form.code || !form.model}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            إضافة المنتج
+            {t('modalManager.createProduct.addProduct')}
           </Button>
         </div>
       </div>

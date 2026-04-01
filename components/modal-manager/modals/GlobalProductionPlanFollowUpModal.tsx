@@ -7,6 +7,7 @@ import { MODAL_KEYS } from '../modalKeys';
 import { productMaterialService } from '../../../modules/production/services/productMaterialService';
 import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
 import { useAppStore } from '../../../store/useAppStore';
+import { useTranslation } from 'react-i18next';
 
 type ModalPayload = {
   planId?: string;
@@ -30,6 +31,7 @@ const normalizeText = (value: string) =>
     .replace(/\s+/g, ' ');
 
 export const GlobalProductionPlanFollowUpModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE);
   const createProductionPlanFollowUp = useAppStore((s) => s.createProductionPlanFollowUp);
   const products = useAppStore((s) => s._rawProducts);
@@ -89,7 +91,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
       } catch {
         if (cancelled) return;
         setOptions([]);
-        setError('تعذر تحميل مكونات المنتج.');
+        setError(t('modalManager.productionPlanFollowUp.loadComponentsError'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -117,7 +119,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
     if (!canSave) return;
     const selected = options.find((opt) => opt.id === componentId);
     if (!selected) {
-      setError('اختر مكون صالح.');
+      setError(t('modalManager.productionPlanFollowUp.invalidComponentError'));
       return;
     }
     setSaving(true);
@@ -135,7 +137,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
     });
     setSaving(false);
     if (!id) {
-      setError('تعذر حفظ المتابعة.');
+      setError(t('modalManager.productionPlanFollowUp.saveError'));
       return;
     }
     close();
@@ -150,8 +152,8 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
               <AlertTriangle size={18} className="text-amber-600" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">إضافة متابعة نقص مكونات</h3>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">تسجيل نقص مكوّن مرتبط بخطة الإنتاج</p>
+              <h3 className="text-lg font-bold">{t('modalManager.productionPlanFollowUp.title')}</h3>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{t('modalManager.productionPlanFollowUp.subtitle')}</p>
             </div>
           </div>
           <button onClick={close} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
@@ -162,33 +164,33 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-2.5">
-              <p className="text-[var(--color-text-muted)] mb-1">المنتج</p>
+              <p className="text-[var(--color-text-muted)] mb-1">{t('modalManager.productionPlanFollowUp.product')}</p>
               <p className="font-bold text-[var(--color-text)]">{productName}</p>
             </div>
             <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-2.5">
-              <p className="text-[var(--color-text-muted)] mb-1">الخط</p>
+              <p className="text-[var(--color-text-muted)] mb-1">{t('modalManager.productionPlanFollowUp.line')}</p>
               <p className="font-bold text-[var(--color-text)]">{lineName}</p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-bold text-[var(--color-text-muted)]">المكون *</label>
+            <label className="text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.componentRequired')}</label>
             <select
               value={componentId}
               onChange={(e) => setComponentId(e.target.value)}
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none"
               disabled={loading}
             >
-              <option value="">اختر المكون...</option>
+              <option value="">{t('modalManager.productionPlanFollowUp.selectComponent')}</option>
               {options.map((opt) => (
                 <option key={opt.id} value={opt.id}>{opt.name}</option>
               ))}
             </select>
-            {loading && <p className="text-xs text-[var(--color-text-muted)]">جاري تحميل المكونات...</p>}
+            {loading && <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.loadingComponents')}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-bold text-[var(--color-text-muted)]">الكمية الناقصة *</label>
+            <label className="text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.shortageQtyRequired')}</label>
             <input
               type="number"
               min={0}
@@ -196,18 +198,18 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
               value={shortageQty || ''}
               onChange={(e) => setShortageQty(Number(e.target.value))}
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none"
-              placeholder="مثال: 250"
+              placeholder={t('modalManager.productionPlanFollowUp.shortageQtyPlaceholder')}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-bold text-[var(--color-text-muted)]">ملحوظة</label>
+            <label className="text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.note')}</label>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none resize-none"
-              placeholder="اكتب سبب النقص أو أي تفاصيل إضافية..."
+              placeholder={t('modalManager.productionPlanFollowUp.notePlaceholder')}
             />
           </div>
 
@@ -220,11 +222,11 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={close}>إلغاء</Button>
+          <Button variant="outline" onClick={close}>{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={!canSave}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />
-            حفظ المتابعة
+            {t('modalManager.productionPlanFollowUp.saveFollowUp')}
           </Button>
         </div>
       </div>

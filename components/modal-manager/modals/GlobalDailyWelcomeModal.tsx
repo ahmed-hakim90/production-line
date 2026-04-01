@@ -3,15 +3,17 @@ import { Check, Sparkles } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { useTranslation } from 'react-i18next';
 
-const getGreeting = () => {
+const getGreetingKey = () => {
   const hour = new Date().getHours();
-  if (hour < 12) return 'صباح الخير';
-  if (hour < 18) return 'مساء الخير';
-  return 'مساء الخير';
+  if (hour < 12) return 'modalManager.dailyWelcome.morningGreeting';
+  if (hour < 18) return 'modalManager.dailyWelcome.eveningGreeting';
+  return 'modalManager.dailyWelcome.eveningGreeting';
 };
 
 export const GlobalDailyWelcomeModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.DAILY_WELCOME);
   const userDisplayName = useAppStore((s) => s.userDisplayName || '');
 
@@ -32,23 +34,23 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
           </div>
           <div>
             <h3 className="text-lg font-bold text-[var(--color-text)]">
-              {getGreeting()}
-              {userDisplayName ? `، ${userDisplayName}` : ''}
+              {t(getGreetingKey())}
+              {userDisplayName ? `${t('modalManager.shared.listSeparator')}${userDisplayName}` : ''}
             </h3>
-            <p className="text-sm text-[var(--color-text-muted)]">أهلا بك في نظام Hakimo ERP.</p>
+            <p className="text-sm text-[var(--color-text-muted)]">{t('modalManager.dailyWelcome.subtitle')}</p>
           </div>
         </div>
 
         <div className="px-6 py-5 space-y-2">
           <p className="text-sm text-[var(--color-text)] leading-7">
-            نتمنى لك يوم عمل موفق. يمكنك الآن متابعة التقارير والمهام والإشعارات اليومية بسهولة.
+            {t('modalManager.dailyWelcome.message')}
           </p>
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end">
           <button className="btn btn-primary" onClick={close}>
             <Check size={16} />
-            متابعة
+            {t('modalManager.dailyWelcome.continue')}
           </button>
         </div>
       </div>

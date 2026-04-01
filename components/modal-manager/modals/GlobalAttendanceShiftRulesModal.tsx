@@ -6,6 +6,7 @@ import { MODAL_KEYS } from '../modalKeys';
 import { shiftService } from '@/modules/hr/shiftService';
 import type { FirestoreShift } from '@/modules/hr/types';
 import { useAppStore } from '@/store/useAppStore';
+import { useTranslation } from 'react-i18next';
 
 type SaveMessage = { type: 'success' | 'error'; text: string } | null;
 
@@ -14,6 +15,7 @@ function parseCodes(text: string): string[] {
 }
 
 export const GlobalAttendanceShiftRulesModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.ATTENDANCE_SHIFT_RULES);
   const fetchEmployees = useAppStore((s) => s.fetchEmployees);
 
@@ -62,7 +64,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
         setSelectedShiftId(rows[0]?.id || '');
       }
     } catch (error) {
-      setSaveMsg({ type: 'error', text: (error as Error).message || 'تعذر تحميل الورديات' });
+      setSaveMsg({ type: 'error', text: (error as Error).message || t('modalManager.attendanceShiftRules.loadError') });
     } finally {
       setLoading(false);
     }
@@ -105,10 +107,10 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
         crossesMidnight: form.crossesMidnight,
         isActive: form.isActive,
       });
-      setSaveMsg({ type: 'success', text: 'تم حفظ قواعد الوردية بنجاح' });
+      setSaveMsg({ type: 'success', text: t('modalManager.attendanceShiftRules.saveSuccess') });
       await refreshShifts();
     } catch (error) {
-      setSaveMsg({ type: 'error', text: (error as Error).message || 'تعذر حفظ قواعد الوردية' });
+      setSaveMsg({ type: 'error', text: (error as Error).message || t('modalManager.attendanceShiftRules.saveError') });
     } finally {
       setSavingRules(false);
     }
@@ -118,7 +120,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
     if (!selectedShiftId) return;
     const parsedCodes = parseCodes(codesInput);
     if (parsedCodes.length === 0) {
-      setSaveMsg({ type: 'error', text: 'أدخل أكواد موظفين أولاً' });
+      setSaveMsg({ type: 'error', text: t('modalManager.attendanceShiftRules.enterCodesError') });
       return;
     }
     setAssigning(true);
@@ -126,12 +128,14 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
     setAssignmentSummary('');
     try {
       const result = await shiftService.assignEmployeesByCodes(selectedShiftId, parsedCodes);
-      const missingText = result.missing.length > 0 ? ` - غير موجود: ${result.missing.join(', ')}` : '';
-      setAssignmentSummary(`تم التعيين لـ ${result.updated} موظف من أصل ${parsedCodes.length}${missingText}`);
-      setSaveMsg({ type: 'success', text: 'تم تطبيق تعيين الأكواد' });
+      const missingText = result.missing.length > 0
+        ? t('modalManager.attendanceShiftRules.missingCodes', { codes: result.missing.join(', ') })
+        : '';
+      setAssignmentSummary(t('modalManager.attendanceShiftRules.assignmentSummary', { updated: result.updated, total: parsedCodes.length, missingText }));
+      setSaveMsg({ type: 'success', text: t('modalManager.attendanceShiftRules.assignSuccess') });
       await fetchEmployees();
     } catch (error) {
-      setSaveMsg({ type: 'error', text: (error as Error).message || 'تعذر تعيين الأكواد' });
+      setSaveMsg({ type: 'error', text: (error as Error).message || t('modalManager.attendanceShiftRules.assignError') });
     } finally {
       setAssigning(false);
     }
@@ -146,8 +150,8 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="erp-modal-head">
-          <h3 className="erp-modal-title">قواعد البصمة للورديات</h3>
-          <button className="erp-modal-close" onClick={() => { if (!savingRules && !assigning) close(); }} aria-label="إغلاق">
+          <h3 className="erp-modal-title">{t('modalManager.attendanceShiftRules.title')}</h3>
+          <button className="erp-modal-close" onClick={() => { if (!savingRules && !assigning) close(); }} aria-label={t('ui.close')}>
             <span className="material-icons-round">close</span>
           </button>
         </div>
@@ -161,24 +165,24 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
 
           <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
             <div className="w-full md:w-[360px]">
-              <label className="erp-filter-label">اختر الوردية</label>
+              <label className="erp-filter-label">{t('modalManager.attendanceShiftRules.selectShift')}</label>
               <SearchableSelect
                 options={shiftOptions}
                 value={selectedShiftId}
                 onChange={(value) => setSelectedShiftId(value)}
-                placeholder="اختر وردية"
+                placeholder={t('modalManager.attendanceShiftRules.selectShiftPlaceholder')}
               />
             </div>
             <button className="erp-filter-apply" onClick={() => void refreshShifts()} disabled={loading}>
               <span className="material-icons-round text-sm">{loading ? 'sync' : 'refresh'}</span>
-              {loading ? 'جار التحميل...' : 'تحديث'}
+              {loading ? t('ui.loading') : t('topbar.refresh')}
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">
-                بداية الوردية
+                {t('modalManager.attendanceShiftRules.shiftStart')}
               </label>
               <input
                 type="time"
@@ -189,7 +193,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">
-                نهاية الوردية
+                {t('modalManager.attendanceShiftRules.shiftEnd')}
               </label>
               <input
                 type="time"
@@ -203,7 +207,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">
-                آخر وقت لاحتساب الدخول
+                {t('modalManager.attendanceShiftRules.latestCheckIn')}
               </label>
               <input
                 type="time"
@@ -214,7 +218,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">
-                أول وقت لاحتساب الخروج
+                {t('modalManager.attendanceShiftRules.firstCheckOut')}
               </label>
               <input
                 type="time"
@@ -228,7 +232,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">
-                دقائق الاستراحة
+                {t('modalManager.attendanceShiftRules.breakMinutes')}
               </label>
               <input
                 type="number"
@@ -240,7 +244,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">
-                سماح التأخير (دقيقة)
+                {t('modalManager.attendanceShiftRules.lateGraceMinutes')}
               </label>
               <input
                 type="number"
@@ -260,7 +264,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
                 onChange={(e) => setForm((p) => ({ ...p, crossesMidnight: e.target.checked }))}
                 className="w-4 h-4 accent-primary"
               />
-              <span className="text-sm text-[var(--color-text)]">تعبر منتصف الليل</span>
+              <span className="text-sm text-[var(--color-text)]">{t('modalManager.attendanceShiftRules.crossesMidnight')}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -269,7 +273,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
                 onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
                 className="w-4 h-4 accent-primary"
               />
-              <span className="text-sm text-[var(--color-text)]">الوردية نشطة</span>
+              <span className="text-sm text-[var(--color-text)]">{t('modalManager.attendanceShiftRules.shiftActive')}</span>
             </label>
           </div>
 
@@ -279,14 +283,14 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
                 group_add
               </span>
               <h4 className="text-sm font-bold text-[var(--color-text)]">
-                تعيين أكواد الموظفين لهذه الوردية
+                {t('modalManager.attendanceShiftRules.assignCodesTitle')}
               </h4>
             </div>
             <p className="text-xs text-[var(--color-text-muted)]">
-              أدخل الأكواد مفصولة بسطر أو فاصلة — مثال: 1001,1002,1003
+              {t('modalManager.attendanceShiftRules.assignCodesHint')}
             </p>
             <label className="block text-xs font-bold text-[var(--color-text-muted)]">
-              أكواد الموظفين
+              {t('modalManager.attendanceShiftRules.employeeCodes')}
             </label>
             <textarea
               className={`${inputClass} placeholder:text-[var(--color-text-muted)] resize-none font-mono`}
@@ -301,7 +305,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
             <div className="flex justify-end">
               <Button type="button" variant="outline" onClick={() => void handleAssignCodes()} disabled={assigning || !selectedShiftId}>
                 {assigning ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />}
-                {assigning ? 'جار التعيين...' : 'تعيين الأكواد'}
+                {assigning ? t('modalManager.attendanceShiftRules.assigning') : t('modalManager.attendanceShiftRules.assignCodes')}
               </Button>
             </div>
           </div>
@@ -309,18 +313,18 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
 
         <div className="flex items-center justify-between gap-3 pt-4 border-t border-[var(--color-border)] mt-4">
           <button type="button" className="btn btn-secondary" onClick={() => close()}>
-            إغلاق
+            {t('ui.close')}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => void handleSaveRules()} disabled={savingRules || !selectedShiftId}>
             {savingRules ? (
               <>
                 <span className="material-icons-round animate-spin text-sm">sync</span>
-                جاري الحفظ...
+                {t('modalManager.attendanceShiftRules.saving')}
               </>
             ) : (
               <>
                 <span className="material-icons-round text-sm">save</span>
-                حفظ قواعد الوردية
+                {t('modalManager.attendanceShiftRules.saveRules')}
               </>
             )}
           </button>
