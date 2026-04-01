@@ -32,8 +32,10 @@ import { useLowStockAlert } from '../hooks/useLowStockAlert';
 import { LowStockAlert } from '../components/LowStockAlert';
 import { productMaterialService } from '../../production/services/productMaterialService';
 import type { ProductMaterial } from '../../../types';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 export const SparePartsInventory: React.FC = () => {
+  const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
@@ -241,7 +243,7 @@ export const SparePartsInventory: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={dir}>
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
         <CardContent className="pt-6">
           <div className="space-y-4">
@@ -314,7 +316,7 @@ export const SparePartsInventory: React.FC = () => {
             <DialogTrigger asChild>
               <Button>إضافة صنف جديد</Button>
             </DialogTrigger>
-            <DialogContent dir="rtl" className="max-w-3xl">
+            <DialogContent dir={dir} className="max-w-3xl">
               <DialogHeader>
                 <DialogTitle>إضافة صنف جديد</DialogTitle>
                 <DialogDescription>اختيار القطعة يكون من مكونات الأصناف المعرفة على النظام.</DialogDescription>
@@ -440,7 +442,7 @@ export const SparePartsInventory: React.FC = () => {
         </CardContent>
       </Card>
       <Dialog open={Boolean(partPendingDelete)} onOpenChange={(open) => !open && setPartPendingDelete(null)}>
-        <DialogContent dir="rtl" className="max-w-md">
+        <DialogContent dir={dir} className="max-w-md">
           <DialogHeader>
             <DialogTitle>تأكيد حذف قطعة الغيار</DialogTitle>
             <DialogDescription>

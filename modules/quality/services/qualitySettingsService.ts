@@ -274,4 +274,30 @@ export const qualitySettingsService = {
       cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as QualityReasonCatalogItem)));
     });
   },
+
+  resolveInspectionRuntimeConfig(
+    settings: QualitySettingsDocument,
+    input: { lineId?: string; productId?: string; unitsProduced?: number },
+  ): {
+    templateIds: string[];
+    dueSamplingPlans: QualitySamplingPlan[];
+  } {
+    const templates = Array.isArray(settings.inspectionTemplates) ? settings.inspectionTemplates : [];
+    const plans = Array.isArray(settings.samplingPlans) ? settings.samplingPlans : [];
+    const lineId = String(input.lineId || '');
+    const productId = String(input.productId || '');
+    const unitsProduced = Math.max(0, Number(input.unitsProduced || 0));
+    const dueSamplingPlans = plans.filter((plan) => {
+      const targetLine = String((plan as any).lineId || '');
+      const targetProduct = String((plan as any).productId || '');
+      const hasLineMatch = !targetLine || targetLine === lineId;
+      const hasProductMatch = !targetProduct || targetProduct === productId;
+      const sampleSize = Math.max(1, Number(plan.sampleSize || 1));
+      return hasLineMatch && hasProductMatch && unitsProduced >= sampleSize;
+    });
+    return {
+      templateIds: templates.map((template) => String(template.id || '')).filter(Boolean),
+      dueSamplingPlans,
+    };
+  },
 };

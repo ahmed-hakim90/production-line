@@ -148,7 +148,7 @@ export const RepairDashboard: React.FC = () => {
   }, [jobs]);
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4">
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
         <CardContent className="pt-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">

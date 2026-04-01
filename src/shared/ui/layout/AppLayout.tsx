@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { SidebarProvider, useSidebar } from './useSidebar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -12,6 +13,7 @@ import { DEFAULT_THEME } from '@/utils/dashboardConfig';
 import { resolveContentMaxWidthForPath } from '@/core/ui-engine/theme/tenantTheme';
 import { OfflineConnectionBanner } from './OfflineConnectionBanner';
 import { useOnlineStatus } from './useOnlineStatus';
+import { useAppDirection } from './useAppDirection';
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -21,6 +23,8 @@ export interface AppLayoutProps {
 
 // Inner component consumes the shared sidebar context
 const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
+  const { t } = useTranslation();
+  const { isRTL } = useAppDirection();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { collapsed, toggleCollapse } = useSidebar();
   const { canViewActivityLog } = usePermission();
@@ -33,7 +37,9 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
   const online = useOnlineStatus();
 
   // Margin matches sidebar width: collapsed=52px icon bar, expanded=260px
-  const contentMargin = collapsed ? 'lg:mr-[52px]' : 'lg:mr-[260px]';
+  const contentMargin = isRTL
+    ? (collapsed ? 'lg:mr-[52px]' : 'lg:mr-[260px]')
+    : (collapsed ? 'lg:ml-[52px]' : 'lg:ml-[260px]');
 
   return (
     <div className="flex min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-x-hidden">
@@ -41,7 +47,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
         href="#main-content"
         className="absolute start-4 top-0 z-[100] -translate-y-[150%] rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm font-semibold text-[var(--color-text)] shadow-md transition-transform focus:translate-y-4 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-primary"
       >
-        تخطي إلى المحتوى الرئيسي
+        {t('layout.skipToMainContent')}
       </a>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -91,7 +97,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
                   <span className="text-primary font-semibold">v{APP_VERSION}</span>
                 </p>
                 <span className="text-[11px] text-[var(--color-text-muted)]">
-                  تطوير بواسطة{' '}
+                  {t('layout.developedBy')}{' '}
                   <a
                     href="https://hakimo-cv.vercel.app/hakimo"
                     target="_blank"
@@ -106,11 +112,11 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
               <div className="flex items-center gap-4 text-[11px] text-[var(--color-text-muted)]">
                 <div className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                  <span>قاعدة البيانات</span>
+                  <span>{t('layout.database')}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 bg-primary rounded-full" />
-                  <span>Firestore نشط</span>
+                  <span>{t('layout.firestoreActive')}</span>
                 </div>
               </div>
             </div>

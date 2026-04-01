@@ -23,6 +23,51 @@
     "readOnly": "Read only",
     "refresh": "Refresh",
     "today": "Today"
+  },
+  "sidebar": {
+    "defaultCompanyName": "Al-Maghribi Foundation",
+    "expand": "Expand menu",
+    "collapse": "Collapse menu",
+    "systemName": "Production Management System",
+    "readOnlyMode": "Read-only mode",
+    "user": "User",
+    "myProfile": "My profile",
+    "logout": "Sign out"
+  },
+  "layout": {
+    "skipToMainContent": "Skip to main content",
+    "developedBy": "Developed by",
+    "database": "Database",
+    "firestoreActive": "Firestore active",
+    "offlineConnectionMessage": "No internet connection. Sync will resume automatically when connectivity returns."
+  },
+  "commandPalette": {
+    "searchPlaceholder": "Search the system... (page, report, module)",
+    "noResults": "No results for \"{{query}}\"",
+    "navigate": "Navigate",
+    "open": "Open",
+    "close": "Close",
+    "quickOpen": "Quick open"
+  },
+  "forcedUpdate": {
+    "title": "Update Required",
+    "message": "A newer app version is available. You need to update to continue.",
+    "currentVersion": "Current version:",
+    "requiredVersion": "Required:",
+    "updating": "Updating…",
+    "updateNow": "Update now"
+  },
+  "accessDenied": {
+    "backToDashboard": "Back to dashboard"
+  },
+  "authLoading": {
+    "panelDescription": "An integrated system for production, inventory, and HR management",
+    "features": {
+      "production": "Manage production lines and plans",
+      "inventory": "Track inventory and raw materials",
+      "hr": "Manage HR and attendance",
+      "analytics": "Advanced reports and analytics"
+    }
   }
 }
 

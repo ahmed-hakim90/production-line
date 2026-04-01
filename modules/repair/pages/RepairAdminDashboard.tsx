@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { withTenantPath } from '@/lib/tenantPaths';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairJobService } from '../services/repairJobService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import { sparePartsService } from '../services/sparePartsService';
 import type { RepairBranch, RepairJob, RepairSalesInvoice, RepairSparePart, RepairSparePartStock } from '../types';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -23,6 +27,8 @@ type BranchKpi = {
 };
 
 export const RepairAdminDashboard: React.FC = () => {
+  const { dir } = useAppDirection();
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [salesInvoices, setSalesInvoices] = useState<RepairSalesInvoice[]>([]);
@@ -118,7 +124,7 @@ export const RepairAdminDashboard: React.FC = () => {
   );
 
   return (
-    <div className="space-y-5" dir="rtl">
+    <div className="space-y-5" dir={dir}>
       <Card className="border-primary/20 bg-gradient-to-l from-primary/10 via-sky-50 to-white shadow-sm">
         <CardContent className="pt-6 pb-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -128,9 +134,14 @@ export const RepairAdminDashboard: React.FC = () => {
                 رؤية تنفيذية موحّدة لأداء الفروع، الطلبات، الإيراد، وحالة المخزون في الوقت الفعلي.
               </p>
             </div>
-            <Badge variant="secondary" className="w-fit text-xs">
-              عدد الفروع النشطة: {fmt(cards.length)}
-            </Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="secondary" className="w-fit text-xs">
+                عدد الفروع النشطة: {fmt(cards.length)}
+              </Badge>
+              <Link to={withTenantPath(tenantSlug, '/repair/admin-orders')}>
+                <Button size="sm" variant="outline">عرض طلبات الأدمن</Button>
+              </Link>
+            </div>
           </div>
         </CardContent>
       </Card>

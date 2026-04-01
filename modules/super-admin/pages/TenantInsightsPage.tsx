@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
   Select,
   SelectContent,
   SelectItem,
@@ -85,6 +86,7 @@ function tenantFullUrl(slug: string): string {
 }
 
 export const TenantInsightsPage: React.FC = () => {
+  const { dir } = useAppDirection();
   const [tenants, setTenants] = useState<(FirestoreTenant & { id: string })[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState('');
@@ -382,7 +384,7 @@ export const TenantInsightsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6" dir="rtl">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6" dir={dir}>
       <div>
         <h1 className="text-xl font-bold text-[var(--color-text)]">إحصائيات الشركات</h1>
         <p className="text-sm text-[var(--color-text-muted)] mt-1 max-w-3xl leading-relaxed">
@@ -596,7 +598,7 @@ export const TenantInsightsPage: React.FC = () => {
                                     setRoleDraft((prev) => ({ ...prev, [t.id]: v }))
                                   }
                                 >
-                                  <SelectTrigger className="w-full" dir="rtl">
+                                  <SelectTrigger className="w-full" dir={dir}>
                                     <SelectValue placeholder="اختر الدور" />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -759,7 +761,7 @@ export const TenantInsightsPage: React.FC = () => {
       )}
 
       <Dialog open={registryDialog !== null} onOpenChange={(open) => !open && setRegistryDialog(null)}>
-        <DialogContent dir="rtl">
+        <DialogContent dir={dir}>
           <DialogHeader>
             <DialogTitle>حذف سجل الشركة</DialogTitle>
             <DialogDescription className="text-right leading-relaxed">
@@ -792,7 +794,7 @@ export const TenantInsightsPage: React.FC = () => {
           }
         }}
       >
-        <DialogContent dir="rtl" className="max-w-lg">
+        <DialogContent dir={dir} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>حذف كامل لبيانات الشركة</DialogTitle>
             <DialogDescription className="text-right space-y-2 leading-relaxed">

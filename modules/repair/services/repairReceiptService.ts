@@ -1,12 +1,21 @@
-import { collection, doc, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, orderBy, runTransaction } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
+import { REPAIR_JOBS_COLLECTION } from '../collections';
 
 const COUNTER_COLLECTION = '_counters';
 const COUNTER_DOC_ID = 'repair_jobs';
 
 const formatReceipt = (seq: number) => `REP-${String(seq).padStart(4, '0')}`;
-const fallbackReceipt = () => formatReceipt(new Date().getTime() % 10000);
+const emergencyFallbackReceipt = () => `REP-TMP-${Date.now()}`;
+const parseReceiptSequence = (receiptNo: string | undefined | null): number | null => {
+  const text = String(receiptNo || '').trim();
+  const match = /^REP-(\d+)$/.exec(text);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+};
 
 const isPermissionOrAuthError = (error: unknown): boolean => {
   const code = String((error as { code?: string })?.code || '').toLowerCase();
@@ -27,10 +36,23 @@ export type RepairReceiptResult = {
 };
 
 export const repairReceiptService = {
+  async getLastKnownSequence(): Promise<number> {
+    if (!isConfigured) return 0;
+    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION, orderBy('createdAt', 'desc'), limit(1));
+    const snap = await getDocs(q);
+    const latest = snap.docs[0]?.data() as { receiptNo?: string } | undefined;
+    return parseReceiptSequence(latest?.receiptNo) ?? 0;
+  },
+
   async getNextReceipt(): Promise<RepairReceiptResult> {
-    if (!isConfigured) return { receiptNo: formatReceipt(1), usedFallback: true };
+    if (!isConfigured) {
+      return { receiptNo: emergencyFallbackReceipt(), usedFallback: true };
+    }
     const tenantId = getCurrentTenantId();
-    if (!tenantId) return { receiptNo: formatReceipt(1), usedFallback: true };
+    if (!tenantId) {
+      console.warn('repairReceiptService: missing tenantId, using emergency fallback receipt.');
+      return { receiptNo: emergencyFallbackReceipt(), usedFallback: true };
+    }
 
     const tenantCounterRef = doc(collection(db, COUNTER_COLLECTION), `${COUNTER_DOC_ID}_${tenantId}`);
     try {
@@ -52,8 +74,21 @@ export const repairReceiptService = {
       return { receiptNo, usedFallback: false };
     } catch (error) {
       if (isPermissionOrAuthError(error)) {
-        console.warn('repairReceiptService: using fallback receipt number due to counter permission/auth failure.', error);
-        return { receiptNo: fallbackReceipt(), usedFallback: true };
+        console.warn(
+          `repairReceiptService: counter permission/auth failure for tenant "${tenantId}". Trying sequential fallback from latest repair job.`,
+          error,
+        );
+        try {
+          const lastKnownSequence = await this.getLastKnownSequence();
+          const next = Math.max(1, lastKnownSequence + 1);
+          return { receiptNo: formatReceipt(next), usedFallback: true };
+        } catch (fallbackError) {
+          console.error(
+            `repairReceiptService: sequential fallback lookup failed for tenant "${tenantId}". Using emergency fallback receipt.`,
+            fallbackError,
+          );
+          return { receiptNo: emergencyFallbackReceipt(), usedFallback: true };
+        }
       }
       throw error;
     }

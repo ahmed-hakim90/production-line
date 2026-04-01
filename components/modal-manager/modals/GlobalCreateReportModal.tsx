@@ -10,6 +10,7 @@ import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
 import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
 import { ProductionLineStatus, type ReportComponentScrapItem } from '../../../types';
+import { useTranslation } from 'react-i18next';
 
 type ReportFormState = {
   reportType: 'finished_product' | 'component_injection';
@@ -79,6 +80,7 @@ const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
 };
 
 export const GlobalCreateReportModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.REPORTS_CREATE);
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
@@ -195,10 +197,10 @@ export const GlobalCreateReportModal: React.FC = () => {
     const map = new Map<string, string>();
     products.forEach((product) => {
       if (!product.id) return;
-      map.set(product.id, product.name || 'منتج غير معروف');
+      map.set(product.id, product.name || t('modalManager.createReport.unknownProduct'));
     });
     return map;
-  }, [products]);
+  }, [products, t]);
 
   useEffect(() => {
     if (!isOpen || !isSupervisorReporter || !currentEmployee?.id) return;
@@ -291,11 +293,11 @@ export const GlobalCreateReportModal: React.FC = () => {
     if (saving) return;
     const requiresWorkers = form.reportType !== 'component_injection';
     if (form.reportType === 'finished_product' && forceInjectionOnly) {
-      openErrorOverlay('هذا المستخدم مخصص لتقارير الحقن فقط');
+      openErrorOverlay(t('modalManager.createReport.injectionOnlyUser'));
       return;
     }
     if (form.reportType === 'component_injection' && !canManageComponentInjectionReports) {
-      openErrorOverlay('غير مصرح بإنشاء تقرير مكونات الحقن');
+      openErrorOverlay(t('modalManager.createReport.injectionPermissionDenied'));
       return;
     }
     if (
@@ -306,7 +308,7 @@ export const GlobalCreateReportModal: React.FC = () => {
       || !form.workHours
       || (requiresWorkers && effectiveWorkersCount <= 0)
     ) {
-      openErrorOverlay(requiresWorkers ? 'أكمل الحقول المطلوبة أولاً' : 'أكمل الحقول المطلوبة أولاً (بدون إلزام تفاصيل العمالة في تقرير الحقن)');
+      openErrorOverlay(requiresWorkers ? t('modalManager.createReport.completeRequiredFields') : t('modalManager.createReport.completeRequiredFieldsInjection'));
       return;
     }
     setSaving(true);
@@ -316,13 +318,13 @@ export const GlobalCreateReportModal: React.FC = () => {
       const created = await createReport({ ...form, workersCount: effectiveWorkersCount });
       if (!created) {
         const storeError = useAppStore.getState().error;
-        openErrorOverlay(getReportDuplicateMessage(storeError, 'تعذر حفظ التقرير'));
+        openErrorOverlay(getReportDuplicateMessage(storeError, t('modalManager.createReport.saveError')));
         return;
       }
-      setFeedback({ text: 'تم حفظ التقرير بنجاح', type: 'success' });
+      setFeedback({ text: t('modalManager.createReport.saveSuccess'), type: 'success' });
       setForm(emptyForm());
     } catch (error) {
-      const errorMessage = getReportDuplicateMessage(error, 'تعذر حفظ التقرير');
+      const errorMessage = getReportDuplicateMessage(error, t('modalManager.createReport.saveError'));
       openErrorOverlay(errorMessage);
     } finally {
       setSaving(false);
@@ -343,14 +345,14 @@ export const GlobalCreateReportModal: React.FC = () => {
             <div className="w-full max-w-md bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-xl)] shadow-2xl p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <AlertCircle size={18} className="text-rose-500" />
-                <h4 className="text-base font-extrabold text-rose-700">تعذر الحفظ</h4>
+                <h4 className="text-base font-extrabold text-rose-700">{t('modalManager.createReport.saveFailedTitle')}</h4>
               </div>
               <p className="text-sm font-bold text-[var(--color-text)]">{feedback.text}</p>
               <div className="flex items-center justify-end gap-2">
-                <Button variant="outline" onClick={closeErrorOverlay}>إغلاق التنبيه</Button>
+                <Button variant="outline" onClick={closeErrorOverlay}>{t('modalManager.createReport.closeAlert')}</Button>
                 <Button variant="danger" onClick={clearFormAndCloseError}>
                   <Trash2 size={14} />
-                  مسح البيانات
+                  {t('modalManager.createReport.clearData')}
                 </Button>
               </div>
             </div>
@@ -359,7 +361,7 @@ export const GlobalCreateReportModal: React.FC = () => {
 
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold">
-            {form.reportType === 'component_injection' ? 'إنشاء تقرير مكون حقن' : 'إنشاء تقرير إنتاج'}
+            {form.reportType === 'component_injection' ? t('modalManager.createReport.createInjectionTitle') : t('modalManager.createReport.createProductionTitle')}
           </h3>
           <button onClick={closeModal} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
@@ -385,7 +387,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           )}
           {canChooseReportType && (
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع التقرير</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.reportType')}</label>
               <select
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
                 value={form.reportType}
@@ -395,17 +397,17 @@ export const GlobalCreateReportModal: React.FC = () => {
                 }}
               >
                 {availableReportTypes.includes('finished_product') && (
-                  <option value="finished_product">تقرير إنتاج عادي</option>
+                  <option value="finished_product">{t('modalManager.createReport.reportTypeFinished')}</option>
                 )}
                 {availableReportTypes.includes('component_injection') && (
-                  <option value="component_injection">تقرير مكون حقن</option>
+                  <option value="component_injection">{t('modalManager.createReport.reportTypeInjection')}</option>
                 )}
               </select>
             </div>
           )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">أمر شغل (اختياري)</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.workOrderOptional')}</label>
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
               value={form.workOrderId}
@@ -425,10 +427,10 @@ export const GlobalCreateReportModal: React.FC = () => {
                 }));
               }}
             >
-              <option value="">اختر أمر شغل لتعبئة البيانات تلقائياً</option>
+              <option value="">{t('modalManager.createReport.selectWorkOrder')}</option>
               {activeWorkOrders.map((wo) => (
                 <option key={wo.id} value={wo.id!}>
-                  {`${productNameById.get(wo.productId) ?? 'منتج غير معروف'} — المتبقي: ${Math.max(0, Number(wo.quantity || 0) - Number(wo.producedQuantity || 0))} وحدة`}
+                  {`${productNameById.get(wo.productId) ?? t('modalManager.createReport.unknownProduct')} — ${t('modalManager.createReport.remaining')}: ${Math.max(0, Number(wo.quantity || 0) - Number(wo.producedQuantity || 0))} ${t('modalManager.createReport.units')}`}
                 </option>
               ))}
             </select>
@@ -436,7 +438,7 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">التاريخ *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.dateRequired')}</label>
               <input
                 type="date"
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
@@ -445,7 +447,7 @@ export const GlobalCreateReportModal: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">المشرف *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.supervisorRequired')}</label>
               {isSupervisorReporter && currentEmployee ? (
                 <input
                   type="text"
@@ -455,7 +457,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               ) : (
                 <SearchableSelect
-                  placeholder="اختر المشرف"
+                  placeholder={t('modalManager.createReport.selectSupervisor')}
                   options={employees.filter((s) => s.level === 2).map((s) => ({ value: s.id, label: s.name }))}
                   value={form.employeeId}
                   onChange={(v) => setForm((prev) => ({ ...prev, employeeId: v }))}
@@ -467,10 +469,10 @@ export const GlobalCreateReportModal: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-                {form.reportType === 'component_injection' ? 'الخط *' : 'خط الإنتاج *'}
+                {form.reportType === 'component_injection' ? t('modalManager.createReport.lineRequired') : t('modalManager.createReport.productionLineRequired')}
               </label>
               <SearchableSelect
-                placeholder="اختر الخط"
+                placeholder={t('modalManager.createReport.selectLine')}
                 options={selectableLines.map((l) => ({ value: l.id!, label: l.name }))}
                 value={form.lineId}
                 onChange={(v) => setForm((prev) => ({ ...prev, lineId: v, workOrderId: '' }))}
@@ -478,10 +480,10 @@ export const GlobalCreateReportModal: React.FC = () => {
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-                {form.reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}
+                {form.reportType === 'component_injection' ? t('modalManager.createReport.componentNameRequired') : t('modalManager.createReport.productRequired')}
               </label>
               <SearchableSelect
-                placeholder={form.reportType === 'component_injection' ? 'اختر المكون' : 'اختر المنتج'}
+                placeholder={form.reportType === 'component_injection' ? t('modalManager.createReport.selectComponent') : t('modalManager.createReport.selectProduct')}
                 options={selectableProducts}
                 value={form.productId}
                 onChange={(v) => setForm((prev) => ({ ...prev, productId: v, workOrderId: '' }))}
@@ -491,7 +493,7 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المنتجة *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.producedQuantityRequired')}</label>
               <input
                 type="number"
                 min={0}
@@ -503,7 +505,7 @@ export const GlobalCreateReportModal: React.FC = () => {
             </div>
             {form.reportType === 'component_injection' ? (
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.componentScrap')}</label>
                 <input
                   type="number"
                   min={0}
@@ -514,7 +516,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                     if (qty > 0) {
                       setForm((prev) => ({
                         ...prev,
-                        componentScrapItems: [{ materialId: '__total__', materialName: 'هالك مكونات', quantity: qty }],
+                        componentScrapItems: [{ materialId: '__total__', materialName: t('modalManager.createReport.componentScrapName'), quantity: qty }],
                       }));
                       return;
                     }
@@ -525,7 +527,7 @@ export const GlobalCreateReportModal: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.componentScrap')}</label>
                 <button
                   type="button"
                   onClick={() => {
@@ -543,8 +545,8 @@ export const GlobalCreateReportModal: React.FC = () => {
                 >
                   <span className="truncate text-right">
                     {totalComponentScrapQty > 0
-                      ? `إجمالي الهالك: ${totalComponentScrapQty}`
-                      : (form.productId ? 'تحديد هالك المكونات' : 'اختر المنتج أولاً')}
+                      ? t('modalManager.createReport.totalScrap', { value: totalComponentScrapQty })
+                      : (form.productId ? t('modalManager.createReport.defineComponentScrap') : t('modalManager.createReport.selectProductFirst'))}
                   </span>
                   <ExternalLink size={16} />
                 </button>
@@ -555,7 +557,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           {form.reportType === 'component_injection' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">إجمالي العمالة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.totalWorkers')}</label>
                 <input
                   type="number"
                   min={0}
@@ -566,7 +568,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.workHoursRequired')}</label>
                 <input
                   type="number"
                   min={0}
@@ -581,7 +583,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">إجمالي العمالة *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.totalWorkersRequired')}</label>
                 <input
                   type="number"
                   readOnly
@@ -591,7 +593,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة إنتاج</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.productionWorkers')}</label>
                 <input
                   type="number"
                   min={0}
@@ -602,7 +604,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة تغليف</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingWorkers')}</label>
                 <input
                   type="number"
                   min={0}
@@ -613,7 +615,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة جودة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.qualityWorkers')}</label>
                 <input
                   type="number"
                   min={0}
@@ -624,7 +626,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة صيانة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.maintenanceWorkers')}</label>
                 <input
                   type="number"
                   min={0}
@@ -635,7 +637,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">عمالة خارجية</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.externalWorkers')}</label>
                 <input
                   type="number"
                   min={0}
@@ -646,7 +648,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.workHoursRequired')}</label>
                 <input
                   type="number"
                   min={0}
@@ -661,19 +663,19 @@ export const GlobalCreateReportModal: React.FC = () => {
           )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">ملحوظة</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.note')}</label>
             <textarea
               rows={3}
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all resize-y"
               value={form.notes}
               onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-              placeholder="اكتب أي ملاحظة إضافية للتقرير..."
+              placeholder={t('modalManager.createReport.notePlaceholder')}
             />
           </div>
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={closeModal}>إلغاء</Button>
+          <Button variant="outline" onClick={closeModal}>{t('ui.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}
@@ -689,7 +691,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Plus size={14} />
-            حفظ التقرير
+            {t('modalManager.createReport.saveReport')}
           </Button>
         </div>
       </div>

@@ -45,7 +45,7 @@ export const LandingPage: React.FC = () => {
   const loginPath = '/login';
 
   return (
-    <div className="landing-marketing" dir="rtl">
+    <div className="landing-marketing">
       <header className="landing-marketing-nav">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">

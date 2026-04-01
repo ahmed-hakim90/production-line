@@ -1,12 +1,6 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { renderAuthIcon } from './authIcons';
-
-const PANEL_FEATURES: { icon: string; text: string }[] = [
-  { icon: 'precision_manufacturing', text: 'إدارة خطوط وخطط الإنتاج' },
-  { icon: 'inventory_2', text: 'متابعة المخزون والمواد الخام' },
-  { icon: 'groups', text: 'إدارة الموارد البشرية والحضور' },
-  { icon: 'bar_chart', text: 'تقارير وتحليلات متقدمة' },
-];
 
 export type AuthLoadingStateProps = {
   /** Main heading under the icon (default: Hakimo ERP) */
@@ -50,14 +44,22 @@ export type AuthBrandedLoadingPageProps = AuthLoadingStateProps;
  * Full-screen auth layout with left branding panel (desktop) + {@link AuthLoadingState}.
  */
 export function AuthBrandedLoadingPage({ title, subtitle }: AuthBrandedLoadingPageProps) {
+  const { t } = useTranslation();
+  const panelFeatures: { icon: string; text: string }[] = [
+    { icon: 'precision_manufacturing', text: t('authLoading.features.production') },
+    { icon: 'inventory_2', text: t('authLoading.features.inventory') },
+    { icon: 'groups', text: t('authLoading.features.hr') },
+    { icon: 'bar_chart', text: t('authLoading.features.analytics') },
+  ];
+
   return (
-    <div className="erp-auth-page has-panel" dir="rtl">
+    <div className="erp-auth-page has-panel">
       <div className="erp-auth-panel">
         <div className="erp-auth-panel-logo">{renderAuthIcon('factory', undefined, 26)}</div>
         <h1 className="erp-auth-panel-name">Hakimo ERP</h1>
-        <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
+        <p className="erp-auth-panel-desc">{t('authLoading.panelDescription')}</p>
         <div className="erp-auth-panel-features">
-          {PANEL_FEATURES.map(({ icon, text }) => (
+          {panelFeatures.map(({ icon, text }) => (
             <div key={icon} className="erp-auth-panel-feature">
               {renderAuthIcon(icon, undefined, 20)}
               <span>{text}</span>

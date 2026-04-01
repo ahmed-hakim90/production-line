@@ -7,15 +7,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { LowStockEntry } from '../hooks/useLowStockAlert';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 export const LowStockAlert: React.FC<{
+  const { dir } = useAppDirection();
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entries: LowStockEntry[];
 }> = ({ open, onOpenChange, entries }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl">
+      <DialogContent dir={dir}>
         <DialogHeader>
           <DialogTitle>تنبيه انخفاض مخزون قطع الغيار</DialogTitle>
           <DialogDescription>

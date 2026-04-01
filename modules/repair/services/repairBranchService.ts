@@ -3,13 +3,12 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
-  deleteDoc,
-  doc,
   getDocs,
   orderBy,
+  doc,
   updateDoc,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { db, deleteRepairBranchCascadeCallable, isConfigured } from '../../auth/services/firebase';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { REPAIR_BRANCHES_COLLECTION } from '../collections';
@@ -66,7 +65,16 @@ export const repairBranchService = {
 
   async remove(id: string): Promise<void> {
     if (!isConfigured) return;
-    await deleteDoc(doc(db, REPAIR_BRANCHES_COLLECTION, id));
+    throw new Error('استخدم removeCascade لحذف الفرع مع جميع البيانات المرتبطة.');
+  },
+
+  async removeCascade(id: string): Promise<{ deletedFirestoreDocs: number; deletedCounts: Record<string, number> }> {
+    if (!isConfigured) return { deletedFirestoreDocs: 0, deletedCounts: {} };
+    const result = await deleteRepairBranchCascadeCallable(id);
+    return {
+      deletedFirestoreDocs: Number(result.deletedFirestoreDocs || 0),
+      deletedCounts: result.deletedCounts || {},
+    };
   },
 
   async assignTechnicianToBranch(branchId: string, technicianId: string): Promise<void> {

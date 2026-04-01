@@ -28,7 +28,7 @@ export function FormField({
   const descId = description ? `${id}-desc` : undefined;
   const errId = error ? `${id}-err` : undefined;
   return (
-    <div className={cn('space-y-1.5', className)} dir="rtl">
+    <div className={cn('space-y-1.5', className)}>
       <Label htmlFor={id} className="text-sm font-medium text-foreground">
         {label}
         {required ? <span className="text-destructive ms-0.5" aria-hidden>*</span> : null}

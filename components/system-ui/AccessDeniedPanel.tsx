@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export type AccessDeniedPanelProps = {
   title: string;
@@ -17,10 +18,11 @@ export function AccessDeniedPanel({
   title,
   description,
   homeHref,
-  homeLabel = 'العودة للوحة التحكم',
+  homeLabel,
 }: AccessDeniedPanelProps) {
+  const { t } = useTranslation();
   return (
-    <div className="erp-auth-page" dir="rtl">
+    <div className="erp-auth-page">
       <div className="erp-auth-container flex items-center justify-center min-h-[calc(100vh-2rem)] py-8 px-4">
         <div className="erp-auth-card text-center p-8 max-w-md w-full">
           <div className="flex justify-center mb-4">
@@ -36,7 +38,7 @@ export function AccessDeniedPanel({
             to={homeHref}
             className="erp-auth-btn inline-flex items-center justify-center w-full no-underline"
           >
-            {homeLabel}
+            {homeLabel || t('accessDenied.backToDashboard')}
           </Link>
         </div>
       </div>

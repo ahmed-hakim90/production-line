@@ -42,7 +42,7 @@ export function DetailPageShell({
   className?: string;
 }) {
   return (
-    <div dir="rtl" className={cn("min-h-screen space-y-4 p-4 md:p-6", PAGE_BG, className)}>
+    <div className={cn("min-h-screen space-y-4 p-4 md:p-6", PAGE_BG, className)}>
       {children}
     </div>
   );

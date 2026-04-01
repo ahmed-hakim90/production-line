@@ -219,12 +219,12 @@ service cloud.firestore {
         'products', 'production_lines', 'productionLines', 'employees', 'production_reports',
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
-        'work_orders', 'notifications', 'scan_events', 'product_materials', 'monthly_production_costs',
+        'work_orders', 'notifications', 'scan_events', 'product_materials',
         'cost_deviation_analysis',
         'line_worker_assignments', 'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
         'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',
         'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations', 'system_settings',
-        'activity_logs', 'audit_logs', 'departments', 'job_positions', 'shifts', 'hr_settings',
+        'activity_logs', 'departments', 'job_positions', 'shifts', 'hr_settings',
         'penalty_rules', 'late_rules', 'allowance_types', 'attendance_raw_logs', 'attendance_logs',
         'attendance_records', 'attendance_monthly_summaries', 'attendance_import_history',
         'leave_requests', 'leave_balances', 'employee_loans', 'employee_allowances', 'employee_deductions',
@@ -307,11 +307,40 @@ service cloud.firestore {
     }
 
     match /dashboardStats/{tenantId}/daily/{dayId} {
-      allow read, write: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow write: if false;
     }
 
     match /dashboardStats/{tenantId}/monthly/{monthId} {
-      allow read, write: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow write: if false;
+    }
+
+    // Alias hardening for snake_case naming in old docs/references.
+    match /dashboard_stats/{tenantId}/{docId} {
+      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow write: if false;
+    }
+
+    match /audit_logs/{docId} {
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow write: if false;
+    }
+
+    match /audit_logs/{docId}/{subPath=**} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    match /monthly_production_costs/{docId} {
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow write: if false;
+    }
+
+    // Alias for requested monthly_costs naming.
+    match /monthly_costs/{docId} {
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow write: if false;
     }
 
     match /user_presence/{userId} {
@@ -338,7 +367,13 @@ service cloud.firestore {
     }
 
     match /payroll_records/{recordId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow read: if (hasPermission('payroll.view')
+        || hasPermission('payroll.generate')
+        || hasPermission('payroll.finalize')
+        || hasPermission('payroll.lock')
+        || hasPermission('payroll.accounts.view')
+        || hasPermission('payroll.accounts.disburse'))
+        && sameTenantOrLegacyRead();
       allow create: if hasPermission('payroll.generate') && sameTenantOrLegacyWrite();
       allow delete: if hasPermission('payroll.generate') && sameTenantOrLegacyRead();
       allow update: if (

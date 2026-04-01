@@ -70,7 +70,7 @@ const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
   const data = payload[0]?.payload;
   if (!data) return null;
   return (
-    <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 shadow-lg text-right min-w-[180px]" dir="rtl">
+    <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 shadow-lg text-right min-w-[180px]">
       <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2 border-b border-[var(--color-border)] pb-1.5">{data.date}</p>
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between gap-6">

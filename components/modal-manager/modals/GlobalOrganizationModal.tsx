@@ -27,6 +27,7 @@ import type {
   CalculationType,
 } from '../../../modules/hr/types';
 import { JOB_LEVEL_LABELS } from '../../../modules/hr/types';
+import { useTranslation } from 'react-i18next';
 
 type OrgTab = 'departments' | 'positions' | 'shifts' | 'penalties' | 'lateRules' | 'allowances';
 
@@ -41,17 +42,13 @@ type ModalPayload = {
   onSaved?: () => Promise<void> | void;
 };
 
-const PENALTY_TYPE_LABELS: Record<PenaltyType, string> = { late: 'تأخير', absence: 'غياب', disciplinary: 'تأديبي' };
-const VALUE_TYPE_LABELS: Record<ValueType, string> = { fixed: 'مبلغ ثابت', percentage: 'نسبة مئوية' };
-const CALC_TYPE_LABELS: Record<CalculationType, string> = { fixed: 'مبلغ ثابت', percentage: 'نسبة من الراتب' };
-
-const MODAL_LABELS: Record<OrgTab, string> = {
-  departments: 'قسم',
-  positions: 'منصب',
-  shifts: 'وردية',
-  penalties: 'جزاء',
-  lateRules: 'قاعدة تأخير',
-  allowances: 'بدل',
+const MODAL_LABEL_KEYS: Record<OrgTab, string> = {
+  departments: 'modalManager.organization.modalLabel.department',
+  positions: 'modalManager.organization.modalLabel.position',
+  shifts: 'modalManager.organization.modalLabel.shift',
+  penalties: 'modalManager.organization.modalLabel.penalty',
+  lateRules: 'modalManager.organization.modalLabel.lateRule',
+  allowances: 'modalManager.organization.modalLabel.allowance',
 };
 
 const emptyDept: Omit<FirestoreDepartment, 'id' | 'createdAt'> = { name: '', code: '', managerId: '', isActive: true };
@@ -95,6 +92,20 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
 );
 
 export const GlobalOrganizationModal: React.FC = () => {
+  const { t } = useTranslation();
+  const penaltyTypeLabels: Record<PenaltyType, string> = {
+    late: t('modalManager.organization.penaltyTypeLate'),
+    absence: t('modalManager.organization.penaltyTypeAbsence'),
+    disciplinary: t('modalManager.organization.penaltyTypeDisciplinary'),
+  };
+  const valueTypeLabels: Record<ValueType, string> = {
+    fixed: t('modalManager.organization.valueTypeFixed'),
+    percentage: t('modalManager.organization.valueTypePercentage'),
+  };
+  const calcTypeLabels: Record<CalculationType, string> = {
+    fixed: t('modalManager.organization.calcTypeFixed'),
+    percentage: t('modalManager.organization.calcTypeSalaryPercentage'),
+  };
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.ORGANIZATION_CREATE);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -206,10 +217,10 @@ export const GlobalOrganizationModal: React.FC = () => {
         else await addDoc(allowanceTypesRef(), data);
       }
       await modalPayload.onSaved?.();
-      setSaveMsg({ type: 'success', text: editId ? 'تم حفظ التعديلات بنجاح' : 'تمت الإضافة بنجاح' });
+      setSaveMsg({ type: 'success', text: editId ? t('modalManager.organization.saveEditSuccess') : t('modalManager.organization.saveCreateSuccess') });
     } catch (e) {
       console.error('GlobalOrganizationModal save error:', e);
-      setSaveMsg({ type: 'error', text: 'تعذر الحفظ. حاول مرة أخرى.' });
+      setSaveMsg({ type: 'error', text: t('modalManager.organization.saveError') });
     } finally {
       setSaving(false);
     }
@@ -219,7 +230,7 @@ export const GlobalOrganizationModal: React.FC = () => {
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!saving) close(); }}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-lg font-bold">{isEdit ? 'تعديل' : 'إضافة'} {MODAL_LABELS[tab]}</h3>
+          <h3 className="text-lg font-bold">{isEdit ? t('modalManager.organization.editPrefix') : t('modalManager.organization.addPrefix')} {t(MODAL_LABEL_KEYS[tab])}</h3>
           <button onClick={() => { if (!saving) close(); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
@@ -237,120 +248,120 @@ export const GlobalOrganizationModal: React.FC = () => {
 
           {tab === 'departments' && (
             <>
-              <Field label="اسم القسم *"><input className={inputClass} value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} placeholder="مثال: قسم التجميع" autoFocus /></Field>
-              <Field label="رمز القسم"><input className={inputClass} value={deptForm.code} onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value })} placeholder="ASM" /></Field>
-              <Field label="مدير القسم">
+              <Field label={t('modalManager.organization.departmentNameRequired')}><input className={inputClass} value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} placeholder={t('modalManager.organization.departmentNamePlaceholder')} autoFocus /></Field>
+              <Field label={t('modalManager.organization.departmentCode')}><input className={inputClass} value={deptForm.code} onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value })} placeholder="ASM" /></Field>
+              <Field label={t('modalManager.organization.departmentManager')}>
                 <select className={selectClass} value={deptForm.managerId} onChange={(e) => setDeptForm({ ...deptForm, managerId: e.target.value })}>
-                  <option value="">— بدون مدير —</option>
+                  <option value="">{t('modalManager.organization.noManager')}</option>
                   {activeEmployees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </Field>
-              <Toggle value={deptForm.isActive} onChange={(v) => setDeptForm({ ...deptForm, isActive: v })} label="نشط" />
+              <Toggle value={deptForm.isActive} onChange={(v) => setDeptForm({ ...deptForm, isActive: v })} label={t('modalManager.organization.active')} />
             </>
           )}
           {tab === 'positions' && (
             <>
-              <Field label="اسم المنصب *"><input className={inputClass} value={posForm.title} onChange={(e) => setPosForm({ ...posForm, title: e.target.value })} placeholder="مثال: فني تجميع" autoFocus /></Field>
-              <Field label="القسم التابع">
+              <Field label={t('modalManager.organization.positionNameRequired')}><input className={inputClass} value={posForm.title} onChange={(e) => setPosForm({ ...posForm, title: e.target.value })} placeholder={t('modalManager.organization.positionNamePlaceholder')} autoFocus /></Field>
+              <Field label={t('modalManager.organization.parentDepartment')}>
                 <select className={selectClass} value={posForm.departmentId} onChange={(e) => setPosForm({ ...posForm, departmentId: e.target.value })}>
-                  <option value="">— كل الأقسام —</option>
+                  <option value="">{t('modalManager.organization.allDepartments')}</option>
                   {departments.filter((d) => d.isActive).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </Field>
-              <Field label="المستوى الوظيفي">
+              <Field label={t('modalManager.organization.jobLevel')}>
                 <select className={selectClass} value={posForm.level} onChange={(e) => setPosForm({ ...posForm, level: Number(e.target.value) as JobLevel })}>
                   {(Object.entries(JOB_LEVEL_LABELS) as [string, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </Field>
               <div className="flex items-center justify-between">
-                <Toggle value={posForm.hasSystemAccessDefault} onChange={(v) => setPosForm({ ...posForm, hasSystemAccessDefault: v })} label="دخول نظام افتراضي" />
-                <Toggle value={posForm.isActive} onChange={(v) => setPosForm({ ...posForm, isActive: v })} label="نشط" />
+                <Toggle value={posForm.hasSystemAccessDefault} onChange={(v) => setPosForm({ ...posForm, hasSystemAccessDefault: v })} label={t('modalManager.organization.defaultSystemAccess')} />
+                <Toggle value={posForm.isActive} onChange={(v) => setPosForm({ ...posForm, isActive: v })} label={t('modalManager.organization.active')} />
               </div>
             </>
           )}
           {tab === 'shifts' && (
             <>
-              <Field label="اسم الوردية *"><input className={inputClass} value={shiftForm.name} onChange={(e) => setShiftForm({ ...shiftForm, name: e.target.value })} placeholder="الوردية الصباحية" autoFocus /></Field>
+              <Field label={t('modalManager.organization.shiftNameRequired')}><input className={inputClass} value={shiftForm.name} onChange={(e) => setShiftForm({ ...shiftForm, name: e.target.value })} placeholder={t('modalManager.organization.shiftNamePlaceholder')} autoFocus /></Field>
               <div className="grid grid-cols-2 gap-4">
-                <Field label="وقت البداية"><input type="time" className={inputClass} value={shiftForm.startTime} onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })} /></Field>
-                <Field label="وقت النهاية"><input type="time" className={inputClass} value={shiftForm.endTime} onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })} /></Field>
+                <Field label={t('modalManager.organization.startTime')}><input type="time" className={inputClass} value={shiftForm.startTime} onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })} /></Field>
+                <Field label={t('modalManager.organization.endTime')}><input type="time" className={inputClass} value={shiftForm.endTime} onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })} /></Field>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Field label="آخر وقت اعتبار دخول"><input type="time" className={inputClass} value={shiftForm.latestCheckInTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, latestCheckInTime: e.target.value })} /></Field>
-                <Field label="أول وقت اعتبار خروج"><input type="time" className={inputClass} value={shiftForm.firstCheckOutTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, firstCheckOutTime: e.target.value })} /></Field>
+                <Field label={t('modalManager.organization.latestCheckInTime')}><input type="time" className={inputClass} value={shiftForm.latestCheckInTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, latestCheckInTime: e.target.value })} /></Field>
+                <Field label={t('modalManager.organization.firstCheckOutTime')}><input type="time" className={inputClass} value={shiftForm.firstCheckOutTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, firstCheckOutTime: e.target.value })} /></Field>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Field label="استراحة (دقيقة)"><input type="number" min={0} className={inputClass} value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) || 0 })} /></Field>
-                <Field label="سماح تأخير (دقيقة)"><input type="number" min={0} className={inputClass} value={shiftForm.lateGraceMinutes} onChange={(e) => setShiftForm({ ...shiftForm, lateGraceMinutes: Number(e.target.value) || 0 })} /></Field>
+                <Field label={t('modalManager.organization.breakMinutes')}><input type="number" min={0} className={inputClass} value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) || 0 })} /></Field>
+                <Field label={t('modalManager.organization.lateGraceMinutes')}><input type="number" min={0} className={inputClass} value={shiftForm.lateGraceMinutes} onChange={(e) => setShiftForm({ ...shiftForm, lateGraceMinutes: Number(e.target.value) || 0 })} /></Field>
               </div>
               <div className="flex items-center justify-between">
-                <Toggle value={shiftForm.crossesMidnight} onChange={(v) => setShiftForm({ ...shiftForm, crossesMidnight: v })} label="تعبر منتصف الليل" color="bg-amber-500" />
-                <Toggle value={shiftForm.isActive} onChange={(v) => setShiftForm({ ...shiftForm, isActive: v })} label="نشطة" />
+                <Toggle value={shiftForm.crossesMidnight} onChange={(v) => setShiftForm({ ...shiftForm, crossesMidnight: v })} label={t('modalManager.organization.crossesMidnight')} color="bg-amber-500" />
+                <Toggle value={shiftForm.isActive} onChange={(v) => setShiftForm({ ...shiftForm, isActive: v })} label={t('modalManager.organization.shiftActive')} />
               </div>
             </>
           )}
           {tab === 'penalties' && (
             <>
-              <Field label="اسم الجزاء *"><input className={inputClass} value={penaltyForm.name} onChange={(e) => setPenaltyForm({ ...penaltyForm, name: e.target.value })} placeholder="مثال: جزاء غياب بدون إذن" autoFocus /></Field>
+              <Field label={t('modalManager.organization.penaltyNameRequired')}><input className={inputClass} value={penaltyForm.name} onChange={(e) => setPenaltyForm({ ...penaltyForm, name: e.target.value })} placeholder={t('modalManager.organization.penaltyNamePlaceholder')} autoFocus /></Field>
               <div className="grid grid-cols-2 gap-4">
-                <Field label="نوع الجزاء">
+                <Field label={t('modalManager.organization.penaltyType')}>
                   <select className={selectClass} value={penaltyForm.type} onChange={(e) => setPenaltyForm({ ...penaltyForm, type: e.target.value as PenaltyType })}>
-                    {Object.entries(PENALTY_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    {Object.entries(penaltyTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </Field>
-                <Field label="طريقة الحساب">
+                <Field label={t('modalManager.organization.calculationMethod')}>
                   <select className={selectClass} value={penaltyForm.valueType} onChange={(e) => setPenaltyForm({ ...penaltyForm, valueType: e.target.value as ValueType })}>
-                    {Object.entries(VALUE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    {Object.entries(valueTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </Field>
               </div>
-              <Field label={penaltyForm.valueType === 'percentage' ? 'النسبة (%)' : 'المبلغ (ج.م)'}>
+              <Field label={penaltyForm.valueType === 'percentage' ? t('modalManager.organization.percentage') : t('modalManager.organization.amountEgp')}>
                 <input type="number" min={0} step={penaltyForm.valueType === 'percentage' ? 0.5 : 1} className={inputClass} value={penaltyForm.value} onChange={(e) => setPenaltyForm({ ...penaltyForm, value: Number(e.target.value) || 0 })} />
               </Field>
-              <Toggle value={penaltyForm.isActive} onChange={(v) => setPenaltyForm({ ...penaltyForm, isActive: v })} label="نشط" />
+              <Toggle value={penaltyForm.isActive} onChange={(v) => setPenaltyForm({ ...penaltyForm, isActive: v })} label={t('modalManager.organization.active')} />
             </>
           )}
           {tab === 'lateRules' && (
             <>
               <div className="grid grid-cols-2 gap-4">
-                <Field label="من (دقيقة)"><input type="number" min={0} className={inputClass} value={lateRuleForm.minutesFrom} onChange={(e) => setLateRuleForm({ ...lateRuleForm, minutesFrom: Number(e.target.value) || 0 })} autoFocus /></Field>
-                <Field label="إلى (دقيقة)"><input type="number" min={1} className={inputClass} value={lateRuleForm.minutesTo} onChange={(e) => setLateRuleForm({ ...lateRuleForm, minutesTo: Number(e.target.value) || 0 })} /></Field>
+                <Field label={t('modalManager.organization.fromMinutes')}><input type="number" min={0} className={inputClass} value={lateRuleForm.minutesFrom} onChange={(e) => setLateRuleForm({ ...lateRuleForm, minutesFrom: Number(e.target.value) || 0 })} autoFocus /></Field>
+                <Field label={t('modalManager.organization.toMinutes')}><input type="number" min={1} className={inputClass} value={lateRuleForm.minutesTo} onChange={(e) => setLateRuleForm({ ...lateRuleForm, minutesTo: Number(e.target.value) || 0 })} /></Field>
               </div>
-              <Field label="طريقة الخصم">
+              <Field label={t('modalManager.organization.deductionMethod')}>
                 <select className={selectClass} value={lateRuleForm.penaltyType} onChange={(e) => setLateRuleForm({ ...lateRuleForm, penaltyType: e.target.value as ValueType })}>
-                  {Object.entries(VALUE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  {Object.entries(valueTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </Field>
-              <Field label={lateRuleForm.penaltyType === 'percentage' ? 'النسبة (%)' : 'المبلغ (ج.م)'}>
+              <Field label={lateRuleForm.penaltyType === 'percentage' ? t('modalManager.organization.percentage') : t('modalManager.organization.amountEgp')}>
                 <input type="number" min={0} step={lateRuleForm.penaltyType === 'percentage' ? 0.5 : 1} className={inputClass} value={lateRuleForm.penaltyValue} onChange={(e) => setLateRuleForm({ ...lateRuleForm, penaltyValue: Number(e.target.value) || 0 })} />
               </Field>
-              <p className="text-xs text-slate-400">مثال: من 16 إلى 30 دقيقة → خصم 50 ج.م</p>
+              <p className="text-xs text-slate-400">{t('modalManager.organization.lateRuleExample')}</p>
             </>
           )}
           {tab === 'allowances' && (
             <>
-              <Field label="اسم البدل *"><input className={inputClass} value={allowanceForm.name} onChange={(e) => setAllowanceForm({ ...allowanceForm, name: e.target.value })} placeholder="مثال: بدل مواصلات" autoFocus /></Field>
-              <Field label="طريقة الحساب">
+              <Field label={t('modalManager.organization.allowanceNameRequired')}><input className={inputClass} value={allowanceForm.name} onChange={(e) => setAllowanceForm({ ...allowanceForm, name: e.target.value })} placeholder={t('modalManager.organization.allowanceNamePlaceholder')} autoFocus /></Field>
+              <Field label={t('modalManager.organization.calculationMethod')}>
                 <select className={selectClass} value={allowanceForm.calculationType} onChange={(e) => setAllowanceForm({ ...allowanceForm, calculationType: e.target.value as CalculationType })}>
-                  {Object.entries(CALC_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  {Object.entries(calcTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </Field>
-              <Field label={allowanceForm.calculationType === 'percentage' ? 'النسبة من الراتب (%)' : 'المبلغ (ج.م)'}>
+              <Field label={allowanceForm.calculationType === 'percentage' ? t('modalManager.organization.salaryPercentage') : t('modalManager.organization.amountEgp')}>
                 <input type="number" min={0} step={allowanceForm.calculationType === 'percentage' ? 0.5 : 1} className={inputClass} value={allowanceForm.value} onChange={(e) => setAllowanceForm({ ...allowanceForm, value: Number(e.target.value) || 0 })} />
               </Field>
-              <Toggle value={allowanceForm.isActive} onChange={(v) => setAllowanceForm({ ...allowanceForm, isActive: v })} label="نشط" />
+              <Toggle value={allowanceForm.isActive} onChange={(v) => setAllowanceForm({ ...allowanceForm, isActive: v })} label={t('modalManager.organization.active')} />
             </>
           )}
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between">
           <div className="text-xs text-[var(--color-text-muted)]">
-            <Badge variant="neutral">{MODAL_LABELS[tab]}</Badge>
+            <Badge variant="neutral">{t(MODAL_LABEL_KEYS[tab])}</Badge>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => { if (!saving) close(); }}>إغلاق</Button>
+            <Button variant="outline" onClick={() => { if (!saving) close(); }}>{t('ui.close')}</Button>
             <Button variant="primary" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 size={14} className="animate-spin" />}
-              {isEdit ? 'حفظ التعديلات' : 'إضافة'}
+              {isEdit ? t('modalManager.organization.saveChanges') : t('modalManager.organization.add')}
             </Button>
           </div>
         </div>

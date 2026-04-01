@@ -103,7 +103,7 @@ function CostCard({ item }: { item: IndirectCostItem }) {
     <article
       className="rounded-[12px] bg-white p-[16px] text-right"
       style={{ border: "0.5px solid rgba(0,0,0,0.12)" }}
-      dir="rtl"
+     
     >
       <div className="flex items-start gap-3">
         <div
@@ -150,7 +150,7 @@ export function IndirectCostCards({ items, className }: IndirectCostCardsProps) 
   const totalMonthly = items.reduce((sum, item) => sum + item.monthlyTotal, 0);
 
   return (
-    <section className={cn("space-y-3", className)} dir="rtl">
+    <section className={cn("space-y-3", className)}>
       <div
         className="rounded-[12px] bg-white px-[18px] py-[12px]"
         style={{ border: "0.5px solid rgba(0,0,0,0.12)" }}

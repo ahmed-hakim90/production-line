@@ -9,12 +9,14 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { departmentsRef } from '../../../modules/hr/collections';
 import type { FirestoreDepartment } from '../../../modules/hr/types';
+import { useTranslation } from 'react-i18next';
 
 type CostCenterPayload = {
   costCenter?: CostCenter;
 };
 
 export const GlobalCostCenterModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.COST_CENTERS_CREATE);
   const createCostCenter = useAppStore((s) => s.createCostCenter);
   const updateCostCenter = useAppStore((s) => s.updateCostCenter);
@@ -205,65 +207,65 @@ export const GlobalCostCenterModal: React.FC = () => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">{editingCostCenter ? 'تعديل مركز التكلفة' : 'إضافة مركز تكلفة'}</h3>
+          <h3 className="text-lg font-bold">{editingCostCenter ? t('modalManager.costCenter.editTitle') : t('modalManager.costCenter.createTitle')}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
         </div>
         <div className="p-6 space-y-5 overflow-y-auto flex-1 min-h-0">
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم مركز التكلفة *</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.nameRequired')}</label>
             <input
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="مثال: إيجار المصنع"
+              placeholder={t('modalManager.costCenter.namePlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">النوع *</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.typeRequired')}</label>
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value as 'indirect' | 'direct' })}
             >
-              <option value="indirect">غير مباشر (يوزع على الإنتاج)</option>
-              <option value="direct">مباشر</option>
+              <option value="indirect">{t('modalManager.costCenter.typeIndirect')}</option>
+              <option value="direct">{t('modalManager.costCenter.typeDirect')}</option>
             </select>
           </div>
           {form.type === 'indirect' && (
             <>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">أساس التوزيع</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.allocationBasis')}</label>
                 <select
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={form.allocationBasis}
                   onChange={(e) => setForm({ ...form, allocationBasis: e.target.value as 'line_percentage' | 'by_qty' })}
                 >
-                  <option value="by_qty">حسب كمية الإنتاج</option>
-                  <option value="line_percentage">حسب نسب الخطوط</option>
+                  <option value="by_qty">{t('modalManager.costCenter.allocationByQty')}</option>
+                  <option value="line_percentage">{t('modalManager.costCenter.allocationByLinePercentage')}</option>
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">نطاق المنتجات</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.productScope')}</label>
                 <select
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={form.productScope}
                   onChange={(e) => setForm({ ...form, productScope: e.target.value as 'all' | 'selected' | 'category' })}
                 >
-                  <option value="selected">منتجات محددة</option>
-                  <option value="category">فئة/فئات منتجات</option>
-                  <option value="all">كل المنتجات</option>
+                  <option value="selected">{t('modalManager.costCenter.productScopeSelected')}</option>
+                  <option value="category">{t('modalManager.costCenter.productScopeCategory')}</option>
+                  <option value="all">{t('modalManager.costCenter.productScopeAll')}</option>
                 </select>
               </div>
               {form.productScope === 'selected' && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختيار المنتجات</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectProducts')}</label>
                   <input
                     className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-2.5 outline-none"
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="بحث منتج..."
+                    placeholder={t('modalManager.costCenter.searchProduct')}
                   />
                   <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-2 space-y-1">
                     {visibleProducts.map((p) => {
@@ -280,20 +282,20 @@ export const GlobalCostCenterModal: React.FC = () => {
                       );
                     })}
                     {visibleProducts.length === 0 && (
-                      <p className="text-xs text-[var(--color-text-muted)]">لا توجد منتجات مطابقة</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.noMatchingProducts')}</p>
                     )}
                   </div>
-                  <p className="text-xs text-[var(--color-text-muted)]">تم اختيار {form.productIds.length} منتج</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectedProductsCount', { count: form.productIds.length })}</p>
                 </div>
               )}
               {form.productScope === 'category' && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختيار فئة المنتجات</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectProductCategory')}</label>
                   <input
                     className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-2.5 outline-none"
                     value={categorySearch}
                     onChange={(e) => setCategorySearch(e.target.value)}
-                    placeholder="بحث فئة..."
+                    placeholder={t('modalManager.costCenter.searchCategory')}
                   />
                   <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-2 space-y-1">
                     {visibleCategories.map((category) => {
@@ -310,43 +312,43 @@ export const GlobalCostCenterModal: React.FC = () => {
                       );
                     })}
                     {visibleCategories.length === 0 && (
-                      <p className="text-xs text-[var(--color-text-muted)]">لا توجد فئات مطابقة</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.noMatchingCategories')}</p>
                     )}
                   </div>
-                  <p className="text-xs text-[var(--color-text-muted)]">تم اختيار {form.productCategories.length} فئة</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectedCategoriesCount', { count: form.productCategories.length })}</p>
                 </div>
               )}
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">مصدر القيمة</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.valueSource')}</label>
                 <select
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={form.valueSource}
                   onChange={(e) => setForm({ ...form, valueSource: e.target.value as 'manual' | 'salaries' | 'combined' })}
                 >
-                  <option value="manual">قيمة يدوية</option>
-                  <option value="salaries">مرتبات عمالة مختارة</option>
-                  <option value="combined">مرتبات + تعديل يدوي</option>
+                  <option value="manual">{t('modalManager.costCenter.valueSourceManual')}</option>
+                  <option value="salaries">{t('modalManager.costCenter.valueSourceSalaries')}</option>
+                  <option value="combined">{t('modalManager.costCenter.valueSourceCombined')}</option>
                 </select>
               </div>
               {(form.valueSource === 'salaries' || form.valueSource === 'combined') && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">نطاق العمالة</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.employeeScope')}</label>
                   <select
                     className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                     value={form.employeeScope}
                     onChange={(e) => setForm({ ...form, employeeScope: e.target.value as 'selected' | 'department' })}
                   >
-                    <option value="selected">موظفين محددين</option>
-                    <option value="department">قسم/أقسام</option>
+                    <option value="selected">{t('modalManager.costCenter.employeeScopeSelected')}</option>
+                    <option value="department">{t('modalManager.costCenter.employeeScopeDepartment')}</option>
                   </select>
                   {form.employeeScope === 'selected' ? (
                     <>
-                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختيار العمالة</label>
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectEmployees')}</label>
                       <input
                         className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-2.5 outline-none"
                         value={employeeSearch}
                         onChange={(e) => setEmployeeSearch(e.target.value)}
-                        placeholder="بحث عامل..."
+                        placeholder={t('modalManager.costCenter.searchEmployee')}
                       />
                       <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-2 space-y-1">
                         {visibleEmployees.map((e) => {
@@ -363,19 +365,19 @@ export const GlobalCostCenterModal: React.FC = () => {
                           );
                         })}
                         {visibleEmployees.length === 0 && (
-                          <p className="text-xs text-[var(--color-text-muted)]">لا توجد عمالة مطابقة</p>
+                          <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.noMatchingEmployees')}</p>
                         )}
                       </div>
-                      <p className="text-xs text-[var(--color-text-muted)]">تم اختيار {form.employeeIds.length} موظف</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectedEmployeesCount', { count: form.employeeIds.length })}</p>
                     </>
                   ) : (
                     <>
-                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختيار القسم</label>
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectDepartment')}</label>
                       <input
                         className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-2.5 outline-none"
                         value={departmentSearch}
                         onChange={(e) => setDepartmentSearch(e.target.value)}
-                        placeholder="بحث قسم..."
+                        placeholder={t('modalManager.costCenter.searchDepartment')}
                       />
                       <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-2 space-y-1">
                         {visibleDepartments.map((dept) => {
@@ -393,17 +395,17 @@ export const GlobalCostCenterModal: React.FC = () => {
                           );
                         })}
                         {visibleDepartments.length === 0 && (
-                          <p className="text-xs text-[var(--color-text-muted)]">لا توجد أقسام مطابقة</p>
+                          <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.noMatchingDepartments')}</p>
                         )}
                       </div>
-                      <p className="text-xs text-[var(--color-text-muted)]">تم اختيار {form.employeeDepartmentIds.length} قسم</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.costCenter.selectedDepartmentsCount', { count: form.employeeDepartmentIds.length })}</p>
                     </>
                   )}
                 </div>
               )}
               {form.valueSource === 'combined' && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">تعديل يدوي (شهري)</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.monthlyManualAdjustment')}</label>
                   <input
                     type="number"
                     className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none"
@@ -422,11 +424,11 @@ export const GlobalCostCenterModal: React.FC = () => {
               onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
               className="w-5 h-5 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
             />
-            <span className="text-sm font-bold text-[var(--color-text-muted)]">مفعل</span>
+            <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.active')}</span>
           </label>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}
@@ -450,7 +452,7 @@ export const GlobalCostCenterModal: React.FC = () => {
             }
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
-            حفظ
+            {t('ui.save')}
           </Button>
         </div>
       </div>

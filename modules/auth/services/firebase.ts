@@ -224,12 +224,65 @@ export const runAssetDepreciationCallable = async (input?: { period?: string }):
   }
 };
 
+export const runMonthlyOverheadAllocationCallable = async (input: { month: string }): Promise<{
+  ok: boolean;
+  month: string;
+  totalDirect: number;
+  totalIndirect: number;
+  totalCost: number;
+  orderCount: number;
+}> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { month: string },
+    { ok: boolean; month: string; totalDirect: number; totalIndirect: number; totalCost: number; orderCount: number }
+  >(functionsClient, 'runMonthlyOverheadAllocation');
+  try {
+    const result = await callable(input);
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const calculateMonthlyCostVarianceCallable = async (input: { month: string }): Promise<{
+  ok: boolean;
+  month: string;
+  flagged: number;
+}> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ month: string }, { ok: boolean; month: string; flagged: number }>(
+    functionsClient,
+    'calculateMonthlyCostVariance',
+  );
+  try {
+    const result = await callable(input);
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
 export type ResolveTenantSlugResult = {
   exists: boolean;
   tenantId?: string;
   status?: string;
   pendingRegistration?: boolean;
 };
+
+export type PublicRepairTrackResult =
+  | { found: false; reason: 'tenant_not_found' | 'tenant_not_active' | 'not_found' }
+  | {
+      found: true;
+      job: {
+        receiptNo: string;
+        customerName: string;
+        deviceBrand: string;
+        deviceModel: string;
+        status: string;
+        updatedAtMs: number;
+      };
+    };
 
 /** Pre-login: resolves company slug via Cloud Function (Firestore tenant_slugs is auth-only). */
 export const resolveTenantSlugCallable = async (slug: string): Promise<ResolveTenantSlugResult> => {
@@ -240,6 +293,28 @@ export const resolveTenantSlugCallable = async (slug: string): Promise<ResolveTe
   );
   try {
     const result = await callable({ slug: slug.trim().toLowerCase() });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const trackRepairJobPublicCallable = async (input: {
+  tenantSlug: string;
+  receiptNo: string;
+  phone: string;
+}): Promise<PublicRepairTrackResult> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { tenantSlug: string; receiptNo: string; phone: string },
+    PublicRepairTrackResult
+  >(functionsClient, 'trackRepairJobPublic');
+  try {
+    const result = await callable({
+      tenantSlug: input.tenantSlug.trim().toLowerCase(),
+      receiptNo: input.receiptNo.trim(),
+      phone: input.phone.trim(),
+    });
     return result.data;
   } catch (error: any) {
     throw normalizeCallableError(error);
@@ -324,6 +399,22 @@ export const adminDeleteTenantCascadeCallable = async (
       tenantId: tenantId.trim(),
       confirmPhrase: confirmPhrase.trim(),
     });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const deleteRepairBranchCascadeCallable = async (
+  branchId: string,
+): Promise<{ ok: boolean; branchId: string; branchName: string; deletedFirestoreDocs: number; deletedCounts: Record<string, number> }> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { branchId: string },
+    { ok: boolean; branchId: string; branchName: string; deletedFirestoreDocs: number; deletedCounts: Record<string, number> }
+  >(functionsClient, 'deleteRepairBranchCascade');
+  try {
+    const result = await callable({ branchId: branchId.trim() });
     return result.data;
   } catch (error: any) {
     throw normalizeCallableError(error);

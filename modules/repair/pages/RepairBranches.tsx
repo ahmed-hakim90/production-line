@@ -26,6 +26,7 @@ import { userService } from '../../../services/userService';
 import { employeeService } from '../../hr/employeeService';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import type { RepairBranch } from '../types';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 type BranchStats = {
   productsCount: number;
@@ -34,6 +35,7 @@ type BranchStats = {
 };
 
 export const RepairBranches: React.FC = () => {
+  const { dir } = useAppDirection();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [rows, setRows] = useState<RepairBranch[]>([]);
   const [users, setUsers] = useState<FirestoreUser[]>([]);
@@ -66,6 +68,7 @@ export const RepairBranches: React.FC = () => {
     code: '',
   });
   const [branchPendingDelete, setBranchPendingDelete] = useState<RepairBranch | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const loadBranches = async () => {
     setRows(await repairBranchService.list());
@@ -168,11 +171,17 @@ export const RepairBranches: React.FC = () => {
   const remove = async () => {
     const id = branchPendingDelete?.id;
     if (!id) return;
+    const requiredName = String(branchPendingDelete?.name || '').trim();
+    if (deleteConfirmText.trim() !== requiredName) {
+      toast.error('اكتب اسم الفرع بشكل صحيح لتأكيد الحذف.');
+      return;
+    }
     try {
-      await repairBranchService.remove(id);
-      toast.success('تم حذف الفرع.');
+      const result = await repairBranchService.removeCascade(id);
+      toast.success(`تم حذف الفرع وكل البيانات المرتبطة به (${result.deletedFirestoreDocs} سجل).`);
       await loadBranches();
       setBranchPendingDelete(null);
+      setDeleteConfirmText('');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر حذف الفرع.');
     }
@@ -319,7 +328,7 @@ export const RepairBranches: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={dir}>
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
         <CardContent className="pt-6">
           <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -335,7 +344,7 @@ export const RepairBranches: React.FC = () => {
               }}
             >
               <Button onClick={() => setBranchModalOpen(true)}>إضافة فرع</Button>
-              <DialogContent dir="rtl" className="max-w-3xl">
+              <DialogContent dir={dir} className="max-w-3xl">
                 <DialogHeader>
                   <DialogTitle>إضافة فرع</DialogTitle>
                   <DialogDescription>أدخل الاسم والهاتف والعنوان وحدد الموظف المسؤول لإنشاء فرع جديد.</DialogDescription>
@@ -518,22 +527,58 @@ export const RepairBranches: React.FC = () => {
           )}
         </CardContent>
       </Card>
-      <Dialog open={Boolean(branchPendingDelete)} onOpenChange={(open) => !open && setBranchPendingDelete(null)}>
-        <DialogContent dir="rtl" className="max-w-md">
+      <Dialog
+        open={Boolean(branchPendingDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBranchPendingDelete(null);
+            setDeleteConfirmText('');
+          }
+        }}
+      >
+        <DialogContent dir={dir} className="max-w-md">
           <DialogHeader>
             <DialogTitle>تأكيد حذف الفرع</DialogTitle>
             <DialogDescription>
-              هل تريد حذف الفرع "{branchPendingDelete?.name}"؟ لا يمكن التراجع عن هذا الإجراء.
+              هل تريد حذف الفرع "{branchPendingDelete?.name}"؟ سيتم حذف جميع البيانات المرتبطة به نهائيًا ولا يمكن التراجع.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="delete-branch-confirm-name">
+              للتأكيد اكتب اسم الفرع بالكامل:
+              {' '}
+              <span className="font-semibold">{branchPendingDelete?.name || '—'}</span>
+            </Label>
+            <Input
+              id="delete-branch-confirm-name"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="اكتب اسم الفرع هنا"
+              autoComplete="off"
+            />
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBranchPendingDelete(null)}>إلغاء</Button>
-            <Button variant="destructive" onClick={remove}>حذف نهائي</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBranchPendingDelete(null);
+                setDeleteConfirmText('');
+              }}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={remove}
+              disabled={deleteConfirmText.trim() !== String(branchPendingDelete?.name || '').trim()}
+            >
+              حذف نهائي
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={employeeModalOpen} onOpenChange={setEmployeeModalOpen}>
-        <DialogContent dir="rtl">
+        <DialogContent dir={dir}>
           <DialogHeader>
             <DialogTitle>إضافة موظف للفرع</DialogTitle>
             <DialogDescription>
@@ -638,7 +683,7 @@ export const RepairBranches: React.FC = () => {
         </DialogContent>
       </Dialog>
       <Dialog open={techniciansModalOpen} onOpenChange={setTechniciansModalOpen}>
-        <DialogContent dir="rtl" className="max-w-md">
+        <DialogContent dir={dir} className="max-w-md">
           <DialogHeader>
             <DialogTitle>
               الفنيون المعينون - {selectedTechniciansBranch?.name || 'الفرع'}

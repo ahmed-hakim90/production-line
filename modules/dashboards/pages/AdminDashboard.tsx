@@ -1275,7 +1275,7 @@ export const AdminDashboard: React.FC = () => {
     if (!active || !payload?.length) return null;
     return (
       <div
-        dir="rtl"
+       
         style={{
           background: 'var(--color-card)',
           border: '1px solid var(--color-border)',
@@ -1301,7 +1301,7 @@ export const AdminDashboard: React.FC = () => {
     const d = payload[0];
     return (
       <div
-        dir="rtl"
+       
         style={{
           background: 'var(--color-card)',
           border: '1px solid var(--color-border)',

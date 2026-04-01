@@ -3,6 +3,7 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useSupervisorStore } from '../../../modules/production/stores/useSupervisorStore';
 import type { HistoryPeriod, SupervisorAssignmentAction } from '../../../modules/production/services/supervisorDistributionService';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 interface HistoryPayload {
   lineId: string;
@@ -39,6 +40,7 @@ const formatDateTime = (value: unknown): string => {
 };
 
 export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
+  const { dir } = useAppDirection();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.PRODUCTION_SUPERVISOR_ASSIGNMENT_HISTORY);
   const history = useSupervisorStore((state) => state.history);
   const historyLoading = useSupervisorStore((state) => state.historyLoading);
@@ -66,7 +68,7 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
 
   return (
     <div
-      dir="rtl"
+      dir={dir}
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/35 p-4"
       onClick={close}
     >

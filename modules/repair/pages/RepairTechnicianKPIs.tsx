@@ -5,16 +5,28 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
+import { employeeService } from '../../hr/employeeService';
+import { userService } from '../../../services/userService';
+import { toast } from '../../../components/Toast';
 import type { FirestoreUserWithRepair, RepairBranch, RepairJob } from '../types';
 import { resolveUserRepairBranchIds } from '../types';
 
@@ -28,8 +40,12 @@ export const RepairTechnicianKPIs: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [technicianId, setTechnicianId] = useState('');
+  const [technicianQuery, setTechnicianQuery] = useState('');
   const [branchFilter, setBranchFilter] = useState<'all' | string>('all');
+  const [technicianNameById, setTechnicianNameById] = useState<Map<string, string>>(new Map());
+  const [hiddenTechnicianIds, setHiddenTechnicianIds] = useState<string[]>([]);
+  const [pendingUnassign, setPendingUnassign] = useState<{ id: string; name: string } | null>(null);
+  const [removing, setRemoving] = useState(false);
   const userBranchIds = useMemo(() => resolveUserRepairBranchIds(user), [user]);
   const assignedBranchIds = useMemo(() => {
     if (!user?.id) return [];
@@ -45,8 +61,9 @@ export const RepairTechnicianKPIs: React.FC = () => {
   const resetFilters = () => {
     setFrom('');
     setTo('');
-    setTechnicianId('');
+    setTechnicianQuery('');
     setBranchFilter('all');
+    setHiddenTechnicianIds([]);
   };
 
   useEffect(() => {
@@ -65,14 +82,52 @@ export const RepairTechnicianKPIs: React.FC = () => {
   useEffect(() => {
     void repairBranchService.list().then(setBranches);
   }, []);
+  useEffect(() => {
+    void Promise.allSettled([employeeService.getAll(), userService.getAll()]).then((results) => {
+      const employees = results[0].status === 'fulfilled' ? results[0].value : [];
+      const users = results[1].status === 'fulfilled' ? results[1].value : [];
+      const map = new Map<string, string>();
+
+      const usersById = new Map<string, FirestoreUser>();
+      users.forEach((user) => {
+        const id = String(user.id || '').trim();
+        if (id) usersById.set(id, user);
+      });
+
+      employees.forEach((employee: FirestoreEmployee) => {
+        const employeeId = String(employee.id || '').trim();
+        const userId = String(employee.userId || '').trim();
+        const user = userId ? usersById.get(userId) : undefined;
+        const name = String(employee.name || user?.displayName || user?.email || '').trim();
+        if (employeeId && name) map.set(employeeId, name);
+        if (userId && name && !map.has(userId)) map.set(userId, name);
+      });
+
+      users.forEach((user) => {
+        const id = String(user.id || '').trim();
+        const name = String(user.displayName || user.email || '').trim();
+        if (id && name && !map.has(id)) map.set(id, name);
+      });
+
+      setTechnicianNameById(map);
+    });
+  }, []);
 
   const filtered = useMemo(() => jobs.filter((j) => {
-    if (technicianId && j.technicianId !== technicianId) return false;
+    if (hiddenTechnicianIds.includes(String(j.technicianId || '').trim())) return false;
+    if (technicianQuery) {
+      const query = technicianQuery.trim().toLowerCase();
+      const currentTechnicianId = String(j.technicianId || '').trim();
+      const currentTechnicianName = String(technicianNameById.get(currentTechnicianId) || '').trim().toLowerCase();
+      const idMatches = currentTechnicianId.toLowerCase().includes(query);
+      const nameMatches = currentTechnicianName.includes(query);
+      if (!idMatches && !nameMatches) return false;
+    }
     if (branchFilter !== 'all' && j.branchId !== branchFilter) return false;
     if (from && j.createdAt < from) return false;
     if (to && j.createdAt > `${to}T23:59:59`) return false;
     return true;
-  }), [jobs, technicianId, branchFilter, from, to]);
+  }), [jobs, hiddenTechnicianIds, technicianQuery, technicianNameById, branchFilter, from, to]);
 
   const totals = useMemo(() => {
     const delivered = filtered.filter((j) => j.status === 'delivered');
@@ -105,9 +160,18 @@ export const RepairTechnicianKPIs: React.FC = () => {
       }, {}),
     [filtered],
   );
+  const resolveUnassignBranchIds = (technicianId: string): string[] => {
+    const normalizedTechnicianId = String(technicianId || '').trim();
+    if (!normalizedTechnicianId) return [];
+    if (branchFilter !== 'all') return [branchFilter];
+    return selectableBranches
+      .filter((branch) => (branch.technicianIds || []).map((id) => String(id || '').trim()).includes(normalizedTechnicianId))
+      .map((branch) => String(branch.id || '').trim())
+      .filter(Boolean);
+  };
 
   return (
-    <div className="space-y-4 w-full" dir="rtl">
+    <div className="space-y-4 w-full">
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
         <CardContent className="pt-6">
           <h1 className="text-2xl font-bold">أداء الفنيين</h1>
@@ -119,7 +183,14 @@ export const RepairTechnicianKPIs: React.FC = () => {
         <CardContent className="grid md:grid-cols-4 gap-2">
           <div><Label>من</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
           <div><Label>إلى</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-          <div><Label>معرف الفني (اختياري)</Label><Input value={technicianId} onChange={(e) => setTechnicianId(e.target.value)} /></div>
+          <div>
+            <Label>الفني (اسم أو معرف)</Label>
+            <Input
+              value={technicianQuery}
+              onChange={(e) => setTechnicianQuery(e.target.value)}
+              placeholder="اكتب اسم الفني أو المعرف"
+            />
+          </div>
           <div>
             <Label>الفرع</Label>
             <Select value={branchFilter} onValueChange={setBranchFilter}>
@@ -167,14 +238,21 @@ export const RepairTechnicianKPIs: React.FC = () => {
                   <th className="p-2 text-right">المنجزة</th>
                   <th className="p-2 text-right">نسبة الإنجاز</th>
                   <th className="p-2 text-right">الإيراد</th>
+                  <th className="p-2 text-right">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {Object.entries(technicianBreakdown).map(([id, row]) => {
                   const rate = row.total > 0 ? (row.delivered / row.total) * 100 : 0;
+                  const technicianLabel =
+                    id === 'غير مسند' ? id : technicianNameById.get(String(id || '').trim()) || `ID: ${id}`;
+                  const isUnassigned = id === 'غير مسند';
+                  const selectedBranch = branchFilter !== 'all'
+                    ? selectableBranches.find((branch) => (branch.id || '') === branchFilter)
+                    : undefined;
                   return (
                     <tr key={id} className="border-t">
-                      <td className="p-2">{id}</td>
+                      <td className="p-2">{technicianLabel}</td>
                       <td className="p-2 font-mono">{fmt(row.total)}</td>
                       <td className="p-2 font-mono">{fmt(row.delivered)}</td>
                       <td className="p-2">
@@ -189,12 +267,45 @@ export const RepairTechnicianKPIs: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-2 font-mono">{fmt(Number(row.revenue.toFixed(0)))}</td>
+                      <td className="p-2">
+                        <div className="flex gap-2">
+                          {!isUnassigned && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setHiddenTechnicianIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+                            >
+                              إخفاء
+                            </Button>
+                          )}
+                          {!isUnassigned && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => setPendingUnassign({ id, name: technicianLabel })}
+                              disabled={resolveUnassignBranchIds(id).length === 0}
+                              title={resolveUnassignBranchIds(id).length === 0 ? 'الفني غير مربوط بأي فرع متاح' : undefined}
+                            >
+                              إزالة من الفرع
+                            </Button>
+                          )}
+                          {isUnassigned && <span className="text-xs text-muted-foreground">—</span>}
+                          {!isUnassigned && branchFilter === 'all' && (
+                            <span className="text-xs text-muted-foreground">سيتم الإزالة من كل الفروع المتاحة</span>
+                          )}
+                          {!isUnassigned && selectedBranch && (
+                            <span className="text-xs text-muted-foreground">الفرع: {selectedBranch.name}</span>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
                 {Object.keys(technicianBreakdown).length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-3 text-center text-muted-foreground">لا توجد بيانات للفلاتر الحالية.</td>
+                    <td colSpan={6} className="p-3 text-center text-muted-foreground">لا توجد بيانات للفلاتر الحالية.</td>
                   </tr>
                 )}
               </tbody>
@@ -202,6 +313,60 @@ export const RepairTechnicianKPIs: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      <Dialog open={Boolean(pendingUnassign)} onOpenChange={(next) => { if (!next) setPendingUnassign(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تأكيد إزالة الفني من الفرع</DialogTitle>
+            <DialogDescription>
+              سيتم فك ربط الفني <span className="font-semibold">{pendingUnassign?.name || '—'}</span>
+              {' '}
+              {branchFilter === 'all' ? 'من كل الفروع المتاحة.' : 'من الفرع المحدد في الفلتر.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={removing} onClick={() => setPendingUnassign(null)}>
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={removing || !pendingUnassign}
+              onClick={async () => {
+                if (!pendingUnassign) return;
+                try {
+                  setRemoving(true);
+                  const targetBranchIds = resolveUnassignBranchIds(pendingUnassign.id);
+                  if (targetBranchIds.length === 0) {
+                    throw new Error('لا توجد فروع مرتبطة بهذا الفني لإزالته منها.');
+                  }
+                  for (const targetBranchId of targetBranchIds) {
+                    await repairBranchService.removeTechnicianFromBranch(targetBranchId, pendingUnassign.id);
+                  }
+                  setBranches((prev) => prev.map((branch) => {
+                    if (!targetBranchIds.includes(String(branch.id || ''))) return branch;
+                    return {
+                      ...branch,
+                      technicianIds: (branch.technicianIds || []).filter((techId) => String(techId || '').trim() !== pendingUnassign.id),
+                    };
+                  }));
+                  toast.success(
+                    targetBranchIds.length > 1
+                      ? `تمت إزالة الفني من ${targetBranchIds.length} فروع.`
+                      : 'تمت إزالة الفني من الفرع.',
+                  );
+                  setPendingUnassign(null);
+                } catch (error: any) {
+                  toast.error(error?.message || 'تعذر إزالة الفني من الفرع.');
+                } finally {
+                  setRemoving(false);
+                }
+              }}
+            >
+              {removing ? 'جارٍ الإزالة...' : 'تأكيد الإزالة'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -42,7 +42,7 @@ export const TenantsApproval: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto" dir="rtl">
+    <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-xl font-bold mb-4">موافقة على تسجيل شركات جديدة</h1>
       {error ? <p className="text-rose-600 text-sm mb-3">{error}</p> : null}
       {loading ? (

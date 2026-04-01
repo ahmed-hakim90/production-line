@@ -73,6 +73,22 @@ export const repairSalesInvoiceService = {
     return snap.exists() ? ({ id: snap.id, ...snap.data() } as RepairSalesInvoice) : null;
   },
 
+  async findActiveByRepairJobId(repairJobId: string): Promise<RepairSalesInvoice | null> {
+    if (!isConfigured || !repairJobId) return null;
+    const q = tenantQuery(
+      db,
+      REPAIR_SALES_INVOICES_COLLECTION,
+      where('repairJobId', '==', repairJobId),
+      limit(20),
+    );
+    const snap = await getDocs(q);
+    const activeRows = snap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as RepairSalesInvoice))
+      .filter((row) => (row.status || 'active') === 'active')
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    return activeRows[0] || null;
+  },
+
   subscribeByBranch(branchId: string, cb: (rows: RepairSalesInvoice[]) => void): Unsubscribe {
     if (!isConfigured || !branchId) return () => {};
     const q = tenantQuery(
@@ -147,6 +163,7 @@ export const repairSalesInvoiceService = {
     branchId: string;
     warehouseId?: string;
     warehouseName?: string;
+    repairJobId?: string;
     lines: RepairSalesInvoiceLine[];
     customerName?: string;
     customerPhone?: string;
@@ -169,6 +186,7 @@ export const repairSalesInvoiceService = {
       status: 'active',
       warehouseId: input.warehouseId || '',
       warehouseName: input.warehouseName || '',
+      repairJobId: input.repairJobId || '',
       customerName: input.customerName || '',
       customerPhone: input.customerPhone || '',
       notes: input.notes || '',

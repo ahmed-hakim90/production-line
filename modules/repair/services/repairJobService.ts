@@ -20,8 +20,12 @@ import { REPAIR_JOBS_COLLECTION } from '../collections';
 import type { RepairJob, RepairJobProduct, RepairJobStatus, RepairPartUsage, RepairStatusHistoryItem } from '../types';
 import { repairReceiptService } from './repairReceiptService';
 import { sparePartsService } from './sparePartsService';
+import { repairTreasuryService } from './repairTreasuryService';
+import { repairSalesInvoiceService } from './repairSalesInvoiceService';
+import { repairBranchService } from './repairBranchService';
 
 const nowIso = () => new Date().toISOString();
+const isoUtcDay = (isoLike: string | undefined | null): string => String(isoLike || '').slice(0, 10);
 const withDefined = <T extends Record<string, unknown>>(obj: T): T =>
   Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined)) as T;
 const makeItemId = () => `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -32,6 +36,7 @@ const normalizeJob = (job: RepairJob): RepairJob => {
     ? existingProducts.map((item, idx) => ({
         ...item,
         itemId: String(item?.itemId || `item-${idx + 1}`),
+        accessories: String(item?.accessories || (idx === 0 ? job.accessories || '' : '')),
       }))
     : [{
         itemId: 'item-1',
@@ -40,6 +45,7 @@ const normalizeJob = (job: RepairJob): RepairJob => {
         deviceType: job.deviceType,
         deviceBrand: job.deviceBrand,
         deviceModel: job.deviceModel,
+        accessories: String(job.accessories || ''),
         diagnosis: job.problemDescription || '',
         estimatedCost: Number(job.estimatedCost || 0),
         finalCost: Number(job.finalCost || 0),
@@ -68,6 +74,12 @@ type NewRepairJobInput = Omit<
 export type RepairJobCreateResult = {
   id: string | null;
   usedFallbackReceipt: boolean;
+};
+
+export type RemoveRepairJobWithRollbackInput = {
+  deletedBy: string;
+  deletedByName?: string;
+  cancelReason?: string;
 };
 
 export const repairJobService = {
@@ -184,6 +196,7 @@ export const repairJobService = {
       ? incomingProducts.map((item, idx) => ({
           ...item,
           itemId: String(item?.itemId || `item-${idx + 1}`),
+          accessories: String(item?.accessories || (idx === 0 ? input.accessories || '' : '')),
         }))
       : [{
           itemId: makeItemId(),
@@ -192,6 +205,7 @@ export const repairJobService = {
           deviceType: input.deviceType,
           deviceBrand: input.deviceBrand,
           deviceModel: input.deviceModel,
+          accessories: String(input.accessories || ''),
           diagnosis: input.problemDescription || '',
           estimatedCost: Number(input.estimatedCost || 0),
           finalCost: Number(input.finalCost || 0),
@@ -248,7 +262,8 @@ export const repairJobService = {
 
   async assignTechnician(id: string, technicianId: string): Promise<void> {
     if (!isConfigured) return;
-    await this.update(id, { technicianId });
+    const at = nowIso();
+    await this.update(id, { technicianId, assignedAt: at });
   },
 
   async changeStatus(input: {
@@ -267,27 +282,51 @@ export const repairJobService = {
       const job = { id: snap.id, ...snap.data() } as RepairJob;
       const at = nowIso();
       const history = Array.isArray(job.statusHistory) ? [...job.statusHistory] : [];
-      history.push(withDefined({
-        status: input.status,
-        at,
-        technicianId: input.technicianId,
-        reason: input.reason,
-      }) as RepairStatusHistoryItem);
+      const lastHistory = history[history.length - 1];
+      const sameStatusSameUtcDay = Boolean(
+        lastHistory
+        && String(lastHistory.status || '') === String(input.status || '')
+        && isoUtcDay(lastHistory.at) === isoUtcDay(at),
+      );
+      if (!sameStatusSameUtcDay) {
+        history.push(withDefined({
+          status: input.status,
+          at,
+          technicianId: input.technicianId,
+          reason: input.reason,
+        }) as RepairStatusHistoryItem);
+      }
 
       tx.update(ref, {
         status: input.status,
         statusHistory: history,
         updatedAt: at,
         technicianId: input.technicianId ?? job.technicianId ?? '',
+        ...(input.status === 'repair' && !job.assignedAt ? { assignedAt: at } : {}),
         ...(input.status === 'delivered'
           ? {
               deliveredAt: at,
               isClosed: true,
               finalCost: Number(input.finalCost ?? job.finalCost ?? 0),
               warranty: input.warranty ?? job.warranty ?? 'none',
+              resolvedAt: at,
+              resolutionMinutes: job.assignedAt
+                ? Math.max(0, Math.round((Date.parse(at) - Date.parse(String(job.assignedAt || at))) / 60000))
+                : undefined,
             }
           : {}),
-        ...(input.status === 'unrepairable' ? { notes: input.reason || job.notes || '' } : {}),
+        ...(input.status === 'unrepairable'
+          ? {
+              notes: input.reason || job.notes || '',
+              resolvedAt: at,
+              resolutionMinutes: job.assignedAt
+                ? Math.max(0, Math.round((Date.parse(at) - Date.parse(String(job.assignedAt || at))) / 60000))
+                : undefined,
+            }
+          : {}),
+        ...(job.dueAt && Date.parse(at) > Date.parse(String(job.dueAt)) && !job.breachedAt
+          ? { breachedAt: at }
+          : {}),
       });
     });
   },
@@ -376,6 +415,83 @@ export const repairJobService = {
 
   async remove(id: string): Promise<void> {
     if (!isConfigured || !id) return;
+    const row = await this.getById(id);
+    if (!row) throw new Error('طلب الصيانة غير موجود.');
+    const normalizedStatus = String(row.status || '').trim().toLowerCase();
+    if (normalizedStatus === 'delivered' || Boolean(row.isClosed)) {
+      throw new Error('لا يمكن حذف طلب صيانة مُسلَّم أو مُقفل.');
+    }
+    await deleteDoc(doc(db, REPAIR_JOBS_COLLECTION, id));
+  },
+
+  async removeWithRollback(id: string, input: RemoveRepairJobWithRollbackInput): Promise<void> {
+    if (!isConfigured || !id) return;
+    const row = await this.getById(id);
+    if (!row) throw new Error('طلب الصيانة غير موجود.');
+
+    const actorId = String(input.deletedBy || '').trim();
+    const actorName = String(input.deletedByName || actorId || 'system').trim();
+    const reason = String(input.cancelReason || '').trim();
+    const reverseRef = `delete-reverse:${id}`;
+
+    const incomeEntries = await repairTreasuryService.listEntriesByReference(id, 'INCOME');
+    const totalIncome = incomeEntries.reduce((sum, entry) => sum + Math.abs(Number(entry.amount || 0)), 0);
+    const isAlreadyReversed = await repairTreasuryService.hasEntryByReference(reverseRef, 'EXPENSE');
+    if (totalIncome > 0 && !isAlreadyReversed) {
+      await repairTreasuryService.ensureOpenSession(row.branchId);
+      await repairTreasuryService.addEntry({
+        branchId: row.branchId,
+        entryType: 'EXPENSE',
+        amount: totalIncome,
+        note: [
+          `عكس تحصيل طلب صيانة #${row.receiptNo || id} بسبب الحذف`,
+          reason ? `السبب: ${reason}` : '',
+        ].filter(Boolean).join(' - '),
+        referenceId: reverseRef,
+        createdBy: actorId,
+        createdByName: actorName,
+      });
+    }
+
+    const branch = (await repairBranchService.list()).find((item) => String(item.id || '') === String(row.branchId || ''));
+    const branchWarehouseId = String(branch?.warehouseId || '').trim();
+    const branchWarehouseName = branch?.name ? `مخزن ${branch.name}` : String(branch?.warehouseCode || '').trim();
+    if (Array.isArray(row.partsUsed) && row.partsUsed.length > 0) {
+      if (!branchWarehouseId) {
+        throw new Error('لا يمكن عكس قطع الغيار لأن مخزن الفرع غير محدد.');
+      }
+      for (const part of row.partsUsed) {
+        const partId = String(part.partId || '').trim();
+        if (!partId) continue;
+        await sparePartsService.adjustStock({
+          branchId: row.branchId,
+          warehouseId: branchWarehouseId,
+          warehouseName: branchWarehouseName,
+          partId,
+          partName: String(part.partName || '').trim() || partId,
+          quantity: Math.abs(Number(part.quantity || 0)),
+          type: 'IN',
+          createdBy: actorName,
+          jobId: row.id,
+          referenceId: reverseRef,
+          notes: [
+            `عكس صرف قطع غيار لطلب #${row.receiptNo || id} بسبب الحذف`,
+            reason ? `السبب: ${reason}` : '',
+          ].filter(Boolean).join(' - '),
+        });
+      }
+    }
+
+    const linkedInvoice = await repairSalesInvoiceService.findActiveByRepairJobId(id);
+    if (linkedInvoice?.id) {
+      await repairSalesInvoiceService.cancelInvoice({
+        id: linkedInvoice.id,
+        cancelledBy: actorId,
+        cancelledByName: actorName,
+        cancelReason: reason || `إلغاء تلقائي بسبب حذف طلب الصيانة #${row.receiptNo || id}`,
+      });
+    }
+
     await deleteDoc(doc(db, REPAIR_JOBS_COLLECTION, id));
   },
 

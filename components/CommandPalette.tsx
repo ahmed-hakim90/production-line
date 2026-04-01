@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { withTenantPath } from '@/lib/tenantPaths';
 import {
   BarChart3,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { usePermission } from '@/utils/permissions';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 interface PaletteItem {
   key: string;
@@ -60,6 +62,8 @@ function renderPaletteIcon(name?: string, className?: string, size = 16) {
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose }) => {
+  const { t } = useTranslation();
+  const { dir } = useAppDirection();
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -146,11 +150,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
           <input
             ref={inputRef}
             type="text"
-            placeholder="ابحث في النظام... (صفحة، تقرير، وحدة)"
+            placeholder={t('commandPalette.searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="flex-1 bg-transparent text-[13.5px] text-[var(--color-text)] placeholder-[var(--color-text-muted)] outline-none"
-            dir="rtl"
+            dir={dir}
           />
           <kbd className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
             Esc
@@ -162,7 +166,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-[13px] text-[var(--color-text-muted)]">
               <SearchX size={30} className="mb-2 block opacity-30 mx-auto" />
-              لا توجد نتائج لـ "{query}"
+              {t('commandPalette.noResults', { query })}
             </div>
           ) : (
             filtered.map((item, idx) => (
@@ -204,11 +208,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
 
         {/* Footer hint */}
         <div className="border-t border-[var(--color-border)] px-3.5 py-2 flex items-center gap-3 text-[10.5px] text-[var(--color-text-muted)]">
-          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">↑↓</kbd> تنقل</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">↵</kbd> فتح</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">Esc</kbd> إغلاق</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">↑↓</kbd>{t('commandPalette.navigate')}</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">↵</kbd>{t('commandPalette.open')}</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">Esc</kbd>{t('commandPalette.close')}</span>
           <span className="mr-auto flex items-center gap-1 opacity-70">
-            <kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">Ctrl K</kbd> فتح سريع
+            <kbd className="px-1 py-0.5 rounded bg-[var(--color-surface-hover)] border border-[var(--color-border)] font-mono">Ctrl K</kbd>{t('commandPalette.quickOpen')}
           </span>
         </div>
       </div>

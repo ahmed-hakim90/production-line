@@ -4,6 +4,7 @@ import { ChevronRight, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "./StatusBadge"
 import { cn } from "@/lib/utils"
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 type WorkOrderDetailStatus = "قيد التنفيذ" | "مكتمل" | "موقف" | "قيد الانتظار" | "ملغي"
 type TabId = "dates" | "costs" | "notes"
@@ -51,6 +52,7 @@ const currencyFormatter = new Intl.NumberFormat("ar-EG", {
 })
 
 export function WorkOrderDetail({
+  const { dir } = useAppDirection();
   order,
   open,
   onClose,
@@ -103,7 +105,7 @@ export function WorkOrderDetail({
       />
 
       <aside
-        dir="rtl"
+        dir={dir}
         className="h-full w-[min(560px,96vw)] border-s border-[var(--color-border-ui)] bg-[var(--color-card-bg)]"
       >
         <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border-ui)] px-4 py-3">

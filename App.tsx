@@ -52,6 +52,8 @@ import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugReso
 import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
 import { SuperAdminGuard } from './modules/super-admin/SuperAdminGuard';
 import { AuthBrandedLoadingPage } from './components/system-ui/AuthLoadingState';
+import { useAppInitialization } from './hooks/useAppInitialization';
+import { useAuthStore } from './store/useAuthStore';
 
 const HomeDashboardRouter = lazyNamed(() => import('./modules/dashboards/pages/HomeDashboardRouter'), 'HomeDashboardRouter');
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
@@ -209,7 +211,7 @@ const WrongCompanyLinkScreen: React.FC<{ forceLogout?: boolean }> = ({ forceLogo
   }, [navigate]);
 
   return (
-    <div className="erp-auth-page" dir="rtl">
+    <div className="erp-auth-page">
       <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
         <span className="material-icons-round text-5xl text-rose-500 mb-3 block">link_off</span>
         <h2 className="text-lg font-bold mb-2 text-rose-600">رابط الشركة غير صحيح</h2>
@@ -401,6 +403,10 @@ const PresenceHeartbeatBridge: React.FC = () => {
 const ModalWorkspaceMigration: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
+  const legacyIsAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const legacyIsPendingApproval = useAppStore((s) => s.isPendingApproval);
+  const legacyLoading = useAppStore((s) => s.loading);
+  const legacyUid = useAppStore((s) => s.uid);
 
   useEffect(() => {
     if (!isAuthenticated || isPendingApproval || loading || !uid) return;
@@ -551,7 +557,7 @@ const TenantLayout: React.FC = () => {
 
   if (gate === 'suspended') {
     return (
-      <div className="erp-auth-page" dir="rtl">
+      <div className="erp-auth-page">
         <div className="erp-auth-card text-center p-8 max-w-md mx-auto mt-12">
           <h2 className="text-lg font-bold mb-2 text-rose-600">الشركة موقوفة</h2>
           <p className="text-sm text-[var(--color-text-muted)]">تواصل مع الدعم لمزيد من المعلومات.</p>
@@ -577,6 +583,16 @@ const TenantLayout: React.FC = () => {
 
 const RootFallbackRedirect: React.FC = () => {
   return <Navigate to="/" replace />;
+};
+
+const TrackLegacyRedirect: React.FC = () => {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const slug = String(params.get('slug') || '').trim();
+  if (!slug) return <Navigate to="/" replace />;
+  params.delete('slug');
+  const rest = params.toString();
+  return <Navigate to={`/track/${encodeURIComponent(slug)}${rest ? `?${rest}` : ''}`} replace />;
 };
 
 const DailyWelcomeLauncher: React.FC = () => {
@@ -611,16 +627,29 @@ const DailyWelcomeLauncher: React.FC = () => {
 const App: React.FC = () => {
   useTenantTheme();
 
-  const initializeApp = useAppStore((s) => s.initializeApp);
+  const initializeApp = useAppInitialization();
   const syncAttendanceFromDevices = useAppStore((s) => s.syncAttendanceFromDevices);
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const uid = useAppStore((s) => s.uid);
+  const legacyIsAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const legacyIsPendingApproval = useAppStore((s) => s.isPendingApproval);
+  const legacyLoading = useAppStore((s) => s.loading);
+  const legacyUid = useAppStore((s) => s.uid);
   const addRealtimeNotification = useAppStore((s) => s.addRealtimeNotification);
   const currentEmployeeId = useAppStore((s) => s.currentEmployee?.id || '');
   const userLanguage = useAppStore((s) => (s.userProfile?.uiPreferences?.language as SupportedLanguage | undefined));
   const activeSessionUidRef = useRef<string | null>(null);
   const cleanupSubsRef = useRef<(() => void) | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
+
+  useEffect(() => {
+    useAuthStore.setState({
+      isAuthenticated: legacyIsAuthenticated,
+      isPendingApproval: legacyIsPendingApproval,
+      loading: legacyLoading,
+      uid: legacyUid,
+    });
+  }, [legacyIsAuthenticated, legacyIsPendingApproval, legacyLoading, legacyUid]);
 
   useEffect(() => {
     if (!authResolved) return;
@@ -834,6 +863,10 @@ const App: React.FC = () => {
           />
           <Route
             path="/track"
+            element={<TrackLegacyRedirect />}
+          />
+          <Route
+            path="/track/:tenantSlug"
             element={
               <Suspense fallback={<PageRouteFallback />}>
                 <RepairTrackPublic />

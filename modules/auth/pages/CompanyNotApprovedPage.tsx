@@ -15,7 +15,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
   const statusLabel = (status || '').trim() || 'غير مفعّل';
 
   return (
-    <div className="erp-auth-page has-panel" dir="rtl">
+    <div className="erp-auth-page has-panel">
       <div className="erp-auth-container" style={{ maxWidth: 480 }}>
         <div className="erp-auth-brand">
           <div className="erp-auth-logo">

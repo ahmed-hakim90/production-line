@@ -25,6 +25,7 @@ import { useCommandPalette } from '@/components/useCommandPalette';
 import { resolveMenuIcon } from './menuIconMap';
 import { usePageBackRegistration } from './PageBackContext';
 import { tenantHomePath } from '@/lib/tenantPaths';
+import { useAppDirection } from './useAppDirection';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -61,6 +62,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
   const homePath       = tenantHomePath(tenantSlug);
   const scrolled       = useScrolled();
   const { t, i18n } = useTranslation();
+  const { isRTL } = useAppDirection();
 
   const uid = useAppStore((s) => s.uid);
   const userProfile = useAppStore((s) => s.userProfile);
@@ -143,7 +145,9 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
       <header
         className={[
           'h-[52px] fixed top-0 left-0 right-0 z-40 shrink-0',
-          collapsed ? 'lg:right-[52px]' : 'lg:right-[260px]',
+          isRTL
+            ? (collapsed ? 'lg:right-[52px]' : 'lg:right-[260px]')
+            : (collapsed ? 'lg:left-[52px]' : 'lg:left-[260px]'),
           'bg-[var(--color-card)]',
           'border-b border-[var(--color-border)]',
           'px-2.5 sm:px-4 py-2 sm:py-0 flex items-center gap-1.5 sm:gap-2',
@@ -168,7 +172,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors shrink-0"
             title={collapsed ? t('topbar.expandSidebar') : t('topbar.collapseSidebar')}
           >
-            <Sidebar size={18} className={`transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
+            <Sidebar size={18} className={`transition-transform duration-300 ${collapsed ? (isRTL ? 'rotate-180' : '') : (isRTL ? '' : 'rotate-180')}`} />
           </button>
 
           {pageBack && (

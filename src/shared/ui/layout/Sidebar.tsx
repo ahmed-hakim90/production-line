@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
   ChevronLeft,
@@ -17,6 +18,7 @@ import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSideba
 import type { SidebarIconStyle } from '@/types';
 import { resolveMenuIcon } from './menuIconMap';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { useAppDirection } from './useAppDirection';
 
 export interface SidebarProps {
   open: boolean;
@@ -67,6 +69,8 @@ function getIconClasses(
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
+  const { t } = useTranslation();
+  const { isRTL } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can }  = usePermission();
   const { roleName, roleColor, isReadOnly } = useCurrentRole();
@@ -79,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     if (t) return t;
     const f = s.systemSettings?.branding?.factoryName?.trim();
     if (f) return f;
-    return 'مؤسسة المغربي';
+    return t('sidebar.defaultCompanyName');
   });
   const location        = useLocation();
 
@@ -126,6 +130,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     ? 'w-[88vw] max-w-[300px] lg:w-[52px] lg:max-w-none'
     : 'w-[88vw] max-w-[300px] lg:w-[260px] lg:max-w-none';
   const showExpandedHeader = !collapsed || open;
+  const tooltipSideClass = isRTL ? 'right-full mr-2' : 'left-full ml-2';
+  const activeIndicatorClass = isRTL ? 'left-0 rounded-r-full' : 'right-0 rounded-l-full';
+  const nestedContainerClass = isRTL
+    ? 'py-0.5 mr-5 border-r border-[var(--color-sidebar-border)]'
+    : 'py-0.5 ml-5 border-l border-[var(--color-sidebar-border)]';
+  const nestedItemPaddingClass = isRTL ? 'pr-2.5 pl-2' : 'pl-2.5 pr-2';
 
   return (
     <>
@@ -140,11 +150,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       <aside
         className={[
           sidebarW,
-          'fixed inset-y-0 right-0 z-50 flex flex-col',
+          `fixed inset-y-0 ${isRTL ? 'right-0' : 'left-0'} z-50 flex flex-col`,
           'bg-[var(--color-sidebar-bg)]',
-          'border-l border-[var(--color-sidebar-border)]',
+          `${isRTL ? 'border-l' : 'border-r'} border-[var(--color-sidebar-border)]`,
           'transition-[width,transform] duration-300 ease-in-out overflow-hidden',
-          open ? 'translate-x-0' : 'translate-x-full lg:translate-x-0',
+          open ? 'translate-x-0' : `${isRTL ? 'translate-x-full' : '-translate-x-full'} lg:translate-x-0`,
         ].join(' ')}
         style={{ boxShadow: open ? '0 4px 20px rgba(0,0,0,0.1)' : undefined }}
       >
@@ -158,7 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           {/* Logo icon */}
           <button
             onClick={collapsed ? toggleCollapse : undefined}
-            title={collapsed ? 'توسيع القائمة' : undefined}
+            title={collapsed ? t('sidebar.expand') : undefined}
             className={[
               'w-8 h-8 bg-primary rounded-[var(--border-radius-base)] flex items-center justify-center text-white shrink-0',
               collapsed ? 'hover:opacity-90 cursor-pointer' : 'cursor-default',
@@ -171,13 +181,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             <>
               <div className="flex-1 min-w-0">
                 <p className="text-[12.5px] font-bold text-[var(--color-text)] truncate leading-tight">{sidebarCompanyTitle}</p>
-                <p className="text-[10px] text-[var(--color-text-muted)] truncate leading-tight">نظام إدارة الإنتاج</p>
+                <p className="text-[10px] text-[var(--color-text-muted)] truncate leading-tight">{t('sidebar.systemName')}</p>
               </div>
 
               {/* Desktop collapse */}
               <button
                 onClick={toggleCollapse}
-                title="طي القائمة"
+                title={t('sidebar.collapse')}
                 className="hidden lg:flex p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors shrink-0"
               >
                 <PanelLeftClose size={16} />
@@ -198,7 +208,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         {isReadOnly && !collapsed && (
           <div className="mx-2 mt-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-sm)] flex items-center gap-1.5 shrink-0">
             <Eye size={14} className="text-amber-500" />
-            <span className="text-[11px] font-semibold text-amber-700">وضع القراءة فقط</span>
+            <span className="text-[11px] font-semibold text-amber-700">{t('sidebar.readOnlyMode')}</span>
           </div>
         )}
 
@@ -234,7 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                               <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-rose-500 rounded-full" />
                             )}
                           </NavLink>
-                          <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]">
+                          <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]`}>
                             {item.label}
                           </span>
                         </div>
@@ -264,7 +274,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         ].join(' ')}
                       >
                         {itemActive && (
-                          <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current rounded-l-full" />
+                          <span className={`absolute ${activeIndicatorClass} top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current`} />
                         )}
                         <span className={`shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
                           {renderSidebarIcon(item.icon, undefined, 17)}
@@ -302,7 +312,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                     )}
                   </button>
                   {/* Tooltip towards content (left side for RTL right sidebar) */}
-                  <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]">
+                  <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]`}>
                     {group.label}
                   </span>
                 </div>
@@ -354,7 +364,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
                 ].join(' ')}>
                   <div className="overflow-hidden">
-                    <div className="py-0.5 mr-5 border-r border-[var(--color-sidebar-border)]">
+                    <div className={nestedContainerClass}>
                       {group.children.map((item) => {
                         const itemActive = isActiveItem(item);
                         const badge      = badgeCounts[item.key] || 0;
@@ -363,7 +373,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                             key={item.path}
                             to={withTenantPath(tenantSlug, item.path)}
                             className={[
-                              'relative flex items-center gap-2 pr-2.5 pl-2 py-1.5 rounded-[var(--border-radius-sm)] text-[12.5px] transition-colors',
+                              `relative flex items-center gap-2 ${nestedItemPaddingClass} py-1.5 rounded-[var(--border-radius-sm)] text-[12.5px] transition-colors`,
                               itemActive
                                 ? `${activeBg} ${iconColor} font-semibold`
                                 : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] font-medium',
@@ -371,7 +381,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                           >
                             {/* Active right-border indicator */}
                             {itemActive && (
-                              <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current rounded-l-full" />
+                              <span className={`absolute ${activeIndicatorClass} top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current`} />
                             )}
                             <span className={`shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
                               {renderSidebarIcon(item.icon, undefined, 15)}
@@ -402,14 +412,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             <div className="p-1.5 flex justify-center">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
-                title={userDisplayName ?? 'المستخدم'}
+                title={userDisplayName ?? t('sidebar.user')}
                 className="group/prof relative w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center ring-1 ring-primary/25 hover:ring-primary/40 transition-all"
               >
                 <span className="text-primary font-bold text-xs">
                   {(userDisplayName ?? 'U').charAt(0).toUpperCase()}
                 </span>
-                <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/prof:opacity-100 transition-opacity shadow-lg z-[60]">
-                  {userDisplayName ?? 'المستخدم'}
+                <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/prof:opacity-100 transition-opacity shadow-lg z-[60]`}>
+                  {userDisplayName ?? t('sidebar.user')}
                 </span>
               </button>
             </div>
@@ -457,7 +467,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         className="flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors"
                       >
                         <UserCircle2 size={16} className="text-[var(--color-text-muted)]" />
-                        <span>ملفي الشخصي</span>
+                        <span>{t('sidebar.myProfile')}</span>
                       </NavLink>
                     )}
                     <button
@@ -465,7 +475,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-start border-t border-[var(--color-border)] mt-1 pt-2"
                     >
                       <LogOut size={16} />
-                      <span>تسجيل الخروج</span>
+                      <span>{t('sidebar.logout')}</span>
                     </button>
                   </div>
                 </div>

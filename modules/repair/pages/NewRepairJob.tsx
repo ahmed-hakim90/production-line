@@ -18,15 +18,20 @@ import { toast } from '../../../components/Toast';
 import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
 import {
+  REPAIR_JOB_STATUS_LABELS,
   resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
+  type RepairJob,
   type RepairJobProduct,
 } from '../types';
+import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 const isRequiredMissing = (value: string) => !value.trim();
 
 export const NewRepairJob: React.FC = () => {
+  const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
   const { can } = usePermission();
@@ -38,6 +43,7 @@ export const NewRepairJob: React.FC = () => {
   const [jobProducts, setJobProducts] = useState<Array<{
     itemId: string;
     productId: string;
+    accessories: string;
     diagnosis: string;
     estimatedCost: string;
     finalCost: string;
@@ -45,6 +51,7 @@ export const NewRepairJob: React.FC = () => {
   }>>([{
     itemId: `item-${Date.now()}`,
     productId: '',
+    accessories: '',
     diagnosis: '',
     estimatedCost: '',
     finalCost: '',
@@ -52,18 +59,13 @@ export const NewRepairJob: React.FC = () => {
   }]);
   const [isServiceOnly, setIsServiceOnly] = useState(false);
   const [serviceOnlyCost, setServiceOnlyCost] = useState('');
+  const [openBranchJobs, setOpenBranchJobs] = useState<RepairJob[]>([]);
+  const [selectedSidebarJob, setSelectedSidebarJob] = useState<RepairJob | null>(null);
   const [form, setForm] = useState({
     branchId: '',
     customerName: '',
     customerPhone: '',
     customerAddress: '',
-    deviceType: '',
-    deviceBrand: '',
-    deviceModel: '',
-    deviceColor: '',
-    devicePassword: '',
-    accessories: '',
-    problemDescription: '',
     estimatedCost: '',
   });
 
@@ -91,11 +93,27 @@ export const NewRepairJob: React.FC = () => {
   }, [branches, can, user, currentEmployee?.id]);
 
   useEffect(() => {
-    if (form.branchId) return;
-    if (allowedBranches.length === 1) {
+    if (allowedBranches.length === 0) return;
+    const selectedBranchExists = allowedBranches.some((branch) => String(branch.id || '') === form.branchId);
+    if (!selectedBranchExists) {
       setForm((prev) => ({ ...prev, branchId: String(allowedBranches[0].id || '') }));
     }
   }, [allowedBranches, form.branchId]);
+
+  useEffect(() => {
+    if (!form.branchId) {
+      setOpenBranchJobs([]);
+      return;
+    }
+    const openStatuses = new Set(['received', 'inspection', 'repair', 'ready']);
+    const unsubscribe = repairJobService.subscribeByBranch(form.branchId, (rows) => {
+      const filtered = rows.filter((job) => openStatuses.has(String(job.status || '')));
+      setOpenBranchJobs(filtered);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [form.branchId]);
 
   const submit = async () => {
     if (!form.branchId) {
@@ -120,6 +138,7 @@ export const NewRepairJob: React.FC = () => {
         deviceType: 'منتج',
         deviceBrand: String(selected?.name || ''),
         deviceModel: String(selected?.model || selected?.code || ''),
+        accessories: row.accessories || '',
         diagnosis: row.diagnosis || '',
         estimatedCost: Number(row.estimatedCost || 0),
         finalCost: row.inWarranty ? 0 : Number(row.finalCost || 0),
@@ -140,13 +159,13 @@ export const NewRepairJob: React.FC = () => {
         customerName: form.customerName,
         customerPhone: form.customerPhone,
         customerAddress: form.customerAddress || '',
-        deviceType: leadProduct?.deviceType || form.deviceType || 'عام',
-        deviceBrand: leadProduct?.deviceBrand || form.deviceBrand,
-        deviceModel: leadProduct?.deviceModel || form.deviceModel,
-        deviceColor: form.deviceColor || '',
-        devicePassword: form.devicePassword || '',
-        accessories: form.accessories || '',
-        problemDescription: leadProduct?.diagnosis || form.problemDescription,
+        deviceType: leadProduct?.deviceType || 'عام',
+        deviceBrand: leadProduct?.deviceBrand || 'غير محدد',
+        deviceModel: leadProduct?.deviceModel || 'غير محدد',
+        deviceColor: '',
+        devicePassword: '',
+        accessories: leadProduct?.accessories || '',
+        problemDescription: leadProduct?.diagnosis || '',
         status: 'received',
         warranty: 'none',
         partsUsed: [],
@@ -170,257 +189,262 @@ export const NewRepairJob: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 w-full max-w-7xl mx-auto px-2 md:px-4" dir="rtl">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">تسجيل جهاز صيانة</h1>
-          <p className="text-sm text-muted-foreground mt-1">أدخل بيانات العميل والجهاز قبل إنشاء طلب الصيانة.</p>
-        </div>
-        <Button variant="outline" type="button" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
-          رجوع للطلبات
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>بيانات العميل والجهاز</CardTitle>
-          <CardDescription>الحقول المميزة بعلامة * إلزامية.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
-              <Label>فرع الصيانة <span className="text-rose-600">*</span></Label>
-              <Select
-                value={form.branchId}
-                onValueChange={(value) => setForm((p) => ({ ...p, branchId: value }))}
-              >
-                <SelectTrigger className={!form.branchId ? 'border-rose-300' : ''}>
-                  <SelectValue placeholder="اختر فرع الصيانة" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allowedBranches.map((branch) => (
-                    <SelectItem key={branch.id} value={String(branch.id || '')}>
-                      {branch.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+    <div className="w-full max-w-none mx-auto px-3 md:px-5 xl:px-8" dir={dir}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+        <div className="space-y-4 lg:order-1">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">تسجيل جهاز صيانة</h1>
+              <p className="text-sm text-muted-foreground mt-1">أدخل بيانات العميل والجهاز قبل إنشاء طلب الصيانة.</p>
             </div>
-            <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
-              <Label>المنتجات / Products <span className="text-rose-600">*</span></Label>
-              <div className="space-y-2">
-                {jobProducts.map((row, idx) => (
-                  <div key={row.itemId} className="rounded-md border p-2 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium">منتج {idx + 1}</div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                          setJobProducts((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.itemId !== row.itemId)));
-                        }}
-                        disabled={jobProducts.length <= 1}
-                      >
-                        حذف
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <Select
-                        value={row.productId}
-                        onValueChange={(value) => {
-                          setJobProducts((prev) => prev.map((item) => (
-                            item.itemId === row.itemId ? { ...item, productId: value } : item
-                          )));
-                        }}
-                      >
-                        <SelectTrigger className={!row.productId ? 'border-rose-300' : ''}>
-                          <SelectValue placeholder="اختر المنتج من الأصناف المعرفة" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.filter((p) => p.id).map((product) => (
-                            <SelectItem key={product.id} value={String(product.id)}>
-                              {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        placeholder="تشخيص المنتج"
-                        value={row.diagnosis}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setJobProducts((prev) => prev.map((item) => (
-                            item.itemId === row.itemId ? { ...item, diagnosis: value } : item
-                          )));
-                        }}
-                      />
-                      <Input
-                        type="number"
-                        placeholder="تكلفة متوقعة"
-                        value={row.estimatedCost}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setJobProducts((prev) => prev.map((item) => (
-                            item.itemId === row.itemId ? { ...item, estimatedCost: value } : item
-                          )));
-                        }}
-                      />
-                      <Input
-                        type="number"
-                        placeholder="تكلفة نهائية"
-                        value={row.finalCost}
-                        disabled={row.inWarranty}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setJobProducts((prev) => prev.map((item) => (
-                            item.itemId === row.itemId ? { ...item, finalCost: value } : item
-                          )));
-                        }}
-                      />
-                    </div>
-                    <label className="inline-flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={row.inWarranty}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setJobProducts((prev) => prev.map((item) => (
-                            item.itemId === row.itemId
-                              ? { ...item, inWarranty: checked, finalCost: checked ? '0' : item.finalCost }
-                              : item
-                          )));
-                        }}
-                      />
-                      داخل الضمان (إصلاح مجاني)
-                    </label>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setJobProducts((prev) => [
-                      ...prev,
-                      {
-                        itemId: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                        productId: '',
-                        diagnosis: '',
-                        estimatedCost: '',
-                        finalCost: '',
-                        inWarranty: false,
-                      },
-                    ]);
-                  }}
-                >
-                  إضافة منتج
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>اسم العميل <span className="text-rose-600">*</span></Label>
-              <Input
-                value={form.customerName}
-                onChange={(e) => setForm((p) => ({ ...p, customerName: e.target.value }))}
-                className={isRequiredMissing(form.customerName) ? 'border-rose-300' : ''}
-                placeholder="مثال: أحمد محمد"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>الهاتف <span className="text-rose-600">*</span></Label>
-              <Input
-                value={form.customerPhone}
-                onChange={(e) => setForm((p) => ({ ...p, customerPhone: e.target.value }))}
-                className={isRequiredMissing(form.customerPhone) ? 'border-rose-300' : ''}
-                placeholder="01xxxxxxxxx"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>العنوان</Label>
-              <Input value={form.customerAddress} onChange={(e) => setForm((p) => ({ ...p, customerAddress: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>نوع الجهاز</Label>
-              <Input value={form.deviceType} onChange={(e) => setForm((p) => ({ ...p, deviceType: e.target.value }))} placeholder="مثال: موبايل" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>الماركة <span className="text-rose-600">*</span></Label>
-              <Input
-                value={form.deviceBrand}
-                onChange={(e) => setForm((p) => ({ ...p, deviceBrand: e.target.value }))}
-                className={isRequiredMissing(form.deviceBrand) ? 'border-rose-300' : ''}
-                placeholder="مثال: Samsung"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>الموديل <span className="text-rose-600">*</span></Label>
-              <Input
-                value={form.deviceModel}
-                onChange={(e) => setForm((p) => ({ ...p, deviceModel: e.target.value }))}
-                className={isRequiredMissing(form.deviceModel) ? 'border-rose-300' : ''}
-                placeholder="مثال: A54"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>اللون</Label>
-              <Input value={form.deviceColor} onChange={(e) => setForm((p) => ({ ...p, deviceColor: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>باسورد الجهاز (اختياري)</Label>
-              <Input value={form.devicePassword} onChange={(e) => setForm((p) => ({ ...p, devicePassword: e.target.value }))} />
-            </div>
-            <div className="md:col-span-2 xl:col-span-3 space-y-1.5">
-              <Label>الإكسسوارات</Label>
-              <Input value={form.accessories} onChange={(e) => setForm((p) => ({ ...p, accessories: e.target.value }))} placeholder="شاحن، جراب، سماعة..." />
-            </div>
-            <div className="space-y-1.5 xl:max-w-[320px]">
-              <Label>التكلفة المتوقعة</Label>
-              <Input type="number" value={form.estimatedCost} onChange={(e) => setForm((p) => ({ ...p, estimatedCost: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5 xl:max-w-[420px]">
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={isServiceOnly}
-                  onChange={(e) => setIsServiceOnly(e.target.checked)}
-                />
-                خدمة فقط بدون قطع غيار
-              </label>
-              {isServiceOnly && (
-                <Input
-                  type="number"
-                  value={serviceOnlyCost}
-                  onChange={(e) => setServiceOnlyCost(e.target.value)}
-                  placeholder="تكلفة خدمة الإصلاح"
-                />
-              )}
-            </div>
+            <Button variant="outline" type="button" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
+              رجوع للطلبات
+            </Button>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>وصف العطل</CardTitle>
-          <CardDescription>اكتب وصفًا واضحًا للمشكلة والأعراض.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <textarea
-            className="w-full min-h-28 rounded-md border border-input bg-background px-3 py-2 text-sm"
-            value={form.problemDescription}
-            placeholder="مثال: الجهاز لا يشحن - تم تجربة أكثر من شاحن..."
-            onChange={(e) => setForm((p) => ({ ...p, problemDescription: e.target.value }))}
-          />
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>بيانات الاستلام الأساسية</CardTitle>
+              <CardDescription>ابدأ ببيانات العميل، ثم المنتجات والتكلفة.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                <div className="md:col-span-2 xl:col-span-3 pt-1">
+                  <div className="text-sm font-semibold">1) بيانات العميل</div>
+                  <p className="text-xs text-muted-foreground mt-1">سجّل معلومات العميل الأساسية للتواصل.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>اسم العميل <span className="text-rose-600">*</span></Label>
+                  <Input
+                    value={form.customerName}
+                    onChange={(e) => setForm((p) => ({ ...p, customerName: e.target.value }))}
+                    className={isRequiredMissing(form.customerName) ? 'border-rose-300' : ''}
+                    placeholder="مثال: أحمد محمد"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>الهاتف <span className="text-rose-600">*</span></Label>
+                  <Input
+                    value={form.customerPhone}
+                    onChange={(e) => setForm((p) => ({ ...p, customerPhone: e.target.value }))}
+                    className={isRequiredMissing(form.customerPhone) ? 'border-rose-300' : ''}
+                    placeholder="01xxxxxxxxx"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>العنوان</Label>
+                  <Input value={form.customerAddress} onChange={(e) => setForm((p) => ({ ...p, customerAddress: e.target.value }))} />
+                </div>
+                <div className="md:col-span-2 xl:col-span-3 border-t pt-3 mt-1">
+                  <div className="text-sm font-semibold">2) المنتجات والتشخيص</div>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">أضف منتجًا أو أكثر، وحدد التشخيص وتكلفة كل منتج.</p>
+                </div>
+                <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
+                  <Label>المنتجات / Products <span className="text-rose-600">*</span></Label>
+                  <div className="space-y-2">
+                    {jobProducts.map((row, idx) => (
+                      <div key={row.itemId} className="rounded-md border p-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-medium">منتج {idx + 1}</div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                              setJobProducts((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.itemId !== row.itemId)));
+                            }}
+                            disabled={jobProducts.length <= 1}
+                          >
+                            حذف
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <Select
+                            value={row.productId}
+                            onValueChange={(value) => {
+                              setJobProducts((prev) => prev.map((item) => (
+                                item.itemId === row.itemId ? { ...item, productId: value } : item
+                              )));
+                            }}
+                          >
+                            <SelectTrigger className={!row.productId ? 'border-rose-300' : ''}>
+                              <SelectValue placeholder="اختر المنتج من الأصناف المعرفة" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.filter((p) => p.id).map((product) => (
+                                <SelectItem key={product.id} value={String(product.id)}>
+                                  {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            placeholder="تشخيص المنتج"
+                            value={row.diagnosis}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setJobProducts((prev) => prev.map((item) => (
+                                item.itemId === row.itemId ? { ...item, diagnosis: value } : item
+                              )));
+                            }}
+                          />
+                          <Input
+                            placeholder="الإكسسوارات (لهذا المنتج)"
+                            value={row.accessories}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setJobProducts((prev) => prev.map((item) => (
+                                item.itemId === row.itemId ? { ...item, accessories: value } : item
+                              )));
+                            }}
+                          />
+                          <Input
+                            type="number"
+                            placeholder="تكلفة متوقعة"
+                            value={row.estimatedCost}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setJobProducts((prev) => prev.map((item) => (
+                                item.itemId === row.itemId ? { ...item, estimatedCost: value } : item
+                              )));
+                            }}
+                          />
+                          <Input
+                            type="number"
+                            placeholder="تكلفة نهائية"
+                            value={row.finalCost}
+                            disabled={row.inWarranty}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setJobProducts((prev) => prev.map((item) => (
+                                item.itemId === row.itemId ? { ...item, finalCost: value } : item
+                              )));
+                            }}
+                          />
+                        </div>
+                        <label className="inline-flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={row.inWarranty}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setJobProducts((prev) => prev.map((item) => (
+                                item.itemId === row.itemId
+                                  ? { ...item, inWarranty: checked, finalCost: checked ? '0' : item.finalCost }
+                                  : item
+                              )));
+                            }}
+                          />
+                          داخل الضمان (إصلاح مجاني)
+                        </label>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setJobProducts((prev) => [
+                          ...prev,
+                          {
+                            itemId: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            productId: '',
+                            accessories: '',
+                            diagnosis: '',
+                            estimatedCost: '',
+                            finalCost: '',
+                            inWarranty: false,
+                          },
+                        ]);
+                      }}
+                    >
+                      إضافة منتج
+                    </Button>
+                  </div>
+                </div>
 
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" type="button" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
-          إلغاء
-        </Button>
-        <Button onClick={submit} disabled={loading}>
-          {loading ? 'جاري الحفظ...' : 'حفظ الطلب'}
-        </Button>
+                <div className="md:col-span-2 xl:col-span-3 border-t pt-3 mt-1">
+                  <div className="text-sm font-semibold">3) التكلفة</div>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">حدد التكلفة التقديرية العامة أو اختر نمط خدمة فقط.</p>
+                </div>
+                <div className="space-y-1.5 xl:max-w-[320px]">
+                  <Label>التكلفة المتوقعة</Label>
+                  <Input type="number" value={form.estimatedCost} onChange={(e) => setForm((p) => ({ ...p, estimatedCost: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5 xl:max-w-[420px]">
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={isServiceOnly}
+                      onChange={(e) => setIsServiceOnly(e.target.checked)}
+                    />
+                    خدمة فقط بدون قطع غيار
+                  </label>
+                  {isServiceOnly && (
+                    <Input
+                      type="number"
+                      value={serviceOnlyCost}
+                      onChange={(e) => setServiceOnlyCost(e.target.value)}
+                      placeholder="تكلفة خدمة الإصلاح"
+                    />
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" type="button" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
+              إلغاء
+            </Button>
+            <Button onClick={submit} disabled={loading}>
+              {loading ? 'جاري الحفظ...' : 'حفظ الطلب'}
+            </Button>
+          </div>
+        </div>
+        <div className="hidden lg:block lg:order-2">
+          <div className="sticky top-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">طلبات الصيانة المفتوحة</CardTitle>
+                <CardDescription className="text-xs">
+                  {form.branchId ? 'اضغط لفتح التفاصيل' : 'جار تحديد الفرع تلقائيًا'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 max-h-[calc(100vh-8rem)] overflow-y-auto">
+                {!form.branchId && (
+                  <div className="text-xs text-muted-foreground">يتم تحديد فرع الصيانة تلقائيًا حسب المستخدم.</div>
+                )}
+                {form.branchId && openBranchJobs.length === 0 && (
+                  <div className="text-xs text-muted-foreground">لا توجد طلبات مفتوحة لهذا الفرع.</div>
+                )}
+                {openBranchJobs.map((job) => (
+                  <button
+                    key={job.id}
+                    type="button"
+                    className="w-full rounded-md border px-2 py-2 text-right hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setSelectedSidebarJob(job);
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                      <span>#{job.receiptNo}</span>
+                      <span>{REPAIR_JOB_STATUS_LABELS[job.status]}</span>
+                    </div>
+                    <div className="mt-1 text-xs font-medium truncate">{job.customerName || 'عميل غير محدد'}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{job.customerPhone || '-'}</div>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
+      <RepairJobQuickDrawer
+        open={Boolean(selectedSidebarJob)}
+        onOpenChange={(next) => { if (!next) setSelectedSidebarJob(null); }}
+        job={selectedSidebarJob}
+        tenantSlug={tenantSlug}
+        branchName={branches.find((branch) => String(branch.id || '') === String(selectedSidebarJob?.branchId || ''))?.name}
+      />
     </div>
   );
 };

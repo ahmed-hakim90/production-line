@@ -10,14 +10,19 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useRepairJobs } from '../hooks/useRepairJobs';
 import { repairBranchService } from '../services/repairBranchService';
 import { StatusBadge } from '../components/StatusBadge';
+import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import type { FirestoreUserWithRepair, RepairJobStatus } from '../types';
-import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS, resolveUserRepairBranchIds } from '../types';
+import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS, resolveUserRepairBranchIds, type RepairBranch, type RepairJob } from '../types';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 export const RepairJobs: React.FC = () => {
+  const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
+  const [branches, setBranches] = useState<RepairBranch[]>([]);
+  const [selectedJob, setSelectedJob] = useState<RepairJob | null>(null);
   const userBranchIds = useMemo(() => {
     const base = resolveUserRepairBranchIds(userProfile);
     return Array.from(new Set([...base, ...assignedBranchIds]));
@@ -30,6 +35,7 @@ export const RepairJobs: React.FC = () => {
       return;
     }
     void repairBranchService.list().then((branches) => {
+      setBranches(branches);
       const ids = branches
         .filter((branch) => (branch.technicianIds || []).includes(userProfile.id || ''))
         .map((branch) => branch.id || '')
@@ -57,9 +63,17 @@ export const RepairJobs: React.FC = () => {
     [jobs],
   );
   const openJobs = useMemo(() => jobs.filter((j) => !['delivered', 'unrepairable'].includes(j.status)).length, [jobs]);
+  const branchNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    branches.forEach((branch) => {
+      const id = String(branch.id || '').trim();
+      if (id) map.set(id, String(branch.name || ''));
+    });
+    return map;
+  }, [branches]);
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={dir}>
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -133,9 +147,17 @@ export const RepairJobs: React.FC = () => {
               </thead>
               <tbody>
                 {loading ? <tr><td className="p-3" colSpan={4}><span role="status" aria-live="polite">جاري التحميل...</span></td></tr> : visibleJobs.map((job) => (
-                  <tr key={job.id} className="border-t hover:bg-muted/40">
+                  <tr
+                    key={job.id}
+                    className="border-t hover:bg-muted/40 cursor-pointer"
+                    onClick={() => setSelectedJob(job)}
+                  >
                     <td className="p-2">
-                      <Link className="text-primary underline" to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}>
+                      <Link
+                        className="text-primary underline"
+                        to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {job.receiptNo}
                       </Link>
                     </td>
@@ -156,6 +178,13 @@ export const RepairJobs: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      <RepairJobQuickDrawer
+        open={Boolean(selectedJob)}
+        onOpenChange={(next) => { if (!next) setSelectedJob(null); }}
+        job={selectedJob}
+        tenantSlug={tenantSlug}
+        branchName={selectedJob ? branchNameById.get(String(selectedJob.branchId || '').trim()) : undefined}
+      />
     </div>
   );
 };

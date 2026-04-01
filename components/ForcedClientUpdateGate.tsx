@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuthUiSlice } from '../store/selectors';
 import { useAppStore } from '../store/useAppStore';
 import { usePermission } from '../utils/permissions';
@@ -9,6 +10,7 @@ import { Button } from '@/components/UI';
 const CLIENT_VERSION = __APP_VERSION__;
 
 export const ForcedClientUpdateGate: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const { can } = usePermission();
   const isSystemAdmin = can('roles.manage');
@@ -40,13 +42,15 @@ export const ForcedClientUpdateGate: React.FC = () => {
   if (!isAuthenticated || isPendingApproval || loading || !mustUpdate || isSystemAdmin) return null;
 
   const message =
-    (systemSettings.clientUpdateMessageAr ?? '').trim() ||
-    'يتوفر إصدار أحدث من التطبيق. يلزم التحديث للمتابعة.';
+    ((i18n.language || 'ar').startsWith('en')
+      ? (systemSettings.clientUpdateMessageEn ?? '').trim()
+      : (systemSettings.clientUpdateMessageAr ?? '').trim()) ||
+    t('forcedUpdate.message');
 
   return (
     <div
       className="fixed inset-0 z-[10050] flex items-center justify-center p-4 bg-[var(--color-bg)]/95 backdrop-blur-sm"
-      dir="rtl"
+     
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="forced-update-title"
@@ -57,21 +61,21 @@ export const ForcedClientUpdateGate: React.FC = () => {
           <span className="material-icons-round text-amber-700 dark:text-amber-400 text-3xl">system_update</span>
         </div>
         <h2 id="forced-update-title" className="text-lg font-bold text-[var(--color-text)]">
-          تحديث مطلوب
+          {t('forcedUpdate.title')}
         </h2>
         <p id="forced-update-desc" className="text-sm text-[var(--color-text-muted)] leading-relaxed">
           {message}
         </p>
         <p className="text-xs text-[var(--color-text-muted)]">
-          الإصدار الحالي: <span className="font-mono font-medium text-[var(--color-text)]">{CLIENT_VERSION}</span>
+          {t('forcedUpdate.currentVersion')} <span className="font-mono font-medium text-[var(--color-text)]">{CLIENT_VERSION}</span>
           {' — '}
-          المطلوب:{' '}
+          {t('forcedUpdate.requiredVersion')}{' '}
           <span className="font-mono font-medium text-[var(--color-text)]">
             {(systemSettings.minimumClientVersion ?? '').trim() || '—'}
           </span>
         </p>
         <Button type="button" className="w-full justify-center" disabled={applying} onClick={onUpdate}>
-          {applying ? 'جاري التحديث…' : 'تحديث الآن'}
+          {applying ? t('forcedUpdate.updating') : t('forcedUpdate.updateNow')}
         </Button>
       </div>
     </div>

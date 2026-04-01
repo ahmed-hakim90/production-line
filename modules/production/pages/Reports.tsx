@@ -80,6 +80,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
   Dialog,
   DialogContent,
   DialogDescription,
@@ -253,6 +254,7 @@ const getDateRangeForCalendarMonth = (ym: string): { startStr: string; endStr: s
 };
 
 export const Reports: React.FC = () => {
+  const { dir } = useAppDirection();
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
   const navigate = useTenantNavigate();
@@ -2603,7 +2605,7 @@ export const Reports: React.FC = () => {
       />
 
       <Dialog open={generalMonthlyDialogOpen} onOpenChange={setGeneralMonthlyDialogOpen}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
+        <DialogContent className="sm:max-w-md" dir={dir}>
           <DialogHeader>
             <DialogTitle>التقرير العام الشهري</DialogTitle>
             <DialogDescription>

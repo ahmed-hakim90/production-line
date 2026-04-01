@@ -1,11 +1,15 @@
 import React from 'react';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 /** Matches `Login.tsx` — left panel + container + mobile brand; optional panel background class. */
 export const AuthShell: React.FC<{ children: React.ReactNode; panelClassName?: string }> = ({
   children,
   panelClassName,
-}) => (
-  <div className="erp-auth-page" dir="rtl">
+}) => {
+  const { dir } = useAppDirection();
+
+  return (
+  <div className="erp-auth-page" dir={dir}>
     <div className={['erp-auth-panel', panelClassName].filter(Boolean).join(' ')}>
       <div className="erp-auth-panel-logo">
         <span className="material-icons-round" style={{ fontSize: 26, color: '#fff' }}>
@@ -42,4 +46,5 @@ export const AuthShell: React.FC<{ children: React.ReactNode; panelClassName?: s
       {children}
     </div>
   </div>
-);
+  );
+};

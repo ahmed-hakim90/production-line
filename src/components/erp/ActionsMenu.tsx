@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 export interface ActionsMenuItem {
   label: string
@@ -21,7 +22,8 @@ interface ActionsMenuProps {
   triggerLabel?: string
 }
 
-export function ActionsMenu({ items, triggerLabel = "الإجراءات" }: ActionsMenuProps) {
+export function ActionsMenu({
+  const { dir } = useAppDirection(); items, triggerLabel = "الإجراءات" }: ActionsMenuProps) {
   const safeItems = items.slice(0, 8)
 
   if (safeItems.length === 0) {
@@ -29,7 +31,7 @@ export function ActionsMenu({ items, triggerLabel = "الإجراءات" }: Acti
   }
 
   return (
-    <DropdownMenu dir="rtl">
+    <DropdownMenu dir={dir}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"

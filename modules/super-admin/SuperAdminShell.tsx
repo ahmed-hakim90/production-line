@@ -9,7 +9,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
   }`;
 
 export const SuperAdminShell: React.FC = () => (
-  <div className="min-h-screen bg-[var(--color-bg)]" dir="rtl">
+  <div className="min-h-screen bg-[var(--color-bg)]">
     <header className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card)]/95 backdrop-blur px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 sm:gap-6">
       <span className="font-bold text-[var(--color-text)]">مشرف المنصة</span>
       <nav className="flex flex-wrap gap-1">

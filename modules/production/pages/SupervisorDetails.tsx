@@ -568,7 +568,7 @@ export const SupervisorDetails: React.FC = () => {
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm" dir="rtl">
+      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm">
         <p className="font-bold text-[var(--color-text-muted)] mb-1">{label}</p>
         {payload.map((entry: any, i: number) => (
           <div key={i} className="flex items-center gap-2">

@@ -447,7 +447,7 @@ export const EmployeeSelfService: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-[var(--color-text)]">الخدمة الذاتية</h1>
         <p className="text-[var(--color-text-muted)] mt-1">مرحباً، {currentEmployee.name}</p>

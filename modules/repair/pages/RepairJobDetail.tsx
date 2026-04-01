@@ -40,6 +40,7 @@ import {
   type RepairSparePart,
 } from '../types';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 const toNumber = (value: string | number | undefined | null) => Number(value || 0);
 const sumProductFinalCosts = (items: RepairJobProduct[]) => items.reduce((sum, item) => sum + toNumber(item.finalCost), 0);
@@ -58,6 +59,7 @@ const inferProducts = (job: RepairJob | null): RepairJobProduct[] => {
     deviceType: job.deviceType,
     deviceBrand: job.deviceBrand,
     deviceModel: job.deviceModel,
+    accessories: String(job.accessories || ''),
     diagnosis: job.problemDescription || '',
     estimatedCost: toNumber(job.estimatedCost),
     finalCost: toNumber(job.finalCost),
@@ -66,6 +68,7 @@ const inferProducts = (job: RepairJob | null): RepairJobProduct[] => {
 };
 
 export const RepairJobDetail: React.FC = () => {
+  const { dir } = useAppDirection();
   const { jobId = '', tenantSlug = '' } = useParams<{ jobId: string; tenantSlug?: string }>();
   const navigate = useNavigate();
   const { can } = usePermission();
@@ -418,6 +421,7 @@ export const RepairJobDetail: React.FC = () => {
       {
         itemId: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         productName: `منتج ${prev.length + 1}`,
+        accessories: '',
         diagnosis: '',
         estimatedCost: 0,
         finalCost: 0,
@@ -502,12 +506,12 @@ export const RepairJobDetail: React.FC = () => {
       ? ''
       : window.location.pathname.split('/').filter(Boolean)[1] || '';
     const effectiveSlug = String(tenantSlug || slugFromPath || '').trim();
+    if (!effectiveSlug) return `${appBaseUrl}/track`;
     const params = new URLSearchParams();
-    if (effectiveSlug) params.set('slug', effectiveSlug);
     if (job.receiptNo) params.set('receipt', String(job.receiptNo));
     if (job.customerPhone) params.set('phone', String(job.customerPhone));
     const query = params.toString();
-    return `${appBaseUrl}/track${query ? `?${query}` : ''}`;
+    return `${appBaseUrl}/track/${encodeURIComponent(effectiveSlug)}${query ? `?${query}` : ''}`;
   }, [appBaseUrl, job, tenantSlug]);
   const whatsappText = useMemo(() => {
     if (!job) return '';
@@ -516,14 +520,32 @@ export const RepairJobDetail: React.FC = () => {
     return [
       baseMessage,
       `رقم الإيصال: ${String(job.receiptNo || '-')}`,
-      `رابط متابعة الطلب (لينك كامل): ${trackUrl}`,
+      `رابط متابعة الطلب (  اضغط هنا): ${trackUrl}`,
     ].join('\n');
   }, [job, trackUrl]);
+  const canDeleteJob = Boolean(job) && String(job?.status || '') !== 'delivered' && !Boolean(job?.isClosed);
 
-  if (!job) return <div dir="rtl" role="status" aria-live="polite">جاري تحميل الطلب...</div>;
+  const deleteJob = async () => {
+    if (!job?.id) return;
+    if (!canDeleteJob) {
+      toast.error('لا يمكن حذف طلب مُسلَّم أو مُقفل.');
+      return;
+    }
+    const ok = window.confirm(`سيتم حذف طلب الصيانة #${job.receiptNo} نهائيًا. هل أنت متأكد؟`);
+    if (!ok) return;
+    try {
+      await repairJobService.remove(job.id);
+      toast.success('تم حذف طلب الصيانة.');
+      navigate(withTenantPath(tenantSlug, '/repair/admin-orders'));
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر حذف طلب الصيانة.');
+    }
+  };
+
+  if (!job) return <div dir={dir} role="status" aria-live="polite">جاري تحميل الطلب...</div>;
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={dir}>
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white no-print">
         <CardContent className="pt-6">
           <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -536,13 +558,84 @@ export const RepairJobDetail: React.FC = () => {
         </CardContent>
       </Card>
 
+      <div className="no-print flex items-center gap-2 flex-wrap">
+        {job.status === 'delivered' && (
+          <Button variant="secondary" onClick={() => setShowReopenOptions((v) => !v)}>
+            {showReopenOptions ? 'إخفاء خيارات إعادة الإصلاح' : 'فتح إعادة الإصلاح'}
+          </Button>
+        )}
+        {/* {can('repair.jobs.edit') && (
+          <Button variant="destructive" onClick={() => void deleteJob()} disabled={!canDeleteJob}>
+            حذف الطلب
+          </Button>
+        )} */}
+      </div>
+      {job.status === 'delivered' && showReopenOptions && (
+        <Card className="no-print">
+          <CardHeader>
+            <CardTitle className="text-lg">إعادة إصلاح</CardTitle>
+            <CardDescription>إنشاء طلب جديد مرتبط بالطلب الحالي.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="space-y-2 text-sm">
+              <Label>معالجة القيد المالي السابق</Label>
+              <Select value={reopenTreasuryHandling} onValueChange={(v) => setReopenTreasuryHandling(v as 'reverse' | 'keep')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keep">الإبقاء على القيد السابق</SelectItem>
+                  <SelectItem value="reverse">عكس القيد السابق</SelectItem>
+                </SelectContent>
+              </Select>
+              <Label>المنتجات التي ستُنقل للطلب الجديد</Label>
+              <div className="space-y-1 rounded border p-2">
+                {jobProducts.map((item, idx) => {
+                  const itemId = String(item.itemId || '');
+                  const checked = selectedReopenProductIds.includes(itemId);
+                  return (
+                    <label key={itemId || idx} className="inline-flex items-center gap-2 text-xs w-full">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const nextChecked = e.target.checked;
+                          setSelectedReopenProductIds((prev) => (
+                            nextChecked
+                              ? Array.from(new Set([...prev, itemId]))
+                              : prev.filter((id) => id !== itemId)
+                          ));
+                        }}
+                      />
+                      {item.productName || `منتج ${idx + 1}`}
+                    </label>
+                  );
+                })}
+              </div>
+              <Button className="w-full" onClick={() => void createReopenRepair()} disabled={isReopening}>
+                {isReopening ? 'جاري الإنشاء...' : 'إنشاء طلب إعادة إصلاح'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 no-print lg:grid-cols-3 lg:items-start">
         <div className="lg:col-span-1 lg:order-2">
           <div className="lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
           <Card className="repair-job-print-sheet">
-          <CardHeader className="border-b">
-            <CardTitle className="text-xl">طلب صيانة</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">نسخة مهيأة للطباعة</p>
+          <CardHeader className="border-b space-y-3">
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              <div>
+                <CardTitle className="text-xl">طلب صيانة</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">نسخة مهيأة للطباعة</p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap no-print">
+                <Button variant="outline" size="sm" onClick={handlePrintRepairRequest}>
+                  <Printer className="h-4 w-4 ms-1" /> طباعة
+                </Button>
+                <div className="w-full sm:w-auto"><WhatsAppShare text={whatsappText} /></div>
+                <Button variant="outline" size="sm" onClick={exportReceipt}>تنزيل PDF</Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="pt-4 space-y-4">
             <div className="grid md:grid-cols-3 gap-2 text-sm">
@@ -572,7 +665,12 @@ export const RepairJobDetail: React.FC = () => {
                   </tr>
                   <tr>
                     <th className="text-right p-2 font-semibold bg-muted/40">الإكسسوارات</th>
-                    <td className="p-2">{job.accessories || '-'}</td>
+                    <td className="p-2">
+                      {jobProducts
+                        .map((item) => String(item.accessories || '').trim())
+                        .filter(Boolean)
+                        .join(' | ') || job.accessories || '-'}
+                    </td>
                   </tr>
                   <tr>
                     <th className="text-right p-2 font-semibold bg-muted/40">العنوان</th>
@@ -696,6 +794,11 @@ export const RepairJobDetail: React.FC = () => {
                       value={item.serialNo || ''}
                       onChange={(e) => updateProduct(item.itemId, { serialNo: e.target.value })}
                       placeholder="السيريال / Serial No."
+                    />
+                    <Input
+                      value={item.accessories || ''}
+                      onChange={(e) => updateProduct(item.itemId, { accessories: e.target.value })}
+                      placeholder="الإكسسوارات / Accessories"
                     />
                     <Input
                       type="number"
@@ -953,66 +1056,6 @@ export const RepairJobDetail: React.FC = () => {
             </CardContent>
           </Card>
         </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <div className="no-print lg:sticky lg:top-4 lg:self-start space-y-3">
-          
-          {job.status === 'delivered' && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">إعادة إصلاح</CardTitle>
-                <CardDescription>إنشاء طلب جديد مرتبط بالطلب الحالي.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button variant="secondary" className="w-full" onClick={() => setShowReopenOptions((v) => !v)}>
-                  {showReopenOptions ? 'إخفاء خيارات إعادة الإصلاح' : 'فتح إعادة الإصلاح'}
-                </Button>
-                {showReopenOptions && (
-                  <div className="space-y-2 text-sm">
-                    <Label>معالجة القيد المالي السابق</Label>
-                    <Select value={reopenTreasuryHandling} onValueChange={(v) => setReopenTreasuryHandling(v as 'reverse' | 'keep')}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="keep">الإبقاء على القيد السابق</SelectItem>
-                        <SelectItem value="reverse">عكس القيد السابق</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Label>المنتجات التي ستُنقل للطلب الجديد</Label>
-                    <div className="space-y-1 rounded border p-2">
-                      {jobProducts.map((item, idx) => {
-                        const itemId = String(item.itemId || '');
-                        const checked = selectedReopenProductIds.includes(itemId);
-                        return (
-                          <label key={itemId || idx} className="inline-flex items-center gap-2 text-xs w-full">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                const nextChecked = e.target.checked;
-                                setSelectedReopenProductIds((prev) => (
-                                  nextChecked
-                                    ? Array.from(new Set([...prev, itemId]))
-                                    : prev.filter((id) => id !== itemId)
-                                ));
-                              }}
-                            />
-                            {item.productName || `منتج ${idx + 1}`}
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <Button className="w-full" onClick={() => void createReopenRepair()} disabled={isReopening}>
-                      {isReopening ? 'جاري الإنشاء...' : 'إنشاء طلب إعادة إصلاح'}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        
       </div>
 
       <div className="hidden">

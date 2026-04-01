@@ -17,12 +17,14 @@ import { sparePartsService } from '../services/sparePartsService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import { exportHRData } from '../../../utils/exportExcel';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
 type DraftLine = RepairSalesInvoiceLine & { key: string };
 
 export const RepairSalesInvoicePage: React.FC = () => {
+  const { dir } = useAppDirection();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const currentEmployee = useAppStore((s) => s.currentEmployee);
@@ -435,7 +437,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 repair-invoice-page" dir="rtl">
+    <div className="space-y-4 repair-invoice-page" dir={dir}>
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white no-print">
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

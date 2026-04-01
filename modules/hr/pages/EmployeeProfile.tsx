@@ -455,7 +455,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Allowance Modal */}
       {showAllowanceModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" dir="rtl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <span className="material-icons-round text-emerald-500">add_circle</span>
@@ -514,7 +514,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Deduction Modal */}
       {showDeductionModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" dir="rtl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <span className="material-icons-round text-rose-500">remove_circle</span>
@@ -853,7 +853,7 @@ export const EmployeeProfile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-5xl mx-auto" dir="rtl">
+      <div className="p-6 max-w-5xl mx-auto">
         <div className="h-10 w-48 bg-slate-200 rounded-[var(--border-radius-base)] animate-pulse mb-6" />
         <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-8">
           <div className="flex items-center gap-4 mb-6">
@@ -875,7 +875,7 @@ export const EmployeeProfile: React.FC = () => {
 
   if (!employee) {
     return (
-      <div className="p-6 max-w-5xl mx-auto text-center" dir="rtl">
+      <div className="p-6 max-w-5xl mx-auto text-center">
         <Card>
           <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-slate-600">person_off</span>
           <h2 className="text-xl font-bold mt-4">موظف غير موجود</h2>
@@ -892,7 +892,7 @@ export const EmployeeProfile: React.FC = () => {
   const levelLabel = JOB_LEVEL_LABELS[(employee.level as JobLevel) ?? 1] ?? String(employee.level);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto" dir="rtl">
+    <div className="p-6 max-w-5xl mx-auto">
       {/* Back + Header */}
       <div className="mb-6">
         <button

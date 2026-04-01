@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 export interface FilterOption {
   value: string;
@@ -55,6 +56,7 @@ interface SmartFilterBarProps {
 }
 
 export function SmartFilterBar({
+  const { dir } = useAppDirection();
   searchPlaceholder = 'ابحث...',
   searchValue = '',
   onSearchChange,
@@ -125,7 +127,7 @@ export function SmartFilterBar({
 
   return (
     <div
-      dir="rtl"
+      dir={dir}
       className={cn(
         'mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white',
         className,
@@ -171,7 +173,7 @@ export function SmartFilterBar({
             <SelectTrigger className={cn('h-[34px] border-slate-200 text-sm', filter.width ?? 'w-[130px]')}>
               <SelectValue placeholder={filter.placeholder} />
             </SelectTrigger>
-            <SelectContent dir="rtl">
+            <SelectContent dir={dir}>
               <SelectItem value="all">{filter.placeholder}</SelectItem>
               {filter.options.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
@@ -240,7 +242,7 @@ export function SmartFilterBar({
                   <SelectTrigger className={cn('h-[34px] border-slate-200 bg-white text-sm', filter.width ?? 'w-[130px]')}>
                     <SelectValue placeholder={filter.placeholder} />
                   </SelectTrigger>
-                  <SelectContent dir="rtl">
+                  <SelectContent dir={dir}>
                     <SelectItem value="all">{filter.placeholder}</SelectItem>
                     {filter.options.map((option) => (
                       <SelectItem key={option.value} value={option.value}>

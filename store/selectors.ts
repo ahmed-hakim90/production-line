@@ -1,5 +1,6 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from './useAppStore';
+import { useAuthStore } from './useAuthStore';
 
 export const useDashboardSlice = () =>
   useAppStore(useShallow((s) => ({
@@ -21,7 +22,7 @@ export const useDashboardSlice = () =>
   })));
 
 export const useAuthUiSlice = () =>
-  useAppStore(useShallow((s) => ({
+  useAuthStore(useShallow((s) => ({
     isAuthenticated: s.isAuthenticated,
     isPendingApproval: s.isPendingApproval,
     loading: s.loading,

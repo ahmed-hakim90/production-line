@@ -344,7 +344,7 @@ export const SupervisorLineAssignment: React.FC = () => {
   };
 
   return (
-    <div dir="rtl" className="erp-ds-clean min-h-full space-y-4 bg-gray-50 p-4 font-sans">
+    <div className="erp-ds-clean min-h-full space-y-4 bg-gray-50 p-4 font-sans">
       <section className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-start gap-2">

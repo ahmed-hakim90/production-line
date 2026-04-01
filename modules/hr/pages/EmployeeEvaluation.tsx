@@ -190,7 +190,7 @@ export const EmployeeEvaluation: React.FC = () => {
   ).length;
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-[var(--color-text)]">تقييم الموظفين</h2>

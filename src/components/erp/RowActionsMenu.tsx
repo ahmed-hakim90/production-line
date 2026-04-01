@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 export interface RowActionMenuItem {
   label: string
@@ -28,7 +29,8 @@ interface RowActionsMenuProps {
   items: RowActionMenuEntry[]
 }
 
-export function RowActionsMenu({ items }: RowActionsMenuProps) {
+export function RowActionsMenu({
+  const { dir } = useAppDirection(); items }: RowActionsMenuProps) {
   const safeItems = items.slice(0, 7)
 
   if (safeItems.length === 0) {
@@ -36,7 +38,7 @@ export function RowActionsMenu({ items }: RowActionsMenuProps) {
   }
 
   return (
-    <DropdownMenu dir="rtl">
+    <DropdownMenu dir={dir}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"

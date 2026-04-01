@@ -70,6 +70,7 @@ export interface RepairJobProduct {
   deviceBrand?: string;
   deviceModel?: string;
   serialNo?: string;
+  accessories?: string;
   diagnosis?: string;
   estimatedCost?: number;
   finalCost?: number;
@@ -108,10 +109,33 @@ export interface RepairJob {
   createdAt: string;
   updatedAt: string;
   deliveredAt?: string;
+  assignedAt?: string;
+  resolvedAt?: string;
+  slaHours?: number;
+  dueAt?: string;
+  breachedAt?: string;
+  resolutionMinutes?: number;
+  preventivePlanId?: string;
+  isPreventive?: boolean;
   isClosed?: boolean;
   closedAt?: string;
   reopenedFromJobId?: string;
   parentJobId?: string;
+}
+
+export interface PreventiveMaintenancePlan {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  machineId: string;
+  machineName: string;
+  everyDays?: number;
+  everyMachineHours?: number;
+  nextDueAt: string;
+  defaultSlaHours?: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RepairSparePart {
@@ -165,6 +189,8 @@ export interface RepairTreasurySession {
   closedBy?: string;
   closedByName?: string;
   closingBalance?: number;
+  closingDifference?: number;
+  closingDifferenceReason?: string;
   needsManualClose?: boolean;
   closeBlockReason?: string;
   status: 'open' | 'closed';
@@ -182,6 +208,61 @@ export interface RepairTreasuryEntry {
   createdBy: string;
   createdByName?: string;
   createdAt: string;
+}
+
+export type RepairTreasurySessionStatusFilter = 'all' | 'open' | 'closed';
+
+export interface RepairTreasurySessionDetailsRow {
+  sessionId: string;
+  branchId: string;
+  branchName: string;
+  status: 'open' | 'closed';
+  openedAt: string;
+  closedAt?: string;
+  openingBalance: number;
+  closingBalance?: number;
+  closingDifference?: number;
+  closingDifferenceReason?: string;
+  openedByName?: string;
+  closedByName?: string;
+  entriesCount: number;
+}
+
+export interface RepairTreasuryBranchMonthlySummary {
+  branchId: string;
+  branchName: string;
+  sessionsCount: number;
+  totalOpening: number;
+  totalIncome: number;
+  totalExpense: number;
+  totalTransferIn: number;
+  totalTransferOut: number;
+  netMovement: number;
+  totalClosing: number;
+}
+
+export interface RepairTreasuryBranchDailyBreakdown {
+  branchId: string;
+  branchName: string;
+  day: string;
+  sessionsCount: number;
+  opening: number;
+  income: number;
+  expense: number;
+  transferIn: number;
+  transferOut: number;
+  net: number;
+  closing: number;
+}
+
+export interface RepairTreasuryMonthlyReportData {
+  month: string;
+  sessionStatus: RepairTreasurySessionStatusFilter;
+  branchFilter: string;
+  visibleBranchIds: string[];
+  summaries: RepairTreasuryBranchMonthlySummary[];
+  dailyBreakdown: RepairTreasuryBranchDailyBreakdown[];
+  sessions: RepairTreasurySessionDetailsRow[];
 }
 
 export interface RepairSalesInvoiceLine {
@@ -205,6 +286,7 @@ export interface RepairSalesInvoice {
   status?: 'active' | 'cancelled';
   warehouseId?: string;
   warehouseName?: string;
+  repairJobId?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;
