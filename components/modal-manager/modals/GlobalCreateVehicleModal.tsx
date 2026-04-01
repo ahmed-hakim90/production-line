@@ -8,6 +8,7 @@ import { employeeService } from '../../../modules/hr/employeeService';
 import type { FirestoreVehicle } from '../../../modules/hr/types';
 import type { FirestoreEmployee } from '../../../types';
 import { formatCurrency } from '../../../utils/calculations';
+import { useTranslation } from 'react-i18next';
 
 const EMPTY_VEHICLE: Omit<FirestoreVehicle, 'id'> = {
   name: '',
@@ -29,6 +30,7 @@ type VehicleModalPayload = {
 };
 
 export const GlobalCreateVehicleModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.VEHICLES_CREATE);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -120,7 +122,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">{editingId ? 'تعديل مركبة' : 'إضافة مركبة جديدة'}</h3>
+          <h3 className="text-lg font-bold">{editingId ? t('modalManager.createVehicle.editTitle') : t('modalManager.createVehicle.createTitle')}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
@@ -128,43 +130,43 @@ export const GlobalCreateVehicleModal: React.FC = () => {
         <div className="p-6 space-y-5 overflow-y-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">اسم المركبة *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.vehicleNameRequired')}</label>
               <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">رقم اللوحة *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.plateNumberRequired')}</label>
               <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.plateNumber} onChange={(e) => setForm({ ...form, plateNumber: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">السعة (عدد الركاب)</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.capacityPassengers')}</label>
               <input type="number" min={1} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) || 1 })} />
             </div>
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">الأجر اليومي (ج.م)</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.dailyRateEgp')}</label>
               <input type="number" min={0} step={0.01} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.dailyRate} onChange={(e) => setForm({ ...form, dailyRate: Number(e.target.value) || 0 })} />
             </div>
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">أيام العمل / شهر</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.workingDaysPerMonth')}</label>
               <input type="number" min={1} max={31} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.workingDaysPerMonth} onChange={(e) => setForm({ ...form, workingDaysPerMonth: Math.min(31, Number(e.target.value) || 1) })} />
             </div>
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">التكلفة الشهرية</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.monthlyCost')}</label>
               <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold bg-emerald-50 text-emerald-700">
                 {formatCurrency(form.dailyRate * form.workingDaysPerMonth)}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">اسم السائق</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.driverName')}</label>
               <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.driverName} onChange={(e) => setForm({ ...form, driverName: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">هاتف السائق</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.driverPhone')}</label>
               <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.driverPhone} onChange={(e) => setForm({ ...form, driverPhone: e.target.value })} dir="ltr" />
             </div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary" />
-                <span className="text-sm font-bold text-[var(--color-text-muted)]">نشطة</span>
+                <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createVehicle.active')}</span>
               </label>
             </div>
           </div>
@@ -172,10 +174,10 @@ export const GlobalCreateVehicleModal: React.FC = () => {
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-bold text-[var(--color-text-muted)]">
-                ربط الموظفين ({form.assignedEmployees.length}/{form.capacity})
+                {t('modalManager.createVehicle.linkEmployeesCount', { count: form.assignedEmployees.length, capacity: form.capacity })}
               </label>
               {form.assignedEmployees.length >= form.capacity && (
-                <span className="text-xs text-amber-600 font-bold">المركبة ممتلئة</span>
+                <span className="text-xs text-amber-600 font-bold">{t('modalManager.createVehicle.vehicleFull')}</span>
               )}
             </div>
             <SearchableSelect
@@ -184,7 +186,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
               onChange={(val) => {
                 if (val) toggleEmployee(val);
               }}
-              placeholder={loadingEmployees ? 'جاري تحميل الموظفين...' : 'ابحث وأضف موظف...'}
+              placeholder={loadingEmployees ? t('modalManager.createVehicle.loadingEmployees') : t('modalManager.createVehicle.searchAddEmployee')}
               className="mb-3"
             />
             {form.assignedEmployees.length > 0 && (
@@ -202,16 +204,16 @@ export const GlobalCreateVehicleModal: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">ملاحظات</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.notes')}</label>
             <textarea className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.name.trim() || !form.plateNumber.trim()}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />
-            {editingId ? 'حفظ التعديلات' : 'إضافة المركبة'}
+            {editingId ? t('modalManager.createVehicle.saveChanges') : t('modalManager.createVehicle.addVehicle')}
           </Button>
         </div>
       </div>

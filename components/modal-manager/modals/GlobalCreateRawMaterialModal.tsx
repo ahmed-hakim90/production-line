@@ -7,10 +7,12 @@ import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { categoryService } from '../../../modules/catalog/services/categoryService';
+import { useTranslation } from 'react-i18next';
 
 type Message = { type: 'success' | 'error'; text: string } | null;
 
 export const GlobalCreateRawMaterialModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE);
   const { can } = usePermission();
   const [name, setName] = useState('');
@@ -86,7 +88,7 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
     const cleanCategoryName = categoryName.trim();
     const cleanUnit = unit.trim() || 'unit';
     if (!cleanName || !cleanCode) {
-      setMessage({ type: 'error', text: 'اسم المادة الخام والكود مطلوبان.' });
+      setMessage({ type: 'error', text: t('modalManager.createRawMaterial.requiredFieldsError') });
       return;
     }
     setSaving(true);
@@ -114,7 +116,12 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
       rawPayload.onSaved?.();
       close();
     } catch {
-      setMessage({ type: 'error', text: isEditMode ? 'تعذر تعديل المادة الخام. حاول مرة أخرى.' : 'تعذر إضافة المادة الخام. حاول مرة أخرى.' });
+      setMessage({
+        type: 'error',
+        text: isEditMode
+          ? t('modalManager.createRawMaterial.updateError')
+          : t('modalManager.createRawMaterial.createError'),
+      });
     } finally {
       setSaving(false);
     }
@@ -124,7 +131,7 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-lg font-bold">{isEditMode ? 'تعديل مادة خام' : 'إضافة مادة خام'}</h3>
+          <h3 className="text-lg font-bold">{isEditMode ? t('modalManager.createRawMaterial.editTitle') : t('modalManager.createRawMaterial.createTitle')}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
@@ -138,20 +145,20 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
           )}
           <input
             className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"
-            placeholder="اسم المادة الخام"
+            placeholder={t('modalManager.createRawMaterial.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <div className="grid grid-cols-2 gap-3">
             <input
               className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"
-              placeholder="الكود"
+              placeholder={t('modalManager.createRawMaterial.codePlaceholder')}
               value={code}
               onChange={(e) => setCode(e.target.value)}
             />
             <input
               className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"
-              placeholder="الوحدة"
+              placeholder={t('modalManager.createRawMaterial.unitPlaceholder')}
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
             />
@@ -161,7 +168,7 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
             value={categoryName}
             onChange={(e) => setCategoryName(e.target.value)}
           >
-            <option value="">فئة المادة الخام (اختياري)</option>
+            <option value="">{t('modalManager.createRawMaterial.categoryOptional')}</option>
             {categoryOptions.map((category) => (
               <option key={category} value={category}>
                 {category}
@@ -171,17 +178,17 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
           <input
             type="number"
             className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"
-            placeholder="الحد الأدنى"
+            placeholder={t('modalManager.createRawMaterial.minStockPlaceholder')}
             value={minStock}
             onChange={(e) => setMinStock(Number(e.target.value))}
           />
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving || !name.trim() || !code.trim()}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             {isEditMode ? <Save size={14} /> : <Package size={14} />}
-            {isEditMode ? 'حفظ التعديلات' : 'إضافة مادة خام'}
+            {isEditMode ? t('modalManager.createRawMaterial.saveChanges') : t('modalManager.createRawMaterial.addRawMaterial')}
           </Button>
         </div>
       </div>

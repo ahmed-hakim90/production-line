@@ -4,6 +4,7 @@ import { Badge, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreRole } from '../../../types';
+import { useTranslation } from 'react-i18next';
 
 type EmployeeOption = { value: string; label: string };
 type ManageUserPayload = {
@@ -31,6 +32,7 @@ type ManageUserPayload = {
 type Message = { type: 'success' | 'error'; text: string } | null;
 
 export const GlobalManageUserModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.SYSTEM_USERS_MANAGE);
   const [roleTargetId, setRoleTargetId] = useState('');
   const [employeeTargetId, setEmployeeTargetId] = useState('');
@@ -54,9 +56,9 @@ export const GlobalManageUserModal: React.FC = () => {
   }, [isOpen, row]);
 
   const title = useMemo(() => {
-    if (!row) return 'إدارة المستخدم';
-    return `إدارة المستخدم: ${row.user.email}`;
-  }, [row]);
+    if (!row) return t('modalManager.manageUser.title');
+    return t('modalManager.manageUser.titleWithEmail', { email: row.user.email });
+  }, [row, t]);
 
   if (!isOpen || !row || !modalPayload) return null;
 
@@ -68,7 +70,7 @@ export const GlobalManageUserModal: React.FC = () => {
       if (successText) setMessage({ type: 'success', text: successText });
       if (closeAfter) close();
     } catch (error: any) {
-      setMessage({ type: 'error', text: error?.message || 'حدث خطأ غير متوقع.' });
+      setMessage({ type: 'error', text: error?.message || t('modalManager.manageUser.unexpectedError') });
     } finally {
       setSubmitting(false);
     }
@@ -98,15 +100,15 @@ export const GlobalManageUserModal: React.FC = () => {
           )}
 
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-[var(--color-text)]">حالة الحساب</span>
+            <span className="text-sm font-semibold text-[var(--color-text)]">{t('modalManager.manageUser.accountStatus')}</span>
             <Badge variant={row.user.isActive ? 'success' : 'warning'}>
-              {row.user.isActive ? 'مفعّل' : 'بانتظار الموافقة'}
+              {row.user.isActive ? t('modalManager.manageUser.statusActive') : t('modalManager.manageUser.statusPendingApproval')}
             </Badge>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-[var(--color-text-muted)]">الدور</label>
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.manageUser.role')}</label>
               <select
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]"
                 value={roleTargetId}
@@ -119,19 +121,19 @@ export const GlobalManageUserModal: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold text-[var(--color-text-muted)]">الموظف المرتبط</label>
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.manageUser.linkedEmployee')}</label>
               <SearchableSelect
                 options={employeeOptions}
                 value={employeeTargetId}
                 onChange={setEmployeeTargetId}
-                placeholder="اختر موظفًا"
+                placeholder={t('modalManager.manageUser.selectEmployee')}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-[var(--color-text-muted)]">البريد الإلكتروني</label>
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.manageUser.email')}</label>
               <input
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]"
                 value={emailTarget}
@@ -140,13 +142,13 @@ export const GlobalManageUserModal: React.FC = () => {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-[var(--color-text-muted)]">كلمة مرور جديدة (اختياري)</label>
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.manageUser.newPasswordOptional')}</label>
               <input
                 type="password"
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]"
                 value={passwordTarget}
                 onChange={(e) => setPasswordTarget(e.target.value)}
-                placeholder="اتركه فارغًا إن لم ترغب بالتغيير"
+                placeholder={t('modalManager.manageUser.leaveBlankPasswordHint')}
               />
             </div>
           </div>
@@ -154,24 +156,24 @@ export const GlobalManageUserModal: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <button
               className="btn btn-secondary"
-              onClick={() => void run(() => modalPayload.onUpdateRole(roleTargetId), 'تم تحديث الدور بنجاح.')}
+              onClick={() => void run(() => modalPayload.onUpdateRole(roleTargetId), t('modalManager.manageUser.updateRoleSuccess'))}
               disabled={submitting || !roleTargetId}
             >
-              حفظ الدور
+              {t('modalManager.manageUser.saveRole')}
             </button>
             <button
               className="btn btn-secondary"
-              onClick={() => void run(() => modalPayload.onLinkEmployee(employeeTargetId), 'تم ربط المستخدم بالموظف بنجاح.')}
+              onClick={() => void run(() => modalPayload.onLinkEmployee(employeeTargetId), t('modalManager.manageUser.linkEmployeeSuccess'))}
               disabled={submitting || !employeeTargetId}
             >
-              ربط بموظف
+              {t('modalManager.manageUser.linkEmployee')}
             </button>
             <button
               className="btn btn-secondary"
-              onClick={() => void run(() => modalPayload.onUnlinkEmployee(), 'تم فك الربط بنجاح.')}
+              onClick={() => void run(() => modalPayload.onUnlinkEmployee(), t('modalManager.manageUser.unlinkSuccess'))}
               disabled={submitting || !row.employee?.id}
             >
-              فك الربط
+              {t('modalManager.manageUser.unlink')}
             </button>
             <button
               className="btn btn-secondary"
@@ -182,12 +184,12 @@ export const GlobalManageUserModal: React.FC = () => {
                       email: emailTarget,
                       password: passwordTarget,
                     }),
-                  'تم تحديث البريد/كلمة المرور بنجاح.',
+                  t('modalManager.manageUser.updateCredentialsSuccess'),
                 )
               }
               disabled={submitting || (!emailTarget.trim() && !passwordTarget.trim())}
             >
-              تحديث الإيميل/الباسورد
+              {t('modalManager.manageUser.updateEmailPassword')}
             </button>
             {!row.user.isActive && (
               <button
@@ -195,14 +197,14 @@ export const GlobalManageUserModal: React.FC = () => {
                 onClick={() =>
                   void run(
                     () => modalPayload.onApproveAccess(roleTargetId, employeeTargetId),
-                    'تمت الموافقة وتفعيل الوصول للنظام.',
+                    t('modalManager.manageUser.approveAndActivateSuccess'),
                     true,
                   )
                 }
                 disabled={submitting || !roleTargetId}
               >
                 <ShieldCheck size={15} />
-                الموافقة + تفعيل الوصول
+                {t('modalManager.manageUser.approveAndActivate')}
               </button>
             )}
             <button
@@ -210,7 +212,7 @@ export const GlobalManageUserModal: React.FC = () => {
               onClick={() => void run(() => modalPayload.onToggleActive(), undefined, true)}
               disabled={submitting}
             >
-              {row.user.isActive ? 'تعطيل المستخدم' : 'تفعيل المستخدم'}
+              {row.user.isActive ? t('modalManager.manageUser.disableUser') : t('modalManager.manageUser.enableUser')}
             </button>
             <button
               className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[var(--border-radius-base,6px)] text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100"
@@ -218,7 +220,7 @@ export const GlobalManageUserModal: React.FC = () => {
               disabled={submitting}
             >
               <Trash2 size={15} />
-              حذف نهائي
+              {t('modalManager.manageUser.hardDelete')}
             </button>
           </div>
         </div>

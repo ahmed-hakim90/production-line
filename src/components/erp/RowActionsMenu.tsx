@@ -30,7 +30,9 @@ interface RowActionsMenuProps {
 }
 
 export function RowActionsMenu({
-  const { dir } = useAppDirection(); items }: RowActionsMenuProps) {
+  items,
+}: RowActionsMenuProps) {
+  const { dir } = useAppDirection();
   const safeItems = items.slice(0, 7)
 
   if (safeItems.length === 0) {

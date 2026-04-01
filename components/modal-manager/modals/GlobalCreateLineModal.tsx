@@ -6,13 +6,14 @@ import { usePermission } from '../../../utils/permissions';
 import { ProductionLineStatus, type FirestoreProductionLine } from '../../../types';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { useTranslation } from 'react-i18next';
 
-const statusOptions: { value: ProductionLineStatus; label: string }[] = [
-  { value: ProductionLineStatus.ACTIVE, label: 'يعمل' },
-  { value: ProductionLineStatus.INJECTION, label: 'حقن' },
-  { value: ProductionLineStatus.MAINTENANCE, label: 'صيانة' },
-  { value: ProductionLineStatus.IDLE, label: 'متوقف' },
-  { value: ProductionLineStatus.WARNING, label: 'تنبيه' },
+const statusOptions: { value: ProductionLineStatus; key: string }[] = [
+  { value: ProductionLineStatus.ACTIVE, key: 'active' },
+  { value: ProductionLineStatus.INJECTION, key: 'injection' },
+  { value: ProductionLineStatus.MAINTENANCE, key: 'maintenance' },
+  { value: ProductionLineStatus.IDLE, key: 'idle' },
+  { value: ProductionLineStatus.WARNING, key: 'warning' },
 ];
 
 const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
@@ -24,6 +25,7 @@ const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
 };
 
 export const GlobalCreateLineModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.LINES_CREATE);
   const { can } = usePermission();
   const createLine = useAppStore((s) => s.createLine);
@@ -56,12 +58,12 @@ export const GlobalCreateLineModal: React.FC = () => {
   const handleSave = async () => {
     const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? ''));
     if (!form.name || !normalizedCode) {
-      setMessage({ type: 'error', text: 'اسم الخط مطلوب. أضف كود الخط أو رقم داخل اسم الخط.' });
+      setMessage({ type: 'error', text: t('modalManager.createLine.nameOrCodeRequiredError') });
       return;
     }
     const isDuplicateCode = lines.some((line) => normalizeLineCode(line.code ?? '') === normalizedCode);
     if (isDuplicateCode) {
-      setMessage({ type: 'error', text: 'كود الخط مستخدم بالفعل. استخدم كودًا مختلفًا.' });
+      setMessage({ type: 'error', text: t('modalManager.createLine.duplicateCodeError') });
       return;
     }
     setSaving(true);
@@ -69,10 +71,10 @@ export const GlobalCreateLineModal: React.FC = () => {
     try {
       const id = await createLine({ ...form, code: normalizedCode });
       if (!id) throw new Error('create failed');
-      setMessage({ type: 'success', text: 'تم إضافة خط الإنتاج بنجاح' });
+      setMessage({ type: 'success', text: t('modalManager.createLine.createSuccess') });
       setForm(emptyForm);
     } catch {
-      setMessage({ type: 'error', text: 'تعذر حفظ بيانات الخط. حاول مرة أخرى.' });
+      setMessage({ type: 'error', text: t('modalManager.createLine.saveError') });
     } finally {
       setSaving(false);
     }
@@ -82,7 +84,7 @@ export const GlobalCreateLineModal: React.FC = () => {
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-lg font-bold">إضافة خط إنتاج جديد</h3>
+          <h3 className="text-lg font-bold">{t('modalManager.createLine.title')}</h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
@@ -95,38 +97,38 @@ export const GlobalCreateLineModal: React.FC = () => {
             </div>
           )}
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">كود الخط (اختياري)</label>
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.code ?? ''} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="مثال: LINE-01" />
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.codeOptional')}</label>
+            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.code ?? ''} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder={t('modalManager.createLine.codePlaceholder')} />
           </div>
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم الخط *</label>
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="مثال: خط الإنتاج A - التعبئة" />
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.nameRequired')}</label>
+            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('modalManager.createLine.namePlaceholder')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل اليومية</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.dailyWorkingHours')}</label>
               <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={1} max={24} value={form.dailyWorkingHours} onChange={(e) => setForm({ ...form, dailyWorkingHours: Number(e.target.value) })} />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">أقصى عدد عمال</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.maxWorkers')}</label>
               <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={1} value={form.maxWorkers} onChange={(e) => setForm({ ...form, maxWorkers: Number(e.target.value) })} />
             </div>
           </div>
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">الحالة</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.status')}</label>
             <select className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ProductionLineStatus })}>
               {statusOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>{t(`modalManager.createLine.statuses.${opt.key}`)}</option>
               ))}
             </select>
           </div>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.name}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Plus size={14} />
-            إضافة الخط
+            {t('modalManager.createLine.addLine')}
           </Button>
         </div>
       </div>

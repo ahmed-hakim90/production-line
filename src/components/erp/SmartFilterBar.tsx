@@ -56,7 +56,6 @@ interface SmartFilterBarProps {
 }
 
 export function SmartFilterBar({
-  const { dir } = useAppDirection();
   searchPlaceholder = 'ابحث...',
   searchValue = '',
   onSearchChange,
@@ -75,6 +74,7 @@ export function SmartFilterBar({
   className,
 }: SmartFilterBarProps) {
   const [expanded, setExpanded] = useState(false);
+  const { dir } = useAppDirection();
 
   const activeAdvancedCount = advancedFilters.filter((filter) => {
     const value = advancedFilterValues[filter.key];

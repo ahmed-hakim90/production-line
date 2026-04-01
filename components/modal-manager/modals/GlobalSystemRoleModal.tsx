@@ -9,16 +9,17 @@ import {
 import type { FirestoreRole } from '../../../types';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { useTranslation } from 'react-i18next';
 
 const COLOR_OPTIONS = [
-  { label: 'أحمر', value: 'bg-rose-100 text-rose-700' },
-  { label: 'أزرق', value: 'bg-blue-100 text-blue-700' },
-  { label: 'برتقالي', value: 'bg-amber-100 text-amber-700' },
-  { label: 'أخضر', value: 'bg-emerald-100 text-emerald-700' },
-  { label: 'بنفسجي', value: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
-  { label: 'وردي', value: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
-  { label: 'سماوي', value: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
-  { label: 'رمادي', value: 'bg-[#f0f2f5] text-[var(--color-text)]/30' },
+  { key: 'red', value: 'bg-rose-100 text-rose-700' },
+  { key: 'blue', value: 'bg-blue-100 text-blue-700' },
+  { key: 'orange', value: 'bg-amber-100 text-amber-700' },
+  { key: 'green', value: 'bg-emerald-100 text-emerald-700' },
+  { key: 'purple', value: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
+  { key: 'pink', value: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
+  { key: 'cyan', value: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
+  { key: 'gray', value: 'bg-[#f0f2f5] text-[var(--color-text)]/30' },
 ];
 
 type RoleModalPayload = {
@@ -34,6 +35,7 @@ const buildEmptyPerms = (): Record<string, boolean> => {
 };
 
 export const GlobalSystemRoleModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.SYSTEM_ROLES_CREATE);
   const createRole = useAppStore((s) => s.createRole);
   const updateRole = useAppStore((s) => s.updateRole);
@@ -101,13 +103,13 @@ export const GlobalSystemRoleModal: React.FC = () => {
       const data = { name: editName.trim(), color: editColor, permissions: editPerms };
       if (editingRole?.id) {
         await updateRole(editingRole.id, data);
-        setSaveMsg({ type: 'success', text: 'تم حفظ تعديلات الدور بنجاح' });
+        setSaveMsg({ type: 'success', text: t('modalManager.systemRole.updateSuccess') });
       } else {
         await createRole(data);
-        setSaveMsg({ type: 'success', text: 'تم إنشاء الدور بنجاح' });
+        setSaveMsg({ type: 'success', text: t('modalManager.systemRole.createSuccess') });
       }
     } catch {
-      setSaveMsg({ type: 'error', text: 'تعذر حفظ الدور. حاول مرة أخرى.' });
+      setSaveMsg({ type: 'error', text: t('modalManager.systemRole.saveError') });
     } finally {
       setSaving(false);
     }
@@ -129,10 +131,10 @@ export const GlobalSystemRoleModal: React.FC = () => {
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--color-text)]">
-                {editingRole ? `تعديل: ${editingRole.name}` : 'إنشاء دور جديد'}
+                {editingRole ? t('modalManager.systemRole.editTitle', { name: editingRole.name }) : t('modalManager.systemRole.createTitle')}
               </h3>
               <p className="text-xs text-[var(--color-text-muted)] font-medium">
-                {enabledCount} / {ALL_PERMISSIONS.length} صلاحية مفعلة
+                {t('modalManager.systemRole.enabledPermissionsCount', { enabled: enabledCount, total: ALL_PERMISSIONS.length })}
               </p>
             </div>
           </div>
@@ -147,17 +149,17 @@ export const GlobalSystemRoleModal: React.FC = () => {
         <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم الدور *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.systemRole.roleNameRequired')}</label>
               <input
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                placeholder="مثال: مدير الإنتاج"
+                placeholder={t('modalManager.systemRole.roleNamePlaceholder')}
                 autoFocus
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">اللون</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.systemRole.color')}</label>
               <div className="flex flex-wrap gap-2">
                 {COLOR_OPTIONS.map((opt) => (
                   <button
@@ -167,7 +169,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                       editColor === opt.value ? 'ring-2 ring-primary scale-105' : 'opacity-60 hover:opacity-100'
                     }`}
                   >
-                    {opt.label}
+                    {t(`modalManager.systemRole.colors.${opt.key}`)}
                   </button>
                 ))}
               </div>
@@ -234,17 +236,17 @@ export const GlobalSystemRoleModal: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-t border-[var(--color-border)] bg-[#f8f9fa] shrink-0">
           <span className="text-xs text-[var(--color-text-muted)] font-bold">
-            {enabledCount} / {ALL_PERMISSIONS.length} صلاحية مفعلة
+            {t('modalManager.systemRole.enabledPermissionsCount', { enabled: enabledCount, total: ALL_PERMISSIONS.length })}
           </span>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button className="btn btn-secondary w-full sm:w-auto" onClick={handleClose}>إلغاء</button>
+            <button className="btn btn-secondary w-full sm:w-auto" onClick={handleClose}>{t('ui.cancel')}</button>
             <button
               className="btn btn-primary w-full sm:w-auto"
               onClick={handleSave}
               disabled={saving || !editName.trim()}
             >
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-              {editingRole ? 'حفظ التعديلات' : 'إنشاء الدور'}
+              {editingRole ? t('modalManager.systemRole.saveChanges') : t('modalManager.systemRole.createRole')}
             </button>
           </div>
         </div>
