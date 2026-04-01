@@ -547,10 +547,9 @@ export const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="erp-dashboard-theme space-y-8">
-        <div>
-          <h2 className="text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
-          <p className="text-[var(--color-text-muted)] mt-1 font-medium">جاري تحميل البيانات...</p>
+      <div className="erp-dashboard-theme win2k-theme space-y-8">
+        <div className="win2k-panel-header" style={{background:'linear-gradient(to left,#0a246a,#a6b8cb)',padding:'3px 8px',display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:11,fontWeight:'bold',color:'#fff',fontFamily:'Tahoma,sans-serif'}}>مؤسسة المغربي — جاري تحميل البيانات...</span>
         </div>
         <LoadingSkeleton type="card" rows={6} />
       </div>
@@ -558,11 +557,31 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
-      {/* <div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
-        <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">لوحة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
-      </div> */}
+    <div className="erp-dashboard-theme win2k-theme space-y-6 sm:space-y-8">
+      {/* Win2K window title bar */}
+      <div style={{
+        background: 'linear-gradient(to left, #0a246a, #a6b8cb)',
+        padding: '3px 8px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: 'inset -1px -1px 0 #404040, inset 1px 1px 0 #ffffff',
+      }}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <span style={{width:14,height:14,background:'#ece9d8',border:'1px solid #808080',display:'inline-block',flexShrink:0}}></span>
+          <span style={{fontSize:11,fontWeight:'bold',color:'#ffffff',fontFamily:'Tahoma,sans-serif',letterSpacing:0}}>لوحة التحكم — مؤسسة المغربي</span>
+        </div>
+        <div style={{display:'flex',gap:2}}>
+          {['_','□','✕'].map((btn) => (
+            <span key={btn} style={{
+              width:16,height:14,background:'#d4d0c8',display:'inline-flex',alignItems:'center',justifyContent:'center',
+              fontSize:10,fontWeight:'bold',color:'#000000',fontFamily:'Tahoma,sans-serif',
+              boxShadow:'inset -1px -1px 0 #404040, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #808080, inset 2px 2px 0 #ece9d8',
+              cursor:'default',userSelect:'none'
+            }}>{btn}</span>
+          ))}
+        </div>
+      </div>
 
       <OrderedDashboardWidgets
         dashboardKey="dashboard"
