@@ -1,4 +1,5 @@
 import { ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button, type ButtonProps } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -16,6 +17,7 @@ export function PrimaryButton({
   disabled,
   ...props
 }: ActionButtonProps) {
+  const { t } = useTranslation()
   return (
     <Button
       variant="default"
@@ -24,7 +26,7 @@ export function PrimaryButton({
       {...props}
     >
       {icon && <span>{icon}</span>}
-      {loading ? "جارٍ الحفظ..." : children}
+      {loading ? t("erpComponents.actionButton.loadingSave") : children}
     </Button>
   )
 }

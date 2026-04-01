@@ -1,5 +1,6 @@
 import { ReactNode } from "react"
 import { MoreHorizontal } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -23,7 +24,12 @@ interface ActionsMenuProps {
 }
 
 export function ActionsMenu({
-  const { dir } = useAppDirection(); items, triggerLabel = "الإجراءات" }: ActionsMenuProps) {
+  items,
+  triggerLabel,
+}: ActionsMenuProps) {
+  const { t } = useTranslation()
+  const { dir } = useAppDirection()
+  const resolvedTriggerLabel = triggerLabel ?? t("erpComponents.actionsMenu.triggerLabel")
   const safeItems = items.slice(0, 8)
 
   if (safeItems.length === 0) {
@@ -39,7 +45,7 @@ export function ActionsMenu({
           className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-normal text-slate-600 hover:bg-slate-50"
         >
           <MoreHorizontal className="h-4 w-4" />
-          {triggerLabel}
+          {resolvedTriggerLabel}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48 rounded-lg border border-slate-200 bg-white p-1">

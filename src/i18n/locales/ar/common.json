@@ -12,6 +12,126 @@
     "cancel": "إلغاء",
     "close": "إغلاق"
   },
+  "shared": {
+    "back": "رجوع",
+    "clearSelection": "مسح الاختيار",
+    "noResults": "لا توجد نتائج",
+    "selectPlaceholder": "اختر..."
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "markAllRead": "تعيين الكل كمقروء",
+    "empty": "لا توجد إشعارات",
+    "timeAgo": {
+      "now": "الآن",
+      "minutesAgo": "منذ {{count}} د",
+      "hoursAgo": "منذ {{count}} س",
+      "daysAgo": "منذ {{count}} يوم"
+    }
+  },
+  "pageHeader": {
+    "moreActions": "المزيد من الإجراءات"
+  },
+  "dashboard": {
+    "quickLink": "رابط سريع",
+    "customTextWidget": "Widget نصي مخصص",
+    "period": {
+      "daily": "اليوم",
+      "yesterday": "أمس",
+      "weekly": "أسبوعي",
+      "monthly": "شهري",
+      "today": "اليوم",
+      "thisWeek": "هذا الأسبوع",
+      "thisMonth": "هذا الشهر"
+    },
+    "supervisorTitle": "لوحة المشرف",
+    "welcomeEmployee": "مرحباً {{name}} — متابعة أدائك وإنتاجك",
+    "loadingData": "جاري تحميل البيانات...",
+    "unitWithPeriod": "وحدة — {{period}}",
+    "wasteUnits": "{{count}} وحدة هالك",
+    "unitsPerDay": "وحدة/يوم ({{days}} يوم)",
+    "hoursValue": "{{value}} س",
+    "noReportsForPeriod": "لا توجد تقارير {{period}}",
+    "goodPerformance": "أداؤك جيد — لا توجد تنبيهات حالياً.",
+    "personalPerformance": "الأداء الشخصي",
+    "status": {
+      "inProgress": "قيد التنفيذ",
+      "planned": "مخطط"
+    },
+    "kpi": {
+      "totalProduction": "إجمالي الإنتاج",
+      "planAchievement": "تحقيق الخطة",
+      "fromCurrentPlan": "من الخطة الحالية",
+      "remainingQty": "الكمية المتبقية",
+      "remainingUnits": "وحدة متبقية",
+      "wasteRatio": "نسبة الهالك",
+      "dailyAverage": "متوسط يومي",
+      "reportsCount": "عدد التقارير",
+      "avgPerHour": "متوسط إنتاج/ساعة",
+      "workHours": "ساعات العمل",
+      "waste": "الهالك"
+    },
+    "activePlan": {
+      "title": "الخطة النشطة",
+      "subtitle": "تتبع تقدم خطة الإنتاج الحالية",
+      "product": "المنتج",
+      "plannedQty": "الكمية المخططة",
+      "producedInPeriod": "تم إنتاج ({{period}})",
+      "remainingTotal": "المتبقي (إجمالي)",
+      "totalProgress": "التقدم الإجمالي",
+      "producedFromPlanned": "تم إنتاج {{produced}} من {{planned}}",
+      "lineName": "الخط: {{line}}"
+    },
+    "noActivePlan": "لا توجد خطة إنتاج نشطة حالياً",
+    "noActivePlanHint": "سيتم عرض تفاصيل الخطة عند تفعيلها",
+    "alerts": {
+      "title": "تنبيهات",
+      "progressBehind": "التقدم متأخر عن الجدول الزمني — المتوقع {{expected}}% والفعلي {{actual}}%",
+      "highWasteRatio": "نسبة الهالك مرتفعة ({{ratio}}%) — تحقق من جودة المواد أو إعدادات الخط"
+    }
+  },
+  "table": {
+    "actions": "إجراءات",
+    "emptyTitle": "لا توجد بيانات"
+  },
+  "filter": {
+    "searchPlaceholder": "بحث...",
+    "selectPlaceholder": "اختر...",
+    "from": "من",
+    "to": "إلى",
+    "apply": "عرض",
+    "clearCount": "مسح ({{count}})"
+  },
+  "bulkActions": {
+    "selectedCount": "{{count}} محدد",
+    "clearSelection": "إلغاء التحديد"
+  },
+  "jobs": {
+    "tasks": "المهام",
+    "runningOperations": "العمليات الجارية",
+    "activeOperations": "{{count}} عملية نشطة",
+    "allOperationsCompleted": "جميع العمليات منتهية",
+    "hideDetails": "إخفاء التفاصيل",
+    "showDetails": "عرض التفاصيل",
+    "rowsProgress": "{{processed}} / {{total}} صف",
+    "addedRows": "{{count}} صف مضاف",
+    "failedRows": "{{count}} صف فشل",
+    "viewReport": "عرض التقرير",
+    "retry": "إعادة المحاولة",
+    "remove": "حذف",
+    "status": {
+      "pending": "في الانتظار",
+      "uploading": "جاري الرفع",
+      "processing": "جاري المعالجة",
+      "completed": "مكتمل",
+      "failed": "فشل"
+    }
+  },
+  "barcodeScanner": {
+    "title": "مسح الباركود بالكاميرا",
+    "hint": "وجّه الكاميرا نحو باركود الموظف",
+    "cameraError": "لم يتم العثور على كاميرا أو تم رفض الإذن"
+  },
   "topbar": {
     "openMenu": "فتح القائمة",
     "expandSidebar": "توسيع القائمة الجانبية",
@@ -495,6 +615,130 @@
         "idle": "متوقف",
         "warning": "تنبيه"
       }
+    },
+    "supervisorAssignmentHistory": {
+      "title": "سجل التعيينات — {{lineName}}",
+      "loading": "جاري تحميل السجل...",
+      "empty": "لا يوجد سجل تعيينات لهذا الخط",
+      "actions": {
+        "assign": "تعيين",
+        "change": "تغيير",
+        "unassign": "فك التعيين"
+      },
+      "table": {
+        "date": "التاريخ",
+        "supervisor": "المشرف",
+        "action": "الإجراء",
+        "by": "بواسطة"
+      }
+    },
+    "createWarehouse": {
+      "requiredFieldsError": "اسم المخزن والكود مطلوبان.",
+      "createSuccess": "تمت إضافة المخزن بنجاح.",
+      "createError": "تعذر إضافة المخزن. حاول مرة أخرى.",
+      "title": "إضافة مخزن جديد",
+      "namePlaceholder": "اسم المخزن",
+      "codePlaceholder": "كود المخزن",
+      "addWarehouse": "إضافة مخزن"
+    },
+    "componentScrap": {
+      "title": "هالك المكونات",
+      "subtitle": "اختر المكونات المرتبطة بالمنتج وحدد كمية الهالك لكل مكون.",
+      "loading": "جاري تحميل مكونات المنتج...",
+      "empty": "لا توجد مكونات مرتبطة بهذا المنتج.",
+      "selectedCount": "تم اختيار {{selected}} / {{total}} مكون",
+      "addComponent": "إضافة مكون",
+      "component": "المكون",
+      "selectComponent": "اختر المكون",
+      "componentMeta": "للقطعة: {{quantityUsed}} | تكلفة: {{unitCost}} | رصيد المفكك: {{balanceInDecomposed}}",
+      "scrapQuantity": "كمية الهالك",
+      "remove": "حذف",
+      "duplicateError": "لا يمكن تكرار نفس المكون أكثر من مرة.",
+      "quantityError": "كل كمية هالك يجب أن تكون أكبر من صفر.",
+      "save": "حفظ هالك المكونات"
+    },
+    "attendanceShiftRules": {
+      "title": "قواعد البصمة للورديات",
+      "loadError": "تعذر تحميل الورديات",
+      "saveSuccess": "تم حفظ قواعد الوردية بنجاح",
+      "saveError": "تعذر حفظ قواعد الوردية",
+      "enterCodesError": "أدخل أكواد موظفين أولاً",
+      "missingCodes": " - غير موجود: {{codes}}",
+      "assignmentSummary": "تم التعيين لـ {{updated}} موظف من أصل {{total}}{{missingText}}",
+      "assignSuccess": "تم تطبيق تعيين الأكواد",
+      "assignError": "تعذر تعيين الأكواد",
+      "selectShift": "اختر الوردية",
+      "selectShiftPlaceholder": "اختر وردية",
+      "shiftStart": "بداية الوردية",
+      "shiftEnd": "نهاية الوردية",
+      "latestCheckIn": "آخر وقت لاحتساب الدخول",
+      "firstCheckOut": "أول وقت لاحتساب الخروج",
+      "breakMinutes": "دقائق الاستراحة",
+      "lateGraceMinutes": "سماح التأخير (دقيقة)",
+      "crossesMidnight": "تعبر منتصف الليل",
+      "shiftActive": "الوردية نشطة",
+      "assignCodesTitle": "تعيين أكواد الموظفين لهذه الوردية",
+      "assignCodesHint": "أدخل الأكواد مفصولة بسطر أو فاصلة — مثال: 1001,1002,1003",
+      "employeeCodes": "أكواد الموظفين",
+      "assigning": "جار التعيين...",
+      "assignCodes": "تعيين الأكواد",
+      "saving": "جاري الحفظ...",
+      "saveRules": "حفظ قواعد الوردية"
+    },
+    "createRawMaterial": {
+      "requiredFieldsError": "اسم المادة الخام والكود مطلوبان.",
+      "updateError": "تعذر تعديل المادة الخام. حاول مرة أخرى.",
+      "createError": "تعذر إضافة المادة الخام. حاول مرة أخرى.",
+      "editTitle": "تعديل مادة خام",
+      "createTitle": "إضافة مادة خام",
+      "namePlaceholder": "اسم المادة الخام",
+      "codePlaceholder": "الكود",
+      "unitPlaceholder": "الوحدة",
+      "categoryOptional": "فئة المادة الخام (اختياري)",
+      "minStockPlaceholder": "الحد الأدنى",
+      "saveChanges": "حفظ التعديلات",
+      "addRawMaterial": "إضافة مادة خام"
+    },
+    "createProduct": {
+      "createSuccess": "تم إضافة المنتج بنجاح",
+      "saveError": "تعذر حفظ المنتج. حاول مرة أخرى.",
+      "title": "إضافة منتج جديد",
+      "productNameRequired": "اسم المنتج *",
+      "productNamePlaceholder": "مثال: محرك هيدروليكي H-400",
+      "codeRequired": "الكود *",
+      "categoryModelRequired": "الفئة / الموديل *",
+      "categoryModelPlaceholder": "اختر أو اكتب فئة",
+      "sellingPrice": "سعر البيع (ج.م)",
+      "autoDeductScrap": "خصم هالك المكونات تلقائياً من مخزن المفكك أثناء تقرير الإنتاج",
+      "chineseUnitCost": "تكلفة الوحدة الصينية (ج.م)",
+      "innerBoxCost": "تكلفة العلبة الداخلية (ج.م)",
+      "outerCartonCost": "تكلفة الكرتونة الخارجية (ج.م)",
+      "unitsPerCarton": "عدد الوحدات في الكرتونة",
+      "addProduct": "إضافة المنتج"
+    },
+    "productionPlanFollowUp": {
+      "loadComponentsError": "تعذر تحميل مكونات المنتج.",
+      "invalidComponentError": "اختر مكون صالح.",
+      "saveError": "تعذر حفظ المتابعة.",
+      "title": "إضافة متابعة نقص مكونات",
+      "subtitle": "تسجيل نقص مكوّن مرتبط بخطة الإنتاج",
+      "product": "المنتج",
+      "line": "الخط",
+      "componentRequired": "المكون *",
+      "selectComponent": "اختر المكون...",
+      "loadingComponents": "جاري تحميل المكونات...",
+      "shortageQtyRequired": "الكمية الناقصة *",
+      "shortageQtyPlaceholder": "مثال: 250",
+      "note": "ملحوظة",
+      "notePlaceholder": "اكتب سبب النقص أو أي تفاصيل إضافية...",
+      "saveFollowUp": "حفظ المتابعة"
+    },
+    "dailyWelcome": {
+      "morningGreeting": "صباح الخير",
+      "eveningGreeting": "مساء الخير",
+      "subtitle": "أهلا بك في نظام Hakimo ERP.",
+      "message": "نتمنى لك يوم عمل موفق. يمكنك الآن متابعة التقارير والمهام والإشعارات اليومية بسهولة.",
+      "continue": "متابعة"
     },
     "shared": {
       "listSeparator": "، "

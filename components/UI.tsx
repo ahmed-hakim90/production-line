@@ -1,5 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
   Boxes,
@@ -256,9 +257,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   options,
   value,
   onChange,
-  placeholder = 'اختر...',
+  placeholder,
   className = '',
 }) => {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t('shared.selectPlaceholder');
   const [open, setOpen] = useState(false);
 
   const selectedLabel = useMemo(
@@ -291,14 +294,14 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         >
           <span className="flex items-center gap-2 min-w-0">
             <Search className="h-4 w-4 text-[var(--color-text-muted)] shrink-0" />
-            <span className="truncate text-[var(--color-text)]">{selectedLabel || placeholder}</span>
+            <span className="truncate text-[var(--color-text)]">{selectedLabel || resolvedPlaceholder}</span>
           </span>
           <span className="flex items-center gap-1">
             {value && (
               <span
                 role="button"
                 tabIndex={0}
-                aria-label="مسح الاختيار"
+                aria-label={t('shared.clearSelection')}
                 className="inline-flex h-5 w-5 items-center justify-center rounded-sm hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
                 onClick={handleClear}
                 onKeyDown={(e) => {
@@ -322,9 +325,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
-          <CommandInput placeholder={placeholder} />
+          <CommandInput placeholder={resolvedPlaceholder} />
           <CommandList>
-            <CommandEmpty>لا توجد نتائج</CommandEmpty>
+            <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
             <CommandGroup>
               {options.map((opt) => (
                 <CommandItem key={opt.value} value={opt.label} onSelect={() => handleSelect(opt.value)}>

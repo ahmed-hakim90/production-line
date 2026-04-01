@@ -17,6 +17,7 @@
  *   />
  */
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,6 +78,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onClear,
   extra,
 }) => {
+  const { t } = useTranslation();
   const visibleSelects = selects?.filter((s) => !s.hidden) ?? [];
 
   return (
@@ -88,7 +90,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <Input
               value={search.value}
               onChange={(e) => search.onChange(e.target.value)}
-              placeholder={search.placeholder ?? 'بحث...'}
+              placeholder={search.placeholder ?? t('filter.searchPlaceholder')}
               className="!border-0 !bg-transparent !shadow-none !ring-0 focus-visible:!ring-0"
             />
             {search.value && (
@@ -115,7 +117,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               className={`erp-filter-select${sel.value ? ' active' : ''}`}
               style={{ minWidth: sel.minWidth ?? 130 }}
             >
-              <SelectValue placeholder={sel.placeholder ?? 'اختر...'} />
+              <SelectValue placeholder={sel.placeholder ?? t('filter.selectPlaceholder')} />
             </SelectTrigger>
             <SelectContent>
               {sel.placeholder && <SelectItem value="__all__">{sel.placeholder}</SelectItem>}
@@ -151,11 +153,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           {dateRange && (
             <>
               <div className="erp-filter-date">
-                <span className="erp-filter-label">من</span>
+                <span className="erp-filter-label">{t('filter.from')}</span>
                 <input type="date" value={dateRange.start} onChange={(e) => dateRange.onStartChange(e.target.value)} />
               </div>
               <div className="erp-filter-date">
-                <span className="erp-filter-label">إلى</span>
+                <span className="erp-filter-label">{t('filter.to')}</span>
                 <input type="date" value={dateRange.end} onChange={(e) => dateRange.onEndChange(e.target.value)} />
               </div>
               {dateRange.onApply && (
@@ -164,7 +166,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                     ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />
                     : <Search style={{ width: 14, height: 14 }} />
                   }
-                  عرض
+                  {t('filter.apply')}
                 </Button>
               )}
             </>
@@ -175,7 +177,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           {activeCount > 0 && onClear && (
             <button className="erp-filter-clear" onClick={onClear} type="button">
               <X style={{ width: 13, height: 13 }} />
-              مسح ({activeCount})
+              {t('filter.clearCount', { count: activeCount })}
             </button>
           )}
         </div>

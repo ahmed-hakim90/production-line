@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { withTenantPath } from '@/lib/tenantPaths';
 import {
   Bell,
@@ -59,20 +60,21 @@ function renderNotificationIcon(name?: string, className?: string, size = 18) {
   return <Circle size={size} className={className} />;
 }
 
-function timeAgo(createdAt: any): string {
+function timeAgo(createdAt: any, t: (key: string, options?: Record<string, unknown>) => string): string {
   if (!createdAt) return '';
   const date = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
   const diff = Date.now() - date.getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'الآن';
-  if (minutes < 60) return `منذ ${minutes} د`;
+  if (minutes < 1) return t('notifications.timeAgo.now');
+  if (minutes < 60) return t('notifications.timeAgo.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `منذ ${hours} س`;
+  if (hours < 24) return t('notifications.timeAgo.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `منذ ${days} يوم`;
+  return t('notifications.timeAgo.daysAgo', { count: days });
 }
 
 export const NotificationBell: React.FC = () => {
+  const { t } = useTranslation();
   const {
     notifications,
     fetchNotifications,
@@ -151,7 +153,7 @@ export const NotificationBell: React.FC = () => {
           <div className="erp-notif-head">
             <div className="flex items-center gap-2">
               <Bell size={18} className="text-[var(--color-text-muted)]" />
-              <span className="text-[13px] font-bold text-[var(--color-text)]">الإشعارات</span>
+              <span className="text-[13px] font-bold text-[var(--color-text)]">{t('notifications.title')}</span>
               {unreadCount > 0 && (
                 <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold">
                   {unreadCount}
@@ -163,7 +165,7 @@ export const NotificationBell: React.FC = () => {
                 onClick={handleMarkAll}
                 className="text-[11px] font-semibold text-primary hover:underline"
               >
-                تعيين الكل كمقروء
+                {t('notifications.markAllRead')}
               </button>
             )}
           </div>
@@ -172,7 +174,7 @@ export const NotificationBell: React.FC = () => {
             {notifications.length === 0 ? (
               <div className="text-center py-10">
                 <BellOff size={40} className="text-[var(--color-text-muted)] mb-2 block mx-auto" style={{ opacity: 0.35 }} />
-                <p className="text-xs text-[var(--color-text-muted)]">لا توجد إشعارات</p>
+                <p className="text-xs text-[var(--color-text-muted)]">{t('notifications.empty')}</p>
               </div>
             ) : (
               notifications.slice(0, 30).map((n) => (
@@ -187,7 +189,7 @@ export const NotificationBell: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-[var(--color-text)] truncate">{n.title}</p>
                     <p className="text-[12px] text-[var(--color-text-muted)] mt-0.5 line-clamp-2">{n.message}</p>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-1">{timeAgo(n.createdAt)}</p>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-1">{timeAgo(n.createdAt, t)}</p>
                   </div>
                   {!n.isRead && <span className="erp-notif-dot shrink-0"></span>}
                 </button>

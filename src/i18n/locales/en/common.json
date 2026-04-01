@@ -12,6 +12,126 @@
     "cancel": "Cancel",
     "close": "Close"
   },
+  "shared": {
+    "back": "Back",
+    "clearSelection": "Clear selection",
+    "noResults": "No results",
+    "selectPlaceholder": "Select..."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "empty": "No notifications",
+    "timeAgo": {
+      "now": "Now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}} day ago"
+    }
+  },
+  "pageHeader": {
+    "moreActions": "More actions"
+  },
+  "dashboard": {
+    "quickLink": "Quick link",
+    "customTextWidget": "Custom text widget",
+    "period": {
+      "daily": "Today",
+      "yesterday": "Yesterday",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month"
+    },
+    "supervisorTitle": "Supervisor Dashboard",
+    "welcomeEmployee": "Hello {{name}} — track your performance and output",
+    "loadingData": "Loading data...",
+    "unitWithPeriod": "unit - {{period}}",
+    "wasteUnits": "{{count}} waste units",
+    "unitsPerDay": "units/day ({{days}} days)",
+    "hoursValue": "{{value}} h",
+    "noReportsForPeriod": "No reports for {{period}}",
+    "goodPerformance": "Your performance is good — there are no alerts right now.",
+    "personalPerformance": "Personal Performance",
+    "status": {
+      "inProgress": "In progress",
+      "planned": "Planned"
+    },
+    "kpi": {
+      "totalProduction": "Total production",
+      "planAchievement": "Plan achievement",
+      "fromCurrentPlan": "From current plan",
+      "remainingQty": "Remaining quantity",
+      "remainingUnits": "units remaining",
+      "wasteRatio": "Waste ratio",
+      "dailyAverage": "Daily average",
+      "reportsCount": "Reports count",
+      "avgPerHour": "Avg production/hour",
+      "workHours": "Work hours",
+      "waste": "Waste"
+    },
+    "activePlan": {
+      "title": "Active plan",
+      "subtitle": "Track current production plan progress",
+      "product": "Product",
+      "plannedQty": "Planned quantity",
+      "producedInPeriod": "Produced ({{period}})",
+      "remainingTotal": "Remaining (total)",
+      "totalProgress": "Total progress",
+      "producedFromPlanned": "Produced {{produced}} of {{planned}}",
+      "lineName": "Line: {{line}}"
+    },
+    "noActivePlan": "No active production plan at the moment",
+    "noActivePlanHint": "Plan details will appear once activated",
+    "alerts": {
+      "title": "Alerts",
+      "progressBehind": "Progress is behind schedule - expected {{expected}}% and actual {{actual}}%",
+      "highWasteRatio": "Waste ratio is high ({{ratio}}%) - check material quality or line setup"
+    }
+  },
+  "table": {
+    "actions": "Actions",
+    "emptyTitle": "No data"
+  },
+  "filter": {
+    "searchPlaceholder": "Search...",
+    "selectPlaceholder": "Select...",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "clearCount": "Clear ({{count}})"
+  },
+  "bulkActions": {
+    "selectedCount": "{{count}} selected",
+    "clearSelection": "Clear selection"
+  },
+  "jobs": {
+    "tasks": "Tasks",
+    "runningOperations": "Running operations",
+    "activeOperations": "{{count}} active operations",
+    "allOperationsCompleted": "All operations completed",
+    "hideDetails": "Hide details",
+    "showDetails": "Show details",
+    "rowsProgress": "{{processed}} / {{total}} rows",
+    "addedRows": "{{count}} rows added",
+    "failedRows": "{{count}} rows failed",
+    "viewReport": "View report",
+    "retry": "Retry",
+    "remove": "Remove",
+    "status": {
+      "pending": "Pending",
+      "uploading": "Uploading",
+      "processing": "Processing",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
+  },
+  "barcodeScanner": {
+    "title": "Scan barcode with camera",
+    "hint": "Point the camera at the employee barcode",
+    "cameraError": "No camera found or permission was denied"
+  },
   "topbar": {
     "openMenu": "Open menu",
     "expandSidebar": "Expand sidebar",
@@ -495,6 +615,130 @@
         "idle": "Idle",
         "warning": "Warning"
       }
+    },
+    "supervisorAssignmentHistory": {
+      "title": "Assignment history — {{lineName}}",
+      "loading": "Loading history...",
+      "empty": "No assignment history for this line",
+      "actions": {
+        "assign": "Assign",
+        "change": "Change",
+        "unassign": "Unassign"
+      },
+      "table": {
+        "date": "Date",
+        "supervisor": "Supervisor",
+        "action": "Action",
+        "by": "By"
+      }
+    },
+    "createWarehouse": {
+      "requiredFieldsError": "Warehouse name and code are required.",
+      "createSuccess": "Warehouse added successfully.",
+      "createError": "Unable to add warehouse. Please try again.",
+      "title": "Add New Warehouse",
+      "namePlaceholder": "Warehouse name",
+      "codePlaceholder": "Warehouse code",
+      "addWarehouse": "Add warehouse"
+    },
+    "componentScrap": {
+      "title": "Component Scrap",
+      "subtitle": "Select product-linked components and set scrap quantity for each component.",
+      "loading": "Loading product components...",
+      "empty": "No components are linked to this product.",
+      "selectedCount": "Selected {{selected}} / {{total}} components",
+      "addComponent": "Add component",
+      "component": "Component",
+      "selectComponent": "Select component",
+      "componentMeta": "Per unit: {{quantityUsed}} | Cost: {{unitCost}} | Decomposed balance: {{balanceInDecomposed}}",
+      "scrapQuantity": "Scrap quantity",
+      "remove": "Remove",
+      "duplicateError": "You cannot repeat the same component more than once.",
+      "quantityError": "Each scrap quantity must be greater than zero.",
+      "save": "Save component scrap"
+    },
+    "attendanceShiftRules": {
+      "title": "Attendance Shift Rules",
+      "loadError": "Unable to load shifts",
+      "saveSuccess": "Shift rules saved successfully",
+      "saveError": "Unable to save shift rules",
+      "enterCodesError": "Enter employee codes first",
+      "missingCodes": " - Missing: {{codes}}",
+      "assignmentSummary": "Assigned {{updated}} employee(s) out of {{total}}{{missingText}}",
+      "assignSuccess": "Code assignment applied successfully",
+      "assignError": "Unable to assign codes",
+      "selectShift": "Select shift",
+      "selectShiftPlaceholder": "Select a shift",
+      "shiftStart": "Shift start",
+      "shiftEnd": "Shift end",
+      "latestCheckIn": "Latest check-in time",
+      "firstCheckOut": "Earliest check-out time",
+      "breakMinutes": "Break minutes",
+      "lateGraceMinutes": "Late grace (minutes)",
+      "crossesMidnight": "Crosses midnight",
+      "shiftActive": "Shift is active",
+      "assignCodesTitle": "Assign employee codes to this shift",
+      "assignCodesHint": "Enter codes separated by new line or comma — example: 1001,1002,1003",
+      "employeeCodes": "Employee codes",
+      "assigning": "Assigning...",
+      "assignCodes": "Assign codes",
+      "saving": "Saving...",
+      "saveRules": "Save shift rules"
+    },
+    "createRawMaterial": {
+      "requiredFieldsError": "Raw material name and code are required.",
+      "updateError": "Unable to update raw material. Please try again.",
+      "createError": "Unable to add raw material. Please try again.",
+      "editTitle": "Edit Raw Material",
+      "createTitle": "Add Raw Material",
+      "namePlaceholder": "Raw material name",
+      "codePlaceholder": "Code",
+      "unitPlaceholder": "Unit",
+      "categoryOptional": "Raw material category (optional)",
+      "minStockPlaceholder": "Minimum stock",
+      "saveChanges": "Save changes",
+      "addRawMaterial": "Add raw material"
+    },
+    "createProduct": {
+      "createSuccess": "Product added successfully",
+      "saveError": "Unable to save product. Please try again.",
+      "title": "Add New Product",
+      "productNameRequired": "Product name *",
+      "productNamePlaceholder": "Example: Hydraulic Motor H-400",
+      "codeRequired": "Code *",
+      "categoryModelRequired": "Category / model *",
+      "categoryModelPlaceholder": "Select or type a category",
+      "sellingPrice": "Selling price (EGP)",
+      "autoDeductScrap": "Auto-deduct component scrap from decomposed warehouse during production report",
+      "chineseUnitCost": "Chinese unit cost (EGP)",
+      "innerBoxCost": "Inner box cost (EGP)",
+      "outerCartonCost": "Outer carton cost (EGP)",
+      "unitsPerCarton": "Units per carton",
+      "addProduct": "Add product"
+    },
+    "productionPlanFollowUp": {
+      "loadComponentsError": "Unable to load product components.",
+      "invalidComponentError": "Select a valid component.",
+      "saveError": "Unable to save follow-up.",
+      "title": "Add Component Shortage Follow-up",
+      "subtitle": "Record a component shortage linked to a production plan",
+      "product": "Product",
+      "line": "Line",
+      "componentRequired": "Component *",
+      "selectComponent": "Select component...",
+      "loadingComponents": "Loading components...",
+      "shortageQtyRequired": "Shortage quantity *",
+      "shortageQtyPlaceholder": "Example: 250",
+      "note": "Note",
+      "notePlaceholder": "Write shortage reason or any additional details...",
+      "saveFollowUp": "Save follow-up"
+    },
+    "dailyWelcome": {
+      "morningGreeting": "Good morning",
+      "eveningGreeting": "Good evening",
+      "subtitle": "Welcome to Hakimo ERP.",
+      "message": "Have a productive day. You can now track reports, tasks, and daily notifications with ease.",
+      "continue": "Continue"
     },
     "shared": {
       "listSeparator": ", "

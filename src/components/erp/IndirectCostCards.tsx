@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export interface IndirectCostItem {
@@ -95,6 +96,7 @@ const ICON_CONFIG: Record<IndirectCostItem["iconType"], { bg: string; svg: React
 };
 
 function CostCard({ item }: { item: IndirectCostItem }) {
+  const { t } = useTranslation();
   const config = ICON_CONFIG[item.iconType];
   const Icon = config.svg;
   const customColor = item.iconType === "custom" ? item.iconColor ?? "#6B7280" : undefined;
@@ -126,14 +128,14 @@ function CostCard({ item }: { item: IndirectCostItem }) {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}{" "}
-          ج.م/قطعة
+          {t("erpComponents.indirectCostCards.currencyPerUnit")}
         </p>
         <p className="text-[12px] font-normal text-[#6B6B64]">
           {item.monthlyTotal.toLocaleString("ar-EG", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}{" "}
-          ج.م شهري
+          {t("erpComponents.indirectCostCards.currencyMonthly")}
         </p>
       </div>
     </article>
@@ -146,6 +148,7 @@ interface IndirectCostCardsProps {
 }
 
 export function IndirectCostCards({ items, className }: IndirectCostCardsProps) {
+  const { t } = useTranslation();
   const totalPerUnit = items.reduce((sum, item) => sum + item.costPerUnit, 0);
   const totalMonthly = items.reduce((sum, item) => sum + item.monthlyTotal, 0);
 
@@ -156,7 +159,7 @@ export function IndirectCostCards({ items, className }: IndirectCostCardsProps) 
         style={{ border: "0.5px solid rgba(0,0,0,0.12)" }}
       >
         <p className="text-[13px] font-medium text-[#444441]">
-          التكاليف الصناعية غير المباشرة — {items.length.toLocaleString("ar-EG")} بنود
+          {t("erpComponents.indirectCostCards.headerTitle", { count: items.length.toLocaleString("ar-EG") })}
         </p>
       </div>
 
@@ -171,21 +174,21 @@ export function IndirectCostCards({ items, className }: IndirectCostCardsProps) 
         style={{ border: "0.5px solid rgba(0,0,0,0.12)" }}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[13px] font-medium text-[rgb(var(--color-primary))]">إجمالي التكاليف غير المباشرة</p>
+          <p className="text-[13px] font-medium text-[rgb(var(--color-primary))]">{t("erpComponents.indirectCostCards.totalTitle")}</p>
           <div className="text-left">
             <p className="text-[14px] font-medium text-[rgb(var(--color-primary))]">
               {totalPerUnit.toLocaleString("ar-EG", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}{" "}
-              ج.م/قطعة
+              {t("erpComponents.indirectCostCards.currencyPerUnit")}
             </p>
             <p className="text-[12px] font-normal text-[rgb(var(--color-primary)/0.85)]">
               {totalMonthly.toLocaleString("ar-EG", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}{" "}
-              ج.م شهري إجمالي
+              {t("erpComponents.indirectCostCards.currencyMonthlyTotal")}
             </p>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 
 type StatusType = "success" | "warning" | "danger" | "info" | "muted"
 
@@ -19,22 +20,6 @@ const dotColors: Record<StatusType, string> = {
   muted: "bg-[#94A3B8]",
 }
 
-const labelVariantMap: Record<string, StatusType> = {
-  "يعمل حالياً": "success",
-  "نشط": "success",
-  "مكتمل": "success",
-  "تم الإرسال": "success",
-  "قيد التنفيذ": "warning",
-  "في المسار": "warning",
-  "قيد الاعتماد": "warning",
-  "متأخر": "danger",
-  "موقف": "danger",
-  "لم يرسل": "danger",
-  "بدون مشرف": "danger",
-  "مخطط": "info",
-  "ضعيف": "muted",
-}
-
 interface StatusBadgeProps {
   label: string
   type?: StatusType
@@ -43,6 +28,35 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ label, type, dot, className }: StatusBadgeProps) {
+  const { t } = useTranslation()
+  const labelVariantMap: Record<string, StatusType> = {
+    [t("erpComponents.statusBadge.labels.currentlyWorking")]: "success",
+    "يعمل حالياً": "success",
+    [t("erpComponents.statusBadge.labels.active")]: "success",
+    "نشط": "success",
+    [t("erpComponents.statusBadge.labels.completed")]: "success",
+    "مكتمل": "success",
+    [t("erpComponents.statusBadge.labels.sent")]: "success",
+    "تم الإرسال": "success",
+    [t("erpComponents.statusBadge.labels.inProgress")]: "warning",
+    "قيد التنفيذ": "warning",
+    [t("erpComponents.statusBadge.labels.onTrack")]: "warning",
+    "في المسار": "warning",
+    [t("erpComponents.statusBadge.labels.pendingApproval")]: "warning",
+    "قيد الاعتماد": "warning",
+    [t("erpComponents.statusBadge.labels.delayed")]: "danger",
+    "متأخر": "danger",
+    [t("erpComponents.statusBadge.labels.stopped")]: "danger",
+    "موقف": "danger",
+    [t("erpComponents.statusBadge.labels.notSent")]: "danger",
+    "لم يرسل": "danger",
+    [t("erpComponents.statusBadge.labels.noSupervisor")]: "danger",
+    "بدون مشرف": "danger",
+    [t("erpComponents.statusBadge.labels.planned")]: "info",
+    "مخطط": "info",
+    [t("erpComponents.statusBadge.labels.weak")]: "muted",
+    "ضعيف": "muted",
+  }
   const resolvedType = type ?? labelVariantMap[label] ?? "muted"
 
   return (

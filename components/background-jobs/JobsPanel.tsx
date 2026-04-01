@@ -1,11 +1,13 @@
 import React from 'react';
 import { CheckCheck, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { JobCard } from './JobCard';
 import { useJobsStore } from './useJobsStore';
 
 const activeStatuses = new Set(['pending', 'uploading', 'processing']);
 
 export const TasksNavButton: React.FC = () => {
+  const { t } = useTranslation();
   const jobs = useJobsStore((s) => s.jobs);
   const setHistoryOpen = useJobsStore((s) => s.setHistoryOpen);
   const setPanelHidden = useJobsStore((s) => s.setPanelHidden);
@@ -20,7 +22,7 @@ export const TasksNavButton: React.FC = () => {
         setPanelMinimized(true);
       }}
       className="relative p-2 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] rounded-full transition-colors"
-      title="Tasks"
+      title={t('jobs.tasks')}
     >
       <CheckCheck size={20} />
       {activeCount > 0 && (
@@ -33,6 +35,7 @@ export const TasksNavButton: React.FC = () => {
 };
 
 export const JobsPanel: React.FC = () => {
+  const { t } = useTranslation();
   const jobs = useJobsStore((s) => s.jobs);
   const panelMinimized = useJobsStore((s) => s.panelMinimized);
   const panelHidden = useJobsStore((s) => s.panelHidden);
@@ -54,16 +57,16 @@ export const JobsPanel: React.FC = () => {
       {/* Panel header */}
       <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between bg-[#f8f9fa]">
         <div>
-          <p className="text-[13px] font-bold text-[var(--color-text)]">العمليات الجارية</p>
+          <p className="text-[13px] font-bold text-[var(--color-text)]">{t('jobs.runningOperations')}</p>
           <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-            {activeCount > 0 ? `${activeCount} عملية نشطة` : 'جميع العمليات منتهية'}
+            {activeCount > 0 ? t('jobs.activeOperations', { count: activeCount }) : t('jobs.allOperationsCompleted')}
           </p>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setPanelHidden(true)}
             className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors"
-            title="إغلاق"
+            title={t('shared.close')}
           >
             <X size={18} />
           </button>

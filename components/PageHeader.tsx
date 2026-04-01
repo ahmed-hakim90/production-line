@@ -16,6 +16,7 @@
  */
 import React, { useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { tenantHomePath } from '@/lib/tenantPaths';
 import {
   Check,
@@ -137,6 +138,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   extra,
   loading,
 }) => {
+  const { t } = useTranslation();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
   const setPageBack = usePageBackSetter();
@@ -176,7 +178,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   }, [backAction, backConfig, navigate, tenantSlug]);
 
   const backDisabled = backConfig?.disabled ?? false;
-  const backLabel = backConfig?.label || 'رجوع';
+  const backLabel = backConfig?.label || t('shared.back');
 
   useEffect(() => {
     if (!setPageBack) return;
@@ -245,7 +247,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         {visibleMoreActions.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" className="btn btn-secondary" title="المزيد من الإجراءات">
+              <Button type="button" variant="outline" className="btn btn-secondary" title={t('pageHeader.moreActions')}>
                 <MoreHorizontal size={16} />
               </Button>
             </DropdownMenuTrigger>

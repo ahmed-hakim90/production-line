@@ -1,5 +1,6 @@
 import { ReactNode } from "react"
 import { MoreHorizontal } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ interface RowActionsMenuProps {
 export function RowActionsMenu({
   items,
 }: RowActionsMenuProps) {
+  const { t } = useTranslation()
   const { dir } = useAppDirection();
   const safeItems = items.slice(0, 7)
 
@@ -46,7 +48,7 @@ export function RowActionsMenu({
           variant="ghost"
           size="icon"
           className="h-8 w-8 rounded-lg border border-slate-200 text-[#64748B] hover:bg-slate-50 hover:text-[#4F46E5]"
-          aria-label="إجراءات الصف"
+          aria-label={t("erpComponents.rowActionsMenu.ariaLabel")}
         >
           <MoreHorizontal className="h-4 w-4" />
         </Button>

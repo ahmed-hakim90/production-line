@@ -5,6 +5,7 @@
  */
 import { ReactNode, useMemo, useState } from "react"
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -41,12 +42,15 @@ export function DataTable<T>({
   columns,
   data,
   isLoading,
-  emptyMessage = "لا توجد بيانات",
+  emptyMessage,
   rowClassName,
   getRowActions,
-  actionsHeader = "الإجراءات",
+  actionsHeader,
 }: DataTableProps<T>) {
+  const { t } = useTranslation()
   const hasActions = Boolean(getRowActions)
+  const resolvedEmptyMessage = emptyMessage ?? t("erpComponents.dataTable.emptyMessage")
+  const resolvedActionsHeader = actionsHeader ?? t("erpComponents.dataTable.actionsHeader")
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
 
@@ -112,7 +116,7 @@ export function DataTable<T>({
             ))}
             {hasActions && (
               <TableHead className="w-[76px] text-left text-xs font-medium text-[#64748B]">
-                {actionsHeader}
+                {resolvedActionsHeader}
               </TableHead>
             )}
           </TableRow>
@@ -139,7 +143,7 @@ export function DataTable<T>({
                 colSpan={columns.length + (hasActions ? 1 : 0)}
                 className="h-24 text-center text-sm font-normal text-[#64748B]"
               >
-                {emptyMessage}
+                {resolvedEmptyMessage}
               </TableCell>
             </TableRow>
           ) : (

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   CheckSquare,
   Download,
@@ -41,6 +42,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   actions,
   onClear,
 }) => {
+  const { t } = useTranslation();
   const { can } = usePermission();
 
   if (selectedCount === 0) return null;
@@ -65,7 +67,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
           <CheckSquare size={18} className="text-primary" />
         </div>
         <span className="text-sm font-bold text-primary">
-          {selectedCount} محدد
+          {t('bulkActions.selectedCount', { count: selectedCount })}
         </span>
       </div>
 
@@ -93,7 +95,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
       <button
         onClick={onClear}
         className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 dark:hover:text-[var(--color-text-muted)] hover:bg-[#e8eaed]/50/50 rounded-[var(--border-radius-base)] transition-all shrink-0"
-        title="إلغاء التحديد"
+        title={t('bulkActions.clearSelection')}
       >
         <X size={18} />
       </button>

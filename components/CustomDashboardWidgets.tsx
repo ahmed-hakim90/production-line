@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card, Badge } from './UI';
 import { usePermission } from '@/utils/permissions';
 import type { SystemSettings, CustomWidgetConfig } from '@/types';
@@ -23,6 +24,7 @@ export const CustomDashboardWidgetItem: React.FC<{
   widget: CustomWidgetConfig;
   navigate: NavigateFunction;
 }> = ({ widget, navigate }) => {
+  const { t } = useTranslation();
   if (widget.type === 'quick_link') {
     return (
       <Card>
@@ -38,7 +40,7 @@ export const CustomDashboardWidgetItem: React.FC<{
             </span>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)] truncate">{widget.label}</p>
-              <p className="text-xs text-[var(--color-text-muted)] truncate">{widget.description || widget.target || 'رابط سريع'}</p>
+              <p className="text-xs text-[var(--color-text-muted)] truncate">{widget.description || widget.target || t('dashboard.quickLink')}</p>
             </div>
           </div>
           {widget.target && <Badge variant="info">{widget.target}</Badge>}
@@ -78,7 +80,7 @@ export const CustomDashboardWidgetItem: React.FC<{
         <p className="text-sm font-bold text-[var(--color-text)]">{widget.label}</p>
       </div>
       <p className="text-sm text-[var(--color-text-muted)]">
-        {widget.description || 'Widget نصي مخصص'}
+        {widget.description || t('dashboard.customTextWidget')}
       </p>
     </Card>
   );

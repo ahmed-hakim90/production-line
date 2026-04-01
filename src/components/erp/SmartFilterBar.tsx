@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Search, SlidersHorizontal, X, ChevronDown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   Select,
   SelectContent,
@@ -56,7 +57,7 @@ interface SmartFilterBarProps {
 }
 
 export function SmartFilterBar({
-  searchPlaceholder = 'ابحث...',
+  searchPlaceholder,
   searchValue = '',
   onSearchChange,
   periods,
@@ -69,12 +70,15 @@ export function SmartFilterBar({
   advancedFilterValues = {},
   onAdvancedFilterChange,
   onApply,
-  applyLabel = 'عرض',
+  applyLabel,
   extra,
   className,
 }: SmartFilterBarProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const { dir } = useAppDirection();
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t('erpComponents.smartFilterBar.searchPlaceholder');
+  const resolvedApplyLabel = applyLabel ?? t('erpComponents.smartFilterBar.applyLabel');
 
   const activeAdvancedCount = advancedFilters.filter((filter) => {
     const value = advancedFilterValues[filter.key];
@@ -139,7 +143,7 @@ export function SmartFilterBar({
           <input
             value={searchValue}
             onChange={(event) => onSearchChange?.(event.target.value)}
-            placeholder={searchPlaceholder}
+            placeholder={resolvedSearchPlaceholder}
             className="h-[34px] w-full rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
           />
         </div>
@@ -196,7 +200,7 @@ export function SmartFilterBar({
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
-            فلاتر إضافية
+            {t('erpComponents.smartFilterBar.advancedFilters')}
             {activeAdvancedCount > 0 && (
               <span className="min-w-[16px] rounded-full bg-[#4F46E5] px-1.5 py-px text-center text-[10px] leading-none text-white">
                 {activeAdvancedCount}
@@ -215,7 +219,7 @@ export function SmartFilterBar({
           className="flex h-[34px] flex-shrink-0 items-center gap-1.5 rounded-lg bg-[#4F46E5] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4338CA]"
         >
           <Search className="h-3.5 w-3.5" />
-          {applyLabel}
+          {resolvedApplyLabel}
         </button>
       </div>
 
@@ -261,14 +265,14 @@ export function SmartFilterBar({
             onClick={handleClearAll}
             className="h-[34px] flex-shrink-0 rounded-lg border border-slate-200 px-3 text-sm text-slate-500 transition-colors hover:bg-white"
           >
-            مسح الكل
+            {t('erpComponents.smartFilterBar.clearAll')}
           </button>
         </div>
       )}
 
       {activeTags.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2">
-          <span className="flex-shrink-0 text-[11px] text-slate-400">فلاتر نشطة:</span>
+          <span className="flex-shrink-0 text-[11px] text-slate-400">{t('erpComponents.smartFilterBar.activeFilters')}</span>
           {activeTags.map((tag) => (
             <span key={tag.key} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">
               <span className="text-indigo-500">{tag.filterLabel}:</span>
@@ -287,7 +291,7 @@ export function SmartFilterBar({
             onClick={handleClearAll}
             className="mr-auto text-[11px] text-slate-400 hover:text-slate-600"
           >
-            مسح الكل
+            {t('erpComponents.smartFilterBar.clearAll')}
           </button>
         </div>
       )}

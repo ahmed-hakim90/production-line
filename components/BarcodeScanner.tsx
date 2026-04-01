@@ -1,5 +1,6 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { useTranslation } from 'react-i18next';
 
 interface BarcodeScannerProps {
   onScan: (code: string) => void;
@@ -7,6 +8,7 @@ interface BarcodeScannerProps {
 }
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
+  const { t } = useTranslation();
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [error, setError] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,7 +34,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
       )
       .catch((err) => {
         console.error('Camera error:', err);
-        setError('لم يتم العثور على كاميرا أو تم رفض الإذن');
+        setError(t('barcodeScanner.cameraError'));
       });
 
     return () => {
@@ -48,7 +50,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
         ref={containerRef}
       >
         <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="font-bold text-base">مسح الباركود بالكاميرا</h3>
+          <h3 className="font-bold text-base">{t('barcodeScanner.title')}</h3>
           <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <span className="material-icons-round">close</span>
           </button>
@@ -62,14 +64,14 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
                 onClick={onClose}
                 className="mt-4 px-4 py-2 bg-[#f0f2f5] rounded-[var(--border-radius-base)] text-sm font-bold hover:bg-[#e8eaed] transition-colors"
               >
-                إغلاق
+                {t('ui.close')}
               </button>
             </div>
           ) : (
             <>
               <div id="barcode-scanner-view" className="rounded-[var(--border-radius-lg)] overflow-hidden" />
               <p className="text-xs text-[var(--color-text-muted)] text-center mt-3 font-medium">
-                وجّه الكاميرا نحو باركود الموظف
+                {t('barcodeScanner.hint')}
               </p>
             </>
           )}

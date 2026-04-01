@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   BellRing,
@@ -71,24 +72,27 @@ const PERIOD_OPTIONS: { value: Period; label: string; icon: string }[] = [
   { value: 'monthly',   label: 'شهري',    icon: 'calendar_month' },
 ];
 
-const DashboardPeriodFilter: React.FC<{ value: Period; onChange: (p: Period) => void }> = ({ value, onChange }) => (
-  <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 gap-1">
-    {PERIOD_OPTIONS.map((opt) => (
-      <button
-        key={opt.value}
-        onClick={() => onChange(opt.value)}
-        className={`flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
-          value === opt.value
-            ? 'bg-white text-primary'
-            : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
-        }`}
-      >
-        {renderDashboardIcon(opt.icon, 14)}
-        {opt.label}
-      </button>
-    ))}
-  </div>
-);
+const DashboardPeriodFilter: React.FC<{ value: Period; onChange: (p: Period) => void }> = ({ value, onChange }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 gap-1">
+      {PERIOD_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
+            value === opt.value
+              ? 'bg-white text-primary'
+              : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
+          }`}
+        >
+          {renderDashboardIcon(opt.icon, 14)}
+          {t(`dashboard.period.${opt.value}`)}
+        </button>
+      ))}
+    </div>
+  );
+};
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 
@@ -120,6 +124,7 @@ interface Props {
 }
 
 export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeName }) => {
+  const { t } = useTranslation();
   const {
     todayReports, monthlyReports, productionPlans, planReports,
     _rawProducts, _rawLines, loading,
@@ -272,7 +277,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
         items.push({
           type: 'warning',
           icon: 'schedule',
-          text: `التقدم متأخر عن الجدول الزمني — المتوقع ${expectedProgress}% والفعلي ${activePlan.progress}%`,
+          text: t('dashboard.alerts.progressBehind', { expected: expectedProgress, actual: activePlan.progress }),
         });
       }
     }
@@ -281,20 +286,24 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
       items.push({
         type: 'danger',
         icon: 'warning',
-        text: `نسبة الهالك مرتفعة (${kpis.wasteRatio}%) — تحقق من جودة المواد أو إعدادات الخط`,
+        text: t('dashboard.alerts.highWasteRatio', { ratio: kpis.wasteRatio }),
       });
     }
 
     return items;
   }, [activePlan, kpis]);
 
-  const periodLabel = period === 'daily' ? 'اليوم' : period === 'weekly' ? 'هذا الأسبوع' : 'هذا الشهر';
+  const periodLabel = period === 'daily'
+    ? t('dashboard.period.today')
+    : period === 'weekly'
+      ? t('dashboard.period.thisWeek')
+      : t('dashboard.period.thisMonth');
   const isLoadingData = (period === 'yesterday' && yesterdayLoading) || (period === 'weekly' && weeklyLoading);
 
   if (loading) {
     return (
       <div className="space-y-8">
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">لوحة المشرف</h2>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">{t('dashboard.supervisorTitle')}</h2>
         <LoadingSkeleton type="card" rows={4} />
       </div>
     );
@@ -305,9 +314,9 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
       {/* Header + Period Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">لوحة المشرف</h2>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">{t('dashboard.supervisorTitle')}</h2>
           <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm">
-            مرحباً <span className="font-bold text-primary">{employeeName}</span> — متابعة أدائك وإنتاجك
+            {t('dashboard.welcomeEmployee', { name: employeeName })}
           </p>
         </div>
         <DashboardPeriodFilter value={period} onChange={setPeriod} />
@@ -316,7 +325,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
       {isLoadingData && (
         <div className="flex items-center justify-center gap-2 py-4 text-slate-400">
           <Loader2 size={18} className="animate-spin" />
-          <span className="text-sm font-bold">جاري تحميل البيانات...</span>
+          <span className="text-sm font-bold">{t('dashboard.loadingData')}</span>
         </div>
       )}
 
@@ -327,10 +336,10 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
               <Package size={20} className="text-blue-600" />
             </div>
-            <p className="text-[11px] font-bold text-slate-400">إجمالي الإنتاج</p>
+            <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.totalProduction')}</p>
           </div>
           <h3 className="text-2xl font-bold text-blue-600">{formatNumber(kpis.totalProduction)}</h3>
-          <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">وحدة — {periodLabel}</p>
+          <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.unitWithPeriod', { period: periodLabel })}</p>
         </div>
 
         {activePlan && (
@@ -339,12 +348,12 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
                 <CheckCircle2 size={20} className="text-emerald-600" />
               </div>
-              <p className="text-[11px] font-bold text-slate-400">تحقيق الخطة</p>
+              <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.planAchievement')}</p>
             </div>
             <h3 className={`text-2xl font-bold ${activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}`}>
               {activePlan.progress}%
             </h3>
-            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">من الخطة الحالية</p>
+            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.kpi.fromCurrentPlan')}</p>
           </div>
         )}
 
@@ -354,10 +363,10 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
                 <ListChecks size={20} className="text-indigo-600 dark:text-indigo-400" />
               </div>
-              <p className="text-[11px] font-bold text-slate-400">الكمية المتبقية</p>
+              <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.remainingQty')}</p>
             </div>
             <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatNumber(activePlan.remaining)}</h3>
-            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">وحدة متبقية</p>
+            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.kpi.remainingUnits')}</p>
           </div>
         )}
 
@@ -366,12 +375,12 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             <div className="w-10 h-10 bg-rose-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
               <Trash2 size={20} className="text-rose-600" />
             </div>
-            <p className="text-[11px] font-bold text-slate-400">نسبة الهالك</p>
+            <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.wasteRatio')}</p>
           </div>
           <h3 className={`text-2xl font-bold ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-[var(--color-text)]'}`}>
             {kpis.wasteRatio}%
           </h3>
-          <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{formatNumber(kpis.totalWaste)} وحدة هالك</p>
+          <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.wasteUnits', { count: formatNumber(kpis.totalWaste) })}</p>
         </div>
 
         {period !== 'daily' && (
@@ -380,10 +389,10 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
                 <Gauge size={20} className="text-amber-600" />
               </div>
-              <p className="text-[11px] font-bold text-slate-400">متوسط يومي</p>
+              <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.dailyAverage')}</p>
             </div>
             <h3 className="text-2xl font-bold text-amber-600">{formatNumber(kpis.avgPerDay)}</h3>
-            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">وحدة/يوم ({kpis.uniqueDays} يوم)</p>
+            <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.unitsPerDay', { days: kpis.uniqueDays })}</p>
           </div>
         )}
       </div>
@@ -398,33 +407,33 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                   <NotebookText size={18} className="text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-[var(--color-text)]">الخطة النشطة</h3>
-                  <p className="text-xs text-[var(--color-text-muted)] font-medium">تتبع تقدم خطة الإنتاج الحالية</p>
+                  <h3 className="text-lg font-bold text-[var(--color-text)]">{t('dashboard.activePlan.title')}</h3>
+                  <p className="text-xs text-[var(--color-text-muted)] font-medium">{t('dashboard.activePlan.subtitle')}</p>
                 </div>
                 <div className="mr-auto">
                   <Badge variant={activePlan.plan.status === 'in_progress' ? 'warning' : 'info'}>
-                    {activePlan.plan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'}
+                    {activePlan.plan.status === 'in_progress' ? t('dashboard.status.inProgress') : t('dashboard.status.planned')}
                   </Badge>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
-                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.product')}</p>
                   <p className="text-sm font-bold text-[var(--color-text)]">
                     {_rawProducts.find((p) => p.id === activePlan.plan.productId)?.name ?? '—'}
                   </p>
                 </div>
                 <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
-                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الكمية المخططة</p>
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.plannedQty')}</p>
                   <p className="text-sm font-bold text-primary">{formatNumber(activePlan.plan.plannedQuantity)}</p>
                 </div>
                 <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
-                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">تم إنتاج ({periodLabel})</p>
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.producedInPeriod', { period: periodLabel })}</p>
                   <p className="text-sm font-bold text-blue-600">{formatNumber(periodPlanProduced)}</p>
                 </div>
                 <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
-                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">المتبقي (إجمالي)</p>
+                  <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.remainingTotal')}</p>
                   <p className="text-sm font-bold text-indigo-600">{formatNumber(activePlan.remaining)}</p>
                 </div>
               </div>
@@ -432,7 +441,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               {/* Progress bar */}
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-bold">
-                  <span className="text-[var(--color-text-muted)]">التقدم الإجمالي</span>
+                  <span className="text-[var(--color-text-muted)]">{t('dashboard.activePlan.totalProgress')}</span>
                   <span className={activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}>
                     {activePlan.progress}%
                   </span>
@@ -448,8 +457,8 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                   />
                 </div>
                 <div className="flex justify-between text-[11px] text-[var(--color-text-muted)] font-medium">
-                  <span>تم إنتاج {formatNumber(activePlan.actualProduced)} من {formatNumber(activePlan.plan.plannedQuantity)}</span>
-                  <span>الخط: {_rawLines.find((l) => l.id === activePlan.plan.lineId)?.name ?? '—'}</span>
+                  <span>{t('dashboard.activePlan.producedFromPlanned', { produced: formatNumber(activePlan.actualProduced), planned: formatNumber(activePlan.plan.plannedQuantity) })}</span>
+                  <span>{t('dashboard.activePlan.lineName', { line: _rawLines.find((l) => l.id === activePlan.plan.lineId)?.name ?? '—' })}</span>
                 </div>
               </div>
             </Card>
@@ -457,8 +466,8 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             <Card>
               <div className="text-center py-8 text-slate-400">
                 <NotebookText size={32} className="mb-2 block opacity-30 mx-auto" />
-                <p className="font-bold">لا توجد خطة إنتاج نشطة حالياً</p>
-                <p className="text-sm mt-1">سيتم عرض تفاصيل الخطة عند تفعيلها</p>
+                <p className="font-bold">{t('dashboard.noActivePlan')}</p>
+                <p className="text-sm mt-1">{t('dashboard.noActivePlanHint')}</p>
               </div>
             </Card>
           )}
@@ -470,7 +479,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                 <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
                   <BellRing size={18} className="text-amber-600" />
                 </div>
-                <h3 className="text-base font-bold text-[var(--color-text)]">تنبيهات</h3>
+                <h3 className="text-base font-bold text-[var(--color-text)]">{t('dashboard.alerts.title')}</h3>
               </div>
               <div className="space-y-3">
                 {alerts.map((alert, i) => (
@@ -503,7 +512,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                 <User size={18} className="text-emerald-600" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-[var(--color-text)]">الأداء الشخصي</h3>
+                <h3 className="text-base font-bold text-[var(--color-text)]">{t('dashboard.personalPerformance')}</h3>
                 <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{periodLabel}</p>
               </div>
             </div>
@@ -513,7 +522,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <FileText size={18} className="text-blue-500" />
-                  <span className="text-sm font-bold text-[var(--color-text-muted)]">عدد التقارير</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.reportsCount')}</span>
                 </div>
                 <span className="text-lg font-bold text-blue-600">{kpis.reportsCount}</span>
               </div>
@@ -522,7 +531,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <Gauge size={18} className="text-emerald-500" />
-                  <span className="text-sm font-bold text-[var(--color-text-muted)]">متوسط إنتاج/ساعة</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.avgPerHour')}</span>
                 </div>
                 <span className="text-lg font-bold text-emerald-600">{kpis.avgPerHour > 0 ? formatNumber(kpis.avgPerHour) : '—'}</span>
               </div>
@@ -531,16 +540,16 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <Clock3 size={18} className="text-amber-500" />
-                  <span className="text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.workHours')}</span>
                 </div>
-                <span className="text-lg font-bold text-amber-600">{kpis.totalHours > 0 ? `${kpis.totalHours} س` : '—'}</span>
+                <span className="text-lg font-bold text-amber-600">{kpis.totalHours > 0 ? t('dashboard.hoursValue', { value: kpis.totalHours }) : '—'}</span>
               </div>
 
               {/* Total production */}
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <Package size={18} className="text-primary" />
-                  <span className="text-sm font-bold text-[var(--color-text-muted)]">إجمالي الإنتاج</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.totalProduction')}</span>
                 </div>
                 <span className="text-lg font-bold text-primary">{formatNumber(kpis.totalProduction)}</span>
               </div>
@@ -549,7 +558,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <Trash2 size={18} className="text-rose-500" />
-                  <span className="text-sm font-bold text-[var(--color-text-muted)]">الهالك</span>
+                  <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.waste')}</span>
                 </div>
                 <div className="text-left">
                   <span className={`text-lg font-bold ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
@@ -564,7 +573,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             {kpis.reportsCount === 0 && !isLoadingData && (
               <div className="mt-6 text-center py-4 text-slate-400">
                 <Info size={22} className="mb-1 block opacity-40 mx-auto" />
-                <p className="text-xs font-bold">لا توجد تقارير {periodLabel}</p>
+                <p className="text-xs font-bold">{t('dashboard.noReportsForPeriod', { period: periodLabel })}</p>
               </div>
             )}
 
@@ -574,7 +583,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                 <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-[var(--border-radius-base)] border border-emerald-100 dark:border-emerald-900/20">
                   <CheckCircle2 size={14} className="text-emerald-500 mt-0.5" />
                   <p className="text-xs text-[var(--color-text-muted)] dark:text-emerald-200/80 leading-relaxed font-medium">
-                    أداؤك جيد — لا توجد تنبيهات حالياً.
+                    {t('dashboard.goodPerformance')}
                   </p>
                 </div>
               </div>

@@ -1,5 +1,6 @@
 import { ReactNode } from "react"
 import { Search } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,17 +42,9 @@ interface FilterBarProps {
   className?: string
 }
 
-const DEFAULT_PERIODS: PeriodOption[] = [
-  { label: "اليوم", value: "today" },
-  { label: "أمس", value: "yesterday" },
-  { label: "أسبوعي", value: "week" },
-  { label: "شهري", value: "month" },
-  { label: "الكل", value: "all" },
-]
-
 /** @deprecated Use `SmartFilterBar` from the same directory for new pages. */
 export function FilterBar({
-  periods = DEFAULT_PERIODS,
+  periods,
   activePeriod,
   onPeriodChange,
   searchPlaceholder,
@@ -61,6 +54,15 @@ export function FilterBar({
   extra,
   className,
 }: FilterBarProps) {
+  const { t } = useTranslation()
+  const resolvedPeriods = periods ?? [
+    { label: t("erpComponents.filterBar.period.today"), value: "today" },
+    { label: t("erpComponents.filterBar.period.yesterday"), value: "yesterday" },
+    { label: t("erpComponents.filterBar.period.week"), value: "week" },
+    { label: t("erpComponents.filterBar.period.month"), value: "month" },
+    { label: t("erpComponents.filterBar.period.all"), value: "all" },
+  ]
+
   return (
     <section className={cn("erp-filter-bar", className)}>
       <div className="flex flex-wrap items-center gap-2 w-full">
@@ -92,11 +94,11 @@ export function FilterBar({
         ))}
       </div>
 
-      {(periods.length > 0 || extra) && (
+      {(resolvedPeriods.length > 0 || extra) && (
         <div className="flex flex-wrap items-center gap-2 w-full">
-          {periods.length > 0 && (
+          {resolvedPeriods.length > 0 && (
             <div className="erp-date-seg">
-              {periods.map((p) => (
+              {resolvedPeriods.map((p) => (
                 <Button
                   key={p.value}
                   type="button"

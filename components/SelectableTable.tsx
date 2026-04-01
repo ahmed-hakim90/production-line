@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Permission } from '../utils/permissions';
 import { usePermission } from '../utils/permissions';
 import { DataTable } from '@/src/shared/ui/organisms/DataTable/DataTable';
@@ -92,9 +93,9 @@ export function SelectableTable<T>({
   getId,
   bulkActions = [],
   renderActions,
-  actionsHeader = 'إجراءات',
+  actionsHeader,
   emptyIcon = 'inbox',
-  emptyTitle = 'لا توجد بيانات',
+  emptyTitle,
   emptySubtitle,
   footer,
   className = '',
@@ -111,6 +112,7 @@ export function SelectableTable<T>({
   selectAllScope = 'page',
   loading = false,
 }: SelectableTableProps<T>) {
+  const { t } = useTranslation();
   const { can } = usePermission();
   const userId = useAppStore((state) => state.uid);
 
@@ -164,7 +166,7 @@ export function SelectableTable<T>({
         disabled: action.disabled,
       }))}
       renderActions={renderActions}
-      actionsHeader={actionsHeader}
+      actionsHeader={actionsHeader || t('table.actions')}
       onRowClick={onRowClick}
       getRowClassName={getRowClassName}
       pageSize={pageSize > 0 ? pageSize : 15}
@@ -174,7 +176,7 @@ export function SelectableTable<T>({
       toolbarContent={toolbarContent}
       highlightRowId={highlightRowId}
       emptyIcon={emptyIcon}
-      emptyTitle={emptyTitle}
+      emptyTitle={emptyTitle || t('table.emptyTitle')}
       emptySubtitle={emptySubtitle}
       footer={footer}
       className={className}

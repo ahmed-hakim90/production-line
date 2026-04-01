@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { BackgroundJob } from './useJobsStore';
 
 interface JobCardProps {
@@ -18,15 +19,8 @@ const STATUS_BADGE: Record<BackgroundJob['status'], string> = {
   failed:     'bg-rose-50 text-rose-700 border border-rose-200',
 };
 
-const STATUS_LABEL: Record<BackgroundJob['status'], string> = {
-  pending:    'في الانتظار',
-  uploading:  'جاري الرفع',
-  processing: 'جاري المعالجة',
-  completed:  'مكتمل',
-  failed:     'فشل',
-};
-
 export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onViewReport, onRemove }) => {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const isProcessing = job.status === 'pending' || job.status === 'uploading' || job.status === 'processing';
   const isDone = job.status === 'completed' || job.status === 'failed';
@@ -37,6 +31,14 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
     job.status === 'failed'    ? 'failed' :
     isProcessing               ? 'running' : '';
 
+  const statusLabel: Record<BackgroundJob['status'], string> = {
+    pending: t('jobs.status.pending'),
+    uploading: t('jobs.status.uploading'),
+    processing: t('jobs.status.processing'),
+    completed: t('jobs.status.completed'),
+    failed: t('jobs.status.failed'),
+  };
+
   return (
     <div className={`erp-job-card ${cardBorder}`}>
       {/* Top row: file name + status icon */}
@@ -46,7 +48,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className="text-[11px] text-[var(--color-text-muted)]">{job.jobType}</span>
             <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-semibold ${STATUS_BADGE[job.status]}`}>
-              {STATUS_LABEL[job.status]}
+              {statusLabel[job.status]}
             </span>
           </div>
         </div>
@@ -74,7 +76,10 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
           <span className="font-semibold text-[var(--color-text)]">{job.progress}%</span>
         </div>
         <div className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-          {job.processedRows.toLocaleString('ar-EG')} / {job.totalRows.toLocaleString('ar-EG')} صف
+          {t('jobs.rowsProgress', {
+            processed: job.processedRows.toLocaleString('ar-EG'),
+            total: job.totalRows.toLocaleString('ar-EG'),
+          })}
         </div>
       </div>
 
@@ -84,7 +89,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
           onClick={() => setIsExpanded((prev) => !prev)}
           className="w-full flex items-center justify-between text-[11.5px] font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
         >
-          <span>{isExpanded ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}</span>
+          <span>{isExpanded ? t('jobs.hideDetails') : t('jobs.showDetails')}</span>
           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
       </div>
@@ -94,8 +99,8 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
           {/* Completion summary */}
           {job.status === 'completed' && (
             <div className="mt-3 rounded-[var(--border-radius-sm)] bg-emerald-50 border border-emerald-200 p-2.5 space-y-0.5">
-              <p className="text-[11.5px] font-semibold text-emerald-700">✔ {job.addedRows.toLocaleString('ar-EG')} صف مضاف</p>
-              <p className="text-[11.5px] font-semibold text-amber-700">⚠ {job.failedRows.toLocaleString('ar-EG')} صف فشل</p>
+              <p className="text-[11.5px] font-semibold text-emerald-700">✔ {t('jobs.addedRows', { count: job.addedRows.toLocaleString('ar-EG') })}</p>
+              <p className="text-[11.5px] font-semibold text-amber-700">⚠ {t('jobs.failedRows', { count: job.failedRows.toLocaleString('ar-EG') })}</p>
             </div>
           )}
 
@@ -111,7 +116,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
                 onClick={() => onCancel(job.id)}
                 className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
               >
-                إلغاء
+                {t('ui.cancel')}
               </button>
             )}
             {isDone && (
@@ -119,7 +124,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
                 onClick={() => onViewReport(job.id)}
                 className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[rgb(var(--color-primary)/0.08)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.14)] transition-colors border border-[rgb(var(--color-primary)/0.2)]"
               >
-                عرض التقرير
+                {t('jobs.viewReport')}
               </button>
             )}
             {job.status === 'failed' && (
@@ -127,7 +132,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
                 onClick={() => onRetry(job.id)}
                 className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors border border-rose-200"
               >
-                إعادة المحاولة
+                {t('jobs.retry')}
               </button>
             )}
             {isDone && (
@@ -135,7 +140,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
                 onClick={() => onRemove(job.id)}
                 className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
               >
-                حذف
+                {t('jobs.remove')}
               </button>
             )}
           </div>
