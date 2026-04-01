@@ -519,7 +519,6 @@ export const RepairJobDetail: React.FC = () => {
     if (!trackUrl) return `${baseMessage}\nرابط متابعة الطلب: /track`;
     return [
       baseMessage,
-      `رقم الإيصال: ${String(job.receiptNo || '-')}`,
       `رابط متابعة الطلب (  اضغط هنا): ${trackUrl}`,
     ].join('\n');
   }, [job, trackUrl]);
@@ -632,7 +631,7 @@ export const RepairJobDetail: React.FC = () => {
                 <Button variant="outline" size="sm" onClick={handlePrintRepairRequest}>
                   <Printer className="h-4 w-4 ms-1" /> طباعة
                 </Button>
-                <div className="w-full sm:w-auto"><WhatsAppShare text={whatsappText} /></div>
+                <div className="w-full sm:w-auto"><WhatsAppShare text={whatsappText} phone={job.customerPhone} /></div>
                 <Button variant="outline" size="sm" onClick={exportReceipt}>تنزيل PDF</Button>
               </div>
             </div>

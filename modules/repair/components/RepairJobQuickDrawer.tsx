@@ -94,10 +94,7 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
   }, [appBaseUrl, job, tenantSlug]);
   const whatsappText = useMemo(() => {
     if (!job) return '';
-    const lines = [
-      formatRepairWhatsAppMessage(job),
-      `رقم الإيصال: ${String(job.receiptNo || '-')}`,
-    ];
+    const lines = [formatRepairWhatsAppMessage(job)];
     if (trackUrl) {
       lines.push(`رابط متابعة الطلب: ${trackUrl}`);
     }
@@ -139,7 +136,7 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
             <Button type="button" variant="outline" onClick={() => printJobSummary(job, branchName, technicianName)}>
               طباعة
             </Button>
-            <WhatsAppShare text={whatsappText} />
+            <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
             {job.id && (
               <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}>
                 <Button type="button">فتح صفحة الطلب كاملة</Button>
