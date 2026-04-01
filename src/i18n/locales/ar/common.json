@@ -102,6 +102,116 @@
     "apply": "عرض",
     "clearCount": "مسح ({{count}})"
   },
+  "erpComponents": {
+    "rowActionsMenu": {
+      "ariaLabel": "إجراءات الصف"
+    },
+    "actionsMenu": {
+      "triggerLabel": "الإجراءات"
+    },
+    "actionButton": {
+      "loadingSave": "جارٍ الحفظ..."
+    },
+    "dataTable": {
+      "emptyMessage": "لا توجد بيانات",
+      "actionsHeader": "الإجراءات"
+    },
+    "filterBar": {
+      "period": {
+        "today": "اليوم",
+        "yesterday": "أمس",
+        "week": "أسبوعي",
+        "month": "شهري",
+        "all": "الكل"
+      }
+    },
+    "smartFilterBar": {
+      "searchPlaceholder": "ابحث...",
+      "applyLabel": "عرض",
+      "advancedFilters": "فلاتر إضافية",
+      "clearAll": "مسح الكل",
+      "activeFilters": "فلاتر نشطة:"
+    },
+    "indirectCostCards": {
+      "currencyPerUnit": "ج.م/قطعة",
+      "currencyMonthly": "ج.م شهري",
+      "currencyMonthlyTotal": "ج.م شهري إجمالي",
+      "headerTitle": "التكاليف الصناعية غير المباشرة — {{count}} بنود",
+      "totalTitle": "إجمالي التكاليف غير المباشرة"
+    },
+    "statusBadge": {
+      "labels": {
+        "currentlyWorking": "يعمل حالياً",
+        "active": "نشط",
+        "completed": "مكتمل",
+        "sent": "تم الإرسال",
+        "inProgress": "قيد التنفيذ",
+        "onTrack": "في المسار",
+        "pendingApproval": "قيد الاعتماد",
+        "delayed": "متأخر",
+        "stopped": "موقف",
+        "notSent": "لم يرسل",
+        "noSupervisor": "بدون مشرف",
+        "planned": "مخطط",
+        "weak": "ضعيف"
+      }
+    },
+    "workOrderDetail": {
+      "aria": {
+        "closeDetails": "إغلاق نافذة التفاصيل",
+        "back": "رجوع",
+        "close": "إغلاق"
+      },
+      "productionOrder": "أمر شغل - إنتاج",
+      "emptyValue": "—",
+      "progress": "التقدم",
+      "fields": {
+        "product": "المنتج",
+        "code": "الكود",
+        "productionLine": "خط الإنتاج",
+        "supervisor": "المشرف",
+        "requiredQty": "المطلوب",
+        "producedQty": "تم إنتاجه",
+        "remainingQty": "المتبقي"
+      },
+      "tabs": {
+        "dates": "التواريخ",
+        "costs": "التكاليف",
+        "notes": "ملاحظات"
+      },
+      "dates": {
+        "start": "البداية",
+        "plannedEnd": "النهاية المخططة",
+        "expected": "المتوقع",
+        "daysRemaining": "الأيام المتبقية",
+        "avgPerDay": "متوسط/يوم",
+        "estimatedDuration": "المدة المقدرة",
+        "reportsCount": "عدد التقارير",
+        "maxWorkers": "الحد الأقصى للعمال"
+      },
+      "units": {
+        "unitValue": "{{count}} وحدة",
+        "dayValue": "{{count}} يوم",
+        "reportValue": "{{count}} تقرير",
+        "workerValue": "{{count}} عامل"
+      },
+      "daysLate": "متأخر {{count}} يوم",
+      "daysOnly": "{{count}} يوم",
+      "costs": {
+        "plannedUnitCost": "تكلفة الوحدة المخططة",
+        "actualUnitCost": "تكلفة الوحدة الفعلية",
+        "totalCost": "إجمالي التكلفة"
+      },
+      "currencyEgp": "ج.م",
+      "noNotes": "لا توجد ملاحظات",
+      "actions": {
+        "print": "طباعة",
+        "closeOrder": "إغلاق الأمر",
+        "reopen": "إعادة فتح",
+        "edit": "تعديل"
+      }
+    }
+  },
   "bulkActions": {
     "selectedCount": "{{count}} محدد",
     "clearSelection": "إلغاء التحديد"

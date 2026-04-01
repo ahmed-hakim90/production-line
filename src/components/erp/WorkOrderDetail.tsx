@@ -273,4 +273,44 @@ export function WorkOrderDetail({
 
             {activeTab === "notes" && (
               <div className="rounded-md border border-[var(--color-border-ui)] bg-[var(--color-page-bg)] px-3 py-3 text-sm text-[var(--color-text-1)]">
-         
+                {order.notes?.trim() ? order.notes : t("erpComponents.workOrderDetail.noNotes")}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <footer className="grid grid-cols-3 gap-2 border-t border-[var(--color-border-ui)] px-4 py-3">
+          <Button type="button" variant="outline" onClick={onPrint} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">
+            {t("erpComponents.workOrderDetail.actions.print")}
+          </Button>
+          {!isCompletedFooter ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose_order}
+              className="border-[var(--color-danger)] text-[var(--color-danger)] hover:bg-destructive/10"
+            >
+              {t("erpComponents.workOrderDetail.actions.closeOrder")}
+            </Button>
+          ) : showReopenCompleted && onReopenCompleted ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onReopenCompleted}
+              className="border-amber-600/50 text-amber-800 hover:bg-amber-500/10 dark:text-amber-600"
+            >
+              {t("erpComponents.workOrderDetail.actions.reopen")}
+            </Button>
+          ) : (
+            <div className="min-h-9" aria-hidden />
+          )}
+          <Button type="button" variant="default" onClick={onEdit}>
+            {t("erpComponents.workOrderDetail.actions.edit")}
+          </Button>
+        </footer>
+      </aside>
+    </div>
+  )
+}
+
+export type { WorkOrderDetailProps, WorkOrderDetailStatus }

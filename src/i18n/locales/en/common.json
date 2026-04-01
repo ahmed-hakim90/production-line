@@ -102,6 +102,116 @@
     "apply": "Apply",
     "clearCount": "Clear ({{count}})"
   },
+  "erpComponents": {
+    "rowActionsMenu": {
+      "ariaLabel": "Row actions"
+    },
+    "actionsMenu": {
+      "triggerLabel": "Actions"
+    },
+    "actionButton": {
+      "loadingSave": "Saving..."
+    },
+    "dataTable": {
+      "emptyMessage": "No data",
+      "actionsHeader": "Actions"
+    },
+    "filterBar": {
+      "period": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "Weekly",
+        "month": "Monthly",
+        "all": "All"
+      }
+    },
+    "smartFilterBar": {
+      "searchPlaceholder": "Search...",
+      "applyLabel": "Apply",
+      "advancedFilters": "Advanced filters",
+      "clearAll": "Clear all",
+      "activeFilters": "Active filters:"
+    },
+    "indirectCostCards": {
+      "currencyPerUnit": "EGP/unit",
+      "currencyMonthly": "EGP monthly",
+      "currencyMonthlyTotal": "EGP monthly total",
+      "headerTitle": "Indirect industrial costs — {{count}} items",
+      "totalTitle": "Total indirect costs"
+    },
+    "statusBadge": {
+      "labels": {
+        "currentlyWorking": "Currently working",
+        "active": "Active",
+        "completed": "Completed",
+        "sent": "Sent",
+        "inProgress": "In progress",
+        "onTrack": "On track",
+        "pendingApproval": "Pending approval",
+        "delayed": "Delayed",
+        "stopped": "Stopped",
+        "notSent": "Not sent",
+        "noSupervisor": "No supervisor",
+        "planned": "Planned",
+        "weak": "Weak"
+      }
+    },
+    "workOrderDetail": {
+      "aria": {
+        "closeDetails": "Close details panel",
+        "back": "Back",
+        "close": "Close"
+      },
+      "productionOrder": "Work order - production",
+      "emptyValue": "—",
+      "progress": "Progress",
+      "fields": {
+        "product": "Product",
+        "code": "Code",
+        "productionLine": "Production line",
+        "supervisor": "Supervisor",
+        "requiredQty": "Required",
+        "producedQty": "Produced",
+        "remainingQty": "Remaining"
+      },
+      "tabs": {
+        "dates": "Dates",
+        "costs": "Costs",
+        "notes": "Notes"
+      },
+      "dates": {
+        "start": "Start",
+        "plannedEnd": "Planned end",
+        "expected": "Expected",
+        "daysRemaining": "Remaining days",
+        "avgPerDay": "Avg/day",
+        "estimatedDuration": "Estimated duration",
+        "reportsCount": "Reports count",
+        "maxWorkers": "Max workers"
+      },
+      "units": {
+        "unitValue": "{{count}} unit",
+        "dayValue": "{{count}} day",
+        "reportValue": "{{count}} report",
+        "workerValue": "{{count}} worker"
+      },
+      "daysLate": "Delayed {{count}} day",
+      "daysOnly": "{{count}} day",
+      "costs": {
+        "plannedUnitCost": "Planned unit cost",
+        "actualUnitCost": "Actual unit cost",
+        "totalCost": "Total cost"
+      },
+      "currencyEgp": "EGP",
+      "noNotes": "No notes",
+      "actions": {
+        "print": "Print",
+        "closeOrder": "Close order",
+        "reopen": "Reopen",
+        "edit": "Edit"
+      }
+    }
+  },
   "bulkActions": {
     "selectedCount": "{{count}} selected",
     "clearSelection": "Clear selection"
