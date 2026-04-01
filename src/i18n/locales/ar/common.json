@@ -257,6 +257,163 @@
       "note": "ملحوظة",
       "notePlaceholder": "اكتب أي ملاحظة إضافية للتقرير...",
       "saveReport": "حفظ التقرير"
+    },
+    "importSystemUsers": {
+      "fileHasNoData": "الملف لا يحتوي على بيانات.",
+      "readImportFileError": "تعذر قراءة ملف الاستيراد.",
+      "unknownRole": "الدور غير معروف: {{role}}",
+      "employeeCodeNotFound": "كود الموظف غير موجود: {{code}}",
+      "createAccountError": "تعذر إنشاء الحساب",
+      "createSummary": "تم إنشاء {{created}} حساب، وفشل {{failed}}.",
+      "title": "استيراد مستخدمين",
+      "subtitle": "الرفع لا ينشئ الحسابات مباشرة. راجع الصفوف ثم أنشئ المطلوب.",
+      "readingFile": "جاري قراءة الملف...",
+      "selectImportFile": "اختيار ملف الاستيراد",
+      "downloadTemplate": "تحميل قالب الاستيراد",
+      "filterAll": "الكل",
+      "filterPending": "غير منشأ",
+      "filterCreated": "منشأ",
+      "filterErrors": "أخطاء",
+      "stats": "إجمالي: {{total}} | غير منشأ: {{pending}} | منشأ: {{created}} | أخطاء: {{errors}}",
+      "table": {
+        "select": "تحديد",
+        "name": "الاسم",
+        "email": "البريد",
+        "role": "الدور",
+        "employeeCode": "كود الموظف",
+        "status": "الحالة"
+      },
+      "status": {
+        "pending": "غير منشأ",
+        "created": "تم الإنشاء",
+        "error": "خطأ: {{reason}}"
+      },
+      "noRowsForFilter": "لا توجد صفوف لهذا الفلتر.",
+      "selectAllPending": "تحديد الكل غير المنشأ",
+      "createSelected": "إنشاء/تفعيل المحدد ({{count}})",
+      "createAllPending": "إنشاء/تفعيل الكل غير المنشأ ({{count}})"
+    },
+    "importRawMaterials": {
+      "readImportFileError": "تعذر قراءة ملف الاستيراد.",
+      "noValidRowsToSave": "لا توجد صفوف صالحة للحفظ.",
+      "saveSummary": "تم الحفظ بنجاح. تمت إضافة {{created}} وتحديث {{updated}}.",
+      "saveImportDataError": "تعذر حفظ بيانات الاستيراد.",
+      "title": "استيراد تعريف المواد الخام",
+      "downloadTemplate": "تحميل القالب",
+      "analyzingFile": "جاري تحليل الملف...",
+      "chooseExcelToStart": "اختر ملف Excel للبدء في استيراد المواد الخام.",
+      "selectImportFile": "اختيار ملف الاستيراد",
+      "totalRows": "إجمالي الصفوف",
+      "validRows": "صفوف صالحة",
+      "rowsWithErrors": "صفوف بها أخطاء",
+      "active": "نشط",
+      "inactive": "غير نشط",
+      "valid": "صالح",
+      "saveValidRows": "حفظ الصفوف الصالحة",
+      "table": {
+        "code": "الكود",
+        "materialName": "اسم المادة",
+        "unit": "الوحدة",
+        "minimum": "الحد الأدنى",
+        "status": "الحالة",
+        "validation": "التحقق"
+      }
+    },
+    "importProductionPlans": {
+      "noValidDataInFile": "لا توجد بيانات صالحة داخل الملف",
+      "readImportFileError": "تعذر قراءة ملف الاستيراد",
+      "cannotImportWithoutActiveUser": "لا يمكن الاستيراد بدون مستخدم نشط",
+      "importSuccess": "تم استيراد {{done}} خطة بنجاح",
+      "importPartial": "تم استيراد {{success}} خطة وفشل {{failed}}",
+      "title": "استيراد خطط الإنتاج من Excel",
+      "headerStats": "{{total}} صف — {{valid}} صالح — {{errors}} خطأ",
+      "chooseFile": "اختيار ملف",
+      "totalLabel": "إجمالي: {{total}}",
+      "validLabel": "صالح: {{valid}}",
+      "errorsLabel": "أخطاء: {{errors}}",
+      "valid": "صالح",
+      "savePlans": "حفظ {{count}} خطة",
+      "table": {
+        "product": "المنتج",
+        "line": "الخط",
+        "quantity": "الكمية",
+        "startDate": "تاريخ البدء",
+        "status": "الحالة"
+      }
+    },
+    "importInventoryInByCode": {
+      "itemType": {
+        "rawMaterial": "مادة خام",
+        "finishedGood": "منتج نهائي"
+      },
+      "readImportFileError": "تعذر قراءة ملف الاستيراد.",
+      "selectWarehouseFirst": "اختر المخزن أولاً قبل حفظ الاستيراد.",
+      "noValidRowsToSave": "لا توجد صفوف صالحة للحفظ.",
+      "importSuccess": "تم استيراد {{rows}} صف بنجاح ({{movements}} حركة مخزنية).",
+      "saveImportDataError": "تعذر حفظ بيانات الاستيراد.",
+      "title": "استيراد {{itemType}} بالكود",
+      "itemTypeLabel": "نوع الصنف",
+      "targetWarehouse": "المخزن المستهدف",
+      "searchAndSelectWarehouse": "ابحث واختر المخزن",
+      "currentWarehouse": "المخزن الحالي:",
+      "notSet": "غير محدد",
+      "analyzingFile": "جاري تحليل الملف...",
+      "chooseExcelToStart": "اختر ملف Excel للبدء في استيراد {{itemType}}.",
+      "selectImportFile": "اختيار ملف الاستيراد",
+      "totalRows": "إجمالي الصفوف",
+      "validRows": "صفوف صالحة",
+      "rowsWithErrors": "صفوف بها أخطاء",
+      "valid": "صالح",
+      "saveValidRows": "حفظ الصفوف الصالحة",
+      "table": {
+        "code": "الكود",
+        "itemName": "اسم الصنف",
+        "quantity": "الكمية",
+        "status": "الحالة"
+      }
+    },
+    "importReports": {
+      "noValidDataInFile": "لا توجد بيانات صالحة داخل الملف",
+      "futureDateErrorToken": "تاريخ مستقبلي غير مسموح",
+      "futureDatesFoundAllCancelled": "يوجد صفوف بتاريخ مستقبلي ({{rows}}). تم إلغاء حفظ الشيت بالكامل.",
+      "readFileError": "تعذر قراءة الملف",
+      "cannotSaveFutureDateRows": "لا يمكن الحفظ: الصفوف ({{rows}}) تحتوي على تاريخ مستقبلي. عدل التاريخ ثم أعد الرفع.",
+      "importSuccess": "تم استيراد {{done}} تقرير بنجاح",
+      "importPartialWithDuplicates": "تم استيراد {{success}} تقرير وفشل {{failed}} ({{duplicate}} مكرر).",
+      "importPartial": "تم استيراد {{success}} تقرير وفشل {{failed}}.",
+      "title": "استيراد تقارير من Excel",
+      "headerStats": "{{total}} صف — {{valid}} صالح — {{errors}} خطأ",
+      "chooseFile": "اختيار ملف",
+      "downloadTemplate": "تحميل القالب",
+      "totalLabel": "إجمالي: {{total}}",
+      "validLabel": "صالح: {{valid}}",
+      "errorsLabel": "أخطاء: {{errors}}",
+      "duplicateLabel": "مكرر: {{duplicate}}",
+      "saveReports": "حفظ {{count}} تقرير"
+    },
+    "shared": {
+      "listSeparator": "، "
+    },
+    "attendanceSignatureFix": {
+      "fetchRecordsError": "تعذر جلب السجلات",
+      "saveSuccess": "تم حفظ التعديل بنجاح",
+      "saveError": "تعذر حفظ التعديل",
+      "title": "إشعار توقيع - معالجة البصمة الواحدة",
+      "employee": "الموظف",
+      "selectEmployee": "اختر الموظف",
+      "from": "من",
+      "to": "إلى",
+      "loading": "جار التحميل...",
+      "showDays": "عرض الأيام",
+      "noRows": "لا توجد أيام بصمة واحدة ضمن الفترة المختارة",
+      "saving": "جار الحفظ...",
+      "table": {
+        "date": "التاريخ",
+        "status": "الحالة",
+        "checkIn": "دخول",
+        "checkOut": "خروج",
+        "action": "إجراء"
+      }
     }
   }
 }

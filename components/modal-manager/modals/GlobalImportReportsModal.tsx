@@ -8,8 +8,12 @@ import { downloadReportsTemplate } from '../../../utils/downloadTemplates';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage, isReportDuplicateError } from '../../../modules/production/utils/reportDuplicateError';
+import { useTranslation } from 'react-i18next';
 
 export const GlobalImportReportsModal: React.FC = () => {
+  const { t } = useTranslation();
+  const futureDateErrorToken = t('modalManager.importReports.futureDateErrorToken');
+  const listSeparator = t('modalManager.shared.listSeparator');
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.REPORTS_IMPORT);
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
@@ -31,14 +35,14 @@ export const GlobalImportReportsModal: React.FC = () => {
   const futureDateErrorRowsCount = useMemo(
     () =>
       (result?.rows || []).filter((row) =>
-        row.errors.some((error) => error.includes('تاريخ مستقبلي غير مسموح'))
+        row.errors.some((error) => error.includes(futureDateErrorToken))
       ).length,
     [result],
   );
   const futureDateErrorRowIndexes = useMemo(
     () =>
       (result?.rows || [])
-        .filter((row) => row.errors.some((error) => error.includes('تاريخ مستقبلي غير مسموح')))
+        .filter((row) => row.errors.some((error) => error.includes(futureDateErrorToken)))
         .map((row) => row.rowIndex),
     [result],
   );
@@ -69,20 +73,20 @@ export const GlobalImportReportsModal: React.FC = () => {
       });
       setResult(parsed);
       if (parsed.rows.length === 0) {
-        setMessage('لا توجد بيانات صالحة داخل الملف');
+        setMessage(t('modalManager.importReports.noValidDataInFile'));
       } else {
         const futureRows = parsed.rows
-          .filter((row) => row.errors.some((error) => error.includes('تاريخ مستقبلي غير مسموح')))
+          .filter((row) => row.errors.some((error) => error.includes(futureDateErrorToken)))
           .map((row) => row.rowIndex);
         const hasFutureDates = futureRows.length > 0;
         if (hasFutureDates) {
           setMessage(
-            `يوجد صفوف بتاريخ مستقبلي (${futureRows.join('، ')}). تم إلغاء حفظ الشيت بالكامل.`
+            t('modalManager.importReports.futureDatesFoundAllCancelled', { rows: futureRows.join(listSeparator) })
           );
         }
       }
     } catch {
-      setMessage('تعذر قراءة الملف');
+      setMessage(t('modalManager.importReports.readFileError'));
     } finally {
       setParsing(false);
     }
@@ -91,7 +95,7 @@ export const GlobalImportReportsModal: React.FC = () => {
   const handleSave = async () => {
     if (futureDateErrorRowsCount > 0) {
       setMessage(
-        `لا يمكن الحفظ: الصفوف (${futureDateErrorRowIndexes.join('، ')}) تحتوي على تاريخ مستقبلي. عدل التاريخ ثم أعد الرفع.`
+        t('modalManager.importReports.cannotSaveFutureDateRows', { rows: futureDateErrorRowIndexes.join(listSeparator) })
       );
       return;
     }
@@ -121,13 +125,13 @@ export const GlobalImportReportsModal: React.FC = () => {
     }
 
     if (failed === 0) {
-      setMessage(`تم استيراد ${done} تقرير بنجاح`);
+      setMessage(t('modalManager.importReports.importSuccess', { done }));
       setResult(null);
     } else {
       const failedMsg =
         duplicate > 0
-          ? `تم استيراد ${done - failed} تقرير وفشل ${failed} (${duplicate} مكرر).`
-          : `تم استيراد ${done - failed} تقرير وفشل ${failed}.`;
+          ? t('modalManager.importReports.importPartialWithDuplicates', { success: done - failed, failed, duplicate })
+          : t('modalManager.importReports.importPartial', { success: done - failed, failed });
       setMessage(getReportDuplicateMessage(null, failedMsg));
     }
     setSaving(false);
@@ -148,10 +152,10 @@ export const GlobalImportReportsModal: React.FC = () => {
               <FileUp size={20} className="text-emerald-600" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">استيراد تقارير من Excel</h3>
+              <h3 className="text-lg font-bold">{t('modalManager.importReports.title')}</h3>
               {result && (
                 <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                  {result.totalRows} صف — {result.validCount} صالح — {result.errorCount} خطأ
+                  {t('modalManager.importReports.headerStats', { total: result.totalRows, valid: result.validCount, errors: result.errorCount })}
                 </p>
               )}
             </div>
@@ -173,7 +177,7 @@ export const GlobalImportReportsModal: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={parsing || saving}>
               {parsing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
-              اختيار ملف
+              {t('modalManager.importReports.chooseFile')}
             </Button>
             <Button
               variant="outline"
@@ -190,16 +194,16 @@ export const GlobalImportReportsModal: React.FC = () => {
               disabled={parsing || saving}
             >
               <Download size={14} />
-              تحميل القالب
+              {t('modalManager.importReports.downloadTemplate')}
             </Button>
           </div>
 
           {result && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold">
-              <div className="rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-blue-700 dark:text-blue-300">إجمالي: {result.totalRows}</div>
-              <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-3 py-2 text-emerald-700">صالح: {result.validCount}</div>
-              <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-3 py-2 text-rose-700">أخطاء: {result.errorCount}</div>
-              <div className="rounded-[var(--border-radius-base)] bg-orange-50 dark:bg-orange-900/20 px-3 py-2 text-orange-700 dark:text-orange-300">مكرر: {result.duplicateCount}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-blue-700 dark:text-blue-300">{t('modalManager.importReports.totalLabel', { total: result.totalRows })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-3 py-2 text-emerald-700">{t('modalManager.importReports.validLabel', { valid: result.validCount })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-3 py-2 text-rose-700">{t('modalManager.importReports.errorsLabel', { errors: result.errorCount })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-orange-50 dark:bg-orange-900/20 px-3 py-2 text-orange-700 dark:text-orange-300">{t('modalManager.importReports.duplicateLabel', { duplicate: result.duplicateCount })}</div>
             </div>
           )}
 
@@ -223,7 +227,7 @@ export const GlobalImportReportsModal: React.FC = () => {
         </div>
 
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose} disabled={saving}>إغلاق</Button>
+          <Button variant="outline" onClick={handleClose} disabled={saving}>{t('ui.close')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}
@@ -231,7 +235,7 @@ export const GlobalImportReportsModal: React.FC = () => {
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />
-            حفظ {validRows.length} تقرير
+            {t('modalManager.importReports.saveReports', { count: validRows.length })}
           </Button>
         </div>
       </div>

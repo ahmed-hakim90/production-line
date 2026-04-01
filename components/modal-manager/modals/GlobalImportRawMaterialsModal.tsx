@@ -6,6 +6,7 @@ import { parseRawMaterialsExcel, type RawMaterialImportResult } from '../../../u
 import { downloadRawMaterialsMasterTemplate } from '../../../utils/downloadTemplates';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { useTranslation } from 'react-i18next';
 
 type RawMaterialsImportPayload = {
   onSaved?: () => void;
@@ -19,6 +20,7 @@ const asPayload = (payload: Record<string, unknown> | undefined): RawMaterialsIm
 };
 
 export const GlobalImportRawMaterialsModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.INVENTORY_RAW_MATERIALS_IMPORT);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<RawMaterialImportResult | null>(null);
@@ -53,7 +55,7 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
       setResult(parsed);
     } catch (error: any) {
       setResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0 });
-      setMessage({ type: 'error', text: error?.message || 'تعذر قراءة ملف الاستيراد.' });
+      setMessage({ type: 'error', text: error?.message || t('modalManager.importRawMaterials.readImportFileError') });
     } finally {
       setParsing(false);
     }
@@ -63,7 +65,7 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
     if (!result) return;
     const validRows = result.rows.filter((row) => row.errors.length === 0);
     if (validRows.length === 0) {
-      setMessage({ type: 'error', text: 'لا توجد صفوف صالحة للحفظ.' });
+      setMessage({ type: 'error', text: t('modalManager.importRawMaterials.noValidRowsToSave') });
       return;
     }
     setSaving(true);
@@ -113,10 +115,10 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
       setFileName('');
       setMessage({
         type: 'success',
-        text: `تم الحفظ بنجاح. تمت إضافة ${created} وتحديث ${updated}.`,
+        text: t('modalManager.importRawMaterials.saveSummary', { created, updated }),
       });
     } catch (error: any) {
-      setMessage({ type: 'error', text: error?.message || 'تعذر حفظ بيانات الاستيراد.' });
+      setMessage({ type: 'error', text: error?.message || t('modalManager.importRawMaterials.saveImportDataError') });
     } finally {
       setSaving(false);
     }
@@ -141,39 +143,39 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
 
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold">استيراد تعريف المواد الخام</h3>
+            <h3 className="text-lg font-bold">{t('modalManager.importRawMaterials.title')}</h3>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{fileName || '—'}</p>
           </div>
           <Button variant="outline" onClick={downloadRawMaterialsMasterTemplate} disabled={saving || parsing}>
             <Download size={14} />
-            تحميل القالب
+            {t('modalManager.importRawMaterials.downloadTemplate')}
           </Button>
         </div>
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
           {parsing ? (
-            <p className="text-sm text-slate-500">جاري تحليل الملف...</p>
+            <p className="text-sm text-slate-500">{t('modalManager.importRawMaterials.analyzingFile')}</p>
           ) : !result ? (
             <div className="space-y-3">
-              <p className="text-sm text-slate-500">اختر ملف Excel للبدء في استيراد المواد الخام.</p>
+              <p className="text-sm text-slate-500">{t('modalManager.importRawMaterials.chooseExcelToStart')}</p>
               <Button variant="primary" onClick={openFilePicker} disabled={saving || parsing}>
                 <FileUp size={14} />
-                اختيار ملف الاستيراد
+                {t('modalManager.importRawMaterials.selectImportFile')}
               </Button>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                  <p className="text-xs text-slate-500">إجمالي الصفوف</p>
+                  <p className="text-xs text-slate-500">{t('modalManager.importRawMaterials.totalRows')}</p>
                   <p className="text-lg font-black">{result.totalRows}</p>
                 </div>
                 <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-900/10 p-3">
-                  <p className="text-xs text-emerald-700">صفوف صالحة</p>
+                  <p className="text-xs text-emerald-700">{t('modalManager.importRawMaterials.validRows')}</p>
                   <p className="text-lg font-bold text-emerald-700">{result.validCount}</p>
                 </div>
                 <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50/60 dark:bg-rose-900/10 p-3">
-                  <p className="text-xs text-rose-700">صفوف بها أخطاء</p>
+                  <p className="text-xs text-rose-700">{t('modalManager.importRawMaterials.rowsWithErrors')}</p>
                   <p className="text-lg font-bold text-rose-700">{result.errorCount}</p>
                 </div>
               </div>
@@ -182,12 +184,12 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">#</th>
-                      <th className="erp-th">الكود</th>
-                      <th className="erp-th">اسم المادة</th>
-                      <th className="erp-th">الوحدة</th>
-                      <th className="erp-th">الحد الأدنى</th>
-                      <th className="erp-th">الحالة</th>
-                      <th className="erp-th">التحقق</th>
+                      <th className="erp-th">{t('modalManager.importRawMaterials.table.code')}</th>
+                      <th className="erp-th">{t('modalManager.importRawMaterials.table.materialName')}</th>
+                      <th className="erp-th">{t('modalManager.importRawMaterials.table.unit')}</th>
+                      <th className="erp-th">{t('modalManager.importRawMaterials.table.minimum')}</th>
+                      <th className="erp-th">{t('modalManager.importRawMaterials.table.status')}</th>
+                      <th className="erp-th">{t('modalManager.importRawMaterials.table.validation')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
@@ -198,10 +200,10 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
                         <td className="px-3 py-2 text-sm">{row.name || '—'}</td>
                         <td className="px-3 py-2 text-sm">{row.unit || '—'}</td>
                         <td className="px-3 py-2 text-sm">{row.minStock}</td>
-                        <td className="px-3 py-2 text-sm">{row.isActive ? 'نشط' : 'غير نشط'}</td>
+                        <td className="px-3 py-2 text-sm">{row.isActive ? t('modalManager.importRawMaterials.active') : t('modalManager.importRawMaterials.inactive')}</td>
                         <td className="px-3 py-2 text-sm">
                           {row.errors.length === 0 ? (
-                            <span className="text-emerald-600 font-bold">صالح</span>
+                            <span className="text-emerald-600 font-bold">{t('modalManager.importRawMaterials.valid')}</span>
                           ) : (
                             <span className="text-rose-600 font-bold">{row.errors.join(' | ')}</span>
                           )}
@@ -229,11 +231,11 @@ export const GlobalImportRawMaterialsModal: React.FC = () => {
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
           <Button variant="outline" onClick={handleClose} disabled={saving}>
-            إغلاق
+            {t('ui.close')}
           </Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving || parsing || !result}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            حفظ الصفوف الصالحة
+            {t('modalManager.importRawMaterials.saveValidRows')}
           </Button>
         </div>
       </div>

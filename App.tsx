@@ -454,6 +454,7 @@ const defaultTenantResolve: TenantSlugResolveValue = {
 
 const TenantLayout: React.FC = () => {
   const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
+  const location = useLocation();
   const [gate, setGate] = useState<TenantGate>('loading');
   const [tenantResolve, setTenantResolve] = useState<TenantSlugResolveValue>(defaultTenantResolve);
   const [forbiddenRequiresLogout, setForbiddenRequiresLogout] = useState(false);
@@ -472,6 +473,15 @@ const TenantLayout: React.FC = () => {
         const r = await tenantService.resolveSlug(tenantSlug);
         if (!alive) return;
         if (!r.exists || !r.tenantId) {
+          if (!isAuthenticated) {
+            // Keep slug context for shared links even if slug resolution is temporarily unavailable.
+            setTenantResolve({
+              pendingRegistration: false,
+              tenantStatus: 'unknown',
+            });
+            setGate('ready');
+            return;
+          }
           setGate('missing');
           return;
         }
@@ -532,6 +542,15 @@ const TenantLayout: React.FC = () => {
         setGate('ready');
       } catch {
         if (!alive) return;
+        if (!isAuthenticated) {
+          // Public/shared slug links should stay tenant-scoped on transient resolver failures.
+          setTenantResolve({
+            pendingRegistration: false,
+            tenantStatus: 'unknown',
+          });
+          setGate('ready');
+          return;
+        }
         setGate('missing');
       }
     })();
@@ -545,6 +564,10 @@ const TenantLayout: React.FC = () => {
   }
 
   if (gate === 'missing') {
+    const tenantLoginPath = `/t/${encodeURIComponent(tenantSlug)}/login`;
+    if (!isAuthenticated && location.pathname !== tenantLoginPath) {
+      return <Navigate to={tenantLoginPath} replace />;
+    }
     return <Navigate to="/" replace />;
   }
 

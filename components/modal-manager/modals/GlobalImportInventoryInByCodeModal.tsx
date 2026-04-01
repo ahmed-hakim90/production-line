@@ -9,6 +9,7 @@ import type { Warehouse, RawMaterial } from '../../../modules/inventory/types';
 import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../../../utils/importInventoryInByCode';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { useTranslation } from 'react-i18next';
 
 type ImportInByCodePayload = {
   warehouseId?: string;
@@ -26,6 +27,7 @@ const asImportPayload = (payload: Record<string, unknown> | undefined): ImportIn
 };
 
 export const GlobalImportInventoryInByCodeModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE);
   const products = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
@@ -80,7 +82,9 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
         : products.map((p) => ({ id: p.id, code: p.code, name: p.name })),
     [itemType, products, rawMaterials],
   );
-  const itemTypeLabel = itemType === 'raw_material' ? 'مادة خام' : 'منتج نهائي';
+  const itemTypeLabel = itemType === 'raw_material'
+    ? t('modalManager.importInventoryInByCode.itemType.rawMaterial')
+    : t('modalManager.importInventoryInByCode.itemType.finishedGood');
 
   if (!isOpen) return null;
 
@@ -114,7 +118,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
       setImportResult(result);
     } catch (error: any) {
       setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0 });
-      setMessage({ type: 'error', text: error?.message || 'تعذر قراءة ملف الاستيراد.' });
+      setMessage({ type: 'error', text: error?.message || t('modalManager.importInventoryInByCode.readImportFileError') });
     } finally {
       setImportParsing(false);
     }
@@ -123,12 +127,12 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   const handleImportSave = async () => {
     if (!importResult) return;
     if (!warehouseId) {
-      setMessage({ type: 'error', text: 'اختر المخزن أولاً قبل حفظ الاستيراد.' });
+      setMessage({ type: 'error', text: t('modalManager.importInventoryInByCode.selectWarehouseFirst') });
       return;
     }
     const validRows = importResult.rows.filter((row) => row.errors.length === 0);
     if (validRows.length === 0) {
-      setMessage({ type: 'error', text: 'لا توجد صفوف صالحة للحفظ.' });
+      setMessage({ type: 'error', text: t('modalManager.importInventoryInByCode.noValidRowsToSave') });
       return;
     }
     setImportSaving(true);
@@ -184,10 +188,10 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
       setImportFileName('');
       setMessage({
         type: 'success',
-        text: `تم استيراد ${validRows.length} صف بنجاح (${mergedRows.length} حركة مخزنية).`,
+        text: t('modalManager.importInventoryInByCode.importSuccess', { rows: validRows.length, movements: mergedRows.length }),
       });
     } catch (error: any) {
-      setMessage({ type: 'error', text: error?.message || 'تعذر حفظ بيانات الاستيراد.' });
+      setMessage({ type: 'error', text: error?.message || t('modalManager.importInventoryInByCode.saveImportDataError') });
     } finally {
       setImportSaving(false);
     }
@@ -212,7 +216,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
 
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold">استيراد {itemTypeLabel} بالكود</h3>
+            <h3 className="text-lg font-bold">{t('modalManager.importInventoryInByCode.title', { itemType: itemTypeLabel })}</h3>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{importFileName || '—'}</p>
           </div>
           {/* Optional header actions intentionally disabled. */}
@@ -220,61 +224,61 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
           <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-            <p className="text-xs text-[var(--color-text-muted)] mb-2">نوع الصنف</p>
+            <p className="text-xs text-[var(--color-text-muted)] mb-2">{t('modalManager.importInventoryInByCode.itemTypeLabel')}</p>
             <div className="flex items-center gap-2">
               <Button
                 variant={itemType === 'finished_good' ? 'primary' : 'outline'}
                 onClick={() => handleItemTypeChange('finished_good')}
                 disabled={importSaving || importParsing}
               >
-                منتج نهائي
+                {t('modalManager.importInventoryInByCode.itemType.finishedGood')}
               </Button>
               <Button
                 variant={itemType === 'raw_material' ? 'primary' : 'outline'}
                 onClick={() => handleItemTypeChange('raw_material')}
                 disabled={importSaving || importParsing}
               >
-                مادة خام
+                {t('modalManager.importInventoryInByCode.itemType.rawMaterial')}
               </Button>
             </div>
           </div>
 
           <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-            <p className="text-xs text-[var(--color-text-muted)] mb-2">المخزن المستهدف</p>
+            <p className="text-xs text-[var(--color-text-muted)] mb-2">{t('modalManager.importInventoryInByCode.targetWarehouse')}</p>
             <SearchableSelect
               options={warehouseSelectOptions}
               value={warehouseId}
               onChange={(value) => setWarehouseId(value)}
-              placeholder="ابحث واختر المخزن"
+              placeholder={t('modalManager.importInventoryInByCode.searchAndSelectWarehouse')}
             />
             <p className="text-xs text-[var(--color-text-muted)] mt-2">
-              المخزن الحالي: <span className="font-bold text-[var(--color-text)]">{selectedWarehouse?.name || 'غير محدد'}</span>
+              {t('modalManager.importInventoryInByCode.currentWarehouse')} <span className="font-bold text-[var(--color-text)]">{selectedWarehouse?.name || t('modalManager.importInventoryInByCode.notSet')}</span>
             </p>
           </div>
 
           {importParsing ? (
-            <p className="text-sm text-slate-500">جاري تحليل الملف...</p>
+            <p className="text-sm text-slate-500">{t('modalManager.importInventoryInByCode.analyzingFile')}</p>
           ) : !importResult ? (
             <div className="space-y-3">
-              <p className="text-sm text-slate-500">اختر ملف Excel للبدء في استيراد {itemTypeLabel}.</p>
+              <p className="text-sm text-slate-500">{t('modalManager.importInventoryInByCode.chooseExcelToStart', { itemType: itemTypeLabel })}</p>
               <Button variant="primary" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
                 <FileUp size={14} />
-                اختيار ملف الاستيراد
+                {t('modalManager.importInventoryInByCode.selectImportFile')}
               </Button>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                  <p className="text-xs text-slate-500">إجمالي الصفوف</p>
+                  <p className="text-xs text-slate-500">{t('modalManager.importInventoryInByCode.totalRows')}</p>
                   <p className="text-lg font-black">{importResult.totalRows}</p>
                 </div>
                 <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-900/10 p-3">
-                  <p className="text-xs text-emerald-700">صفوف صالحة</p>
+                  <p className="text-xs text-emerald-700">{t('modalManager.importInventoryInByCode.validRows')}</p>
                   <p className="text-lg font-bold text-emerald-700">{importResult.validCount}</p>
                 </div>
                 <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50/60 dark:bg-rose-900/10 p-3">
-                  <p className="text-xs text-rose-700">صفوف بها أخطاء</p>
+                  <p className="text-xs text-rose-700">{t('modalManager.importInventoryInByCode.rowsWithErrors')}</p>
                   <p className="text-lg font-bold text-rose-700">{importResult.errorCount}</p>
                 </div>
               </div>
@@ -283,10 +287,10 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">#</th>
-                      <th className="erp-th">الكود</th>
-                      <th className="erp-th">اسم الصنف</th>
-                      <th className="erp-th">الكمية</th>
-                      <th className="erp-th">الحالة</th>
+                      <th className="erp-th">{t('modalManager.importInventoryInByCode.table.code')}</th>
+                      <th className="erp-th">{t('modalManager.importInventoryInByCode.table.itemName')}</th>
+                      <th className="erp-th">{t('modalManager.importInventoryInByCode.table.quantity')}</th>
+                      <th className="erp-th">{t('modalManager.importInventoryInByCode.table.status')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
@@ -298,7 +302,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
                         <td className="px-3 py-2 text-sm">{row.quantity || 0}</td>
                         <td className="px-3 py-2 text-sm">
                           {row.errors.length === 0 ? (
-                            <span className="text-emerald-600 font-bold">صالح</span>
+                            <span className="text-emerald-600 font-bold">{t('modalManager.importInventoryInByCode.valid')}</span>
                           ) : (
                             <span className="text-rose-600 font-bold">{row.errors.join(' | ')}</span>
                           )}
@@ -326,11 +330,11 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
           <Button variant="outline" onClick={handleClose} disabled={importSaving}>
-            إغلاق
+            {t('ui.close')}
           </Button>
           <Button variant="primary" onClick={() => void handleImportSave()} disabled={importSaving || importParsing || !importResult}>
             {importSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            حفظ الصفوف الصالحة
+            {t('modalManager.importInventoryInByCode.saveValidRows')}
           </Button>
         </div>
       </div>

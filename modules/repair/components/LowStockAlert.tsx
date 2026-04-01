@@ -10,11 +10,11 @@ import type { LowStockEntry } from '../hooks/useLowStockAlert';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 export const LowStockAlert: React.FC<{
-  const { dir } = useAppDirection();
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entries: LowStockEntry[];
 }> = ({ open, onOpenChange, entries }) => {
+  const { dir } = useAppDirection();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent dir={dir}>

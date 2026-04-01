@@ -7,8 +7,10 @@ import { addDaysToDate, calculateEstimatedDays } from '../../../utils/calculatio
 import { parseProductionPlansExcel, type ProductionPlanImportResult } from '../../../utils/importProductionPlans';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { useTranslation } from 'react-i18next';
 
 export const GlobalImportProductionPlansModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.PRODUCTION_PLANS_IMPORT);
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
@@ -48,9 +50,9 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
     try {
       const parsed = await parseProductionPlansExcel(file, { products, lines });
       setResult(parsed);
-      if (parsed.rows.length === 0) setMessage('لا توجد بيانات صالحة داخل الملف');
+      if (parsed.rows.length === 0) setMessage(t('modalManager.importProductionPlans.noValidDataInFile'));
     } catch {
-      setMessage('تعذر قراءة ملف الاستيراد');
+      setMessage(t('modalManager.importProductionPlans.readImportFileError'));
     } finally {
       setParsing(false);
     }
@@ -58,7 +60,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
 
   const handleSave = async () => {
     if (!uid) {
-      setMessage('لا يمكن الاستيراد بدون مستخدم نشط');
+      setMessage(t('modalManager.importProductionPlans.cannotImportWithoutActiveUser'));
       return;
     }
     if (validRows.length === 0) return;
@@ -101,10 +103,10 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
     }
 
     if (failed === 0) {
-      setMessage(`تم استيراد ${done} خطة بنجاح`);
+      setMessage(t('modalManager.importProductionPlans.importSuccess', { done }));
       setResult(null);
     } else {
-      setMessage(`تم استيراد ${done - failed} خطة وفشل ${failed}`);
+      setMessage(t('modalManager.importProductionPlans.importPartial', { success: done - failed, failed }));
     }
     setSaving(false);
   };
@@ -124,10 +126,10 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
               <FileUp size={20} className="text-emerald-600" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">استيراد خطط الإنتاج من Excel</h3>
+              <h3 className="text-lg font-bold">{t('modalManager.importProductionPlans.title')}</h3>
               {result && (
                 <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                  {result.totalRows} صف — {result.validCount} صالح — {result.errorCount} خطأ
+                  {t('modalManager.importProductionPlans.headerStats', { total: result.totalRows, valid: result.validCount, errors: result.errorCount })}
                 </p>
               )}
             </div>
@@ -149,15 +151,15 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={parsing || saving}>
               {parsing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
-              اختيار ملف
+              {t('modalManager.importProductionPlans.chooseFile')}
             </Button>
           </div>
 
           {result && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-bold">
-              <div className="rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-blue-700 dark:text-blue-300">إجمالي: {result.totalRows}</div>
-              <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-3 py-2 text-emerald-700">صالح: {result.validCount}</div>
-              <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-3 py-2 text-rose-700">أخطاء: {result.errorCount}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-blue-700 dark:text-blue-300">{t('modalManager.importProductionPlans.totalLabel', { total: result.totalRows })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-3 py-2 text-emerald-700">{t('modalManager.importProductionPlans.validLabel', { valid: result.validCount })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-3 py-2 text-rose-700">{t('modalManager.importProductionPlans.errorsLabel', { errors: result.errorCount })}</div>
             </div>
           )}
 
@@ -167,11 +169,11 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th">#</th>
-                    <th className="erp-th">المنتج</th>
-                    <th className="erp-th">الخط</th>
-                    <th className="erp-th">الكمية</th>
-                    <th className="erp-th">تاريخ البدء</th>
-                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">{t('modalManager.importProductionPlans.table.product')}</th>
+                    <th className="erp-th">{t('modalManager.importProductionPlans.table.line')}</th>
+                    <th className="erp-th">{t('modalManager.importProductionPlans.table.quantity')}</th>
+                    <th className="erp-th">{t('modalManager.importProductionPlans.table.startDate')}</th>
+                    <th className="erp-th">{t('modalManager.importProductionPlans.table.status')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
@@ -187,7 +189,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
                         <td className="px-3 py-2 text-sm">{row.startDate || '—'}</td>
                         <td className="px-3 py-2 text-sm">
                           {row.errors.length === 0 ? (
-                            <span className="text-emerald-600 font-bold">صالح</span>
+                            <span className="text-emerald-600 font-bold">{t('modalManager.importProductionPlans.valid')}</span>
                           ) : (
                             <span className="text-rose-600 font-bold">{row.errors.join(' | ')}</span>
                           )}
@@ -220,11 +222,11 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
         </div>
 
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose} disabled={saving}>إغلاق</Button>
+          <Button variant="outline" onClick={handleClose} disabled={saving}>{t('ui.close')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || validRows.length === 0}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />
-            حفظ {validRows.length} خطة
+            {t('modalManager.importProductionPlans.savePlans', { count: validRows.length })}
           </Button>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useAppStore } from '@/store/useAppStore';
 import type { AttendanceRecord } from '@/modules/attendance/types';
+import { useTranslation } from 'react-i18next';
 
 type RowDraft = { checkIn: string; checkOut: string };
 
@@ -30,6 +31,7 @@ function toClock(value: any): string {
 }
 
 export const GlobalAttendanceSignatureFixModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX);
   const employees = useAppStore((s) => s.employees);
   const fetchEmployees = useAppStore((s) => s.fetchEmployees);
@@ -72,7 +74,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
       });
       setDrafts(initialDrafts);
     } catch (error) {
-      setMessage({ type: 'error', text: (error as Error).message || 'تعذر جلب السجلات' });
+      setMessage({ type: 'error', text: (error as Error).message || t('modalManager.attendanceSignatureFix.fetchRecordsError') });
     } finally {
       setLoading(false);
     }
@@ -99,10 +101,10 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
         checkIn: draft.checkIn || null,
         checkOut: draft.checkOut || null,
       });
-      setMessage({ type: 'success', text: 'تم حفظ التعديل بنجاح' });
+      setMessage({ type: 'success', text: t('modalManager.attendanceSignatureFix.saveSuccess') });
       await loadRecords();
     } catch (error) {
-      setMessage({ type: 'error', text: (error as Error).message || 'تعذر حفظ التعديل' });
+      setMessage({ type: 'error', text: (error as Error).message || t('modalManager.attendanceSignatureFix.saveError') });
     } finally {
       setSavingId('');
     }
@@ -115,8 +117,8 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="erp-modal-head">
-          <h3 className="erp-modal-title">إشعار توقيع - معالجة البصمة الواحدة</h3>
-          <button className="erp-modal-close" onClick={() => { if (!savingId) close(); }} aria-label="إغلاق">
+          <h3 className="erp-modal-title">{t('modalManager.attendanceSignatureFix.title')}</h3>
+          <button className="erp-modal-close" onClick={() => { if (!savingId) close(); }} aria-label={t('ui.close')}>
             <span className="material-icons-round">close</span>
           </button>
         </div>
@@ -130,20 +132,20 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
 
           <div className="erp-filter-bar border border-[var(--color-border)] rounded-[var(--border-radius-base)]">
             <div className="w-full md:w-[320px]">
-              <label className="erp-filter-label">الموظف</label>
+              <label className="erp-filter-label">{t('modalManager.attendanceSignatureFix.employee')}</label>
               <SearchableSelect
                 options={employeeOptions}
                 value={selectedEmployeeId}
                 onChange={(value) => setSelectedEmployeeId(value)}
-                placeholder="اختر الموظف"
+                placeholder={t('modalManager.attendanceSignatureFix.selectEmployee')}
               />
             </div>
             <label className="erp-filter-date">
-              <span className="erp-filter-label">من</span>
+              <span className="erp-filter-label">{t('modalManager.attendanceSignatureFix.from')}</span>
               <input type="date" value={range.startDate} onChange={(e) => setRange((p) => ({ ...p, startDate: e.target.value }))} />
             </label>
             <label className="erp-filter-date">
-              <span className="erp-filter-label">إلى</span>
+              <span className="erp-filter-label">{t('modalManager.attendanceSignatureFix.to')}</span>
               <input type="date" value={range.endDate} onChange={(e) => setRange((p) => ({ ...p, endDate: e.target.value }))} />
             </label>
             <button
@@ -153,7 +155,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
               disabled={loading || !selectedEmployeeId}
             >
               <span className="material-icons-round text-sm">search</span>
-              {loading ? 'جار التحميل...' : 'عرض الأيام'}
+              {loading ? t('modalManager.attendanceSignatureFix.loading') : t('modalManager.attendanceSignatureFix.showDays')}
             </button>
           </div>
 
@@ -161,18 +163,18 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
             <table className="erp-table min-w-full text-sm">
               <thead className="bg-[var(--color-bg-alt)]">
                 <tr>
-                  <th className="px-3 py-2 text-right">التاريخ</th>
-                  <th className="px-3 py-2 text-right">الحالة</th>
-                  <th className="px-3 py-2 text-right">دخول</th>
-                  <th className="px-3 py-2 text-right">خروج</th>
-                  <th className="px-3 py-2 text-right">إجراء</th>
+                  <th className="px-3 py-2 text-right">{t('modalManager.attendanceSignatureFix.table.date')}</th>
+                  <th className="px-3 py-2 text-right">{t('modalManager.attendanceSignatureFix.table.status')}</th>
+                  <th className="px-3 py-2 text-right">{t('modalManager.attendanceSignatureFix.table.checkIn')}</th>
+                  <th className="px-3 py-2 text-right">{t('modalManager.attendanceSignatureFix.table.checkOut')}</th>
+                  <th className="px-3 py-2 text-right">{t('modalManager.attendanceSignatureFix.table.action')}</th>
                 </tr>
               </thead>
               <tbody>
                 {records.length === 0 && (
                   <tr>
                     <td className="px-3 py-6 text-center text-[var(--color-text-muted)]" colSpan={5}>
-                      لا توجد أيام بصمة واحدة ضمن الفترة المختارة
+                      {t('modalManager.attendanceSignatureFix.noRows')}
                     </td>
                   </tr>
                 )}
@@ -208,7 +210,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
                           disabled={rowSaving}
                         >
                           {rowSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                          {rowSaving ? 'جار الحفظ...' : 'حفظ'}
+                          {rowSaving ? t('modalManager.attendanceSignatureFix.saving') : t('ui.save')}
                         </Button>
                       </td>
                     </tr>
@@ -221,7 +223,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
 
         <div className="erp-modal-foot">
           <button type="button" className="erp-btn erp-btn-light" onClick={() => close()}>
-            إغلاق
+            {t('ui.close')}
           </button>
         </div>
       </div>

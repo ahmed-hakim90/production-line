@@ -5,6 +5,7 @@ import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreEmployee, FirestoreRole } from '../../../types';
 import { parseUsersImportFile, type ParsedUserImportRow } from '../../../utils/importUsers';
 import { downloadUsersTemplate } from '../../../utils/downloadTemplates';
+import { useTranslation } from 'react-i18next';
 
 type ImportStatus = 'pending' | 'created' | 'error';
 type ImportEntry = ParsedUserImportRow & { status: ImportStatus; selected: boolean; runtimeError?: string };
@@ -23,6 +24,7 @@ type ImportUsersPayload = {
 };
 
 export const GlobalImportSystemUsersModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.SYSTEM_USERS_IMPORT);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<ImportEntry[]>([]);
@@ -81,9 +83,9 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
         selected: row.errors.length === 0,
       }));
       setEntries(next);
-      if (parsed.totalRows === 0) setMessage('الملف لا يحتوي على بيانات.');
+      if (parsed.totalRows === 0) setMessage(t('modalManager.importSystemUsers.fileHasNoData'));
     } catch {
-      setMessage('تعذر قراءة ملف الاستيراد.');
+      setMessage(t('modalManager.importSystemUsers.readImportFileError'));
     } finally {
       setParsing(false);
     }
@@ -103,7 +105,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
 
       const roleId = roleByNormalizedName.get(String(target.roleNameOrId || '').trim().toLowerCase());
       if (!roleId) {
-        next[idx] = { ...next[idx], status: 'error', runtimeError: `الدور غير معروف: ${target.roleNameOrId}` };
+        next[idx] = { ...next[idx], status: 'error', runtimeError: t('modalManager.importSystemUsers.unknownRole', { role: target.roleNameOrId }) };
         failedCount += 1;
         continue;
       }
@@ -113,7 +115,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
       if (code) {
         employeeId = employeeByCode.get(code);
         if (!employeeId) {
-          next[idx] = { ...next[idx], status: 'error', runtimeError: `كود الموظف غير موجود: ${target.employeeCode}` };
+          next[idx] = { ...next[idx], status: 'error', runtimeError: t('modalManager.importSystemUsers.employeeCodeNotFound', { code: target.employeeCode }) };
           failedCount += 1;
           continue;
         }
@@ -130,7 +132,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
         next[idx] = { ...next[idx], status: 'created', selected: false, runtimeError: undefined };
         createdCount += 1;
       } catch (error: any) {
-        next[idx] = { ...next[idx], status: 'error', runtimeError: error?.message || 'تعذر إنشاء الحساب' };
+        next[idx] = { ...next[idx], status: 'error', runtimeError: error?.message || t('modalManager.importSystemUsers.createAccountError') };
         failedCount += 1;
       }
       setEntries([...next]);
@@ -138,7 +140,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
 
     setEntries([...next]);
     setCreating(false);
-    setMessage(`تم إنشاء ${createdCount} حساب، وفشل ${failedCount}.`);
+    setMessage(t('modalManager.importSystemUsers.createSummary', { created: createdCount, failed: failedCount }));
   };
 
   const pendingEntries = entries.filter((entry) => entry.status === 'pending');
@@ -149,8 +151,8 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[96vw] max-w-5xl max-h-[90dvh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold">استيراد مستخدمين</h3>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">الرفع لا ينشئ الحسابات مباشرة. راجع الصفوف ثم أنشئ المطلوب.</p>
+            <h3 className="text-lg font-bold">{t('modalManager.importSystemUsers.title')}</h3>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">{t('modalManager.importSystemUsers.subtitle')}</p>
           </div>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors" disabled={creating}>
             <X size={20} />
@@ -163,35 +165,35 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={parsing || creating}>
               {parsing ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-              {parsing ? 'جاري قراءة الملف...' : 'اختيار ملف الاستيراد'}
+              {parsing ? t('modalManager.importSystemUsers.readingFile') : t('modalManager.importSystemUsers.selectImportFile')}
             </button>
             <button className="btn btn-secondary" onClick={downloadUsersTemplate} disabled={parsing || creating}>
               <Download size={15} />
-              تحميل قالب الاستيراد
+              {t('modalManager.importSystemUsers.downloadTemplate')}
             </button>
             <button
               className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'all' ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('all')}
             >
-              الكل
+              {t('modalManager.importSystemUsers.filterAll')}
             </button>
             <button
               className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('pending')}
             >
-              غير منشأ
+              {t('modalManager.importSystemUsers.filterPending')}
             </button>
             <button
               className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'created' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('created')}
             >
-              منشأ
+              {t('modalManager.importSystemUsers.filterCreated')}
             </button>
             <button
               className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'error' ? 'bg-rose-600 text-white border-rose-600' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('error')}
             >
-              أخطاء
+              {t('modalManager.importSystemUsers.filterErrors')}
             </button>
           </div>
 
@@ -202,19 +204,24 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
           )}
 
           <div className="text-xs text-[var(--color-text-muted)] font-medium">
-            إجمالي: {entries.length} | غير منشأ: {pendingEntries.length} | منشأ: {entries.filter((entry) => entry.status === 'created').length} | أخطاء: {entries.filter((entry) => entry.status === 'error').length}
+            {t('modalManager.importSystemUsers.stats', {
+              total: entries.length,
+              pending: pendingEntries.length,
+              created: entries.filter((entry) => entry.status === 'created').length,
+              errors: entries.filter((entry) => entry.status === 'error').length,
+            })}
           </div>
 
           <div className="erp-table-scroll">
             <table className="erp-table w-full text-sm">
               <thead className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)]">
-                  <th className="text-right py-2.5 px-3">تحديد</th>
-                  <th className="text-right py-2.5 px-3">الاسم</th>
-                  <th className="text-right py-2.5 px-3">البريد</th>
-                  <th className="text-right py-2.5 px-3">الدور</th>
-                  <th className="text-right py-2.5 px-3">كود الموظف</th>
-                  <th className="text-right py-2.5 px-3">الحالة</th>
+                  <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.select')}</th>
+                  <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.name')}</th>
+                  <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.email')}</th>
+                  <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.role')}</th>
+                  <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.employeeCode')}</th>
+                  <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,13 +246,21 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
                     <td className="py-2.5 px-3">{entry.roleNameOrId}</td>
                     <td className="py-2.5 px-3">{entry.employeeCode || '—'}</td>
                     <td className="py-2.5 px-3">
-                      {entry.status === 'pending' ? 'غير منشأ' : entry.status === 'created' ? 'تم الإنشاء' : `خطأ: ${entry.runtimeError || entry.errors.join('، ')}`}
+                      {entry.status === 'pending'
+                        ? t('modalManager.importSystemUsers.status.pending')
+                        : entry.status === 'created'
+                          ? t('modalManager.importSystemUsers.status.created')
+                          : t('modalManager.importSystemUsers.status.error', {
+                              reason:
+                                entry.runtimeError ||
+                                entry.errors.join(t('modalManager.shared.listSeparator')),
+                            })}
                     </td>
                   </tr>
                 ))}
                 {filteredEntries.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 px-3 text-center text-[var(--color-text-muted)]">لا توجد صفوف لهذا الفلتر.</td>
+                    <td colSpan={6} className="py-8 px-3 text-center text-[var(--color-text-muted)]">{t('modalManager.importSystemUsers.noRowsForFilter')}</td>
                   </tr>
                 )}
               </tbody>
@@ -254,7 +269,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
-          <button className="btn btn-secondary" onClick={handleClose} disabled={creating}>إغلاق</button>
+          <button className="btn btn-secondary" onClick={handleClose} disabled={creating}>{t('ui.close')}</button>
           <button
             className="btn btn-secondary"
             onClick={() => {
@@ -264,21 +279,21 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
             }}
             disabled={creating || pendingEntries.length === 0}
           >
-            تحديد الكل غير المنشأ
+            {t('modalManager.importSystemUsers.selectAllPending')}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => void runCreateForEntries(selectedPending)}
             disabled={creating || selectedPending.length === 0}
           >
-            إنشاء/تفعيل المحدد ({selectedPending.length})
+            {t('modalManager.importSystemUsers.createSelected', { count: selectedPending.length })}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => void runCreateForEntries(pendingEntries)}
             disabled={creating || pendingEntries.length === 0}
           >
-            إنشاء/تفعيل الكل غير المنشأ ({pendingEntries.length})
+            {t('modalManager.importSystemUsers.createAllPending', { count: pendingEntries.length })}
           </button>
         </div>
       </div>
