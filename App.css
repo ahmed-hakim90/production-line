@@ -1197,7 +1197,7 @@ button {
 
 /* ══════════════════════════════════════════════════════════
    ERPNext Modal System
-   ══════════════════════════════════════════════════════════ */
+   ═════��════════════════════════════════════════════════════ */
 
 /* Modal container */
 .modal-container,
@@ -2522,6 +2522,430 @@ input[type="radio"] {
     border: 1px solid #d1d5db !important;
     text-align: right !important;
   }
+}
+
+/* ══════════════════════════════════════════════════════════
+   WINDOWS 2000 THEME — Microsoft 2000 / Office 2000 style
+   Applied via .win2k-theme on .erp-dashboard-theme
+   ══════════════════════════════════════════════════════════ */
+
+.win2k-theme {
+  /* Win2K design tokens */
+  --w2k-grey: #d4d0c8;
+  --w2k-grey-light: #ece9d8;
+  --w2k-grey-dark: #a09c92;
+  --w2k-grey-darker: #808080;
+  --w2k-white: #ffffff;
+  --w2k-black: #000000;
+  --w2k-titlebar-from: #0a246a;
+  --w2k-titlebar-to: #a6b8cb;
+  --w2k-selection: #0a246a;
+  --w2k-selection-text: #ffffff;
+  --w2k-link: #0000cc;
+  --w2k-border-light: #ffffff;
+  --w2k-border-shadow: #808080;
+  --w2k-border-dark: #404040;
+
+  /* Override ERP tokens */
+  --color-bg: #d4d0c8 !important;
+  --color-background: #d4d0c8 !important;
+  --color-card: #ece9d8 !important;
+  --color-border: #a09c92 !important;
+  --color-text: #000000 !important;
+  --color-text-muted: #404040 !important;
+  --color-primary: 10 36 106 !important;
+  --color-sidebar-bg: #d4d0c8 !important;
+  --border-radius-sm: 0px !important;
+  --border-radius-base: 0px !important;
+  --border-radius-lg: 0px !important;
+  --border-radius-xl: 0px !important;
+  --shadow-card: inset -1px -1px 0 #404040, inset 1px 1px 0 #ffffff, inset -2px -2px 0 #808080, inset 2px 2px 0 #ece9d8 !important;
+  --font-family-base: 'Tahoma', 'MS Sans Serif', 'Cairo', sans-serif !important;
+
+  font-family: 'Tahoma', 'MS Sans Serif', 'Cairo', sans-serif !important;
+  background: #d4d0c8 !important;
+}
+
+/* All rounded corners → sharp in Win2K */
+.win2k-theme * {
+  border-radius: 0 !important;
+  font-family: 'Tahoma', 'MS Sans Serif', 'Cairo', sans-serif !important;
+}
+
+/* Cards get the classic Win2K raised panel look */
+.win2k-theme [class*="rounded"],
+.win2k-theme .erp-card,
+.win2k-theme [class*="bg-[var(--color-card)]"],
+.win2k-theme .page-card {
+  border-radius: 0 !important;
+}
+
+/* Win2K raised 3D panel border (outset) */
+.win2k-theme > div,
+.win2k-theme .space-y-6 > div,
+.win2k-theme .space-y-8 > div {
+  border-radius: 0 !important;
+}
+
+/* Card / panel — classic raised bevel */
+.win2k-theme .bg-\[var\(--color-card\)\],
+.win2k-theme [style*="--color-card"] {
+  background-color: #ece9d8 !important;
+}
+
+/* All cards: outset bevel */
+.win2k-theme .border {
+  border: none !important;
+  box-shadow:
+    inset -1px -1px 0 #404040,
+    inset 1px 1px 0 #ffffff,
+    inset -2px -2px 0 #808080,
+    inset 2px 2px 0 #ece9d8 !important;
+}
+
+/* Sunken / inset areas (like the grey sub-panels) */
+.win2k-theme [class*="bg-[#f8f9fa]"],
+.win2k-theme [class*="bg-[#f0f2f5]"] {
+  background: #d4d0c8 !important;
+  box-shadow:
+    inset 1px 1px 0 #808080,
+    inset -1px -1px 0 #ffffff !important;
+  border: none !important;
+}
+
+/* Primary / active backgrounds */
+.win2k-theme [class*="bg-blue-50"],
+.win2k-theme [class*="bg-indigo-50"],
+.win2k-theme [class*="bg-violet-50"],
+.win2k-theme [class*="bg-emerald-50"],
+.win2k-theme [class*="bg-amber-50"] {
+  background: #d4d0c8 !important;
+}
+
+/* Title bar — the classic navy-to-steel gradient strip inside each card */
+.win2k-theme .border-b {
+  background: linear-gradient(to right, #0a246a, #a6b8cb) !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+
+/* Text inside title bars should be white */
+.win2k-theme .border-b h3,
+.win2k-theme .border-b p,
+.win2k-theme .border-b span,
+.win2k-theme .border-b svg {
+  color: #ffffff !important;
+}
+
+/* Table headers */
+.win2k-theme .erp-thead,
+.win2k-theme thead tr,
+.win2k-theme thead th {
+  background: linear-gradient(to right, #0a246a, #a6b8cb) !important;
+  color: #ffffff !important;
+  border: 1px solid #808080 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 11px !important;
+}
+
+/* Table body */
+.win2k-theme tbody tr:hover {
+  background: #0a246a !important;
+  color: #ffffff !important;
+}
+
+.win2k-theme tbody tr:hover * {
+  color: #ffffff !important;
+}
+
+.win2k-theme tbody td {
+  border: 1px solid #a09c92 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-size: 11px !important;
+}
+
+/* Buttons — Win2K raised button */
+.win2k-theme button:not([disabled]) {
+  background: #d4d0c8 !important;
+  color: #000000 !important;
+  border: none !important;
+  box-shadow:
+    inset -1px -1px 0 #404040,
+    inset 1px 1px 0 #ffffff,
+    inset -2px -2px 0 #808080,
+    inset 2px 2px 0 #ece9d8 !important;
+  font-size: 11px !important;
+  padding: 3px 10px !important;
+  cursor: pointer !important;
+}
+
+.win2k-theme button:not([disabled]):hover {
+  background: #d4d0c8 !important;
+}
+
+.win2k-theme button:not([disabled]):active {
+  box-shadow:
+    inset 1px 1px 0 #404040,
+    inset -1px -1px 0 #ffffff,
+    inset 2px 2px 0 #808080,
+    inset -2px -2px 0 #ece9d8 !important;
+}
+
+/* Primary buttons — keep as slightly raised dark */
+.win2k-theme button[class*="bg-primary"],
+.win2k-theme [class*="variant-primary"] {
+  background: #0a246a !important;
+  color: #ffffff !important;
+}
+
+/* Inputs — Win2K sunken field */
+.win2k-theme input,
+.win2k-theme select,
+.win2k-theme textarea {
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow:
+    inset 1px 1px 0 #808080,
+    inset -1px -1px 0 #ffffff,
+    inset 2px 2px 0 #404040,
+    inset -2px -2px 0 #ece9d8 !important;
+  color: #000000 !important;
+  font-size: 11px !important;
+}
+
+.win2k-theme input:focus,
+.win2k-theme select:focus,
+.win2k-theme textarea:focus {
+  outline: 1px dotted #0a246a !important;
+  box-shadow:
+    inset 1px 1px 0 #808080,
+    inset -1px -1px 0 #ffffff,
+    inset 2px 2px 0 #404040,
+    inset -2px -2px 0 #ece9d8 !important;
+}
+
+/* Progress bars — classic Win2K blue blocks */
+.win2k-theme [class*="bg-primary shadow"],
+.win2k-theme [class*="rounded-full"][class*="bg-primary"],
+.win2k-theme .h-2\.5 > div,
+.win2k-theme .h-full.rounded-full {
+  background: repeating-linear-gradient(
+    to right,
+    #0a246a 0px,
+    #0a246a 8px,
+    #2a5bd7 8px,
+    #2a5bd7 10px
+  ) !important;
+  border-radius: 0 !important;
+}
+
+/* The progress track */
+.win2k-theme .h-2\.5.bg-\[\#f0f2f5\],
+.win2k-theme [class*="bg-[#f0f2f5]"].rounded-full {
+  background: #ffffff !important;
+  box-shadow:
+    inset 1px 1px 0 #808080,
+    inset -1px -1px 0 #ffffff !important;
+}
+
+/* KPI boxes — Win2K style raised group boxes */
+.win2k-theme [class*="grid"] > div {
+  border-radius: 0 !important;
+}
+
+/* Badges — flat, system colors */
+.win2k-theme [class*="rounded-full"],
+.win2k-theme .badge-success,
+.win2k-theme .badge-warning,
+.win2k-theme .badge-neutral {
+  background: #d4d0c8 !important;
+  color: #000000 !important;
+  border: 1px solid #808080 !important;
+  border-radius: 0 !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+}
+
+/* Active/success badge */
+.win2k-theme .badge-success {
+  background: #000080 !important;
+  color: #ffffff !important;
+}
+
+/* Text color overrides */
+.win2k-theme [class*="text-blue-600"],
+.win2k-theme [class*="text-indigo-600"],
+.win2k-theme [class*="text-violet-600"],
+.win2k-theme [class*="text-primary"] {
+  color: #0a246a !important;
+}
+
+.win2k-theme [class*="text-emerald-600"] {
+  color: #006400 !important;
+}
+
+.win2k-theme [class*="text-amber-600"],
+.win2k-theme [class*="text-amber-500"] {
+  color: #8b4513 !important;
+}
+
+/* Section headings — Win2K groupbox label style */
+.win2k-theme h3,
+.win2k-theme h4 {
+  font-size: 11px !important;
+  font-weight: bold !important;
+  color: #000000 !important;
+}
+
+.win2k-theme h3.text-lg,
+.win2k-theme h3.text-xl,
+.win2k-theme .text-lg,
+.win2k-theme .text-xl,
+.win2k-theme .text-2xl,
+.win2k-theme .text-3xl {
+  font-size: 13px !important;
+  font-weight: bold !important;
+}
+
+/* KPI big numbers */
+.win2k-theme [class*="text-xl font-bold"],
+.win2k-theme [class*="text-2xl font-bold"] {
+  font-size: 18px !important;
+  color: #0a246a !important;
+}
+
+/* The colored accent strip for section titles */
+.win2k-theme .bg-primary.rounded-full {
+  background: #0a246a !important;
+  width: 3px !important;
+  border-radius: 0 !important;
+}
+
+/* Recharts: Win2K style */
+.win2k-theme .recharts-cartesian-grid line {
+  stroke: #a09c92 !important;
+}
+
+.win2k-theme .recharts-bar-rectangle path {
+  fill: #0a246a !important;
+}
+
+/* Scrollbar Win2K style */
+.win2k-theme ::-webkit-scrollbar {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.win2k-theme ::-webkit-scrollbar-track {
+  background: #d4d0c8 !important;
+  box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff !important;
+}
+
+.win2k-theme ::-webkit-scrollbar-thumb {
+  background: #d4d0c8 !important;
+  box-shadow:
+    inset -1px -1px 0 #404040,
+    inset 1px 1px 0 #ffffff,
+    inset -2px -2px 0 #808080,
+    inset 2px 2px 0 #ece9d8 !important;
+  border-radius: 0 !important;
+}
+
+/* Modal dialog — Win2K window chrome */
+.win2k-theme [class*="fixed inset-0"] > div {
+  border: 2px solid #0a246a !important;
+  border-radius: 0 !important;
+  box-shadow: 3px 3px 0 #000000 !important;
+  background: #d4d0c8 !important;
+}
+
+/* Pulse animation — remove in Win2K */
+.win2k-theme [class*="animate-pulse"] {
+  animation: none !important;
+}
+
+/* Backdrop */
+.win2k-theme [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  background: rgba(0, 0, 128, 0.2) !important;
+}
+
+/* Select / dropdown trigger */
+.win2k-theme [role="combobox"],
+.win2k-theme [data-radix-select-trigger] {
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow:
+    inset 1px 1px 0 #808080,
+    inset -1px -1px 0 #ffffff,
+    inset 2px 2px 0 #404040,
+    inset -2px -2px 0 #ece9d8 !important;
+  font-size: 11px !important;
+  color: #000000 !important;
+}
+
+/* Select dropdown content */
+.win2k-theme [role="listbox"],
+.win2k-theme [data-radix-select-content] {
+  background: #ffffff !important;
+  border: 1px solid #808080 !important;
+  border-radius: 0 !important;
+  box-shadow: 2px 2px 0 #000000 !important;
+}
+
+.win2k-theme [role="option"]:hover,
+.win2k-theme [data-radix-select-item]:hover {
+  background: #0a246a !important;
+  color: #ffffff !important;
+}
+
+/* Dark mode: disabled in Win2K theme */
+.win2k-theme .dark\:bg-blue-900\/20,
+.win2k-theme .dark\:bg-indigo-900\/10,
+.win2k-theme .dark\:bg-violet-900\/20,
+.win2k-theme [class*="dark:bg-"] {
+  background: transparent !important;
+}
+
+/* Win2K "window title" on card headers — specific class selector */
+.win2k-theme .px-5.py-4.border-b,
+.win2k-theme .px-6.py-5.border-b,
+.win2k-theme .px-4.py-3.border-b {
+  background: linear-gradient(to left, #0a246a, #a6b8cb) !important;
+  padding: 3px 6px !important;
+}
+
+/* Special: sunken KPI sub-cells */
+.win2k-theme [class*="rounded-"][class*="p-3"],
+.win2k-theme [class*="rounded-"][class*="p-4"] {
+  border-radius: 0 !important;
+}
+
+/* Hack: fix button override for border-b divs (they shouldn't be affected) */
+.win2k-theme .border-b button {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  padding: 2px 6px !important;
+}
+
+.win2k-theme .border-b button:hover {
+  background: rgba(255,255,255,0.2) !important;
+}
+
+/* Loading skeleton — Win2K style */
+.win2k-theme [class*="animate-pulse"],
+.win2k-theme .skeleton {
+  background: #d4d0c8 !important;
+  box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #ffffff !important;
+}
+
+/* ── Win2K "title bar" decoration added via pseudo-element ── */
+.win2k-theme .bg-\[var\(--color-card\)\].rounded-\[var\(--border-radius-xl\)\],
+.win2k-theme [class*="rounded-[var(--border-radius-xl)]"] {
+  border-radius: 0 !important;
 }
 
 /* Production/Inventory DS normalization wrapper */
