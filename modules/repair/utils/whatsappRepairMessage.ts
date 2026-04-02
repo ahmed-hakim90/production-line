@@ -1,6 +1,6 @@
 import type { RepairJob, RepairJobStatus } from '../types';
 
-const statusLabelMap: Record<RepairJobStatus, string> = {
+const statusLabelMap: Record<string, string> = {
   received: 'وارد',
   inspection: 'فحص',
   repair: 'إصلاح',
@@ -18,7 +18,7 @@ const warrantyLabelMap = {
 export const formatRepairWhatsAppMessage = (job: RepairJob): string => {
   const lines = [
     `مرحباً ${job.customerName}،`,
-    `جهازك (${job.deviceBrand} ${job.deviceModel}) حالته الآن: ${statusLabelMap[job.status]}`,
+    `جهازك (${job.deviceBrand} ${job.deviceModel}) حالته الآن: ${statusLabelMap[job.status] || job.status}`,
     `رقم الإيصال: ${job.receiptNo}`,
   ];
 

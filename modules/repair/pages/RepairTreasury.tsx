@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
@@ -12,6 +13,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairTreasuryEntry, type RepairTreasurySession } from '../types';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
@@ -31,7 +33,20 @@ export const RepairTreasury: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile: user,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [user, userRoleName, systemSettings, userPermissions],
+  );
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [branchId, setBranchId] = useState('');
   const [sessions, setSessions] = useState<RepairTreasurySession[]>([]);
@@ -48,8 +63,9 @@ export const RepairTreasury: React.FC = () => {
   const [entryType, setEntryType] = useState<TreasuryEntryType>('INCOME');
   const [entryAmount, setEntryAmount] = useState('0');
   const [entryNote, setEntryNote] = useState('');
+  const [showPrevDayCloseModal, setShowPrevDayCloseModal] = useState(false);
   const allowedBranches = useMemo(() => {
-    if (can('repair.branches.manage')) return branches;
+    if (repairCtx.canViewAllBranches) return branches;
     const baseUserBranchIds = resolveUserRepairBranchIds(user);
     const userId = String(user?.id || '').trim();
     const employeeId = String(currentEmployee?.id || '').trim();
@@ -58,10 +74,11 @@ export const RepairTreasury: React.FC = () => {
       if (!id) return false;
       if (baseUserBranchIds.includes(id)) return true;
       if (userId && (branch.technicianIds || []).includes(userId)) return true;
+      if (employeeId && (branch.technicianIds || []).includes(employeeId)) return true;
       if (employeeId && String(branch.managerEmployeeId || '') === employeeId) return true;
       return false;
     });
-  }, [branches, can, currentEmployee?.id, user]);
+  }, [branches, repairCtx.canViewAllBranches, currentEmployee?.id, user]);
 
   const load = async (selectedBranchId: string, options?: { suppressToast?: boolean }) => {
     if (!selectedBranchId) return;
@@ -91,15 +108,6 @@ export const RepairTreasury: React.FC = () => {
         const rows = await repairBranchService.list();
         if (!mounted) return;
         setBranches(rows);
-        const defaultBranch = rows[0]?.id || '';
-        setBranchId(defaultBranch);
-        if (!defaultBranch) {
-          setSessions([]);
-          setEntries([]);
-          setActiveOpenSession(null);
-          return;
-        }
-        await load(defaultBranch, { suppressToast: true });
       } catch (e: any) {
         if (!mounted) return;
         setBranches([]);
@@ -136,6 +144,18 @@ export const RepairTreasury: React.FC = () => {
     const allowedBranchIds = allowedBranches.map((branch) => String(branch.id || '')).filter(Boolean);
     void loadAllBranchSessions(allowedBranchIds);
   }, [allowedBranches]);
+
+  useEffect(() => {
+    if (!branchId) return;
+    void (async () => {
+      try {
+        const prevDayOpen = await repairTreasuryService.getPreviousDayOpenSession(branchId);
+        if (prevDayOpen?.id) setShowPrevDayCloseModal(true);
+      } catch {
+        // no-op
+      }
+    })();
+  }, [branchId]);
 
   const openSession = useMemo(
     () => activeOpenSession || sessions.find((s) => s.status === 'open') || null,
@@ -398,6 +418,11 @@ export const RepairTreasury: React.FC = () => {
               </div>
               <Button className="w-full md:w-auto xl:justify-self-start" onClick={async () => {
                 try {
+                  const prevDayOpen = await repairTreasuryService.getPreviousDayOpenSession(branchId);
+                  if (prevDayOpen?.id) {
+                    setShowPrevDayCloseModal(true);
+                    return;
+                  }
                   await repairTreasuryService.addEntry({
                     branchId,
                     entryType,
@@ -543,6 +568,46 @@ export const RepairTreasury: React.FC = () => {
           )}
         </CardContent>
       </Card>
+      <Dialog open={showPrevDayCloseModal} onOpenChange={setShowPrevDayCloseModal}>
+        <DialogContent dir={dir}>
+          <DialogHeader>
+            <DialogTitle>إغلاق خزينة يوم سابق</DialogTitle>
+            <DialogDescription>
+              يوجد جلسة خزينة مفتوحة من يوم سابق. يجب إغلاقها قبل تنفيذ أي حركة جديدة.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div>
+              <Label>رصيد الإقفال الفعلي</Label>
+              <Input className="mt-1" type="number" value={closingBalance} onChange={(e) => setClosingBalance(e.target.value)} />
+            </div>
+            <div>
+              <Label>سبب الفرق</Label>
+              <Input className="mt-1" value={closingDifferenceReason} onChange={(e) => setClosingDifferenceReason(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPrevDayCloseModal(false)}>إلغاء</Button>
+            <Button onClick={async () => {
+              try {
+                await repairTreasuryService.closeSession({
+                  branchId,
+                  closingBalance: Number(closingBalance || 0),
+                  differenceReason: String(closingDifferenceReason || ''),
+                  closedBy: user?.id || '',
+                  closedByName: user?.displayName || user?.email || 'system',
+                  note: 'إغلاق إلزامي لجلسة يوم سابق',
+                });
+                setShowPrevDayCloseModal(false);
+                toast.success('تم إغلاق خزينة اليوم السابق.');
+                await load(branchId);
+              } catch (e: any) {
+                toast.error(e?.message || 'تعذر إغلاق خزينة اليوم السابق.');
+              }
+            }}>إغلاق الخزينة</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

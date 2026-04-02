@@ -68,12 +68,17 @@ export const repairBranchService = {
     throw new Error('استخدم removeCascade لحذف الفرع مع جميع البيانات المرتبطة.');
   },
 
-  async removeCascade(id: string): Promise<{ deletedFirestoreDocs: number; deletedCounts: Record<string, number> }> {
-    if (!isConfigured) return { deletedFirestoreDocs: 0, deletedCounts: {} };
+  async removeCascade(id: string): Promise<{
+    deletedFirestoreDocs: number;
+    deletedCounts: Record<string, number>;
+    unlinkedCounts: Record<string, number>;
+  }> {
+    if (!isConfigured) return { deletedFirestoreDocs: 0, deletedCounts: {}, unlinkedCounts: {} };
     const result = await deleteRepairBranchCascadeCallable(id);
     return {
       deletedFirestoreDocs: Number(result.deletedFirestoreDocs || 0),
       deletedCounts: result.deletedCounts || {},
+      unlinkedCounts: result.unlinkedCounts || {},
     };
   },
 

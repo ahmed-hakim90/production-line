@@ -9,8 +9,8 @@ export const REPAIR_JOB_STATUSES = [
   'unrepairable',
 ] as const;
 
-export type RepairJobStatus = (typeof REPAIR_JOB_STATUSES)[number];
-export const REPAIR_JOB_STATUS_LABELS: Record<RepairJobStatus, string> = {
+export type RepairJobStatus = string;
+export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
   received: 'وارد',
   inspection: 'فحص',
   repair: 'إصلاح',
@@ -18,7 +18,7 @@ export const REPAIR_JOB_STATUS_LABELS: Record<RepairJobStatus, string> = {
   delivered: 'تم التسليم',
   unrepairable: 'غير قابل للإصلاح',
 };
-export const REPAIR_JOB_STATUS_COLORS: Record<RepairJobStatus, string> = {
+export const REPAIR_JOB_STATUS_COLORS: Record<string, string> = {
   received: '#64748b',
   inspection: '#f59e0b',
   repair: '#0ea5e9',

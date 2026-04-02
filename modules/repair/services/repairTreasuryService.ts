@@ -25,8 +25,11 @@ import type {
   RepairTreasurySessionDetailsRow,
   RepairTreasurySessionStatusFilter,
 } from '../types';
+import { systemSettingsService } from '../../system/services/systemSettingsService';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const nowIso = () => new Date().toISOString();
+const utcDay = (isoLike: string) => String(isoLike || '').slice(0, 10);
 const computeSessionBalance = (entries: RepairTreasuryEntry[]): number => entries.reduce((sum, entry) => {
   const amount = Number(entry.amount || 0);
   if (entry.entryType === 'OPENING') return sum + amount;
@@ -272,10 +275,29 @@ export const repairTreasuryService = {
     if (!openSession?.id) {
       throw new Error('لا توجد خزينة مفتوحة لهذا الفرع.');
     }
+    const settings = resolveRepairSettings(await systemSettingsService.get());
+    const blockIfPrevDayOpen = settings.treasury.autoClose.blockOperationsIfPrevDayOpen;
+    const openedDay = utcDay(String(openSession.openedAt || ''));
+    const today = utcDay(nowIso());
+    if (blockIfPrevDayOpen && openedDay && openedDay < today) {
+      throw new Error('PREV_DAY_OPEN_TREASURY_SESSION');
+    }
     if (openSession.needsManualClose) {
       throw new Error('الخزينة تحتاج إقفال يدوي بسبب فرق في الرصيد. لا يمكن تسجيل حركات جديدة.');
     }
     return openSession;
+  },
+
+  async getPreviousDayOpenSession(branchId: string): Promise<RepairTreasurySession | null> {
+    if (!isConfigured || !branchId) return null;
+    const settings = resolveRepairSettings(await systemSettingsService.get());
+    if (!settings.treasury.autoClose.blockOperationsIfPrevDayOpen) return null;
+    const openSession = await this.getOpenSession(branchId);
+    if (!openSession?.id) return null;
+    const openedDay = utcDay(String(openSession.openedAt || ''));
+    const today = utcDay(nowIso());
+    if (openedDay && openedDay < today) return openSession;
+    return null;
   },
 
   async hasIncomeEntryByReference(sessionId: string, referenceId: string): Promise<boolean> {

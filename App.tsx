@@ -44,6 +44,7 @@ import { pushService } from './services/pushService';
 import { sessionTrackerService } from './modules/system/audit';
 import { userService } from './services/userService';
 import { ForcedClientUpdateGate } from './components/ForcedClientUpdateGate';
+import { NotificationPopupOverlay } from './components/NotificationPopupOverlay';
 import { setCurrentTenant } from './lib/currentTenant';
 import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
 import { tenantService } from './services/tenantService';
@@ -948,6 +949,7 @@ const App: React.FC = () => {
         </Routes>
         {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
         <ForcedClientUpdateGate />
+        <NotificationPopupOverlay />
         <ToastContainer />
       </BrowserRouter>
     </GlobalModalManagerProvider>

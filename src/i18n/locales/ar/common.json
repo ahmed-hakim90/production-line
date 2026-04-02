@@ -848,7 +848,16 @@
       "eveningGreeting": "مساء الخير",
       "subtitle": "أهلا بك في نظام Hakimo ERP.",
       "message": "نتمنى لك يوم عمل موفق. يمكنك الآن متابعة التقارير والمهام والإشعارات اليومية بسهولة.",
-      "continue": "متابعة"
+      "continue": "متابعة",
+      "notification": {
+        "title": "إشعار جديد",
+        "defaultTitle": "إشعار جديد",
+        "recipient": "إلى: {{name}}",
+        "now": "الآن",
+        "minutesAgo": "منذ {{count}} دقيقة",
+        "hoursAgo": "منذ {{count}} ساعة",
+        "daysAgo": "منذ {{count}} يوم"
+      }
     },
     "shared": {
       "listSeparator": "، "

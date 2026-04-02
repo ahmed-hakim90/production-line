@@ -11,12 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
+import { repairTreasuryService } from '../services/repairTreasuryService';
 import {
   REPAIR_JOB_STATUS_LABELS,
   resolveUserRepairBranchIds,
@@ -27,6 +29,7 @@ import {
 } from '../types';
 import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const isRequiredMissing = (value: string) => !value.trim();
 
@@ -36,10 +39,12 @@ export const NewRepairJob: React.FC = () => {
   const navigate = useNavigate();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const products = useAppStore((s) => s._rawProducts);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [loading, setLoading] = useState(false);
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const [jobProducts, setJobProducts] = useState<Array<{
     itemId: string;
     productId: string;
@@ -61,6 +66,9 @@ export const NewRepairJob: React.FC = () => {
   const [serviceOnlyCost, setServiceOnlyCost] = useState('');
   const [openBranchJobs, setOpenBranchJobs] = useState<RepairJob[]>([]);
   const [selectedSidebarJob, setSelectedSidebarJob] = useState<RepairJob | null>(null);
+  const [showTreasuryCloseModal, setShowTreasuryCloseModal] = useState(false);
+  const [treasuryClosingBalance, setTreasuryClosingBalance] = useState('0');
+  const [treasuryDifferenceReason, setTreasuryDifferenceReason] = useState('');
   const [form, setForm] = useState({
     branchId: '',
     customerName: '',
@@ -105,7 +113,7 @@ export const NewRepairJob: React.FC = () => {
       setOpenBranchJobs([]);
       return;
     }
-    const openStatuses = new Set(['received', 'inspection', 'repair', 'ready']);
+    const openStatuses = new Set(repairSettings.workflow.openStatusIds);
     const unsubscribe = repairJobService.subscribeByBranch(form.branchId, (rows) => {
       const filtered = rows.filter((job) => openStatuses.has(String(job.status || '')));
       setOpenBranchJobs(filtered);
@@ -113,7 +121,7 @@ export const NewRepairJob: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [form.branchId]);
+  }, [form.branchId, repairSettings.workflow.openStatusIds]);
 
   const submit = async () => {
     if (!form.branchId) {
@@ -149,6 +157,15 @@ export const NewRepairJob: React.FC = () => {
     const productsEstimated = normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0);
     const productsFinal = normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0);
     const finalCostOverride = isServiceOnly ? Number(serviceOnlyCost || 0) : undefined;
+    try {
+      const previousDayOpenSession = await repairTreasuryService.getPreviousDayOpenSession(form.branchId);
+      if (previousDayOpenSession?.id) {
+        setShowTreasuryCloseModal(true);
+        return;
+      }
+    } catch {
+      // Best-effort check; do not block create on read failure.
+    }
     setLoading(true);
     try {
       const result = await repairJobService.create({
@@ -166,8 +183,8 @@ export const NewRepairJob: React.FC = () => {
         devicePassword: '',
         accessories: leadProduct?.accessories || '',
         problemDescription: leadProduct?.diagnosis || '',
-        status: 'received',
-        warranty: 'none',
+        status: repairSettings.workflow.initialStatusId,
+        warranty: repairSettings.defaults.defaultWarranty,
         partsUsed: [],
         estimatedCost: productsEstimated || Number(form.estimatedCost || 0),
         finalCost: isServiceOnly ? Number(serviceOnlyCost || 0) : productsFinal,
@@ -427,7 +444,7 @@ export const NewRepairJob: React.FC = () => {
                   >
                     <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                       <span>#{job.receiptNo}</span>
-                      <span>{REPAIR_JOB_STATUS_LABELS[job.status]}</span>
+                      <span>{repairSettings.statusMap[job.status]?.label || REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</span>
                     </div>
                     <div className="mt-1 text-xs font-medium truncate">{job.customerName || 'عميل غير محدد'}</div>
                     <div className="text-[11px] text-muted-foreground truncate">{job.customerPhone || '-'}</div>
@@ -445,6 +462,49 @@ export const NewRepairJob: React.FC = () => {
         tenantSlug={tenantSlug}
         branchName={branches.find((branch) => String(branch.id || '') === String(selectedSidebarJob?.branchId || ''))?.name}
       />
+      <Dialog open={showTreasuryCloseModal} onOpenChange={setShowTreasuryCloseModal}>
+        <DialogContent dir={dir}>
+          <DialogHeader>
+            <DialogTitle>إغلاق خزينة يوم سابق</DialogTitle>
+            <DialogDescription>
+              لا يمكن إنشاء طلب جديد قبل إغلاق خزينة اليوم السابق لهذا الفرع.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div>
+              <Label>رصيد الإقفال الفعلي</Label>
+              <Input className="mt-1" type="number" value={treasuryClosingBalance} onChange={(e) => setTreasuryClosingBalance(e.target.value)} />
+            </div>
+            <div>
+              <Label>سبب الفرق (اختياري)</Label>
+              <Input className="mt-1" value={treasuryDifferenceReason} onChange={(e) => setTreasuryDifferenceReason(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTreasuryCloseModal(false)}>إلغاء</Button>
+            <Button
+              onClick={async () => {
+                try {
+                  await repairTreasuryService.closeSession({
+                    branchId: form.branchId,
+                    closingBalance: Number(treasuryClosingBalance || 0),
+                    differenceReason: treasuryDifferenceReason,
+                    closedBy: user?.id || '',
+                    closedByName: user?.displayName || user?.email || 'system',
+                    note: 'إغلاق من شاشة إنشاء طلب صيانة',
+                  });
+                  toast.success('تم إغلاق الخزينة. يمكنك الآن إنشاء الطلب.');
+                  setShowTreasuryCloseModal(false);
+                } catch (e: any) {
+                  toast.error(e?.message || 'تعذر إغلاق الخزينة.');
+                }
+              }}
+            >
+              إغلاق الخزينة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

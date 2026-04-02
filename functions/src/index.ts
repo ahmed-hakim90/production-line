@@ -40,6 +40,10 @@ const REPAIR_SALES_INVOICES_COLLECTION = 'repair_sales_invoices';
 const REPAIR_TREASURY_SESSIONS_COLLECTION = 'repair_treasury_sessions';
 const REPAIR_TREASURY_ENTRIES_COLLECTION = 'repair_treasury_entries';
 const REPAIR_PM_PLANS_COLLECTION = 'repair_pm_plans';
+const STOCK_TRANSACTIONS_COLLECTION = 'stock_transactions';
+const STOCK_ITEMS_COLLECTION = 'stock_items';
+const STOCK_COUNTS_COLLECTION = 'stock_counts';
+const INVENTORY_TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
 
 type Primitive = string | number | boolean | null;
 const asComparable = (value: unknown): Primitive | string => {
@@ -371,6 +375,27 @@ const deleteByBranchId = async (collectionName: string, branchId: string): Promi
     const snap = await db
       .collection(collectionName)
       .where('branchId', '==', branchId)
+      .limit(400)
+      .get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach((row) => batch.delete(row.ref));
+    await batch.commit();
+    deleted += snap.size;
+  }
+  return deleted;
+};
+
+const deleteByField = async (
+  collectionName: string,
+  fieldName: string,
+  fieldValue: string,
+): Promise<number> => {
+  let deleted = 0;
+  while (true) {
+    const snap = await db
+      .collection(collectionName)
+      .where(fieldName, '==', fieldValue)
       .limit(400)
       .get();
     if (snap.empty) break;
@@ -919,7 +944,7 @@ export const scheduledAssetDepreciationJob = onSchedule(
 
 export const scheduledRepairTreasuryAutoCloseJob = onSchedule(
   {
-    schedule: '0 21 * * *',
+    schedule: '0 0 * * *',
     timeZone: 'Africa/Cairo',
     region: 'us-central1',
     memory: '256MiB',
@@ -991,6 +1016,7 @@ export const scheduledRepairTreasuryAutoCloseJob = onSchedule(
           needsManualClose: false,
           closeBlockReason: '',
           autoClosedAt: FieldValue.serverTimestamp(),
+          autoCloseSource: 'auto-midnight-close',
         },
         { merge: true },
       );
@@ -1002,7 +1028,7 @@ export const scheduledRepairTreasuryAutoCloseJob = onSchedule(
         sessionId,
         entryType: 'CLOSING',
         amount: computedBalance,
-        note: 'إقفال تلقائي 9:00 مساءً',
+        note: 'إقفال تلقائي منتصف الليل',
         createdBy: 'system:auto-close',
         createdByName: 'System Auto Close',
         createdAt: closedAt,
@@ -1145,6 +1171,16 @@ export const deleteRepairBranchCascade = onCall(
     }
 
     const deletedCounts: Record<string, number> = {};
+    const unlinkedCounts: Record<string, number> = {};
+    const branchTechnicianIds = Array.isArray((branchData as { technicianIds?: unknown[] }).technicianIds)
+      ? ((branchData as { technicianIds?: unknown[] }).technicianIds || [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+      : [];
+    const managerEmployeeId = String((branchData as { managerEmployeeId?: string }).managerEmployeeId || '').trim();
+    unlinkedCounts.technicians = branchTechnicianIds.length;
+    unlinkedCounts.managers = managerEmployeeId ? 1 : 0;
+
     deletedCounts[REPAIR_TREASURY_ENTRIES_COLLECTION] = await deleteByBranchId(REPAIR_TREASURY_ENTRIES_COLLECTION, branchId);
     deletedCounts[REPAIR_TREASURY_SESSIONS_COLLECTION] = await deleteByBranchId(REPAIR_TREASURY_SESSIONS_COLLECTION, branchId);
     deletedCounts[REPAIR_PARTS_TRANSACTIONS_COLLECTION] = await deleteByBranchId(REPAIR_PARTS_TRANSACTIONS_COLLECTION, branchId);
@@ -1156,6 +1192,17 @@ export const deleteRepairBranchCascade = onCall(
 
     const warehouseId = String(branchData?.warehouseId || '').trim();
     if (warehouseId) {
+      deletedCounts[STOCK_TRANSACTIONS_COLLECTION] =
+        await deleteByField(STOCK_TRANSACTIONS_COLLECTION, 'warehouseId', warehouseId);
+      deletedCounts[`${STOCK_TRANSACTIONS_COLLECTION}_toWarehouseId`] =
+        await deleteByField(STOCK_TRANSACTIONS_COLLECTION, 'toWarehouseId', warehouseId);
+      deletedCounts[STOCK_ITEMS_COLLECTION] = await deleteByField(STOCK_ITEMS_COLLECTION, 'warehouseId', warehouseId);
+      deletedCounts[STOCK_COUNTS_COLLECTION] = await deleteByField(STOCK_COUNTS_COLLECTION, 'warehouseId', warehouseId);
+      deletedCounts[`${INVENTORY_TRANSFER_REQUESTS_COLLECTION}_fromWarehouseId`] =
+        await deleteByField(INVENTORY_TRANSFER_REQUESTS_COLLECTION, 'fromWarehouseId', warehouseId);
+      deletedCounts[`${INVENTORY_TRANSFER_REQUESTS_COLLECTION}_toWarehouseId`] =
+        await deleteByField(INVENTORY_TRANSFER_REQUESTS_COLLECTION, 'toWarehouseId', warehouseId);
+
       const warehouseRef = db.collection('warehouses').doc(warehouseId);
       const warehouseSnap = await warehouseRef.get();
       if (warehouseSnap.exists) {
@@ -1176,6 +1223,7 @@ export const deleteRepairBranchCascade = onCall(
       branchName: String(branchData?.name || ''),
       deletedFirestoreDocs,
       deletedCounts,
+      unlinkedCounts,
     };
   },
 );

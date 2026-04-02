@@ -194,6 +194,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'repair-branches', label: 'الفروع', icon: 'store', path: '/repair/branches', permission: 'repair.branches.manage' },
       { key: 'repair-kpis', label: 'أداء الفنيين', icon: 'leaderboard', path: '/repair/technician-kpis', permission: 'repair.technician.view' },
       { key: 'repair-treasury', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/treasury', permission: 'repair.treasury.view' },
+      { key: 'repair-settings', label: 'إعدادات الصيانة', icon: 'settings', path: '/repair/settings', permission: 'repair.settings.manage' },
       { key: 'repair-sales-invoice', label: 'فاتورة بيع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },
     ],
   },

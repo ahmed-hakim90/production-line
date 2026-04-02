@@ -4,6 +4,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useTranslation } from 'react-i18next';
+import type { AppNotification } from '@/types';
 
 const getGreetingKey = () => {
   const hour = new Date().getHours();
@@ -14,8 +15,10 @@ const getGreetingKey = () => {
 
 export const GlobalDailyWelcomeModal: React.FC = () => {
   const { t } = useTranslation();
-  const { isOpen, close } = useManagedModalController(MODAL_KEYS.DAILY_WELCOME);
+  const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.DAILY_WELCOME);
   const userDisplayName = useAppStore((s) => s.userDisplayName || '');
+  const notification = (payload?.notification as AppNotification | undefined) || undefined;
+  const isNotificationMode = payload?.source === 'notification' && Boolean(notification);
 
   if (!isOpen) return null;
 
@@ -34,17 +37,38 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
           </div>
           <div>
             <h3 className="text-lg font-bold text-[var(--color-text)]">
-              {t(getGreetingKey())}
-              {userDisplayName ? `${t('modalManager.shared.listSeparator')}${userDisplayName}` : ''}
+              {isNotificationMode
+                ? (notification?.title || t('modalManager.dailyWelcome.notification.defaultTitle'))
+                : (
+                  <>
+                    {t(getGreetingKey())}
+                    {userDisplayName ? `${t('modalManager.shared.listSeparator')}${userDisplayName}` : ''}
+                  </>
+                )}
             </h3>
-            <p className="text-sm text-[var(--color-text-muted)]">{t('modalManager.dailyWelcome.subtitle')}</p>
+            {!isNotificationMode && (
+              <p className="text-sm text-[var(--color-text-muted)]">{t('modalManager.dailyWelcome.subtitle')}</p>
+            )}
           </div>
         </div>
 
         <div className="px-6 py-5 space-y-2">
-          <p className="text-sm text-[var(--color-text)] leading-7">
-            {t('modalManager.dailyWelcome.message')}
-          </p>
+          {isNotificationMode ? (
+            <>
+              {userDisplayName && (
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  {t('modalManager.dailyWelcome.notification.recipient', { name: userDisplayName })}
+                </p>
+              )}
+              <p className="text-sm text-[var(--color-text)] leading-7">
+                {notification?.message}
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--color-text)] leading-7">
+              {t('modalManager.dailyWelcome.message')}
+            </p>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end">

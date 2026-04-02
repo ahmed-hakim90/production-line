@@ -142,6 +142,19 @@ function notificationCreatedAtMs(notification: AppNotification): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeNotificationText(value: string | undefined): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isSameNotificationPayload(a: AppNotification, b: AppNotification): boolean {
+  if (a.type !== b.type) return false;
+  if (normalizeNotificationText(a.title) !== normalizeNotificationText(b.title)) return false;
+  if (normalizeNotificationText(a.message) !== normalizeNotificationText(b.message)) return false;
+  if (normalizeNotificationText(a.referenceId) !== normalizeNotificationText(b.referenceId)) return false;
+  if (normalizeNotificationText(a.recipientId) !== normalizeNotificationText(b.recipientId)) return false;
+  return true;
+}
+
 function mergeWithRealtimeNotifications(
   incoming: AppNotification[],
   current: AppNotification[],
@@ -152,6 +165,16 @@ function mergeWithRealtimeNotifications(
   localRealtime.forEach((n) => {
     const id = String(n.id || '');
     if (!id || seen.has(id)) return;
+    const localTs = notificationCreatedAtMs(n);
+    const duplicatedOnServer = merged.some((serverItem) => {
+      if (String(serverItem.id || '').startsWith('fcm_')) return false;
+      if (!isSameNotificationPayload(n, serverItem)) return false;
+      const serverTs = notificationCreatedAtMs(serverItem);
+      if (!localTs || !serverTs) return true;
+      // Treat same payload in a short window as a single notification.
+      return Math.abs(serverTs - localTs) <= 2 * 60 * 1000;
+    });
+    if (duplicatedOnServer) return;
     merged.push(n);
     seen.add(id);
   });
@@ -2438,12 +2461,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const empId = get().currentEmployee?.id;
       if (!empId) return;
-      const isManager = get().userPermissions['roles.manage'] === true;
-      if (isManager) {
-        const notifications = (await notificationService.getAll()).filter((n) => !isBlockedNotification(n));
-        set((state) => ({ notifications: mergeWithRealtimeNotifications(notifications, state.notifications) }));
-        return;
-      }
       const notifications = (await notificationService.getByRecipient(empId)).filter((n) => !isBlockedNotification(n));
       const scopedNotifications = notifications.filter((n) => {
         if (!n.type.startsWith('work_order')) return true;
@@ -2482,17 +2499,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   subscribeToNotifications: () => {
     const empId = get().currentEmployee?.id;
     if (!empId) return () => {};
-    const isManager = get().userPermissions['roles.manage'] === true;
-    const subscribe = isManager
-      ? notificationService.subscribeAll.bind(notificationService)
-      : (cb: (notifications: AppNotification[]) => void) =>
-          notificationService.subscribeToRecipient(empId, cb);
-    return subscribe((notifications) => {
+    return notificationService.subscribeToRecipient(empId, (notifications) => {
       const visibleNotifications = notifications.filter((n) => !isBlockedNotification(n));
-      if (isManager) {
-        set((state) => ({ notifications: mergeWithRealtimeNotifications(visibleNotifications, state.notifications) }));
-        return;
-      }
       const scopedNotifications = visibleNotifications.filter((n) => {
         if (!n.type.startsWith('work_order')) return true;
         const linkedWO = get().workOrders.find((w) => w.id === n.referenceId);

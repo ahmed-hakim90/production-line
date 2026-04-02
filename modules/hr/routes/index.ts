@@ -36,6 +36,7 @@ export const HR_ROUTES: AppRouteDef[] = [
   { path: '/payroll', permission: 'payroll.view', component: Payroll },
   { path: '/payroll/accounts', permission: 'payroll.accounts.view', component: PayrollAccounts },
   { path: '/hr/evaluations', permission: 'hr.evaluation.view', component: EmployeeEvaluation },
+  // Keep as operational deep-link pages; intentionally hidden from sidebar menu.
   { path: '/employee-financials', permission: 'hrSettings.view', component: EmployeeFinancials },
   { path: '/employee-financial-overview', permission: 'payroll.view', component: EmployeeFinancialOverview },
   { path: '/hr-transactions', permission: 'hrDashboard.view', component: HRTransactions },

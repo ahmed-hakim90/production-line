@@ -458,7 +458,7 @@ export const Settings: React.FC = () => {
     if (brandingLogoRef.current) brandingLogoRef.current.value = '';
   }, []);
 
-  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print' | 'exportImport' | 'clientVersion') => {
+  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print' | 'exportImport' | 'clientVersion' | 'repair') => {
     setSaving(true);
     setSaveMessage('');
     try {
@@ -960,6 +960,7 @@ export const Settings: React.FC = () => {
               label: `${user.displayName || 'مستخدم'}${user.email ? ` (${user.email})` : ''}`,
             })).filter((item) => item.id)}
           />
+
 
           <GeneralDashboardDisplaySection
             isAdmin={isAdmin}

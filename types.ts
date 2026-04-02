@@ -898,6 +898,55 @@ export interface AttendanceIntegrationSettings {
   overtimeThresholdMinutes: number;
 }
 
+/** إعدادات اختيارية لعزل صلاحيات الصيانة حسب الفرع (تُقرأ من system_settings عند التوفر). */
+export interface RepairAccessSettings {
+  /** مدير فرع واحد مقابل مدير على كل مراكز الصيانة */
+  managerScope?: 'branch' | 'centers';
+}
+
+export interface RepairWorkflowSettings {
+  /** حالات ديناميكية قابلة للإدارة من إعدادات الصيانة */
+  statuses?: Array<{
+    id: string;
+    label: string;
+    color?: string;
+    order?: number;
+    isTerminal?: boolean;
+    isEnabled?: boolean;
+  }>;
+  /** الحالة الافتراضية عند إنشاء طلب جديد */
+  initialStatusId?: string;
+  /** حالات تعتبر مفتوحة في التقارير والإحصائيات */
+  openStatusIds?: string[];
+}
+
+export interface RepairDefaultsSettings {
+  /** الضمان الافتراضي عند إنشاء الطلب */
+  defaultWarranty?: 'none' | '3months' | '6months';
+  /** الحد الأدنى الافتراضي لمخزون قطع الغيار */
+  defaultMinStock?: number;
+  /** SLA افتراضي بالساعات */
+  defaultSlaHours?: number;
+}
+
+export interface RepairTreasuryAutoCloseSettings {
+  enabled?: boolean;
+  mode?: 'scheduled_midnight';
+  timezone?: string;
+  blockOperationsIfPrevDayOpen?: boolean;
+}
+
+export interface RepairTreasurySettings {
+  autoClose?: RepairTreasuryAutoCloseSettings;
+}
+
+export interface RepairSettings {
+  access?: RepairAccessSettings;
+  workflow?: RepairWorkflowSettings;
+  defaults?: RepairDefaultsSettings;
+  treasury?: RepairTreasurySettings;
+}
+
 export interface SystemSettings {
   dashboardWidgets: Record<string, WidgetConfig[]>;
   customDashboardWidgets?: CustomWidgetConfig[];
@@ -919,6 +968,10 @@ export interface SystemSettings {
   forceClientUpdate?: boolean;
   /** رسالة تظهر على شاشة التحديث الإجباري */
   clientUpdateMessageAr?: string;
+  /** عزل بيانات الصيانة: نطاق المدير وغيره (اختياري) */
+  repairAccess?: RepairAccessSettings;
+  /** إعدادات الصيانة المجمعة (وصول + سير عمل + افتراضيات) */
+  repairSettings?: RepairSettings;
 }
 
 // ─── Multi-tenant ────────────────────────────────────────────────────────────

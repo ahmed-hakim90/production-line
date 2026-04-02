@@ -315,6 +315,34 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   quickActions: [],
   exportImport: DEFAULT_EXPORT_IMPORT_SETTINGS,
   attendanceIntegration: DEFAULT_ATTENDANCE_INTEGRATION,
+  repairSettings: {
+    access: { managerScope: 'branch' },
+    workflow: {
+      statuses: [
+        { id: 'received', label: 'وارد', color: '#64748b', order: 1, isTerminal: false, isEnabled: true },
+        { id: 'inspection', label: 'فحص', color: '#f59e0b', order: 2, isTerminal: false, isEnabled: true },
+        { id: 'repair', label: 'إصلاح', color: '#0ea5e9', order: 3, isTerminal: false, isEnabled: true },
+        { id: 'ready', label: 'جاهز للتسليم', color: '#22c55e', order: 4, isTerminal: false, isEnabled: true },
+        { id: 'delivered', label: 'تم التسليم', color: '#16a34a', order: 5, isTerminal: true, isEnabled: true },
+        { id: 'unrepairable', label: 'غير قابل للإصلاح', color: '#ef4444', order: 6, isTerminal: true, isEnabled: true },
+      ],
+      initialStatusId: 'received',
+      openStatusIds: ['received', 'inspection', 'repair', 'ready'],
+    },
+    defaults: {
+      defaultWarranty: 'none',
+      defaultMinStock: 1,
+      defaultSlaHours: 24,
+    },
+    treasury: {
+      autoClose: {
+        enabled: true,
+        mode: 'scheduled_midnight',
+        timezone: 'Africa/Cairo',
+        blockOperationsIfPrevDayOpen: true,
+      },
+    },
+  },
 };
 
 // ─── Selectors / Helpers ─────────────────────────────────────────────────────

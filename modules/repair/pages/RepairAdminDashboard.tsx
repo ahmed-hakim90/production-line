@@ -10,6 +10,11 @@ import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService
 import { sparePartsService } from '../services/sparePartsService';
 import type { RepairBranch, RepairJob, RepairSalesInvoice, RepairSparePart, RepairSparePartStock } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { useAppStore } from '../../../store/useAppStore';
+import type { FirestoreUserWithRepair } from '../types';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
+import { resolveUserRepairBranchIds } from '../types';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -29,26 +34,78 @@ type BranchKpi = {
 export const RepairAdminDashboard: React.FC = () => {
   const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [userProfile, userRoleName, systemSettings, userPermissions],
+  );
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [salesInvoices, setSalesInvoices] = useState<RepairSalesInvoice[]>([]);
   const [partsByBranch, setPartsByBranch] = useState<Record<string, RepairSparePart[]>>({});
   const [stockByBranch, setStockByBranch] = useState<Record<string, RepairSparePartStock[]>>({});
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+
+  const allowedBranchIds = useMemo(() => {
+    if (repairCtx.adminSeesAllBranches) {
+      return branches.map((b) => String(b.id || '')).filter(Boolean);
+    }
+    const base = resolveUserRepairBranchIds(userProfile);
+    const set = new Set(base);
+    const employeeId = String(currentEmployee?.id || '').trim();
+    const userId = String(userProfile?.id || '').trim();
+    branches.forEach((branch) => {
+      const id = String(branch.id || '').trim();
+      if (!id) return;
+      if (employeeId && String(branch.managerEmployeeId || '').trim() === employeeId) set.add(id);
+      const techs = (branch.technicianIds || []).map((x) => String(x || '').trim());
+      if ((userId && techs.includes(userId)) || (employeeId && techs.includes(employeeId))) set.add(id);
+    });
+    return Array.from(set);
+  }, [branches, repairCtx.adminSeesAllBranches, userProfile, currentEmployee?.id]);
 
   useEffect(() => {
     void repairBranchService.list().then(setBranches);
-    const unsub = repairJobService.subscribeAll(setJobs);
-    const unsubInvoices = repairSalesInvoiceService.subscribeAll(setSalesInvoices);
-    return () => {
-      unsub();
-      unsubInvoices();
-    };
   }, []);
 
   useEffect(() => {
-    if (branches.length === 0) return;
+    let unsubJobs: () => void = () => {};
+    let unsubInvoices: () => void = () => {};
+    if (repairCtx.adminSeesAllBranches) {
+      unsubJobs = repairJobService.subscribeAll(setJobs);
+      unsubInvoices = repairSalesInvoiceService.subscribeAll(setSalesInvoices);
+    } else if (allowedBranchIds.length > 1) {
+      unsubJobs = repairJobService.subscribeByBranches(allowedBranchIds, setJobs);
+      unsubInvoices = repairSalesInvoiceService.subscribeByBranches(allowedBranchIds, setSalesInvoices);
+    } else {
+      const branchId = allowedBranchIds[0] || '';
+      unsubJobs = repairJobService.subscribeByBranch(branchId, setJobs);
+      unsubInvoices = repairSalesInvoiceService.subscribeByBranch(branchId, setSalesInvoices);
+    }
+    return () => {
+      unsubJobs();
+      unsubInvoices();
+    };
+  }, [repairCtx.adminSeesAllBranches, JSON.stringify(allowedBranchIds)]);
+
+  useEffect(() => {
+    if (allowedBranchIds.length === 0) {
+      setPartsByBranch({});
+      setStockByBranch({});
+      return;
+    }
     void Promise.all(
-      branches.map(async (branch) => {
+      branches.filter((branch) => allowedBranchIds.includes(String(branch.id || ''))).map(async (branch) => {
         const branchId = branch.id || '';
         const [parts, stock] = await Promise.all([
           sparePartsService.listParts(branchId),
@@ -66,14 +123,14 @@ export const RepairAdminDashboard: React.FC = () => {
       setPartsByBranch(nextParts);
       setStockByBranch(nextStock);
     });
-  }, [branches]);
+  }, [branches, JSON.stringify(allowedBranchIds)]);
 
   const cards = useMemo<BranchKpi[]>(() => {
-    return branches.map((branch) => {
+    return branches.filter((branch) => allowedBranchIds.includes(String(branch.id || ''))).map((branch) => {
       const branchId = branch.id || '';
       const branchJobs = jobs.filter((j) => j.branchId === branchId);
       const totalJobs = branchJobs.length;
-      const openJobs = branchJobs.filter((j) => !['delivered', 'unrepairable'].includes(j.status)).length;
+      const openJobs = branchJobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
       const deliveredJobs = branchJobs.filter((j) => j.status === 'delivered').length;
       const readyJobs = branchJobs.filter((j) => j.status === 'ready').length;
       const successRate = totalJobs > 0 ? (deliveredJobs / totalJobs) * 100 : 0;
@@ -103,7 +160,7 @@ export const RepairAdminDashboard: React.FC = () => {
         lowStockCount,
       };
     });
-  }, [branches, jobs, salesInvoices, partsByBranch, stockByBranch]);
+  }, [branches, allowedBranchIds, jobs, salesInvoices, partsByBranch, stockByBranch, repairSettings.workflow.openStatusIds]);
 
   const overview = useMemo(() => {
     const totalJobs = cards.reduce((sum, card) => sum + card.totalJobs, 0);

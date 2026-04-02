@@ -29,6 +29,7 @@ import type {
 import {
   buildSupervisorIndirectShareMap,
   calculateDailyIndirectCost,
+  getByQtyEffectiveMonthlyAmount,
   getWorkingDaysForMonth,
 } from '../../../utils/costCalculations';
 
@@ -43,6 +44,7 @@ type QtyCenterRule = {
   entry: CenterResolvedValue;
   allowedProductIds: Set<string>;
   denominator: number;
+  effectiveAmount: number;
 };
 
 type CostPayrollRow = MonthlyPayrollData & {
@@ -71,6 +73,8 @@ type MonthCalculationContext = {
   centerValues: Map<string, CenterResolvedValue>;
   lineDateQtyTotals: Map<string, number>;
   lineDateHoursTotals: Map<string, number>;
+  lineMonthActiveDays: Map<string, number>;
+  monthActiveDays: number;
   qtyCenterRules: QtyCenterRule[];
 };
 
@@ -387,6 +391,8 @@ async function buildMonthCalculationContext(
 
   const lineDateQtyTotals = new Map<string, number>();
   const lineDateHoursTotals = new Map<string, number>();
+  const lineMonthDates = new Map<string, Set<string>>();
+  const monthDates = new Set<string>();
   const monthProductQtyTotals = new Map<string, number>();
   const productReportsByProduct = new Map<string, CostProductionReport[]>();
 
@@ -394,6 +400,13 @@ async function buildMonthCalculationContext(
     const lineDateKey = `${report.lineId}_${report.date}`;
     lineDateQtyTotals.set(lineDateKey, (lineDateQtyTotals.get(lineDateKey) || 0) + Number(report.quantity || 0));
     lineDateHoursTotals.set(lineDateKey, (lineDateHoursTotals.get(lineDateKey) || 0) + Math.max(0, Number(report.hours || 0)));
+    const reportMonth = String(report.date?.slice(0, 7) || month);
+    const lineMonthKey = `${report.lineId}_${reportMonth}`;
+    if (!lineMonthDates.has(lineMonthKey)) lineMonthDates.set(lineMonthKey, new Set<string>());
+    lineMonthDates.get(lineMonthKey)!.add(String(report.date || ''));
+    if (String(report.date || '').startsWith(month)) {
+      monthDates.add(String(report.date || ''));
+    }
     if ((report.quantity || 0) > 0 && report.productId) {
       monthProductQtyTotals.set(
         report.productId,
@@ -425,6 +438,11 @@ async function buildMonthCalculationContext(
       entry,
       allowedProductIds: new Set(allowedProductIds),
       denominator,
+      effectiveAmount: getByQtyEffectiveMonthlyAmount(
+        entry.resolvedAmount,
+        entry.workingDays,
+        monthDates.size,
+      ),
     };
   });
 
@@ -434,6 +452,8 @@ async function buildMonthCalculationContext(
     centerValues,
     lineDateQtyTotals,
     lineDateHoursTotals,
+    lineMonthActiveDays: new Map(Array.from(lineMonthDates.entries()).map(([key, dates]) => [key, dates.size])),
+    monthActiveDays: monthDates.size,
     qtyCenterRules,
   };
 }
@@ -624,7 +644,17 @@ export const monthlyProductionCostService = {
       if (!indirectCache.has(cacheKey)) {
         indirectCache.set(
           cacheKey,
-          calculateDailyIndirectCost(r.lineId, rMonth, costCenters, costCenterValues, costAllocations, assets, assetDepreciations, workingDaysByMonth),
+          calculateDailyIndirectCost(
+            r.lineId,
+            rMonth,
+            costCenters,
+            costCenterValues,
+            costAllocations,
+            assets,
+            assetDepreciations,
+            workingDaysByMonth,
+            context.lineMonthActiveDays,
+          ),
         );
       }
       const lineIndirect = indirectCache.get(cacheKey) || 0;
@@ -645,7 +675,7 @@ export const monthlyProductionCostService = {
 
       for (const rule of qtyCenterRules) {
         if (!rule.allowedProductIds.has(r.productId) || rule.denominator <= 0) continue;
-        totalIndirect += rule.entry.resolvedAmount * (r.quantity / rule.denominator);
+        totalIndirect += rule.effectiveAmount * (r.quantity / rule.denominator);
       }
     }
 

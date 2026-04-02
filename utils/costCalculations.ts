@@ -60,6 +60,7 @@ export const calculateDailyIndirectCost = (
   assets: Asset[] = [],
   assetDepreciations: AssetDepreciation[] = [],
   workingDaysByMonth?: Record<string, number>,
+  activeReportDaysByLineMonth?: Map<string, number>,
 ): number => {
   let totalDaily = 0;
 
@@ -82,8 +83,10 @@ export const calculateDailyIndirectCost = (
     if (!lineAlloc || lineAlloc.percentage <= 0) continue;
 
     const monthlyAllocated = value.amount * (lineAlloc.percentage / 100);
+    const activeDays = Number(activeReportDaysByLineMonth?.get(`${lineId}_${month}`) || 0);
     const workingDays = getWorkingDaysForMonth(value, month, workingDaysByMonth);
-    totalDaily += workingDays > 0 ? monthlyAllocated / workingDays : 0;
+    const divisorDays = activeDays > 0 ? activeDays : workingDays;
+    totalDaily += divisorDays > 0 ? monthlyAllocated / divisorDays : 0;
   }
 
   if (assets.length > 0 && assetDepreciations.length > 0) {
@@ -103,9 +106,11 @@ export const calculateDailyIndirectCost = (
       const lineAlloc = allocation.allocations.find((a) => a.lineId === lineId);
       if (!lineAlloc || lineAlloc.percentage <= 0) return;
       const value = costCenterValues.find((v) => v.costCenterId === centerId && v.month === month);
+      const activeDays = Number(activeReportDaysByLineMonth?.get(`${lineId}_${month}`) || 0);
       const workingDays = getWorkingDaysForMonth(value, month, workingDaysByMonth);
+      const divisorDays = activeDays > 0 ? activeDays : workingDays;
       const lineMonthlyDep = monthlyDep * (lineAlloc.percentage / 100);
-      totalDaily += workingDays > 0 ? lineMonthlyDep / workingDays : 0;
+      totalDaily += divisorDays > 0 ? lineMonthlyDep / divisorDays : 0;
     });
   }
 
@@ -125,6 +130,7 @@ export const buildLineAllocatedCostSummary = (
   assets: Asset[] = [],
   assetDepreciations: AssetDepreciation[] = [],
   workingDaysByMonth?: Record<string, number>,
+  activeReportDaysByLineMonth?: Map<string, number>,
 ): LineAllocatedCostSummary => {
   if (!lineId) {
     return {
@@ -177,14 +183,16 @@ export const buildLineAllocatedCostSummary = (
     const centerMonthlyDep = depreciationByCenter.get(center.id) || 0;
     const monthlyAllocatedFromDep = centerMonthlyDep * (lineAlloc.percentage / 100);
     const monthlyAllocated = monthlyAllocatedFromValue + monthlyAllocatedFromDep;
+    const activeDays = Number(activeReportDaysByLineMonth?.get(`${lineId}_${month}`) || 0);
     const workingDays = getWorkingDaysForMonth(value, month, workingDaysByMonth);
+    const divisorDays = activeDays > 0 ? activeDays : workingDays;
     if (monthlyAllocated <= 0) continue;
 
     centers.push({
       costCenterId: center.id,
       costCenterName: center.name,
       monthlyAllocated,
-      dailyAllocated: workingDays > 0 ? monthlyAllocated / workingDays : 0,
+      dailyAllocated: divisorDays > 0 ? monthlyAllocated / divisorDays : 0,
       percentage: lineAlloc.percentage,
     });
   }
@@ -345,28 +353,27 @@ export const computeLiveProductCosts = (
   const activeIndirectCenters = costCenters.filter((center) => center.type === 'indirect' && center.isActive && center.id);
 
   const monthProductQtyTotals = new Map<string, Map<string, number>>();
-  const monthDateProductQtyTotals = new Map<string, Map<string, Map<string, number>>>();
   const lineDateQtyTotals = new Map<string, number>();
   const lineDateHoursTotals = new Map<string, number>();
+  const lineMonthDates = new Map<string, Set<string>>();
   reports.forEach((report) => {
     const key = `${report.lineId}_${report.date}`;
     lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + Number(report.quantityProduced || 0));
     lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, Number(report.workHours || 0)));
     const month = String(report.date?.slice(0, 7) || getCurrentMonth());
+    const lineMonthKey = `${report.lineId}_${month}`;
+    if (!lineMonthDates.has(lineMonthKey)) lineMonthDates.set(lineMonthKey, new Set<string>());
+    lineMonthDates.get(lineMonthKey)!.add(String(report.date || ''));
     if (!monthProductQtyTotals.has(month)) monthProductQtyTotals.set(month, new Map<string, number>());
     const monthMap = monthProductQtyTotals.get(month)!;
-    if (!monthDateProductQtyTotals.has(month)) monthDateProductQtyTotals.set(month, new Map<string, Map<string, number>>());
-    const dateMapByMonth = monthDateProductQtyTotals.get(month)!;
-    const reportDate = String(report.date || '');
-    if (!dateMapByMonth.has(reportDate)) dateMapByMonth.set(reportDate, new Map<string, number>());
-    const dayMap = dateMapByMonth.get(reportDate)!;
     if ((report.quantityProduced || 0) > 0 && report.productId) {
       monthMap.set(report.productId, (monthMap.get(report.productId) || 0) + Number(report.quantityProduced || 0));
-      dayMap.set(report.productId, (dayMap.get(report.productId) || 0) + Number(report.quantityProduced || 0));
     }
   });
 
   const lineMonthDailyCache = new Map<string, { totalDaily: number; centerDaily: Map<string, number> }>();
+  const lineMonthActiveDays = new Map<string, number>();
+  lineMonthDates.forEach((dates, key) => lineMonthActiveDays.set(key, dates.size));
   const getLineMonthDaily = (lineId: string, month: string) => {
     const cacheKey = `${lineId}_${month}`;
     const cached = lineMonthDailyCache.get(cacheKey);
@@ -387,8 +394,10 @@ export const computeLiveProductCosts = (
         depreciationByMonthCenter,
         options.workingDaysByMonth,
       );
-      if (resolvedAmount <= 0 || workingDays <= 0) return;
-      const dailyShare = (resolvedAmount * (Number(lineAllocation.percentage || 0) / 100)) / workingDays;
+      const activeDays = Number(lineMonthActiveDays.get(`${lineId}_${month}`) || 0);
+      const divisorDays = activeDays > 0 ? activeDays : workingDays;
+      if (resolvedAmount <= 0 || divisorDays <= 0) return;
+      const dailyShare = (resolvedAmount * (Number(lineAllocation.percentage || 0) / 100)) / divisorDays;
       if (dailyShare <= 0) return;
       totalDaily += dailyShare;
       centerDaily.set(centerId, (centerDaily.get(centerId) || 0) + dailyShare);
@@ -398,7 +407,19 @@ export const computeLiveProductCosts = (
     return built;
   };
 
-  const qtyRulesByMonth = new Map<string, Array<{ centerId: string; dailyAmount: number; allowedProductIds: Set<string> }>>();
+  const monthActiveDays = new Map<string, number>();
+  monthProductQtyTotals.forEach((_, month) => {
+    const dates = new Set<string>();
+    reports.forEach((report) => {
+      const reportMonth = String(report.date?.slice(0, 7) || getCurrentMonth());
+      if (reportMonth !== month) return;
+      const date = String(report.date || '');
+      if (date) dates.add(date);
+    });
+    monthActiveDays.set(month, dates.size);
+  });
+
+  const qtyRulesByMonth = new Map<string, Array<{ centerId: string; monthlyAmount: number; allowedProductIds: Set<string>; denominator: number }>>();
   const getQtyRulesForMonth = (month: string) => {
     const cached = qtyRulesByMonth.get(month);
     if (cached) return cached;
@@ -415,19 +436,26 @@ export const computeLiveProductCosts = (
           depreciationByMonthCenter,
           options.workingDaysByMonth,
         );
-        const dailyAmount = workingDays > 0 ? (resolvedAmount / workingDays) : 0;
+        const monthlyAmount = getByQtyEffectiveMonthlyAmount(
+          resolvedAmount,
+          workingDays,
+          Number(monthActiveDays.get(month) || 0),
+        );
         const allowedProductIds = center.productScope === 'selected'
           ? (center.productIds || []).map((id) => String(id))
           : center.productScope === 'category'
             ? allProductIds.filter((productId) => (center.productCategories || []).includes(String(productCategoryById.get(productId) || '')))
             : allProductIds;
+        const denominator = Array.from(new Set(allowedProductIds))
+          .reduce((sum, productId) => sum + Number(monthTotals.get(productId) || 0), 0);
         return {
           centerId,
-          dailyAmount,
+          monthlyAmount,
           allowedProductIds: new Set(allowedProductIds),
+          denominator,
         };
       })
-      .filter((rule) => rule.dailyAmount > 0);
+      .filter((rule) => rule.monthlyAmount > 0 && rule.denominator > 0);
     qtyRulesByMonth.set(month, rules);
     return rules;
   };
@@ -464,13 +492,7 @@ export const computeLiveProductCosts = (
     const qtyRules = getQtyRulesForMonth(month);
     qtyRules.forEach((rule) => {
       if (!rule.allowedProductIds.has(report.productId)) return;
-      const monthDateMap = monthDateProductQtyTotals.get(month);
-      const dayMap = monthDateMap?.get(String(report.date || ''));
-      const denominator = dayMap
-        ? Array.from(rule.allowedProductIds).reduce((sum, productId) => sum + Number(dayMap.get(productId) || 0), 0)
-        : 0;
-      if (denominator <= 0) return;
-      const share = rule.dailyAmount * (qty / denominator);
+      const share = rule.monthlyAmount * (qty / rule.denominator);
       if (share <= 0) return;
       indirectCost += share;
       result.byProductCenter[report.productId][rule.centerId] = (result.byProductCenter[report.productId][rule.centerId] || 0) + share;
@@ -946,6 +968,25 @@ export const getWorkingDaysForMonth = (
   }
   void value;
   return getWorkingDaysExcludingFriday(month);
+};
+
+export const getByQtyEffectiveMonthlyAmount = (
+  resolvedAmount: number,
+  workingDays: number,
+  elapsedActiveDays: number,
+  isMonthClosed = false,
+): number => {
+  const monthlyAmount = Number(resolvedAmount || 0);
+  if (monthlyAmount <= 0) return 0;
+  if (isMonthClosed) return monthlyAmount;
+  const totalWorkingDays = Math.max(0, Math.round(Number(workingDays || 0)));
+  if (totalWorkingDays <= 0) return 0;
+  const elapsedDays = Math.min(
+    totalWorkingDays,
+    Math.max(0, Math.round(Number(elapsedActiveDays || 0))),
+  );
+  if (elapsedDays <= 0) return 0;
+  return monthlyAmount * (elapsedDays / totalWorkingDays);
 };
 
 export const formatCost = (amount: number): string => {

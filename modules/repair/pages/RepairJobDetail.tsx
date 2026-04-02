@@ -41,6 +41,8 @@ import {
 } from '../types';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const toNumber = (value: string | number | undefined | null) => Number(value || 0);
 const sumProductFinalCosts = (items: RepairJobProduct[]) => items.reduce((sum, item) => sum + toNumber(item.finalCost), 0);
@@ -73,15 +75,34 @@ export const RepairJobDetail: React.FC = () => {
   const navigate = useNavigate();
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [userProfile, userRoleName, systemSettings, userPermissions],
+  );
+  const technicianIds = useMemo(
+    () => resolveRepairTechnicianIds(userProfile, currentEmployee?.id),
+    [userProfile, currentEmployee?.id],
+  );
   const [job, setJob] = useState<RepairJob | null>(null);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [parts, setParts] = useState<RepairSparePart[]>([]);
   const [allowedPartIds, setAllowedPartIds] = useState<Set<string>>(new Set());
   const [hasProductComponents, setHasProductComponents] = useState(false);
-  const [status, setStatus] = useState<RepairJob['status']>('received');
+  const [status, setStatus] = useState<RepairJob['status']>(repairSettings.workflow.initialStatusId);
   const [finalCost, setFinalCost] = useState('');
   const [manualFinalOverride, setManualFinalOverride] = useState(false);
-  const [warranty, setWarranty] = useState<RepairJob['warranty']>('none');
+  const [warranty, setWarranty] = useState<RepairJob['warranty']>(repairSettings.defaults.defaultWarranty);
   const [reason, setReason] = useState('');
   const [jobProducts, setJobProducts] = useState<RepairJobProduct[]>([]);
   const [serviceOnly, setServiceOnly] = useState(false);
@@ -102,18 +123,18 @@ export const RepairJobDetail: React.FC = () => {
     void repairJobService.getById(jobId).then((row) => {
       if (!row) return;
       setJob(row);
-      setStatus(row?.status || 'received');
+      setStatus(row?.status || repairSettings.workflow.initialStatusId);
       const inferredProducts = inferProducts(row);
       setJobProducts(inferredProducts);
       setFinalCost(String(row?.finalCostOverride ?? row?.finalCost ?? sumProductFinalCosts(inferredProducts)));
       setManualFinalOverride(typeof row?.finalCostOverride === 'number');
-      setWarranty(row?.warranty || 'none');
+      setWarranty(row?.warranty || repairSettings.defaults.defaultWarranty);
       setServiceOnly(Boolean(row?.isServiceOnly));
       setServiceOnlyCost(String(row?.serviceOnlyCost ?? ''));
       setSelectedReopenProductIds(inferredProducts.map((item) => String(item.itemId || '')).filter(Boolean));
     });
     void repairBranchService.list().then(setBranches);
-  }, [jobId]);
+  }, [jobId, repairSettings.workflow.initialStatusId, repairSettings.defaults.defaultWarranty]);
 
   useEffect(() => {
     if (!job?.branchId) return;
@@ -261,6 +282,10 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const applyStatus = async () => {
+    if (!canEditThisJob) {
+      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+      return;
+    }
     try {
       await persistProducts(jobProducts, serviceOnly);
       const finalCostNumber = effectiveFinalCost;
@@ -298,6 +323,10 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const assignToMe = async () => {
+    if (!canEditThisJob) {
+      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+      return;
+    }
     if (!userProfile?.id) return;
     try {
       await repairJobService.assignTechnician(jobId, userProfile.id);
@@ -309,6 +338,10 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const assignToBranchTechnician = async () => {
+    if (!canEditThisJob) {
+      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+      return;
+    }
     const technicianId = String(selectedTechnicianId || '').trim();
     const branchTechnicianIds = (branch?.technicianIds || []).map((id) => String(id || '').trim());
     if (!technicianId) {
@@ -329,6 +362,10 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const addPartUsage = async () => {
+    if (!canEditThisJob) {
+      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+      return;
+    }
     if (serviceOnly) {
       toast.error('تم تفعيل خدمة فقط. أوقف الخيار لإضافة قطع غيار.');
       return;
@@ -382,6 +419,10 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const removePartUsage = async (idx: number) => {
+    if (!canEditThisJob) {
+      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+      return;
+    }
     if (!job?.branchId || !branchWarehouseId) {
       toast.error('لا يمكن إرجاع القطعة بدون إعداد مخزن الفرع.');
       return;
@@ -439,6 +480,10 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const saveMultiProductDetails = async () => {
+    if (!canEditThisJob) {
+      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+      return;
+    }
     try {
       await persistProducts(jobProducts, serviceOnly);
       toast.success('تم حفظ بيانات المنتجات والتشخيص.');
@@ -522,7 +567,13 @@ export const RepairJobDetail: React.FC = () => {
       `رابط متابعة الطلب (  اضغط هنا): ${trackUrl}`,
     ].join('\n');
   }, [job, trackUrl]);
-  const canDeleteJob = Boolean(job) && String(job?.status || '') !== 'delivered' && !Boolean(job?.isClosed);
+  const isAssignedToCurrentTechnician = useMemo(() => {
+    const assigned = String(job?.technicianId || '').trim();
+    return assigned.length > 0 && technicianIds.includes(assigned);
+  }, [job?.technicianId, technicianIds]);
+  const canEditThisJob = can('repair.jobs.edit') || (repairCtx.isRepairTechnician && isAssignedToCurrentTechnician);
+  const canViewThisJob = !repairCtx.jobsTechnicianOnly || isAssignedToCurrentTechnician;
+  const canDeleteJob = Boolean(job) && String(job?.status || '') !== 'delivered' && !Boolean(job?.isClosed) && canEditThisJob;
 
   const deleteJob = async () => {
     if (!job?.id) return;
@@ -542,6 +593,13 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   if (!job) return <div dir={dir} role="status" aria-live="polite">جاري تحميل الطلب...</div>;
+  if (!canViewThisJob) {
+    return (
+      <div dir={dir} className="rounded border border-amber-300 bg-amber-50 p-4 text-amber-900 text-sm">
+        هذا الطلب غير مسند لك، ولا تملك صلاحية عرضه.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" dir={dir}>
@@ -840,7 +898,7 @@ export const RepairJobDetail: React.FC = () => {
                   <Plus className="h-4 w-4 ms-1" />
                   إضافة منتج / Add Product
                 </Button>
-                <Button type="button" onClick={saveMultiProductDetails}>
+                    <Button type="button" onClick={saveMultiProductDetails} disabled={!canEditThisJob}>
                   حفظ المنتجات والتشخيص / Save
                 </Button>
               </div>
@@ -852,12 +910,11 @@ export const RepairJobDetail: React.FC = () => {
                     <Select value={status} onValueChange={(v) => setStatus(v as RepairJob['status'])}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="received">{REPAIR_JOB_STATUS_LABELS.received}</SelectItem>
-                        <SelectItem value="inspection">{REPAIR_JOB_STATUS_LABELS.inspection}</SelectItem>
-                        <SelectItem value="repair">{REPAIR_JOB_STATUS_LABELS.repair}</SelectItem>
-                        <SelectItem value="ready">{REPAIR_JOB_STATUS_LABELS.ready}</SelectItem>
-                        <SelectItem value="delivered">{REPAIR_JOB_STATUS_LABELS.delivered}</SelectItem>
-                        <SelectItem value="unrepairable">{REPAIR_JOB_STATUS_LABELS.unrepairable}</SelectItem>
+                        {repairSettings.workflow.statuses.map((statusOption) => (
+                          <SelectItem key={statusOption.id} value={statusOption.id}>
+                            {statusOption.label || REPAIR_JOB_STATUS_LABELS[statusOption.id] || statusOption.id}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     {status === 'unrepairable' && (
@@ -907,7 +964,7 @@ export const RepairJobDetail: React.FC = () => {
                         </Select>
                       </div>
                     )}
-                    <Button onClick={applyStatus} disabled={!can('repair.jobs.edit')}>حفظ الحالة</Button>
+                    <Button onClick={applyStatus} disabled={!canEditThisJob}>حفظ الحالة</Button>
                     {Array.isArray(job.statusHistory) && job.statusHistory.length > 0 && (
                       <div className="space-y-2 pt-2">
                         <p className="text-sm font-medium">سجل الحالة</p>
@@ -993,7 +1050,7 @@ export const RepairJobDetail: React.FC = () => {
                     <Button
                       variant="outline"
                       onClick={addPartUsage}
-                      disabled={serviceOnly || !hasProductComponents || !branchWarehouseId || (partScope === 'product' && !partProductItemId)}
+                      disabled={!canEditThisJob || serviceOnly || !hasProductComponents || !branchWarehouseId || (partScope === 'product' && !partProductItemId)}
                     >
                       إضافة/خصم
                     </Button>
@@ -1017,13 +1074,13 @@ export const RepairJobDetail: React.FC = () => {
                     <Button
                       variant="default"
                       onClick={assignToBranchTechnician}
-                      disabled={!selectedTechnicianId || branchTechnicians.length === 0}
+                      disabled={!canEditThisJob || !selectedTechnicianId || branchTechnicians.length === 0}
                     >
                       إسناد الطلب للفني المختار
                     </Button>
                     <p></p>
-                    <Button variant="secondary" onClick={assignToMe}>إسناد الطلب لي</Button>
-                    <Button variant="ghost" onClick={() => void saveMultiProductDetails()}>
+                    <Button variant="secondary" onClick={assignToMe} disabled={!canEditThisJob}>إسناد الطلب لي</Button>
+                    <Button variant="ghost" onClick={() => void saveMultiProductDetails()} disabled={!canEditThisJob}>
                       حفظ وضع الخدمة/الربط
                     </Button>
                     {Array.isArray(job.partsUsed) && job.partsUsed.length > 0 && (

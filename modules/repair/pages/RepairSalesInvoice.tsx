@@ -12,6 +12,7 @@ import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairSalesInvoice, type RepairSalesInvoiceLine, type RepairSparePart } from '../types';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { repairBranchService } from '../services/repairBranchService';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
@@ -27,7 +28,20 @@ export const RepairSalesInvoicePage: React.FC = () => {
   const { dir } = useAppDirection();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile: user,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [user, userRoleName, systemSettings, userPermissions],
+  );
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [branchId, setBranchId] = useState('');
   const [parts, setParts] = useState<RepairSparePart[]>([]);
@@ -52,7 +66,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
     [branches, branchId],
   );
   const allowedBranches = useMemo(() => {
-    if (can('repair.branches.manage')) return branches;
+    if (repairCtx.canViewAllBranches) return branches;
     const baseUserBranchIds = resolveUserRepairBranchIds(user);
     const userId = String(user?.id || '').trim();
     const employeeId = String(currentEmployee?.id || '').trim();
@@ -61,16 +75,15 @@ export const RepairSalesInvoicePage: React.FC = () => {
       if (!id) return false;
       if (baseUserBranchIds.includes(id)) return true;
       if (userId && (branch.technicianIds || []).includes(userId)) return true;
+      if (employeeId && (branch.technicianIds || []).includes(employeeId)) return true;
       if (employeeId && String(branch.managerEmployeeId || '') === employeeId) return true;
       return false;
     });
-  }, [branches, can, currentEmployee?.id, user]);
+  }, [branches, repairCtx.canViewAllBranches, currentEmployee?.id, user]);
 
   useEffect(() => {
     void repairBranchService.list().then((rows) => {
       setBranches(rows);
-      const defaultBranch = rows[0]?.id || '';
-      setBranchId(defaultBranch);
     });
   }, []);
 

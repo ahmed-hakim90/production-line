@@ -29,6 +29,7 @@ import { userService } from '../../../services/userService';
 import { toast } from '../../../components/Toast';
 import type { FirestoreUserWithRepair, RepairBranch, RepairJob } from '../types';
 import { resolveUserRepairBranchIds } from '../types';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const calcDiffDays = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / (1000 * 60 * 60 * 24);
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
@@ -36,6 +37,8 @@ const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 export const RepairTechnicianKPIs: React.FC = () => {
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [from, setFrom] = useState('');
@@ -138,9 +141,9 @@ export const RepairTechnicianKPIs: React.FC = () => {
       ? delivered.reduce((s, j) => s + calcDiffDays(j.createdAt, j.updatedAt), 0) / delivered.length
       : 0;
     const revenue = delivered.reduce((s, j) => s + Number(j.finalCost || 0), 0);
-    const open = filtered.filter((j) => !['delivered', 'unrepairable'].includes(j.status)).length;
+    const open = filtered.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
     return { totalJobs: filtered.length, successRate, avgRepair, revenue, open };
-  }, [filtered]);
+  }, [filtered, repairSettings.workflow.openStatusIds]);
 
   const deviceBreakdown = useMemo(() => filtered.reduce<Record<string, number>>((acc, j) => {
     acc[j.deviceType] = (acc[j.deviceType] || 0) + 1;

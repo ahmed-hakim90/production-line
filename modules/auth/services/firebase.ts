@@ -407,11 +407,25 @@ export const adminDeleteTenantCascadeCallable = async (
 
 export const deleteRepairBranchCascadeCallable = async (
   branchId: string,
-): Promise<{ ok: boolean; branchId: string; branchName: string; deletedFirestoreDocs: number; deletedCounts: Record<string, number> }> => {
+): Promise<{
+  ok: boolean;
+  branchId: string;
+  branchName: string;
+  deletedFirestoreDocs: number;
+  deletedCounts: Record<string, number>;
+  unlinkedCounts?: Record<string, number>;
+}> => {
   if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
   const callable = httpsCallable<
     { branchId: string },
-    { ok: boolean; branchId: string; branchName: string; deletedFirestoreDocs: number; deletedCounts: Record<string, number> }
+    {
+      ok: boolean;
+      branchId: string;
+      branchName: string;
+      deletedFirestoreDocs: number;
+      deletedCounts: Record<string, number>;
+      unlinkedCounts?: Record<string, number>;
+    }
   >(functionsClient, 'deleteRepairBranchCascade');
   try {
     const result = await callable({ branchId: branchId.trim() });

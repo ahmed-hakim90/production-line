@@ -3,7 +3,14 @@ import { Card, KPIBox } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useShallowStore } from '../../../store/useAppStore';
-import { getCurrentMonth, formatCost } from '../../../utils/costCalculations';
+import {
+  getCurrentMonth,
+  formatCost,
+  computeLiveProductCosts,
+  buildSupervisorHourlyRatesMap,
+  getByQtyEffectiveMonthlyAmount,
+  getWorkingDaysForMonth,
+} from '../../../utils/costCalculations';
 import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
 import { reportService } from '../../production/services/reportService';
 import type { MonthlyProductionCost, ProductionReport } from '../../../types';
@@ -50,6 +57,7 @@ const severityBadgeClass: Record<HealthIssueSeverity, string> = {
 export const CostDataHealth: React.FC = () => {
   const {
     products,
+    _rawEmployees,
     costCenters,
     costCenterValues,
     costAllocations,
@@ -59,6 +67,7 @@ export const CostDataHealth: React.FC = () => {
     systemSettings,
   } = useShallowStore((s) => ({
     products: s.products,
+    _rawEmployees: s._rawEmployees,
     costCenters: s.costCenters,
     costCenterValues: s.costCenterValues,
     costAllocations: s.costAllocations,
@@ -75,6 +84,10 @@ export const CostDataHealth: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('');
   const [monthlyRecords, setMonthlyRecords] = useState<MonthlyProductionCost[]>([]);
   const [monthReports, setMonthReports] = useState<ProductionReport[]>([]);
+  const supervisorHourlyRates = useMemo(
+    () => buildSupervisorHourlyRatesMap(_rawEmployees),
+    [_rawEmployees]
+  );
 
   const fetchMonthHealthData = useCallback(async () => {
     setLoading(true);
@@ -309,6 +322,90 @@ export const CostDataHealth: React.FC = () => {
       });
     }
 
+    if (monthReports.length > 0 && monthlyRecords.length > 0 && hourlyRate > 0) {
+      const monthActiveDates = new Set<string>();
+      monthReports.forEach((report) => {
+        const date = String(report.date || '');
+        if (date.startsWith(month)) monthActiveDates.add(date);
+      });
+      const byQtyGap = activeIndirectCenters
+        .filter((center) => (center.allocationBasis || 'line_percentage') === 'by_qty' && center.id)
+        .reduce((sum, center) => {
+          const centerId = String(center.id || '');
+          const centerValue = costCenterValues.find((value) => value.costCenterId === centerId && value.month === month);
+          const valueSource = centerValue?.valueSource || center.valueSource || 'manual';
+          const hasSavedBreakdown = centerValue?.manualAmount !== undefined || centerValue?.salariesAmount !== undefined;
+          const manualAmount = hasSavedBreakdown
+            ? Number(centerValue?.manualAmount || 0)
+            : Number(centerValue?.amount || 0);
+          const salariesAmount = hasSavedBreakdown
+            ? Number(centerValue?.salariesAmount || 0)
+            : 0;
+          const snapshotBaseAmount = valueSource === 'manual'
+            ? manualAmount
+            : valueSource === 'salaries'
+              ? (hasSavedBreakdown ? salariesAmount : Number(centerValue?.amount || 0))
+              : (hasSavedBreakdown ? (manualAmount + salariesAmount) : Number(centerValue?.amount || 0));
+          const monthlyAmount = Math.max(0, snapshotBaseAmount);
+          const workingDays = getWorkingDaysForMonth(
+            centerValue,
+            month,
+            systemSettings.costMonthlyWorkingDays,
+          );
+          const effectiveAmount = getByQtyEffectiveMonthlyAmount(
+            monthlyAmount,
+            workingDays,
+            monthActiveDates.size,
+          );
+          return sum + Math.max(0, monthlyAmount - effectiveAmount);
+        }, 0);
+      const productCategoryById = new Map<string, string>(
+        products.map((product) => [String(product.id || ''), String(product.category || '')]),
+      );
+      const live = computeLiveProductCosts(
+        monthReports,
+        hourlyRate,
+        costCenters,
+        costCenterValues,
+        costAllocations,
+        {
+          assets,
+          assetDepreciations,
+          productCategoryById,
+          supervisorHourlyRates,
+          workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+        },
+      );
+      const recordsIndirectTotal = monthlyRecords.reduce((sum, row) => sum + Number(row.indirectCost || 0), 0);
+      const indirectDelta = Math.abs(recordsIndirectTotal - live.totalIndirectCost);
+      if (indirectDelta > 1) {
+        addIssue({
+          id: 'indirect-total-live-mismatch',
+          type: 'calc',
+          severity: 'high',
+          title: 'فرق بين غير المباشر المخزّن والحساب الحي',
+          description: `إجمالي غير المباشر في السجلات = ${formatCost(recordsIndirectTotal)} مقابل الحساب الحي = ${formatCost(live.totalIndirectCost)} (فرق ${formatCost(indirectDelta)}).`,
+          recommendation: 'نفّذ إعادة حساب الكل ثم راجع إعدادات التوزيع لمراكز line_percentage/by_qty.',
+        });
+      }
+      const hasOpenRows = monthlyRecords.some((row) => !row.isClosed);
+      const expectedGap = Number(byQtyGap || 0);
+      if (hasOpenRows && expectedGap > 1) {
+        const closeness = Math.abs(indirectDelta - expectedGap);
+        const tolerance = Math.max(5, expectedGap * 0.25);
+        if (closeness <= tolerance) {
+          addIssue({
+            id: 'by-qty-full-month-loaded-early',
+            type: 'calc',
+            severity: 'high',
+            title: 'اشتباه تحميل by_qty بالقيمة الشهرية كاملة مبكرًا',
+            description: `فرق غير المباشر (${formatCost(indirectDelta)}) قريب من فجوة التحميل التدريجي المتوقعة لمراكز by_qty (${formatCost(expectedGap)}) أثناء شهر مفتوح.`,
+            recommendation: 'استخدم التحميل التدريجي لمراكز by_qty حسب الأيام المنقضية ثم أعد حساب الكل.',
+          });
+        }
+      }
+    }
+
     if (monthReports.length > 4000) {
       addIssue({
         id: 'large-report-scan',
@@ -351,6 +448,7 @@ export const CostDataHealth: React.FC = () => {
     assets,
     assetDepreciations,
     monthlyRecords,
+    supervisorHourlyRates,
     search,
   ]);
 

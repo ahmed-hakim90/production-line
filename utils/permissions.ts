@@ -61,11 +61,12 @@ export type Permission =
   | 'repair.view'
   | 'repair.dashboard.view'
   | 'repair.adminDashboard.view'
-  | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete'
+  | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete' | 'repair.jobs.technician'
   | 'repair.parts.view' | 'repair.parts.manage'
   | 'repair.branches.manage'
   | 'repair.technician.view'
   | 'repair.treasury.view' | 'repair.treasury.manage'
+  | 'repair.settings.manage'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
   | 'print' | 'export' | 'import';
 
@@ -233,12 +234,14 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repair.jobs.create', label: 'إنشاء طلب صيانة' },
       { key: 'repair.jobs.edit', label: 'تعديل طلب صيانة' },
       { key: 'repair.jobs.delete', label: 'حذف طلب صيانة' },
+      { key: 'repair.jobs.technician', label: 'فني صيانة (طلبات مسندة فقط)' },
       { key: 'repair.parts.view', label: 'عرض قطع الغيار' },
       { key: 'repair.parts.manage', label: 'إدارة قطع الغيار' },
       { key: 'repair.branches.manage', label: 'إدارة فروع الصيانة' },
       { key: 'repair.technician.view', label: 'عرض أداء الفنيين' },
       { key: 'repair.treasury.view', label: 'عرض خزينة الصيانة' },
       { key: 'repair.treasury.manage', label: 'إدارة خزينة الصيانة' },
+      { key: 'repair.settings.manage', label: 'إدارة إعدادات الصيانة' },
       { key: 'repair.salesInvoice.create', label: 'إنشاء فاتورة بيع قطع الغيار' },
       { key: 'repair.salesInvoice.view', label: 'عرض فواتير بيع قطع الغيار' },
       { key: 'repair.salesInvoice.edit', label: 'تعديل فاتورة بيع قطع الغيار' },
@@ -321,294 +324,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [...PERMISSION_GROUPS_RAW].s
 export const ALL_PERMISSIONS: Permission[] =
   PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key));
 
-// ─── Sidebar Items ───────────────────────────────────────────────────────────
-
-export interface SidebarItem {
-  path: string;
-  icon: string;
-  label: string;
-  permission: Permission;
-  /** If set, item matches visibility OR logic (same as menu `anyOfPermissions`). */
-  anyOfPermissions?: Permission[];
-}
-
-export interface SidebarGroup {
-  key: string;
-  label: string;
-  items: SidebarItem[];
-}
-
-const SIDEBAR_GROUPS_RAW: SidebarGroup[] = [
-  {
-    key: 'dashboards',
-    label: 'لوحات التحكم',
-    items: [
-      {
-        path: '/',
-        icon: 'dashboard',
-        label: 'الرئيسية',
-        permission: 'dashboard.view',
-        anyOfPermissions: [
-          'dashboard.view',
-          'employeeDashboard.view',
-          'factoryDashboard.view',
-          'adminDashboard.view',
-        ],
-      },
-    ],
-  },
-  {
-    key: 'catalog',
-    label: 'الكتالوج',
-    items: [
-      { path: '/products', icon: 'inventory_2', label: 'المنتجات', permission: 'products.view' },
-      { path: '/products/raw-materials', icon: 'science', label: 'المواد الخام', permission: 'products.rawMaterials.view' },
-      { path: '/catalog/categories', icon: 'category', label: 'الفئات', permission: 'catalog.categories.view' },
-    ],
-  },
-  {
-    key: 'production',
-    label: 'الإنتاج',
-    items: [
-      { path: '/lines', icon: 'precision_manufacturing', label: 'خطوط الإنتاج', permission: 'lines.view' },
-      { path: '/production-plans', icon: 'event_note', label: 'خطط الإنتاج', permission: 'plans.view' },
-      { path: '/work-orders', icon: 'assignment', label: 'أوامر الشغل', permission: 'workOrders.view' },
-      { path: '/supervisors', icon: 'engineering', label: 'المشرفين', permission: 'supervisors.view' },
-      { path: '/supervisor-line-assignments', icon: 'alt_route', label: 'توزيع المشرفين', permission: 'supervisorAssignments.manage' },
-      { path: '/production-workers', icon: 'construction', label: 'عمال الإنتاج', permission: 'productionWorkers.view' },
-      { path: '/reports', icon: 'bar_chart', label: 'التقارير', permission: 'reports.view' },
-      { path: '/quick-action', icon: 'bolt', label: 'إدخال سريع', permission: 'quickAction.view' },
-    ],
-  },
-  {
-    key: 'inventory',
-    label: 'المخازن',
-    items: [
-      { path: '/inventory', icon: 'inventory', label: 'لوحة المخزون', permission: 'inventory.view' },
-      { path: '/inventory/balances', icon: 'inventory_2', label: 'أرصدة المخزون', permission: 'inventory.view' },
-      { path: '/inventory/transactions', icon: 'sync_alt', label: 'حركات المخزون', permission: 'inventory.view' },
-      { path: '/inventory/transfer-approvals', icon: 'verified_user', label: 'اعتماد التحويلات', permission: 'inventory.view' },
-      { path: '/quick-inventory-transfer', icon: 'bolt', label: 'تحويل سريع', permission: 'inventory.transactions.create' },
-      { path: '/inventory/movements', icon: 'add_circle', label: 'إدخال حركة', permission: 'inventory.transactions.create' },
-      { path: '/inventory/counts', icon: 'fact_check', label: 'جرد المخزون', permission: 'inventory.counts.manage' },
-    ],
-  },
-  {
-    key: 'hr',
-    label: 'فريق العمل',
-    items: [
-      { path: '/hr-dashboard', icon: 'monitoring', label: 'لوحة HR', permission: 'hrDashboard.view' },
-      { path: '/employees', icon: 'groups', label: 'الموظفين', permission: 'employees.view' },
-      { path: '/employees/import', icon: 'upload', label: 'استيراد الموظفين', permission: 'employees.create' },
-      { path: '/organization', icon: 'account_tree', label: 'الهيكل التنظيمي', permission: 'hrSettings.view' },
-      { path: '/self-service', icon: 'person', label: 'الخدمة الذاتية', permission: 'selfService.view' },
-      { path: '/attendance', icon: 'fingerprint', label: 'سجل الحضور', permission: 'attendance.view' },
-      { path: '/attendance/import', icon: 'upload_file', label: 'استيراد الحضور', permission: 'attendance.import' },
-      { path: '/attendance/logs', icon: 'event_note', label: 'السجلات الخام', permission: 'attendance.view' },
-      { path: '/attendance/daily', icon: 'fact_check', label: 'الحضور اليومي', permission: 'attendance.view' },
-      { path: '/attendance/monthly', icon: 'analytics', label: 'التقرير الشهري', permission: 'attendance.view' },
-      { path: '/attendance/sync', icon: 'sync', label: 'مزامنة الحضور', permission: 'attendance.sync' },
-      { path: '/leave-requests', icon: 'beach_access', label: 'الإجازات', permission: 'leave.view' },
-      { path: '/loan-requests', icon: 'payments', label: 'السُلف', permission: 'loan.view' },
-      { path: '/approval-center', icon: 'fact_check', label: 'مركز الموافقات', permission: 'approval.view' },
-      { path: '/delegations', icon: 'swap_horiz', label: 'التفويضات', permission: 'approval.delegate' },
-      { path: '/employee-financials', icon: 'account_balance_wallet', label: 'بدلات واستقطاعات', permission: 'hrSettings.view' },
-      { path: '/hr-transactions', icon: 'swap_vert', label: 'سجل الحركات', permission: 'hrDashboard.view' },
-      { path: '/vehicles', icon: 'directions_bus', label: 'المركبات', permission: 'vehicles.view' },
-      { path: '/payroll', icon: 'receipt_long', label: 'كشف الرواتب', permission: 'payroll.view' },
-      { path: '/payroll/accounts', icon: 'payments', label: 'صرف الرواتب', permission: 'payroll.accounts.view' },
-      { path: '/hr/evaluations', icon: 'stars', label: 'تقييم الموظفين', permission: 'hr.evaluation.view' },
-      { path: '/hr-settings', icon: 'tune', label: 'إعدادات HR', permission: 'hrSettings.view' },
-    ],
-  },
-  {
-    key: 'repair',
-    label: 'الصيانة',
-    items: [
-      { path: '/repair', icon: 'dashboard', label: 'لوحة الصيانة', permission: 'repair.dashboard.view' },
-      { path: '/repair/admin-dashboard', icon: 'admin_panel_settings', label: 'لوحة الأدمن', permission: 'repair.adminDashboard.view' },
-      { path: '/repair/jobs', icon: 'construction', label: 'طلبات الصيانة', permission: 'repair.view' },
-      { path: '/repair/jobs/new', icon: 'add_circle', label: 'جهاز جديد', permission: 'repair.jobs.create' },
-      { path: '/repair/parts', icon: 'inventory_2', label: 'قطع الغيار', permission: 'repair.parts.view' },
-      { path: '/repair/branches', icon: 'store', label: 'الفروع', permission: 'repair.branches.manage' },
-      { path: '/repair/technician-kpis', icon: 'leaderboard', label: 'أداء الفنيين', permission: 'repair.technician.view' },
-      { path: '/repair/treasury', icon: 'account_balance_wallet', label: 'الخزينة', permission: 'repair.treasury.view' },
-      { path: '/repair/sales-invoice', icon: 'receipt_long', label: 'فاتورة بيع', permission: 'repair.salesInvoice.create' },
-    ],
-  },
-  {
-    key: 'costs',
-    label: 'التكاليف',
-    items: [
-      { path: '/cost-centers', icon: 'account_balance', label: 'مراكز التكلفة', permission: 'costs.view' },
-      { path: '/cost-settings', icon: 'payments', label: 'إعدادات التكلفة', permission: 'costs.manage' },
-      { path: '/costs/assets', icon: 'precision_manufacturing', label: 'الأصول', permission: 'assets.view' },
-      { path: '/costs/depreciation-report', icon: 'receipt_long', label: 'تقرير الإهلاك', permission: 'assets.depreciation.view' },
-    ],
-  },
-  {
-    key: 'quality',
-    label: 'الجودة',
-    items: [
-      { path: '/quality/settings', icon: 'tune', label: 'إعدادات الجودة', permission: 'quality.settings.view' },
-      { path: '/quality/workers', icon: 'groups', label: 'عمال الجودة', permission: 'quality.workers.view' },
-      { path: '/quality/final-inspection', icon: 'task_alt', label: 'الفحص النهائي', permission: 'quality.finalInspection.view' },
-      { path: '/quality/ipqc', icon: 'rule', label: 'IPQC', permission: 'quality.ipqc.view' },
-      { path: '/quality/rework', icon: 'build', label: 'إعادة التشغيل', permission: 'quality.rework.view' },
-      { path: '/quality/capa', icon: 'fact_check', label: 'CAPA', permission: 'quality.capa.view' },
-      { path: '/quality/reports', icon: 'print', label: 'تقارير الجودة', permission: 'quality.reports.view' },
-    ],
-  },
-  {
-    key: 'system',
-    label: 'النظام',
-    items: [
-      { path: '/system/users', icon: 'manage_accounts', label: 'المستخدمون', permission: 'users.manage' },
-      { path: '/roles', icon: 'admin_panel_settings', label: 'الأدوار والصلاحيات', permission: 'roles.manage' },
-      { path: '/activity-log', icon: 'history', label: 'سجل النشاط', permission: 'activityLog.view' },
-      { path: '/operations-monitor', icon: 'monitoring', label: 'متابعة العمليات', permission: 'activityLog.view' },
-      { path: '/settings', icon: 'settings', label: 'الإعدادات', permission: 'settings.view' },
-    ],
-  },
-];
-
-const SIDEBAR_GROUP_ORDER: string[] = [
-  'dashboards',
-  'catalog',
-  'production',
-  'inventory',
-  'quality',
-  'hr',
-  'repair',
-  'costs',
-  'system',
-];
-
-const SIDEBAR_ITEM_ORDER: Record<string, string[]> = {
-  dashboards: ['/'],
-  catalog: ['/products', '/products/raw-materials', '/catalog/categories'],
-  production: ['/lines', '/production-plans', '/work-orders', '/supervisors', '/supervisor-line-assignments', '/production-workers', '/reports', '/quick-action'],
-  inventory: ['/inventory', '/inventory/balances', '/inventory/transactions', '/inventory/transfer-approvals', '/quick-inventory-transfer', '/inventory/movements', '/inventory/counts'],
-  quality: ['/quality/settings', '/quality/workers', '/quality/final-inspection', '/quality/ipqc', '/quality/rework', '/quality/capa', '/quality/reports'],
-  hr: ['/hr-dashboard', '/employees', '/employees/import', '/organization', '/self-service', '/attendance', '/attendance/import', '/attendance/logs', '/attendance/daily', '/attendance/monthly', '/attendance/sync', '/leave-requests', '/loan-requests', '/approval-center', '/delegations', '/employee-financials', '/hr-transactions', '/vehicles', '/payroll', '/payroll/accounts', '/hr/evaluations', '/hr-settings'],
-  repair: ['/repair', '/repair/admin-dashboard', '/repair/jobs', '/repair/jobs/new', '/repair/parts', '/repair/branches', '/repair/technician-kpis', '/repair/treasury', '/repair/sales-invoice'],
-  costs: ['/cost-centers', '/cost-settings', '/costs/assets', '/costs/depreciation-report'],
-  system: ['/system/users', '/roles', '/activity-log', '/operations-monitor', '/settings'],
-};
-
-const sidebarGroupOrderRank = new Map(
-  SIDEBAR_GROUP_ORDER.map((key, idx) => [key, idx]),
-);
-
-export const SIDEBAR_GROUPS: SidebarGroup[] = [...SIDEBAR_GROUPS_RAW]
-  .sort((a, b) => {
-    const aRank = sidebarGroupOrderRank.get(a.key) ?? Number.MAX_SAFE_INTEGER;
-    const bRank = sidebarGroupOrderRank.get(b.key) ?? Number.MAX_SAFE_INTEGER;
-    return aRank - bRank;
-  })
-  .map((group) => {
-    const order = SIDEBAR_ITEM_ORDER[group.key] ?? [];
-    const itemRank = new Map(order.map((path, idx) => [path, idx]));
-    return {
-      ...group,
-      items: [...group.items].sort((a, b) => {
-        const aRank = itemRank.get(a.path) ?? Number.MAX_SAFE_INTEGER;
-        const bRank = itemRank.get(b.path) ?? Number.MAX_SAFE_INTEGER;
-        return aRank - bRank;
-      }),
-    };
-  });
-
-/** Flat list for backward compatibility (route matching, etc.) */
-export const SIDEBAR_ITEMS: SidebarItem[] = SIDEBAR_GROUPS.flatMap((g) => g.items);
-
-// ─── Route → Permission Mapping ──────────────────────────────────────────────
-
-export const ROUTE_PERMISSIONS: Record<string, Permission> = {
-  '/': 'dashboard.view',
-  '/products': 'products.view',
-  '/products/raw-materials': 'products.rawMaterials.view',
-  '/products/:id': 'products.view',
-  '/catalog/categories': 'catalog.categories.view',
-  '/inventory': 'inventory.view',
-  '/inventory/balances': 'inventory.view',
-  '/inventory/transactions': 'inventory.view',
-  '/inventory/transfer-approvals': 'inventory.view',
-  '/quick-inventory-transfer': 'inventory.transactions.create',
-  '/inventory/movements': 'inventory.transactions.create',
-  '/inventory/counts': 'inventory.counts.manage',
-  '/lines': 'lines.view',
-  '/lines/:id': 'lines.view',
-  '/employees': 'employees.view',
-  '/employees/import': 'employees.create',
-  '/employees/:id': 'employees.viewDetails',
-  '/supervisors': 'supervisors.view',
-  '/supervisors/:id': 'supervisors.view',
-  '/supervisor-line-assignments': 'supervisorAssignments.manage',
-  '/production-workers': 'productionWorkers.view',
-  '/production-workers/:id': 'productionWorkers.view',
-  '/self-service': 'selfService.view',
-  '/reports': 'reports.view',
-  '/quick-action': 'quickAction.view',
-  '/costs/assets': 'assets.view',
-  '/costs/assets/:id': 'assets.view',
-  '/costs/depreciation-report': 'assets.depreciation.view',
-  '/activity-log': 'activityLog.view',
-  '/operations-monitor': 'activityLog.view',
-  '/production-plans': 'plans.view',
-  '/work-orders': 'workOrders.view',
-  '/quality/settings': 'quality.settings.view',
-  '/quality/workers': 'quality.workers.view',
-  '/quality/final-inspection': 'quality.finalInspection.view',
-  '/quality/ipqc': 'quality.ipqc.view',
-  '/quality/rework': 'quality.rework.view',
-  '/quality/capa': 'quality.capa.view',
-  '/quality/reports': 'quality.reports.view',
-  '/cost-centers': 'costs.view',
-  '/cost-centers/:id': 'costs.view',
-  '/cost-settings': 'costs.manage',
-  '/monthly-costs': 'costs.view',
-  '/line-workers': 'lineWorkers.view',
-  '/system/users': 'users.manage',
-  '/roles': 'roles.manage',
-  '/settings': 'settings.view',
-  '/attendance': 'attendance.view',
-  '/attendance/import': 'attendance.import',
-  '/attendance/logs': 'attendance.view',
-  '/attendance/daily': 'attendance.view',
-  '/attendance/monthly': 'attendance.view',
-  '/attendance/sync': 'attendance.sync',
-  '/leave-requests': 'leave.view',
-  '/loan-requests': 'loan.view',
-  '/approval-center': 'approval.view',
-  '/delegations': 'approval.delegate',
-  '/payroll': 'payroll.view',
-  '/payroll/accounts': 'payroll.accounts.view',
-  '/hr/evaluations': 'hr.evaluation.view',
-  '/hr-dashboard': 'hrDashboard.view',
-  '/hr-transactions': 'hrDashboard.view',
-  '/employee-financials': 'hrSettings.view',
-  '/vehicles': 'vehicles.view',
-  '/organization': 'hrSettings.view',
-  '/hr-settings': 'hrSettings.view',
-  '/repair': 'repair.dashboard.view',
-  '/repair/admin-dashboard': 'repair.adminDashboard.view',
-  '/repair/jobs': 'repair.view',
-  '/repair/jobs/new': 'repair.jobs.create',
-  '/repair/jobs/:jobId': 'repair.view',
-  '/repair/parts': 'repair.parts.view',
-  '/repair/branches': 'repair.branches.manage',
-  '/repair/technician-kpis': 'repair.technician.view',
-  '/repair/treasury': 'repair.treasury.view',
-  '/repair/sales-invoice': 'repair.salesInvoice.create',
-};
-
-// ─── Role-based Home Route ───────────────────────────────────────────────────
-
-/** Unified home: role-specific dashboard content is chosen on `/` (see HomeDashboardRouter). */
-export function getHomeRoute(_permissions: Record<string, boolean>): string {
-  return '/';
-}
+// NOTE: Sidebar/menu and route-to-permission mapping are centralized in
+// `config/menu.config.ts` and module route definitions.
 
 // ─── Pure Helpers ────────────────────────────────────────────────────────────
 

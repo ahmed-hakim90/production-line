@@ -9,6 +9,7 @@ const AttendanceSyncDashboard = lazyNamed(() => import('../pages/AttendanceSyncD
 export const ATTENDANCE_ROUTES: AppRouteDef[] = [
   { path: '/attendance/logs', permission: 'attendance.view', component: AttendanceLogs },
   { path: '/attendance/daily', permission: 'attendance.view', component: AttendanceDailyView },
+  // Keep as deep-link route; intentionally hidden from sidebar menu.
   { path: '/attendance/monthly', permission: 'attendance.view', component: AttendanceMonthlyReport },
   { path: '/attendance/sync', permission: 'attendance.sync', component: AttendanceSyncDashboard },
 ];

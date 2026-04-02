@@ -12,6 +12,8 @@ import {
   buildLineAllocatedCostSummary,
   buildSupervisorHourlyRatesMap,
   buildSupervisorIndirectShareMap,
+  getByQtyEffectiveMonthlyAmount,
+  getWorkingDaysForMonth,
 } from '../../../utils/costCalculations';
 import { productMaterialService } from '../../production/services/productMaterialService';
 import type { MonthlyProductionCost } from '../../../types';
@@ -241,12 +243,16 @@ export const MonthlyProductionCosts: React.FC = () => {
       ]);
       if (!mountedRef.current || requestId !== fetchRequestRef.current) return;
       const monthProductQtyTotals = new Map<string, number>();
+      const monthActiveDates = new Set<string>();
       allReports.forEach((report) => {
         if ((report.quantityProduced || 0) <= 0 || !report.productId) return;
         monthProductQtyTotals.set(
           report.productId,
           (monthProductQtyTotals.get(report.productId) || 0) + (report.quantityProduced || 0),
         );
+        if (String(report.date || '').startsWith(month)) {
+          monthActiveDates.add(String(report.date || ''));
+        }
       });
       const assetById = new Map(assets.map((asset) => [String(asset.id || ''), asset]));
       const depreciationByCenter = new Map<string, number>();
@@ -277,6 +283,16 @@ export const MonthlyProductionCosts: React.FC = () => {
               : (hasSavedBreakdown ? (manualAmount + salariesAmount) : Number(centerValue?.amount || 0));
           const depreciation = Number(depreciationByCenter.get(centerId) || 0);
           const resolvedAmount = snapshotBase + depreciation;
+          const workingDays = getWorkingDaysForMonth(
+            centerValue,
+            month,
+            systemSettings.costMonthlyWorkingDays,
+          );
+          const effectiveAmount = getByQtyEffectiveMonthlyAmount(
+            resolvedAmount,
+            workingDays,
+            monthActiveDates.size,
+          );
           const allowedProductIds = center.productScope === 'selected'
             ? center.productIds || []
             : center.productScope === 'category'
@@ -290,21 +306,28 @@ export const MonthlyProductionCosts: React.FC = () => {
           );
           return {
             costCenterId: centerId,
-            resolvedAmount,
+            effectiveAmount,
             denominator,
             allowedProductIds: new Set(allowedProductIds),
           };
         })
-        .filter((rule) => rule.resolvedAmount > 0 && rule.denominator > 0);
+        .filter((rule) => rule.effectiveAmount > 0 && rule.denominator > 0);
 
       const lineDateQtyTotals = new Map<string, number>();
       const lineDateHoursTotals = new Map<string, number>();
+      const lineMonthDates = new Map<string, Set<string>>();
       const lineCenterSummaryCache = new Map<string, ReturnType<typeof buildLineAllocatedCostSummary>>();
       allReports.forEach((r) => {
         const key = `${r.lineId}_${r.date}`;
         lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + (r.quantityProduced || 0));
         lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, r.workHours || 0));
+        const reportMonth = r.date?.slice(0, 7) || month;
+        const lineMonthKey = `${r.lineId}_${reportMonth}`;
+        if (!lineMonthDates.has(lineMonthKey)) lineMonthDates.set(lineMonthKey, new Set<string>());
+        lineMonthDates.get(lineMonthKey)!.add(String(r.date || ''));
       });
+      const lineMonthActiveDays = new Map<string, number>();
+      lineMonthDates.forEach((dates, key) => lineMonthActiveDays.set(key, dates.size));
 
       const indirectCache = new Map<string, number>();
       const supervisorShareMap = buildSupervisorIndirectShareMap(
@@ -338,6 +361,7 @@ export const MonthlyProductionCosts: React.FC = () => {
               assets,
               assetDepreciations,
               systemSettings.costMonthlyWorkingDays,
+              lineMonthActiveDays,
             ),
           );
         }
@@ -358,6 +382,7 @@ export const MonthlyProductionCosts: React.FC = () => {
               assets,
               assetDepreciations,
               systemSettings.costMonthlyWorkingDays,
+              lineMonthActiveDays,
             )
           );
         }
@@ -382,7 +407,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         }
         for (const rule of qtyRules) {
           if (!rule.allowedProductIds.has(r.productId)) continue;
-          const share = rule.resolvedAmount * ((r.quantityProduced || 0) / rule.denominator);
+          const share = rule.effectiveAmount * ((r.quantityProduced || 0) / rule.denominator);
           current.indirectCost += share;
           addCenterCost(r.productId, rule.costCenterId, share);
         }

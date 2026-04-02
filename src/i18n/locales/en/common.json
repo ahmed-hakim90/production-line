@@ -848,7 +848,16 @@
       "eveningGreeting": "Good evening",
       "subtitle": "Welcome to Hakimo ERP.",
       "message": "Have a productive day. You can now track reports, tasks, and daily notifications with ease.",
-      "continue": "Continue"
+      "continue": "Continue",
+      "notification": {
+        "title": "New notification",
+        "defaultTitle": "New notification",
+        "recipient": "To: {{name}}",
+        "now": "Now",
+        "minutesAgo": "{{count}} minute ago",
+        "hoursAgo": "{{count}} hour ago",
+        "daysAgo": "{{count}} day ago"
+      }
     },
     "shared": {
       "listSeparator": ", "

@@ -23,6 +23,8 @@ import { sparePartsService } from './sparePartsService';
 import { repairTreasuryService } from './repairTreasuryService';
 import { repairSalesInvoiceService } from './repairSalesInvoiceService';
 import { repairBranchService } from './repairBranchService';
+import { systemSettingsService } from '../../system/services/systemSettingsService';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const nowIso = () => new Date().toISOString();
 const isoUtcDay = (isoLike: string | undefined | null): string => String(isoLike || '').slice(0, 10);
@@ -172,6 +174,59 @@ export const repairJobService = {
     );
   },
 
+  /** تحديث لحظي لطلبات مسندة لفني (user id أو employee id) */
+  subscribeByTechnician(technicianId: string, cb: (rows: RepairJob[]) => void): Unsubscribe {
+    if (!isConfigured || !technicianId) {
+      cb([]);
+      return () => {};
+    }
+    const q = tenantQuery(
+      db,
+      REPAIR_JOBS_COLLECTION,
+      where('technicianId', '==', technicianId),
+      orderBy('createdAt', 'desc'),
+    );
+    return onSnapshot(
+      q,
+      (snap) => cb(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob))),
+      (error) => {
+        console.error('repairJobService.subscribeByTechnician listener error:', error);
+      },
+    );
+  },
+
+  /** عدة معرفات فني (مثلاً user id + employee id) — دمج في استعلام واحد عند الإمكان */
+  subscribeByTechnicianIds(technicianIds: string[], cb: (rows: RepairJob[]) => void): Unsubscribe {
+    if (!isConfigured) return () => {};
+    const normalized = Array.from(
+      new Set(technicianIds.filter((id) => typeof id === 'string' && id.trim().length > 0).map((id) => id.trim())),
+    );
+    if (normalized.length === 0) {
+      cb([]);
+      return () => {};
+    }
+    if (normalized.length === 1) {
+      return repairJobService.subscribeByTechnician(normalized[0], cb);
+    }
+    if (normalized.length > 10) {
+      console.warn('repairJobService.subscribeByTechnicianIds: more than 10 ids, truncating');
+      normalized.splice(10);
+    }
+    const q = tenantQuery(
+      db,
+      REPAIR_JOBS_COLLECTION,
+      where('technicianId', 'in', normalized),
+      orderBy('createdAt', 'desc'),
+    );
+    return onSnapshot(
+      q,
+      (snap) => cb(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob))),
+      (error) => {
+        console.error('repairJobService.subscribeByTechnicianIds listener error:', error);
+      },
+    );
+  },
+
   async getById(id: string): Promise<RepairJob | null> {
     if (!isConfigured || !id) return null;
     const snap = await getDoc(doc(db, REPAIR_JOBS_COLLECTION, id));
@@ -180,6 +235,7 @@ export const repairJobService = {
 
   async create(input: NewRepairJobInput): Promise<RepairJobCreateResult> {
     if (!isConfigured) return { id: null, usedFallbackReceipt: false };
+    const settings = resolveRepairSettings(await systemSettingsService.get());
     const receiptResult = input.receiptNo
       ? { receiptNo: input.receiptNo, usedFallback: false }
       : await repairReceiptService.getNextReceipt();
@@ -228,6 +284,9 @@ export const repairJobService = {
       createdAt: at,
       updatedAt: at,
       statusHistory: history,
+      status: input.status || settings.workflow.initialStatusId,
+      warranty: input.warranty || settings.defaults.defaultWarranty,
+      slaHours: typeof input.slaHours === 'number' ? input.slaHours : settings.defaults.defaultSlaHours,
       isClosed: false,
     }));
     return { id: ref.id, usedFallbackReceipt: receiptResult.usedFallback };
@@ -340,6 +399,7 @@ export const repairJobService = {
     const source = await this.getById(input.sourceJobId);
     if (!source) throw new Error('طلب الصيانة الأصلي غير موجود.');
     const selectedIds = new Set((input.selectedProductItemIds || []).filter(Boolean));
+    const settings = resolveRepairSettings(await systemSettingsService.get());
     const sourceProducts = Array.isArray(source.jobProducts) ? source.jobProducts : [];
     const carriedProducts = (selectedIds.size > 0
       ? sourceProducts.filter((item) => selectedIds.has(String(item.itemId || '')))
@@ -368,8 +428,8 @@ export const repairJobService = {
       devicePassword: source.devicePassword || '',
       problemDescription: '',
       accessories: source.accessories || '',
-      status: 'received',
-      warranty: 'none',
+      status: settings.workflow.initialStatusId,
+      warranty: settings.defaults.defaultWarranty,
       notes: `إعادة إصلاح مرتبطة بالطلب #${source.receiptNo}`,
       partsUsed: [],
       estimatedCost: carriedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0),

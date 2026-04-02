@@ -14,12 +14,32 @@ import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import type { FirestoreUserWithRepair, RepairJobStatus } from '../types';
 import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS, resolveUserRepairBranchIds, type RepairBranch, type RepairJob } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 export const RepairJobs: React.FC = () => {
   const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [userProfile, userRoleName, systemSettings, userPermissions],
+  );
+  const technicianIds = useMemo(
+    () => resolveRepairTechnicianIds(userProfile, currentEmployee?.id),
+    [userProfile, currentEmployee?.id],
+  );
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedJob, setSelectedJob] = useState<RepairJob | null>(null);
@@ -29,25 +49,33 @@ export const RepairJobs: React.FC = () => {
   }, [userProfile, assignedBranchIds]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<RepairJobStatus | 'all'>('all');
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   useEffect(() => {
     if (can('repair.branches.manage') || !userProfile?.id) {
       setAssignedBranchIds([]);
       return;
     }
-    void repairBranchService.list().then((branches) => {
-      setBranches(branches);
-      const ids = branches
-        .filter((branch) => (branch.technicianIds || []).includes(userProfile.id || ''))
+    void repairBranchService.list().then((branchRows) => {
+      setBranches(branchRows);
+      const uid = String(userProfile.id || '').trim();
+      const eid = String(currentEmployee?.id || '').trim();
+      const ids = branchRows
+        .filter((branch) => {
+          const t = branch.technicianIds || [];
+          return (uid && t.includes(uid)) || (eid && t.includes(eid));
+        })
         .map((branch) => branch.id || '')
         .filter(Boolean);
       setAssignedBranchIds(ids);
     });
-  }, [can, userProfile?.id]);
+  }, [can, userProfile?.id, currentEmployee?.id]);
 
   const { jobs, loading } = useRepairJobs({
     branchId: userBranchIds[0],
     branchIds: userBranchIds,
-    canViewAllBranches: can('repair.branches.manage'),
+    canViewAllBranches: repairCtx.canViewAllBranches,
+    technicianOnly: repairCtx.jobsTechnicianOnly,
+    technicianIds,
     searchText: search,
   });
   const visibleJobs = useMemo(
@@ -62,7 +90,10 @@ export const RepairJobs: React.FC = () => {
       }, {}),
     [jobs],
   );
-  const openJobs = useMemo(() => jobs.filter((j) => !['delivered', 'unrepairable'].includes(j.status)).length, [jobs]);
+  const openJobs = useMemo(
+    () => jobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length,
+    [jobs, repairSettings.workflow.openStatusIds],
+  );
   const branchNameById = useMemo(() => {
     const map = new Map<string, string>();
     branches.forEach((branch) => {
@@ -117,14 +148,16 @@ export const RepairJobs: React.FC = () => {
               الكل
               <Badge variant="secondary" className="mr-2">{jobs.length}</Badge>
             </Button>
-            {REPAIR_JOB_STATUSES.map((status) => (
+            {((repairSettings.workflow.statuses.map((s) => s.id).length > 0
+              ? repairSettings.workflow.statuses.map((s) => s.id)
+              : REPAIR_JOB_STATUSES) as RepairJobStatus[]).map((status) => (
               <Button
                 key={status}
                 variant={statusFilter === status ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setStatusFilter(status)}
               >
-                {REPAIR_JOB_STATUS_LABELS[status]}
+                {repairSettings.statusMap[status]?.label || REPAIR_JOB_STATUS_LABELS[status] || status}
                 <Badge variant="secondary" className="mr-2">{jobsByStatus[status] || 0}</Badge>
               </Button>
             ))}

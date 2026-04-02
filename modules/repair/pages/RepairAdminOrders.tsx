@@ -22,6 +22,10 @@ import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import { toast } from '../../../components/Toast';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { useAppStore } from '../../../store/useAppStore';
+import type { FirestoreUserWithRepair } from '../types';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
+import { resolveUserRepairBranchIds } from '../types';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const OVERDUE_DAYS = 7;
 const CURRENCY_FMT = new Intl.NumberFormat('ar-EG');
@@ -36,7 +40,7 @@ const getWorkDaysElapsed = (createdAt?: string): number => {
   return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 };
 
-const isOpenJob = (job: RepairJob) => !['delivered', 'unrepairable'].includes(String(job.status || ''));
+const isOpenJob = (job: RepairJob, openStatuses: string[]) => openStatuses.includes(String(job.status || ''));
 const canDeleteRepairJob = (job: RepairJob) => {
   const normalizedStatus = String(job.status || '').trim().toLowerCase();
   return normalizedStatus !== 'delivered' && !Boolean(job.isClosed);
@@ -44,7 +48,22 @@ const canDeleteRepairJob = (job: RepairJob) => {
 
 export const RepairAdminOrders: React.FC = () => {
   const { dir } = useAppDirection();
-  const user = useAppStore((s) => s.userProfile);
+  const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile: user,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [user, userRoleName, systemSettings, userPermissions],
+  );
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [search, setSearch] = useState('');
@@ -54,8 +73,36 @@ export const RepairAdminOrders: React.FC = () => {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    const unsub = repairJobService.subscribeAll(setJobs);
     void repairBranchService.list().then(setBranches).catch(() => setBranches([]));
+  }, []);
+
+  const allowedBranchIds = useMemo(() => {
+    if (repairCtx.adminSeesAllBranches) {
+      return branches.map((b) => String(b.id || '')).filter(Boolean);
+    }
+    const base = resolveUserRepairBranchIds(user);
+    const set = new Set(base);
+    const employeeId = String(currentEmployee?.id || '').trim();
+    const userId = String(user?.id || '').trim();
+    branches.forEach((branch) => {
+      const id = String(branch.id || '').trim();
+      if (!id) return;
+      if (employeeId && String(branch.managerEmployeeId || '').trim() === employeeId) set.add(id);
+      const techs = (branch.technicianIds || []).map((x) => String(x || '').trim());
+      if ((userId && techs.includes(userId)) || (employeeId && techs.includes(employeeId))) set.add(id);
+    });
+    return Array.from(set);
+  }, [branches, repairCtx.adminSeesAllBranches, user, currentEmployee?.id]);
+
+  useEffect(() => {
+    let unsub: () => void = () => {};
+    if (repairCtx.adminSeesAllBranches) {
+      unsub = repairJobService.subscribeAll(setJobs);
+    } else if (allowedBranchIds.length > 1) {
+      unsub = repairJobService.subscribeByBranches(allowedBranchIds, setJobs);
+    } else {
+      unsub = repairJobService.subscribeByBranch(allowedBranchIds[0] || '', setJobs);
+    }
 
     void Promise.allSettled([employeeService.getAll(), userService.getAll()]).then((results) => {
       const employees = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -87,7 +134,7 @@ export const RepairAdminOrders: React.FC = () => {
     });
 
     return () => unsub();
-  }, []);
+  }, [repairCtx.adminSeesAllBranches, JSON.stringify(allowedBranchIds)]);
 
   const branchNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -119,8 +166,8 @@ export const RepairAdminOrders: React.FC = () => {
   const pendingDeliveryCount = useMemo(() => rows.filter((job) => job.status === 'ready').length, [rows]);
   const inDeliveryCount = pendingDeliveryCount;
   const overdueCount = useMemo(
-    () => rows.filter((job) => isOpenJob(job) && getWorkDaysElapsed(job.createdAt) > OVERDUE_DAYS).length,
-    [rows],
+    () => rows.filter((job) => isOpenJob(job, repairSettings.workflow.openStatusIds) && getWorkDaysElapsed(job.createdAt) > OVERDUE_DAYS).length,
+    [rows, repairSettings.workflow.openStatusIds],
   );
 
   return (
@@ -190,7 +237,7 @@ export const RepairAdminOrders: React.FC = () => {
                     ? job.partsUsed.map((part) => `${part.partName} x${part.quantity}`).join(' | ')
                     : '—';
                   const elapsed = getWorkDaysElapsed(job.createdAt);
-                  const overdue = isOpenJob(job) && elapsed > OVERDUE_DAYS;
+                  const overdue = isOpenJob(job, repairSettings.workflow.openStatusIds) && elapsed > OVERDUE_DAYS;
                   const canDelete = canDeleteRepairJob(job);
 
                   return (

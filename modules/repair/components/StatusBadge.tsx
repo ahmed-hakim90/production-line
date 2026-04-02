@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { REPAIR_JOB_STATUS_LABELS, type RepairJobStatus } from '../types';
 
-const classMap: Record<RepairJobStatus, string> = {
+const classMap: Record<string, string> = {
   received: 'bg-slate-100 text-slate-800',
   inspection: 'bg-amber-100 text-amber-800',
   repair: 'bg-sky-100 text-sky-800',
@@ -12,5 +12,9 @@ const classMap: Record<RepairJobStatus, string> = {
 };
 
 export const StatusBadge: React.FC<{ status: RepairJobStatus }> = ({ status }) => {
-  return <Badge className={classMap[status]}>{REPAIR_JOB_STATUS_LABELS[status]}</Badge>;
+  return (
+    <Badge className={classMap[status] || 'bg-slate-100 text-slate-800'}>
+      {REPAIR_JOB_STATUS_LABELS[status] || status}
+    </Badge>
+  );
 };

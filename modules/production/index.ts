@@ -1,6 +1,5 @@
 // Production Module — Public API
 export { Products } from './pages/Products';
-export { ProductDetails } from './pages/ProductDetails';
 export { Lines } from './pages/Lines';
 export { LineDetails } from './pages/LineDetails';
 export { Reports } from './pages/Reports';

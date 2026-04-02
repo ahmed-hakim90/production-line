@@ -26,6 +26,7 @@ import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairSparePart, type RepairSparePartStock } from '../types';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairBranchService } from '../services/repairBranchService';
 import { useLowStockAlert } from '../hooks/useLowStockAlert';
@@ -33,17 +34,56 @@ import { LowStockAlert } from '../components/LowStockAlert';
 import { productMaterialService } from '../../production/services/productMaterialService';
 import type { ProductMaterial } from '../../../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 export const SparePartsInventory: React.FC = () => {
   const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
-  const canManageAllBranches = can('repair.branches.manage');
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile: user,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [user, userRoleName, systemSettings, userPermissions],
+  );
+  const canManageAllBranches = repairCtx.canViewAllBranches;
   const canManageParts = can('repair.parts.manage');
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
-  const userBranchIds = useMemo(() => resolveUserRepairBranchIds(user), [user]);
+  const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
+  const userBranchIds = useMemo(
+    () => Array.from(new Set([...resolveUserRepairBranchIds(user), ...assignedBranchIds])),
+    [user, assignedBranchIds],
+  );
+
+  useEffect(() => {
+    if (canManageAllBranches || !user?.id) {
+      setAssignedBranchIds([]);
+      return;
+    }
+    void repairBranchService.list().then((rows) => {
+      const uid = String(user.id || '').trim();
+      const eid = String(currentEmployee?.id || '').trim();
+      const ids = rows
+        .filter((branch) => {
+          const t = branch.technicianIds || [];
+          return (uid && t.includes(uid)) || (eid && t.includes(eid));
+        })
+        .map((branch) => branch.id || '')
+        .filter(Boolean);
+      setAssignedBranchIds(ids);
+    });
+  }, [canManageAllBranches, user?.id, currentEmployee?.id]);
   const branchId = selectedBranchId;
   const [parts, setParts] = useState<RepairSparePart[]>([]);
   const [stock, setStock] = useState<RepairSparePartStock[]>([]);
@@ -53,8 +93,12 @@ export const SparePartsInventory: React.FC = () => {
     productId: '',
     materialKey: '',
     unit: 'قطعة',
-    minStock: '1',
+    minStock: String(repairSettings.defaults.defaultMinStock),
   });
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, minStock: String(repairSettings.defaults.defaultMinStock) }));
+  }, [repairSettings.defaults.defaultMinStock]);
+
   const [isCreatePartModalOpen, setIsCreatePartModalOpen] = useState(false);
   const [partPendingDelete, setPartPendingDelete] = useState<RepairSparePart | null>(null);
   const [search, setSearch] = useState('');
@@ -167,7 +211,12 @@ export const SparePartsInventory: React.FC = () => {
         minStock: Number(form.minStock || 0),
       });
       toast.success('تمت إضافة القطعة.');
-      setForm((prev) => ({ ...prev, materialKey: '', unit: 'قطعة', minStock: '1' }));
+      setForm((prev) => ({
+        ...prev,
+        materialKey: '',
+        unit: 'قطعة',
+        minStock: String(repairSettings.defaults.defaultMinStock),
+      }));
       setIsCreatePartModalOpen(false);
       await load();
     } catch (e: any) {

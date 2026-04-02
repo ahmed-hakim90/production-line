@@ -178,7 +178,21 @@ export const RepairBranches: React.FC = () => {
     }
     try {
       const result = await repairBranchService.removeCascade(id);
-      toast.success(`تم حذف الفرع وكل البيانات المرتبطة به (${result.deletedFirestoreDocs} سجل).`);
+      const count = (key: string) => Number(result.deletedCounts?.[key] || 0);
+      const details = [
+        `الطلبات: ${count('repair_jobs')}`,
+        `فواتير الصيانة: ${count('repair_sales_invoices')}`,
+        `حركات قطع الغيار: ${count('repair_parts_transactions')}`,
+        `حركات المخزون: ${count('stock_transactions') + count('stock_transactions_toWarehouseId')}`,
+        `أرصدة المخزون: ${count('stock_items')}`,
+        `طلبات التحويل: ${count('inventory_transfer_requests_fromWarehouseId') + count('inventory_transfer_requests_toWarehouseId')}`,
+        `المخزن: ${count('warehouses')}`,
+      ].join(' | ');
+      const unlinkedTechs = Number(result.unlinkedCounts?.technicians || 0);
+      const unlinkedManagers = Number(result.unlinkedCounts?.managers || 0);
+      toast.success(
+        `تم حذف الفرع وكل البيانات المرتبطة به (${result.deletedFirestoreDocs} سجل). ${details}. فك ربط الموظفين فقط: الفنيون ${unlinkedTechs}، المسؤول ${unlinkedManagers}.`,
+      );
       await loadBranches();
       setBranchPendingDelete(null);
       setDeleteConfirmText('');

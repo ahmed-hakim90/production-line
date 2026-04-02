@@ -19,6 +19,9 @@ export function useRepairJobs(params: {
   branchIds?: string[];
   canViewAllBranches?: boolean;
   searchText?: string;
+  /** فني صيانة: طلبات مسندة فقط (technicianId) */
+  technicianOnly?: boolean;
+  technicianIds?: string[];
 }) {
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +36,24 @@ export function useRepairJobs(params: {
 
   useEffect(() => {
     setLoading(true);
+    if (params.technicianOnly) {
+      const techIds = Array.from(
+        new Set(
+          (params.technicianIds || []).filter((id) => typeof id === 'string' && id.trim().length > 0).map((id) => id.trim()),
+        ),
+      );
+      if (techIds.length === 0) {
+        setJobs([]);
+        setLoading(false);
+        return () => {};
+      }
+      const unsub = repairJobService.subscribeByTechnicianIds(techIds, (rows) => {
+        setJobs(rows);
+        setLoading(false);
+      });
+      return () => unsub();
+    }
+
     const normalizedBranchIds = Array.isArray(params.branchIds)
       ? Array.from(new Set(params.branchIds.filter((id) => typeof id === 'string' && id.trim().length > 0)))
       : [];
@@ -56,7 +77,13 @@ export function useRepairJobs(params: {
           setLoading(false);
         });
     return () => unsub();
-  }, [params.branchId, params.canViewAllBranches, JSON.stringify(params.branchIds || [])]);
+  }, [
+    params.branchId,
+    params.canViewAllBranches,
+    params.technicianOnly,
+    JSON.stringify(params.branchIds || []),
+    JSON.stringify(params.technicianIds || []),
+  ]);
 
   const filteredJobs = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();

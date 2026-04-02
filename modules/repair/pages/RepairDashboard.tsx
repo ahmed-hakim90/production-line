@@ -33,6 +33,8 @@ import {
 import { repairJobService } from '../services/repairJobService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import type { RepairSalesInvoice } from '../types';
+import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
+import { resolveRepairSettings } from '../config/repairSettings';
 
 const num = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const shortDay = (isoDate: string) =>
@@ -44,6 +46,25 @@ export const RepairDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [userProfile, userRoleName, systemSettings, userPermissions],
+  );
+  const technicianIds = useMemo(
+    () => resolveRepairTechnicianIds(userProfile, currentEmployee?.id),
+    [userProfile, currentEmployee?.id],
+  );
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [salesInvoices, setSalesInvoices] = useState<RepairSalesInvoice[]>([]);
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
@@ -57,35 +78,48 @@ export const RepairDashboard: React.FC = () => {
       setAssignedBranchIds([]);
       return;
     }
-    void repairBranchService.list().then((branches) => {
-      const ids = branches
-        .filter((branch) => (branch.technicianIds || []).includes(userProfile.id || ''))
+    void repairBranchService.list().then((branchRows) => {
+      const uid = String(userProfile.id || '').trim();
+      const eid = String(currentEmployee?.id || '').trim();
+      const ids = branchRows
+        .filter((branch) => {
+          const t = branch.technicianIds || [];
+          return (uid && t.includes(uid)) || (eid && t.includes(eid));
+        })
         .map((branch) => branch.id || '')
         .filter(Boolean);
       setAssignedBranchIds(ids);
     });
-  }, [can, userProfile?.id]);
+  }, [can, userProfile?.id, currentEmployee?.id]);
 
   useEffect(() => {
-    const unsub = can('repair.branches.manage')
-      ? repairJobService.subscribeAll(setJobs)
-      : userBranchIds.length > 1
-        ? repairJobService.subscribeByBranches(userBranchIds, setJobs)
-        : repairJobService.subscribeByBranch(userBranchIds[0] || '', setJobs);
+    let unsub: () => void = () => {};
+    if (repairCtx.canViewAllBranches) {
+      unsub = repairJobService.subscribeAll(setJobs);
+    } else if (repairCtx.jobsTechnicianOnly) {
+      unsub = repairJobService.subscribeByTechnicianIds(technicianIds, setJobs);
+    } else if (userBranchIds.length > 1) {
+      unsub = repairJobService.subscribeByBranches(userBranchIds, setJobs);
+    } else {
+      unsub = repairJobService.subscribeByBranch(userBranchIds[0] || '', setJobs);
+    }
     return () => unsub();
-  }, [can, JSON.stringify(userBranchIds)]);
+  }, [repairCtx.canViewAllBranches, repairCtx.jobsTechnicianOnly, JSON.stringify(userBranchIds), JSON.stringify(technicianIds)]);
 
   useEffect(() => {
-    const unsub = can('repair.branches.manage')
-      ? repairSalesInvoiceService.subscribeAll(setSalesInvoices)
-      : userBranchIds.length > 1
-        ? repairSalesInvoiceService.subscribeByBranches(userBranchIds, setSalesInvoices)
-        : repairSalesInvoiceService.subscribeByBranch(userBranchIds[0] || '', setSalesInvoices);
+    let unsub: () => void = () => {};
+    if (repairCtx.canViewAllBranches) {
+      unsub = repairSalesInvoiceService.subscribeAll(setSalesInvoices);
+    } else if (userBranchIds.length > 1) {
+      unsub = repairSalesInvoiceService.subscribeByBranches(userBranchIds, setSalesInvoices);
+    } else {
+      unsub = repairSalesInvoiceService.subscribeByBranch(userBranchIds[0] || '', setSalesInvoices);
+    }
     return () => unsub();
-  }, [can, JSON.stringify(userBranchIds)]);
+  }, [repairCtx.canViewAllBranches, JSON.stringify(userBranchIds)]);
 
   const kpis = useMemo(() => {
-    const openJobs = jobs.filter((j) => !['delivered', 'unrepairable'].includes(j.status)).length;
+    const openJobs = jobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
     const pendingDelivery = jobs.filter((j) => j.status === 'ready').length;
     const repairRevenue = jobs
       .filter((j) => j.status === 'delivered')
@@ -95,7 +129,7 @@ export const RepairDashboard: React.FC = () => {
     const all = jobs.length || 1;
     const successRate = (jobs.filter((j) => j.status === 'delivered').length / all) * 100;
     return { openJobs, pendingDelivery, repairRevenue, partsRevenue, totalRevenue, successRate };
-  }, [jobs, salesInvoices]);
+  }, [jobs, salesInvoices, repairSettings.workflow.openStatusIds]);
   const recent = useMemo(() => jobs.slice(0, 6), [jobs]);
   const avgTicket = useMemo(() => {
     const delivered = jobs.filter((job) => job.status === 'delivered');
@@ -105,12 +139,14 @@ export const RepairDashboard: React.FC = () => {
   }, [jobs]);
   const statusChartData = useMemo(
     () =>
-      REPAIR_JOB_STATUSES.map((status) => ({
+      (repairSettings.workflow.statuses.map((s) => s.id).length > 0
+        ? repairSettings.workflow.statuses.map((s) => s.id)
+        : REPAIR_JOB_STATUSES).map((status) => ({
         key: status,
-        name: REPAIR_JOB_STATUS_LABELS[status],
+        name: repairSettings.statusMap[status]?.label || REPAIR_JOB_STATUS_LABELS[status] || status,
         value: jobs.filter((job) => job.status === status).length,
       })).filter((row) => row.value > 0),
-    [jobs],
+    [jobs, repairSettings.workflow.statuses, repairSettings.statusMap],
   );
   const dailyTrendData = useMemo(() => {
     const days = Array.from({ length: 14 }).map((_, idx) => {
@@ -214,13 +250,13 @@ export const RepairDashboard: React.FC = () => {
               <PieChart>
                 <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={52} outerRadius={88} paddingAngle={2}>
                   {statusChartData.map((entry) => (
-                    <Cell key={entry.key} fill={REPAIR_JOB_STATUS_COLORS[entry.key]} />
+                    <Cell key={entry.key} fill={repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b'} />
                   ))}
                 </Pie>
                 <Tooltip
                   formatter={(value: number, _name, item: { payload?: { key: RepairJobStatus } }) => [
                     num(value),
-                    item?.payload?.key ? REPAIR_JOB_STATUS_LABELS[item.payload.key] : 'الحالة',
+                    item?.payload?.key ? (repairSettings.statusMap[item.payload.key]?.label || REPAIR_JOB_STATUS_LABELS[item.payload.key] || item.payload.key) : 'الحالة',
                   ]}
                 />
               </PieChart>
@@ -230,7 +266,7 @@ export const RepairDashboard: React.FC = () => {
             <div className="flex flex-wrap gap-2">
               {statusChartData.map((entry) => (
                 <Badge key={entry.key} variant="outline" className="gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: REPAIR_JOB_STATUS_COLORS[entry.key] }} />
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b' }} />
                   {entry.name}: {num(entry.value)}
                 </Badge>
               ))}
@@ -277,7 +313,7 @@ export const RepairDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <span>{job.deviceBrand} {job.deviceModel}</span>
-                <Badge variant="secondary">{REPAIR_JOB_STATUS_LABELS[job.status]}</Badge>
+                <Badge variant="secondary">{repairSettings.statusMap[job.status]?.label || REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</Badge>
               </div>
             </div>
           ))}

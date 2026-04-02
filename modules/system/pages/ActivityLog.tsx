@@ -42,6 +42,19 @@ const ACTION_LABELS: Partial<Record<ActivityAction, { label: string; icon: strin
   PROCESS_INSTALLMENT: { label: 'معالجة قسط', icon: 'receipt', variant: 'warning' },
 };
 
+interface ActivityLogUserGroup {
+  userKey: string;
+  userId: string;
+  userEmail: string;
+  logs: ActivityLogType[];
+}
+
+interface ActivityLogDayGroup {
+  dayKey: string;
+  dayDate: Date;
+  users: ActivityLogUserGroup[];
+}
+
 export const ActivityLogPage: React.FC = () => {
   const { can } = usePermission();
   const canBroadcast = can('roles.manage');
@@ -106,9 +119,36 @@ export const ActivityLogPage: React.FC = () => {
     return unsub;
   }, []);
 
-  const formatTimestamp = (ts: any): string => {
-    if (!ts) return '—';
+  const toTimestampDate = (ts: any): Date | null => {
+    if (!ts) return null;
     const date = ts.toDate ? ts.toDate() : new Date(ts);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const toTimestampMillis = (ts: any): number => {
+    const date = toTimestampDate(ts);
+    return date ? date.getTime() : 0;
+  };
+
+  const getLocalDayKey = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDayHeading = (date: Date): string => (
+    date.toLocaleDateString('ar-EG', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+  );
+
+  const formatTimestamp = (ts: any): string => {
+    const date = toTimestampDate(ts);
+    if (!date) return '—';
     return date.toLocaleDateString('ar-EG', {
       weekday: 'short',
       day: 'numeric',
@@ -135,6 +175,59 @@ export const ActivityLogPage: React.FC = () => {
     () => logs.filter((log) => !HIDDEN_ACTIVITY_ACTIONS.has(log.action as ActivityAction)),
     [logs],
   );
+
+  const groupedVisibleLogs = useMemo<ActivityLogDayGroup[]>(() => {
+    const dayMap = new Map<string, { dayDate: Date; usersMap: Map<string, ActivityLogUserGroup> }>();
+
+    visibleLogs.forEach((log) => {
+      const logDate = toTimestampDate(log.timestamp);
+      if (!logDate) return;
+
+      const dayKey = getLocalDayKey(logDate);
+      const userId = String(log.userId || '');
+      const userEmail = String(log.userEmail || userId || 'unknown');
+      const userKey = userId || userEmail;
+
+      if (!dayMap.has(dayKey)) {
+        dayMap.set(dayKey, { dayDate: logDate, usersMap: new Map<string, ActivityLogUserGroup>() });
+      }
+
+      const dayEntry = dayMap.get(dayKey)!;
+      if (!dayEntry.usersMap.has(userKey)) {
+        dayEntry.usersMap.set(userKey, {
+          userKey,
+          userId,
+          userEmail,
+          logs: [],
+        });
+      }
+
+      dayEntry.usersMap.get(userKey)!.logs.push(log);
+    });
+
+    return Array.from(dayMap.entries())
+      .map(([dayKey, dayEntry]) => {
+        const users = Array.from(dayEntry.usersMap.values())
+          .map((userGroup) => ({
+            ...userGroup,
+            logs: [...userGroup.logs].sort(
+              (a, b) => toTimestampMillis(b.timestamp) - toTimestampMillis(a.timestamp),
+            ),
+          }))
+          .sort((a, b) => {
+            const aLatest = a.logs[0] ? toTimestampMillis(a.logs[0].timestamp) : 0;
+            const bLatest = b.logs[0] ? toTimestampMillis(b.logs[0].timestamp) : 0;
+            return bLatest - aLatest;
+          });
+
+        return {
+          dayKey,
+          dayDate: dayEntry.dayDate,
+          users,
+        };
+      })
+      .sort((a, b) => b.dayDate.getTime() - a.dayDate.getTime());
+  }, [visibleLogs]);
 
   const employeeOptions = useMemo(
     () =>
@@ -391,37 +484,63 @@ export const ActivityLogPage: React.FC = () => {
         <LoadingSkeleton rows={8} type="table" />
       ) : (
         <Card>
-          <div className="space-y-0 divide-y divide-[var(--color-border)]">
-            {visibleLogs.map((log) => {
-              const info = getActionInfo(log.action);
-              return (
-                <div key={log.id} className="flex items-start gap-4 py-4 px-2">
-                  <div className={`w-10 h-10 rounded-[var(--border-radius-lg)] flex items-center justify-center flex-shrink-0 ${
-                    info.variant === 'success' ? 'bg-emerald-100' :
-                    info.variant === 'warning' ? 'bg-amber-100' :
-                    info.variant === 'danger' ? 'bg-rose-100' :
-                    info.variant === 'info' ? 'bg-blue-100' :
-                    'bg-[#f0f2f5]'
-                  }`}>
-                    <span className={`material-icons-round text-lg ${
-                      info.variant === 'success' ? 'text-emerald-600' :
-                      info.variant === 'warning' ? 'text-amber-600' :
-                      info.variant === 'danger' ? 'text-rose-600' :
-                      info.variant === 'info' ? 'text-blue-600' :
-                      'text-slate-500'
-                    }`}>{info.icon}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant={info.variant}>{info.label}</Badge>
-                      <span className="text-xs text-[var(--color-text-muted)] font-mono" dir="ltr">{log.userEmail}</span>
-                    </div>
-                    <p className="text-sm font-medium text-[var(--color-text)]">{log.description}</p>
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1">{formatTimestamp(log.timestamp)}</p>
-                  </div>
+          <div className="space-y-5">
+            {groupedVisibleLogs.map((dayGroup) => (
+              <section key={dayGroup.dayKey} className="space-y-3">
+                <div className="px-1">
+                  <h3 className="text-sm font-bold text-[var(--color-text)]">{formatDayHeading(dayGroup.dayDate)}</h3>
                 </div>
-              );
-            })}
+
+                <div className="space-y-3">
+                  {dayGroup.users.map((userGroup) => {
+                    const employeeName = userGroup.userId ? employeesById[userGroup.userId]?.name : '';
+                    const userLabel = employeeName ? `${employeeName} (${userGroup.userEmail})` : userGroup.userEmail;
+
+                    return (
+                      <div key={`${dayGroup.dayKey}-${userGroup.userKey}`} className="border border-[var(--color-border)] rounded-[var(--border-radius-base)] overflow-hidden">
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-[var(--color-bg)] border-b border-[var(--color-border)]">
+                          <p className="text-sm font-bold text-[var(--color-text)] truncate" dir="ltr">{userLabel}</p>
+                          <span className="text-xs text-[var(--color-text-muted)] whitespace-nowrap">{userGroup.logs.length} حدث</span>
+                        </div>
+
+                        <div className="divide-y divide-[var(--color-border)]">
+                          {userGroup.logs.map((log) => {
+                            const info = getActionInfo(log.action);
+                            return (
+                              <div key={log.id} className="flex items-start gap-4 py-4 px-2">
+                                <div className={`w-10 h-10 rounded-[var(--border-radius-lg)] flex items-center justify-center flex-shrink-0 ${
+                                  info.variant === 'success' ? 'bg-emerald-100' :
+                                  info.variant === 'warning' ? 'bg-amber-100' :
+                                  info.variant === 'danger' ? 'bg-rose-100' :
+                                  info.variant === 'info' ? 'bg-blue-100' :
+                                  'bg-[#f0f2f5]'
+                                }`}>
+                                  <span className={`material-icons-round text-lg ${
+                                    info.variant === 'success' ? 'text-emerald-600' :
+                                    info.variant === 'warning' ? 'text-amber-600' :
+                                    info.variant === 'danger' ? 'text-rose-600' :
+                                    info.variant === 'info' ? 'text-blue-600' :
+                                    'text-slate-500'
+                                  }`}>{info.icon}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Badge variant={info.variant}>{info.label}</Badge>
+                                    <span className="text-xs text-[var(--color-text-muted)] font-mono" dir="ltr">{log.userEmail}</span>
+                                  </div>
+                                  <p className="text-sm font-medium text-[var(--color-text)]">{log.description}</p>
+                                  <p className="text-xs text-[var(--color-text-muted)] mt-1">{formatTimestamp(log.timestamp)}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
 
             {visibleLogs.length === 0 && (
               <div className="py-16 text-center text-slate-400">
