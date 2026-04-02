@@ -670,6 +670,141 @@ export const buildProductCosts = (
   return result;
 };
 
+/** Internal pieces of report cost before dividing by quantity (matches buildReportsCosts). */
+type ReportCostParts = {
+  laborCost: number;
+  indirectShare: number;
+  supervisorIndirectCost: number;
+  lineIndirect: number;
+  lineDateTotal: number;
+  qty: number;
+};
+
+function ensureLineMonthIndirectCached(
+  lineId: string,
+  month: string,
+  indirectCache: Map<string, number>,
+  costCenters: CostCenter[],
+  costCenterValues: CostCenterValue[],
+  costAllocations: CostAllocation[]
+): void {
+  const cacheKey = `${lineId}_${month}`;
+  if (!indirectCache.has(cacheKey)) {
+    indirectCache.set(
+      cacheKey,
+      calculateDailyIndirectCost(lineId, month, costCenters, costCenterValues, costAllocations)
+    );
+  }
+}
+
+function computeReportCostParts(
+  r: ProductionReport,
+  lineDateTotals: Map<string, number>,
+  indirectCache: Map<string, number>,
+  supervisorShareMap: Map<string, number>,
+  hourlyRate: number,
+  costCenters: CostCenter[],
+  costCenterValues: CostCenterValue[],
+  costAllocations: CostAllocation[]
+): ReportCostParts | null {
+  if (!r.id || !r.quantityProduced || r.quantityProduced <= 0) return null;
+
+  const qty = r.quantityProduced;
+  const laborCost = (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
+  const supervisorIndirectCost = supervisorShareMap.get(r.id) || 0;
+
+  const month = r.date?.slice(0, 7) || getCurrentMonth();
+  ensureLineMonthIndirectCached(r.lineId, month, indirectCache, costCenters, costCenterValues, costAllocations);
+  const lineIndirect = indirectCache.get(`${r.lineId}_${month}`) || 0;
+  const lineDateKey = `${r.lineId}_${r.date}`;
+  const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
+  const indirectShare = lineDateTotal > 0 ? lineIndirect * (qty / lineDateTotal) : 0;
+
+  return {
+    laborCost,
+    indirectShare,
+    supervisorIndirectCost,
+    lineIndirect,
+    lineDateTotal,
+    qty,
+  };
+}
+
+/**
+ * Detailed cost breakdown for one production report, consistent with {@link buildReportsCosts}
+ * when using the same batch of `reports` and cost inputs.
+ */
+export interface ProductionReportCostBreakdown {
+  quantityProduced: number;
+  workersCount: number;
+  workHours: number;
+  hourlyRate: number;
+  laborCostTotal: number;
+  /** Daily indirect cost allocated to the line for the report month (before splitting by day qty). */
+  lineDailyIndirect: number;
+  /** Total produced qty on this line on this calendar day (all reports in batch). */
+  lineDateTotalQty: number;
+  indirectShareTotal: number;
+  supervisorIndirectTotal: number;
+  totalCost: number;
+  costPerUnit: number;
+}
+
+/**
+ * @returns `null` if cost settings are disabled, the report cannot be costed, or batch context is empty.
+ */
+export const getProductionReportCostBreakdown = (
+  report: ProductionReport,
+  reports: ProductionReport[],
+  hourlyRate: number,
+  costCenters: CostCenter[],
+  costCenterValues: CostCenterValue[],
+  costAllocations: CostAllocation[],
+  supervisorHourlyRates?: Map<string, number>
+): ProductionReportCostBreakdown | null => {
+  if (hourlyRate <= 0 && costCenters.length === 0) return null;
+
+  const lineDateTotals = new Map<string, number>();
+  reports.forEach((r) => {
+    const key = `${r.lineId}_${r.date}`;
+    lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
+  });
+
+  const indirectCache = new Map<string, number>();
+  const supervisorShareMap = buildSupervisorIndirectShareMap(
+    reports,
+    supervisorHourlyRates,
+    hourlyRate
+  );
+
+  const parts = computeReportCostParts(
+    report,
+    lineDateTotals,
+    indirectCache,
+    supervisorShareMap,
+    hourlyRate,
+    costCenters,
+    costCenterValues,
+    costAllocations
+  );
+  if (!parts) return null;
+
+  const totalCost = parts.laborCost + parts.indirectShare + parts.supervisorIndirectCost;
+  return {
+    quantityProduced: parts.qty,
+    workersCount: report.workersCount || 0,
+    workHours: report.workHours || 0,
+    hourlyRate,
+    laborCostTotal: parts.laborCost,
+    lineDailyIndirect: parts.lineIndirect,
+    lineDateTotalQty: parts.lineDateTotal,
+    indirectShareTotal: parts.indirectShare,
+    supervisorIndirectTotal: parts.supervisorIndirectCost,
+    totalCost,
+    costPerUnit: totalCost / parts.qty,
+  };
+};
+
 /**
  * Compute cost per unit for every report in a batch.
  * Groups reports by (lineId + date) to properly split indirect costs.
@@ -700,26 +835,18 @@ export const buildReportsCosts = (
   );
 
   for (const r of reports) {
-    if (!r.id || !r.quantityProduced || r.quantityProduced <= 0) continue;
-
-    const laborCost = (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-    const supervisorIndirectCost = supervisorShareMap.get(r.id) || 0;
-
-    const month = r.date?.slice(0, 7) || getCurrentMonth();
-    if (!indirectCache.has(`${r.lineId}_${month}`)) {
-      indirectCache.set(
-        `${r.lineId}_${month}`,
-        calculateDailyIndirectCost(r.lineId, month, costCenters, costCenterValues, costAllocations)
-      );
-    }
-    const lineIndirect = indirectCache.get(`${r.lineId}_${month}`) || 0;
-    const lineDateKey = `${r.lineId}_${r.date}`;
-    const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-    const indirectShare = lineDateTotal > 0
-      ? lineIndirect * (r.quantityProduced / lineDateTotal)
-      : 0;
-
-    result.set(r.id, (laborCost + indirectShare + supervisorIndirectCost) / r.quantityProduced);
+    const parts = computeReportCostParts(
+      r,
+      lineDateTotals,
+      indirectCache,
+      supervisorShareMap,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations
+    );
+    if (!parts) continue;
+    result.set(r.id!, (parts.laborCost + parts.indirectShare + parts.supervisorIndirectCost) / parts.qty);
   }
 
   return result;

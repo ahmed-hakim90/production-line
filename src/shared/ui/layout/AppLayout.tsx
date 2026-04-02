@@ -10,7 +10,8 @@ import { usePermission } from '@/utils/permissions';
 import { PageShell } from '@/src/shared/ui/layout/PageShell';
 import { useAppStore } from '@/store/useAppStore';
 import { DEFAULT_THEME } from '@/utils/dashboardConfig';
-import { resolveContentMaxWidthForPath } from '@/core/ui-engine/theme/tenantTheme';
+import { resolveContentMaxWidthForPath, stripTenantSegmentFromPathname } from '@/core/ui-engine/theme/tenantTheme';
+import { cn } from '@/lib/utils';
 import { OfflineConnectionBanner } from './OfflineConnectionBanner';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useAppDirection } from './useAppDirection';
@@ -34,6 +35,10 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
     () => resolveContentMaxWidthForPath(location.pathname, themeSettings),
     [location.pathname, themeSettings],
   );
+  const repairContentTheme = useMemo(() => {
+    const p = stripTenantSegmentFromPathname(location.pathname);
+    return p === '/repair' || p.startsWith('/repair/');
+  }, [location.pathname]);
   const online = useOnlineStatus();
 
   // Margin matches sidebar width: collapsed=52px icon bar, expanded=260px
@@ -75,7 +80,10 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             tabIndex={-1}
           >
             <div
-              className="mx-auto w-full px-4 sm:px-5 animate-in fade-in duration-200"
+              className={cn(
+                'mx-auto w-full px-4 sm:px-5 animate-in fade-in duration-200',
+                repairContentTheme && 'erp-repair-theme',
+              )}
               style={{
                 maxWidth: `min(100%, ${contentMaxWidth})`,
                 paddingTop: 'var(--layout-main-padding-y, 1rem)',

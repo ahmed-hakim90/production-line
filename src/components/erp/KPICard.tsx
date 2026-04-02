@@ -49,7 +49,8 @@ export function KPICard({
   return (
     <article
       className={cn(
-        "flex min-h-[118px] flex-col justify-between rounded-xl border border-slate-200 bg-white p-4",
+        "flex min-h-[118px] flex-col justify-between rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-5",
+        "shadow-[var(--shadow-desk-card)] ring-1 ring-slate-900/[0.05] dark:ring-white/10",
         className
       )}
     >
@@ -57,7 +58,7 @@ export function KPICard({
         {loading ? (
           <Skeleton className="h-3 w-20 rounded-md" />
         ) : (
-          <p className="text-xs font-normal text-[#64748B]">{label}</p>
+          <p className="text-xs font-medium text-[var(--color-text-muted)]">{label}</p>
         )}
         <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg", iconBoxClasses[color])}>
           <Icon className="h-4 w-4" />
@@ -69,14 +70,14 @@ export function KPICard({
           <Skeleton className="h-7 w-28 rounded-md" />
         ) : (
           <div className="flex items-end gap-1.5">
-            <p className="text-xl font-medium leading-none text-[#0F172A]">{value}</p>
-            {unit && <span className="text-xs font-normal text-[#94A3B8]">{unit}</span>}
+            <p className="text-xl font-semibold leading-none tracking-tight text-[var(--color-text)]">{value}</p>
+            {unit && <span className="text-xs font-normal text-[var(--color-text-muted)]">{unit}</span>}
           </div>
         )}
 
         {!loading && (subValue || trend) && (
           <div className="flex items-center gap-2">
-            {subValue && <span className="text-xs font-normal text-[#64748B]">{subValue}</span>}
+            {subValue && <span className="text-xs font-normal text-[var(--color-text-muted)]">{subValue}</span>}
             {trend && (
               <span
                 className={cn(

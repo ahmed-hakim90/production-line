@@ -2463,6 +2463,64 @@ input[type="radio"] {
   stroke-opacity: 0.65 !important;
 }
 
+/* Desk workspace: primary chrome + KPI depth (ERPNext-like) */
+.erp-dashboard-theme {
+  --shadow-card: var(--shadow-desk-card, 0 4px 16px rgba(15, 23, 42, 0.07));
+}
+
+.erp-dashboard-theme .erp-page-head {
+  align-items: flex-start;
+  padding: 1rem 1.125rem;
+  margin-bottom: 1.25rem;
+  border-radius: var(--border-radius-xl);
+  border: 1px solid var(--color-border);
+  background: linear-gradient(
+    165deg,
+    var(--color-card) 0%,
+    color-mix(in srgb, var(--color-card) 88%, var(--color-bg) 12%) 100%
+  );
+  box-shadow: var(--shadow-desk-header);
+}
+
+.erp-dashboard-theme .erp-page-head .page-title {
+  letter-spacing: -0.02em;
+}
+
+/* Repair module — scoped to main content (see AppLayout `erp-repair-theme`).
+   Stripe-like: airy padding, hairline borders, soft elevation, warm accent. */
+.erp-repair-theme {
+  --layout-main-padding-y: 1.35rem;
+  /* orange-600 channels — module accent without changing global tenant shell */
+  --color-primary: 234 88 12;
+  --color-primary-hex: #ea580c;
+}
+
+.erp-repair-theme .erp-page-head {
+  align-items: flex-start;
+  padding: 1.125rem 1.25rem;
+  margin-bottom: 1.5rem;
+  border-radius: var(--border-radius-xl);
+  border: 1px solid color-mix(in srgb, var(--color-border) 92%, var(--color-primary) 8%);
+  background: linear-gradient(
+    165deg,
+    var(--color-card) 0%,
+    color-mix(in srgb, var(--color-card) 94%, var(--color-bg) 6%) 100%
+  );
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px rgba(15, 23, 42, 0.05);
+}
+
+.erp-repair-theme .erp-page-head .page-title {
+  letter-spacing: -0.025em;
+}
+
+.erp-repair-theme .shadow-sm {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
 /* ══════════════════════════════════════════════════════════
    ERPNext PRINT STYLES
    ══════════════════════════════════════════════════════════ */

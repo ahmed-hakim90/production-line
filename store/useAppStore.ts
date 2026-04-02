@@ -386,22 +386,6 @@ function hasPermission(
   return permissions[key] === true;
 }
 
-function collectHiddenProductIdsFromRawWarehouse(
-  balances: StockItemBalance[],
-  rawMaterialWarehouseId?: string,
-): Set<string> {
-  const targetWarehouseId = (rawMaterialWarehouseId || '').trim();
-  if (!targetWarehouseId) return new Set();
-  const hiddenIds = new Set<string>();
-  for (const row of balances) {
-    if (row.warehouseId !== targetWarehouseId) continue;
-    if (row.itemType !== 'finished_good') continue;
-    if (!row.itemId) continue;
-    hiddenIds.add(row.itemId);
-  }
-  return hiddenIds;
-}
-
 function collectHiddenProductIdsFromRawMaster(
   rawProducts: FirestoreProduct[],
   rawMaterials: Array<{ name?: string; code?: string }>,
@@ -430,22 +414,14 @@ function collectHiddenProductIdsFromRawMaster(
 
 async function filterProductsByRawMaterialWarehouse(
   rawProducts: FirestoreProduct[],
-  rawMaterialWarehouseId?: string,
+  _rawMaterialWarehouseId?: string,
 ): Promise<FirestoreProduct[]> {
-  const targetWarehouseId = (rawMaterialWarehouseId || '').trim();
   try {
-    const [rawMaterials, balances] = await Promise.all([
-      rawMaterialService.getAll(),
-      targetWarehouseId ? stockService.getBalances() : Promise.resolve([]),
-    ]);
-
+    const rawMaterials = await rawMaterialService.getAll();
     const hiddenByMaster = collectHiddenProductIdsFromRawMaster(rawProducts, rawMaterials);
-    const hiddenIds = collectHiddenProductIdsFromRawWarehouse(balances, targetWarehouseId);
-    const allHiddenIds = new Set<string>([...hiddenByMaster, ...hiddenIds]);
-    if (allHiddenIds.size === 0) return rawProducts;
-    return rawProducts.filter((product) => !product.id || !allHiddenIds.has(product.id));
+    if (hiddenByMaster.size === 0) return rawProducts;
+    return rawProducts.filter((product) => !product.id || !hiddenByMaster.has(product.id));
   } catch {
-    // If balances cannot be loaded, fail open to avoid blocking data.
     return rawProducts;
   }
 }

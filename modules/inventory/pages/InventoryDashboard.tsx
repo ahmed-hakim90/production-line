@@ -49,7 +49,7 @@ export const InventoryDashboard: React.FC = () => {
   );
 
   return (
-    <div className="erp-ds-clean space-y-6">
+    <div className="erp-ds-clean erp-dashboard-theme space-y-6">
       <PageHeader
         title="لوحة المخازن"
         subtitle="متابعة فورية للأرصدة والحركات والجرد."

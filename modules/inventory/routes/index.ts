@@ -8,9 +8,11 @@ const StockMovementForm = lazyNamed(() => import('../pages/StockMovementForm'), 
 const StockCounts = lazyNamed(() => import('../pages/StockCounts'), 'StockCounts');
 const TransferApprovals = lazyNamed(() => import('../pages/TransferApprovals'), 'TransferApprovals');
 const QuickWarehouseTransfer = lazyNamed(() => import('../pages/QuickWarehouseTransfer'), 'QuickWarehouseTransfer');
+const Warehouses = lazyNamed(() => import('../pages/Warehouses'), 'Warehouses');
 
 export const INVENTORY_ROUTES: AppRouteDef[] = [
   { path: '/inventory', permission: 'inventory.view', component: InventoryDashboard },
+  { path: '/inventory/warehouses', permission: 'inventory.view', component: Warehouses },
   { path: '/inventory/balances', permission: 'inventory.view', component: StockBalances },
   { path: '/inventory/transactions', permission: 'inventory.view', component: StockTransactions },
   { path: '/quick-inventory-transfer', permission: 'inventory.transactions.create', component: QuickWarehouseTransfer },

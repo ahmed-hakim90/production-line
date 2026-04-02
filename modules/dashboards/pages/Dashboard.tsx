@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
   BarChart3,
+  CalendarDays,
   CheckCircle2,
   Factory,
   Flag,
@@ -17,6 +18,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { PageHeader } from '@/src/components/erp/PageHeader';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
@@ -151,6 +153,17 @@ export const Dashboard: React.FC = () => {
   const linkedEmployee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
     [_rawEmployees, uid]
+  );
+
+  const deskTodayLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString('ar-EG', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+    []
   );
 
   if (linkedEmployee && !canViewCosts) {
@@ -547,11 +560,12 @@ export const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="erp-dashboard-theme space-y-8">
-        <div>
-          <h2 className="text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
-          <p className="text-[var(--color-text-muted)] mt-1 font-medium">جاري تحميل البيانات...</p>
-        </div>
+      <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
+        <PageHeader
+          title="لوحة التشغيل"
+          subtitle="جاري تحميل البيانات..."
+          icon={<CalendarDays className="h-4 w-4" strokeWidth={2} />}
+        />
         <LoadingSkeleton type="card" rows={6} />
       </div>
     );
@@ -559,10 +573,20 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
-      {/* <div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">مؤسسة المغربي</h2>
-        <p className="text-[var(--color-text-muted)] mt-1 font-medium text-sm sm:text-base">لوحة عامة شاملة على أداء المصنع اليوم وتتبع حقيقي لخطوط الإنتاج.</p>
-      </div> */}
+      <PageHeader
+        title="لوحة التشغيل"
+        subtitle="نظرة موحّدة على الإنتاج اليومي، الخطوط، والتكاليف"
+        icon={<CalendarDays className="h-4 w-4" strokeWidth={2} />}
+        actions={
+          <span
+            className="inline-flex max-w-[min(100%,280px)] items-center gap-2 truncate rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-xs font-semibold text-[var(--color-text-muted)] shadow-[var(--shadow-desk-header)]"
+            title={deskTodayLabel}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.25)]" aria-hidden />
+            {deskTodayLabel}
+          </span>
+        }
+      />
 
       <OrderedDashboardWidgets
         dashboardKey="dashboard"
@@ -573,9 +597,9 @@ export const Dashboard: React.FC = () => {
               return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {/* Production Card — Daily & Monthly */}
-        <div className="bg-[var(--color-card)] p-4 sm:p-6 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-2 md:col-span-1">
+        <div className="bg-[var(--color-card)] p-4 sm:p-6 rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 sm:col-span-2 md:col-span-1 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0 shadow-inner">
               <DashboardIcon name="inventory" className="text-2xl sm:text-3xl" />
             </div>
             <p className="text-[var(--color-text-muted)] text-sm font-bold">إجمالي الإنتاج</p>
@@ -606,10 +630,10 @@ export const Dashboard: React.FC = () => {
             case 'product_cost_analysis':
               if (!canViewCosts) return null;
               return (
-        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
-          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 overflow-hidden shadow-[var(--shadow-card)]">
+          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] bg-[var(--color-surface-hover)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0 ring-1 ring-violet-500/10">
                 <DashboardIcon name="price_check" className="text-violet-600 dark:text-violet-400" />
               </div>
               <div>
@@ -781,10 +805,10 @@ export const Dashboard: React.FC = () => {
             case 'daily_cost_chart':
               if (!canViewCosts) return null;
               return (
-        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
-          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 overflow-hidden shadow-[var(--shadow-card)]">
+          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] bg-[var(--color-surface-hover)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0 ring-1 ring-blue-500/10">
                 <DashboardIcon name="insights" className="text-blue-600" />
               </div>
               <div>

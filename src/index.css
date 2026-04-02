@@ -44,6 +44,13 @@
     --border-radius-xl: 12px;
 
     --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+    /* Desk / ERPNext-style layered elevation (dashboards, KPI strips) */
+    --shadow-desk-card:
+      0 1px 2px rgba(15, 23, 42, 0.04),
+      0 4px 16px -2px rgba(15, 23, 42, 0.07);
+    --shadow-desk-header:
+      0 1px 2px rgba(15, 23, 42, 0.03),
+      0 2px 8px rgba(15, 23, 42, 0.04);
     --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
     --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.14);
     --density-scale: 1;

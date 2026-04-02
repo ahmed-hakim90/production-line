@@ -33,6 +33,7 @@ const COLORFUL_ICON: Record<string, string> = {
   hr:         'text-violet-600',
   costs:      'text-amber-600',
   quality:    'text-cyan-600',
+  repair:     'text-orange-600',
   system:     'text-rose-600',
 };
 
@@ -43,6 +44,7 @@ const COLORFUL_BG: Record<string, string> = {
   hr:         'bg-violet-50',
   costs:      'bg-amber-50',
   quality:    'bg-cyan-50',
+  repair:     'bg-orange-50',
   system:     'bg-rose-50',
 };
 

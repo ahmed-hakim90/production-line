@@ -27,6 +27,8 @@ import type {
 const BALANCES_COLLECTION = 'stock_items';
 const TRANSACTIONS_COLLECTION = 'stock_transactions';
 const COUNTS_COLLECTION = 'stock_counts';
+const TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
+const DELETE_BATCH = 500;
 const INV_REF_REGEX = /^INV-(\d+)$/i;
 const formatInvReference = (seq: number) => `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
 const MAX_PAGE_SIZE = 100;
@@ -133,6 +135,35 @@ export const stockService = {
       : tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
+  },
+
+  /**
+   * Deletes all tenant-scoped inventory data tied to a warehouse (transfer requests, transactions,
+   * balances, count sessions). Caller deletes the warehouse document afterward.
+   */
+  async deleteAllDataForWarehouse(warehouseId: string): Promise<void> {
+    if (!isConfigured || !warehouseId.trim()) {
+      throw new Error('معرّف المخزن غير صالح.');
+    }
+    const id = warehouseId.trim();
+
+    const deleteWhereEquals = async (collectionName: string, field: string, value: string) => {
+      for (;;) {
+        const q = tenantQuery(db, collectionName, where(field, '==', value), limit(DELETE_BATCH));
+        const snap = await getDocs(q);
+        if (snap.empty) break;
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    };
+
+    await deleteWhereEquals(TRANSFER_REQUESTS_COLLECTION, 'fromWarehouseId', id);
+    await deleteWhereEquals(TRANSFER_REQUESTS_COLLECTION, 'toWarehouseId', id);
+    await deleteWhereEquals(TRANSACTIONS_COLLECTION, 'warehouseId', id);
+    await deleteWhereEquals(TRANSACTIONS_COLLECTION, 'toWarehouseId', id);
+    await deleteWhereEquals(BALANCES_COLLECTION, 'warehouseId', id);
+    await deleteWhereEquals(COUNTS_COLLECTION, 'warehouseId', id);
   },
 
   async getTransactionsByReferenceNo(referenceNo: string): Promise<StockTransaction[]> {

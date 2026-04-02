@@ -10,10 +10,12 @@ import {
   Package,
   Circle,
   Search,
+  Trash2,
   TrendingDown,
   TrendingUp,
   Users,
   X,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { Badge as UiBadge } from '@/components/ui/badge';
@@ -32,7 +34,9 @@ import { cn } from '@/lib/utils';
 const KPI_ICON_MAP: Record<string, LucideIcon> = {
   analytics: BarChart3,
   bar_chart: BarChart3,
+  bolt: Zap,
   category: Boxes,
+  delete_sweep: Trash2,
   factory: Factory,
   groups: Users,
   inventory_2: Package,
@@ -56,7 +60,7 @@ interface CardProps {
 export const Card: React.FC<CardProps> = ({ children, className = '', title, onClick }) => (
   <UiCard
     onClick={onClick}
-    className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg,8px)] border border-[var(--color-border)] overflow-hidden ${onClick ? 'cursor-pointer hover:border-primary/30 hover:shadow-md transition-shadow' : ''} ${className}`}
+    className={`bg-[var(--color-card)] rounded-[var(--border-radius-xl,12px)] border border-[var(--color-border)] overflow-hidden ring-1 ring-slate-900/[0.04] dark:ring-white/10 ${onClick ? 'cursor-pointer hover:border-primary/30 hover:shadow-md transition-shadow' : ''} ${className}`}
     style={{ boxShadow: 'var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08))' }}
   >
     {title && (
@@ -80,10 +84,10 @@ interface KPIBoxProps {
 
 export const KPIBox: React.FC<KPIBoxProps> = ({ label, value, icon, trend, trendUp, colorClass = 'bg-primary/10 text-primary', unit }) => (
   <div
-    className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg,8px)] border border-[var(--color-border)] flex items-center gap-3.5 min-h-[108px] h-full"
+    className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-xl,12px)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 flex items-center gap-3.5 min-h-[108px] h-full"
     style={{ boxShadow: 'var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08))' }}
   >
-    <div className={`w-10 h-10 ${colorClass} rounded-[var(--border-radius-base,6px)] flex items-center justify-center shrink-0`}>
+    <div className={`w-11 h-11 ${colorClass} rounded-[var(--border-radius-lg,8px)] flex items-center justify-center shrink-0`}>
       {renderKpiIcon(icon)}
     </div>
     <div className="min-w-0 flex-1">
@@ -329,8 +333,13 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           <CommandList>
             <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
             <CommandGroup>
-              {options.map((opt) => (
-                <CommandItem key={opt.value} value={opt.label} onSelect={() => handleSelect(opt.value)}>
+              {options.map((opt, idx) => (
+                <CommandItem
+                  key={opt.value || `opt-${idx}`}
+                  // cmdk filters by `value`; include id so items stay unique when labels repeat (e.g. product names).
+                  value={`${opt.label} ${opt.value}`}
+                  onSelect={() => handleSelect(opt.value)}
+                >
                   <Check className={cn('mr-2 h-4 w-4', value === opt.value ? 'opacity-100' : 'opacity-0')} />
                   <span className="truncate">{opt.label}</span>
                 </CommandItem>

@@ -38,7 +38,14 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
-import { buildReportsCosts, buildSupervisorHourlyRatesMap, estimateReportCost, formatCost } from '../../../utils/costCalculations';
+import {
+  buildReportsCosts,
+  buildSupervisorHourlyRatesMap,
+  estimateReportCost,
+  formatCost,
+  getProductionReportCostBreakdown,
+  type ProductionReportCostBreakdown,
+} from '../../../utils/costCalculations';
 import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus, ReportComponentScrapItem, ProductionLineStatus } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import type { ShareResult } from '../../../utils/reportExport';
@@ -111,6 +118,68 @@ const emptyForm = {
 const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>): number =>
   (report.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const NOTE_PREVIEW_LENGTH = 10;
+
+function ReportCostBreakdownPanel({
+  breakdown,
+  noCostSettings,
+}: {
+  breakdown: ProductionReportCostBreakdown | null;
+  noCostSettings: boolean;
+}) {
+  if (noCostSettings) {
+    return (
+      <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+        لا تتوفر إعدادات تكلفة كافية لعرض التفصيل (يُشترط أجر ساعة للعمال أو مراكز تكلفة غير مباشرة).
+      </p>
+    );
+  }
+  if (!breakdown) {
+    return (
+      <p className="text-sm text-[var(--color-text-muted)]">تعذر حساب تفصيل التكلفة لهذا التقرير.</p>
+    );
+  }
+  const indirectFormula =
+    breakdown.lineDateTotalQty > 0
+      ? `${formatCost(breakdown.lineDailyIndirect)} × (${formatNumber(breakdown.quantityProduced)} ÷ ${formatNumber(breakdown.lineDateTotalQty)})`
+      : '—';
+  return (
+    <div className="space-y-3 text-sm">
+      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden divide-y divide-[var(--color-border)]">
+        <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[var(--color-text-muted)] font-medium">تكلفة العمالة</span>
+          <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.laborCostTotal)} ج.م</span>
+        </div>
+        <p className="px-3 py-2 text-[11px] text-[var(--color-text-muted)] bg-[#f8f9fa]/80 dark:bg-slate-900/20 leading-relaxed">
+          {breakdown.workersCount} عامل × {formatNumber(breakdown.workHours)} ساعة × {formatCost(breakdown.hourlyRate)} ج.م/ساعة
+        </p>
+        <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[var(--color-text-muted)] font-medium">نصيب التكاليف غير المباشرة (الخط)</span>
+          <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.indirectShareTotal)} ج.م</span>
+        </div>
+        <p className="px-3 py-2 text-[11px] text-[var(--color-text-muted)] bg-[#f8f9fa]/80 dark:bg-slate-900/20 leading-relaxed">
+          التكلفة اليومية للخط: {formatCost(breakdown.lineDailyIndirect)} ج.م | إجمالي إنتاج الخط في نفس اليوم: {formatNumber(breakdown.lineDateTotalQty)} | {indirectFormula}
+        </p>
+        <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[var(--color-text-muted)] font-medium">نصيب المشرف (غير مباشر)</span>
+          <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.supervisorIndirectTotal)} ج.م</span>
+        </div>
+        <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 bg-primary/5">
+          <span className="font-bold text-[var(--color-text)]">إجمالي التكلفة</span>
+          <span className="font-black tabular-nums text-primary">{formatCost(breakdown.totalCost)} ج.م</span>
+        </div>
+        <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[var(--color-text-muted)] font-medium">الكمية المنتجة</span>
+          <span className="font-bold tabular-nums">{formatNumber(breakdown.quantityProduced)}</span>
+        </div>
+        <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 border-t-2 border-primary/20">
+          <span className="font-bold text-[var(--color-text)]">تكلفة الوحدة</span>
+          <span className="font-black tabular-nums text-violet-600 text-base">{formatCost(breakdown.costPerUnit)} ج.م</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ReportGroupBy = 'none' | 'supervisor' | 'line' | 'product';
 
 const normalizeArabic = (value: string) =>
@@ -397,6 +466,7 @@ export const Reports: React.FC = () => {
   const [viewQualityReport, setViewQualityReport] = useState<ProductionReport | null>(null);
   const [selectedReportDrawer, setSelectedReportDrawer] = useState<ProductionReport | null>(null);
   const [reportDrawerTab, setReportDrawerTab] = useState<'summary' | 'cost' | 'notes'>('summary');
+  const [costDetailReport, setCostDetailReport] = useState<ProductionReport | null>(null);
 
 
   // Date range filter
@@ -756,6 +826,53 @@ export const Reports: React.FC = () => {
     const hourlyRate = laborSettings?.hourlyRate ?? 0;
     return buildReportsCosts(displayedReports, hourlyRate, costCenters, costCenterValues, costAllocations, supervisorHourlyRates);
   }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates]);
+
+  const hourlyRateForCosts = laborSettings?.hourlyRate ?? 0;
+  const noCostSettingsForBreakdown = hourlyRateForCosts <= 0 && costCenters.length === 0;
+
+  const costDetailBreakdown = useMemo(() => {
+    if (!costDetailReport || !canViewCosts) return null;
+    return getProductionReportCostBreakdown(
+      costDetailReport,
+      displayedReports,
+      hourlyRateForCosts,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      supervisorHourlyRates,
+    );
+  }, [
+    costDetailReport,
+    canViewCosts,
+    displayedReports,
+    hourlyRateForCosts,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    supervisorHourlyRates,
+  ]);
+
+  const drawerCostBreakdown = useMemo(() => {
+    if (!selectedReportDrawer || !canViewCosts) return null;
+    return getProductionReportCostBreakdown(
+      selectedReportDrawer,
+      displayedReports,
+      hourlyRateForCosts,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      supervisorHourlyRates,
+    );
+  }, [
+    selectedReportDrawer,
+    canViewCosts,
+    displayedReports,
+    hourlyRateForCosts,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    supervisorHourlyRates,
+  ]);
 
   const warehouseBuckets = useMemo(() => {
     const decomposed = new Set<string>();
@@ -2234,12 +2351,25 @@ export const Reports: React.FC = () => {
         header: 'تكلفة الوحدة',
         headerClassName: 'text-center',
         className: 'text-center',
-        render: (r) =>
-          r.id && reportCosts.get(r.id) ? (
-            <span className="text-sm font-bold text-primary">{formatCost(reportCosts.get(r.id)!)} ج.م</span>
-          ) : (
-            <span className="text-sm text-[var(--color-text-muted)]">—</span>
-          ),
+        render: (r) => {
+          const uc = r.id ? reportCosts.get(r.id) : undefined;
+          if (!r.id || uc == null || uc <= 0) {
+            return <span className="text-sm text-[var(--color-text-muted)]">—</span>;
+          }
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCostDetailReport(r);
+              }}
+              className="text-sm font-bold text-primary hover:underline"
+              title="تفاصيل التكلفة"
+            >
+              {formatCost(uc)} ج.م
+            </button>
+          );
+        },
       });
     }
     return cols;
@@ -2867,11 +2997,50 @@ export const Reports: React.FC = () => {
         ))}
       </div>
 
+      {/* Unit cost breakdown modal */}
+      {costDetailReport && canViewCosts && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[62] flex items-center justify-center p-4"
+          onClick={() => setCostDetailReport(null)}
+        >
+          <div
+            className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[90vh] overflow-y-auto flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-start justify-between gap-2 shrink-0">
+              <div>
+                <h3 className="font-black text-[var(--color-text)] text-base">تفصيل تكلفة الوحدة</h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1 font-mono font-bold">
+                  {costDetailReport.reportCode || '—'}{' '}
+                  <span className="font-sans font-bold">| {costDetailReport.date}</span>
+                </p>
+                <p className="text-sm font-bold mt-2 text-[var(--color-text)]">
+                  {getProductName(costDetailReport.productId, costDetailReport.reportType)}
+                </p>
+                <p className="text-xs text-[var(--color-text-muted)]">{getLineName(costDetailReport.lineId)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCostDetailReport(null)}
+                className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] shrink-0"
+                aria-label="إغلاق"
+              >
+                <ReportIcon name="close" />
+              </button>
+            </div>
+            <div className="p-5">
+              <ReportCostBreakdownPanel
+                breakdown={costDetailBreakdown}
+                noCostSettings={noCostSettingsForBreakdown}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Report Drawer */}
       {selectedReportDrawer && (() => {
         const row = selectedReportDrawer;
-        const unitCost = row.id ? Number(reportCosts.get(row.id) || 0) : 0;
-        const totalCost = unitCost * Number(row.quantityProduced || 0);
         const linkedWo = row.workOrderId ? woMap.get(row.workOrderId) : null;
         const reportTypeLabel = row.reportType === 'component_injection' ? 'تقرير حقن مكونات' : 'تقرير منتج نهائي';
         return (
@@ -2972,20 +3141,10 @@ export const Reports: React.FC = () => {
                 {reportDrawerTab === 'cost' && (
                   <div className="space-y-3 text-sm">
                     {canViewCosts ? (
-                      <>
-                        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                          <span className="text-xs text-[var(--color-text-muted)] block mb-1">تكلفة الوحدة</span>
-                          <span className="font-black text-primary">
-                            {unitCost > 0 ? `${formatCost(unitCost)} ج.م` : '—'}
-                          </span>
-                        </div>
-                        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                          <span className="text-xs text-[var(--color-text-muted)] block mb-1">التكلفة الإجمالية</span>
-                          <span className="font-black text-[var(--color-text)]">
-                            {unitCost > 0 ? `${formatCost(totalCost)} ج.م` : '—'}
-                          </span>
-                        </div>
-                      </>
+                      <ReportCostBreakdownPanel
+                        breakdown={drawerCostBreakdown}
+                        noCostSettings={noCostSettingsForBreakdown}
+                      />
                     ) : (
                       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-sm text-[var(--color-text-muted)]">
                         لا تملك صلاحية عرض التكلفة.
