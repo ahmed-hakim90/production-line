@@ -293,7 +293,7 @@ export const AssetsList: React.FC = () => {
         extra={
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={() => navigate(-1)}>
-              <span>â†گ رجوع</span>
+              <span></span>
             </Button>
             {canRun && (
               <>

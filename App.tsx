@@ -947,7 +947,7 @@ const App: React.FC = () => {
           </Route>
           <Route path="*" element={<RootFallbackRedirect />} />
         </Routes>
-        {isAuthenticated && !isPendingApproval && !loading && <ModalHost />}
+        {isAuthenticated && !isPendingApproval && <ModalHost />}
         <ForcedClientUpdateGate />
         <NotificationPopupOverlay />
         <ToastContainer />

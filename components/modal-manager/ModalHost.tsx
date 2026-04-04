@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useGlobalModalManager } from './GlobalModalManager';
 import { GlobalCreateReportModal } from './modals/GlobalCreateReportModal';
 import { GlobalImportReportsModal } from './modals/GlobalImportReportsModal';
 import { GlobalCreateWorkOrderModal } from './modals/GlobalCreateWorkOrderModal';
@@ -25,6 +26,12 @@ import { GlobalAttendanceSignatureFixModal } from './modals/GlobalAttendanceSign
 
 /** Central host for global modal components (keyed via GlobalModalManager). */
 export const ModalHost: React.FC = () => {
+  const { resetAllModals } = useGlobalModalManager();
+
+  // When this host unmounts (e.g. brief auth/loading gate), clear managed modal state so
+  // isOpen does not survive and reopen on remount without the user clicking again.
+  useEffect(() => () => resetAllModals(), [resetAllModals]);
+
   return (
     <>
       <GlobalCreateReportModal />

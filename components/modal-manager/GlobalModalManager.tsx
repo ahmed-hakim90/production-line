@@ -56,13 +56,27 @@ export const GlobalModalManagerProvider: React.FC<{ children: React.ReactNode }>
       opener(payload);
       return true;
     }
-    if (managedRef.current.has(modalKey)) {
+    const openManaged = () => {
       setManagedStates((prev) => ({
         ...prev,
         [modalKey]: { isOpen: true, payload },
       }));
+    };
+    if (managedRef.current.has(modalKey)) {
+      openManaged();
       return true;
     }
+    // Managed modals register in useLayoutEffect on ModalHost children; a sync click in the same
+    // tick as mount can run before registration. Defer once so the modal still opens.
+    queueMicrotask(() => {
+      if (managedRef.current.has(modalKey)) {
+        openManaged();
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (managedRef.current.has(modalKey)) openManaged();
+      });
+    });
     return false;
   }, []);
 
@@ -118,7 +132,7 @@ export const useGlobalModalManager = (): GlobalModalManagerValue => {
 export const useManagedModalController = (modalKey: string) => {
   const manager = useGlobalModalManager();
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!modalKey) return;
     return manager.registerManagedModal(modalKey);
   }, [manager, modalKey]);

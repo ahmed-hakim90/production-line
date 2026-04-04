@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
-import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import { exportAsImage, exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
@@ -444,8 +443,6 @@ export const QuickAction: React.FC = () => {
     setPrintReport(null);
   };
 
-  const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
-
   const handleExportPDF = async () => {
     if (!printRef.current) return;
     setExporting(true);
@@ -552,7 +549,7 @@ export const QuickAction: React.FC = () => {
     <div className="erp-ds-clean space-y-6">
       <PageHeader
         title="إدخال سريع"
-        subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، طباعة ومشاركة."
+        subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، تصدير ومشاركة."
         icon="bolt"
       />
 
@@ -911,16 +908,12 @@ export const QuickAction: React.FC = () => {
             <span className="material-icons-round text-emerald-500 text-2xl">check_circle</span>
             <div>
               <p className="font-bold text-emerald-700">تم حفظ التقرير بنجاح!</p>
-              <p className="text-sm text-emerald-600 dark:text-emerald-500">يمكنك الآن الطباعة أو التصدير أو المشاركة.</p>
+              <p className="text-sm text-emerald-600 dark:text-emerald-500">يمكنك الآن التصدير أو المشاركة.</p>
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
-            <Button onClick={() => handlePrint()} className="w-full sm:w-auto">
-              <span className="material-icons-round text-lg">print</span>
-              طباعة
-            </Button>
             <Button variant="secondary" disabled={exporting} onClick={handleExportPDF} className="w-full sm:w-auto">
               {exporting ? (
                 <span className="material-icons-round animate-spin text-sm">refresh</span>
