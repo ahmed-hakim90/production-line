@@ -1,4 +1,4 @@
-
+﻿
 export enum ProductionLineStatus {
   ACTIVE = 'active',
   MAINTENANCE = 'maintenance',
@@ -7,7 +7,7 @@ export enum ProductionLineStatus {
   INJECTION = 'injection',
 }
 
-// ─── UI Types (consumed by components — do NOT change) ──────────────────────
+// â”€â”€â”€ UI Types (consumed by components â€” do NOT change) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ProductionLine {
   id: string;
@@ -42,10 +42,10 @@ export interface Product {
 export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'daily';
 
 export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
-  full_time: 'دوام كامل',
-  part_time: 'دوام جزئي',
-  contract: 'عقد',
-  daily: 'يومي',
+  full_time: 'ط¯ظˆط§ظ… ظƒط§ظ…ظ„',
+  part_time: 'ط¯ظˆط§ظ… ط¬ط²ط¦ظٹ',
+  contract: 'ط¹ظ‚ط¯',
+  daily: 'ظٹظˆظ…ظٹ',
 };
 
 export interface Employee {
@@ -69,7 +69,7 @@ export interface Employee {
   workDays?: number[];
 }
 
-// ─── Firestore Document Types (match collection schemas) ────────────────────
+// â”€â”€â”€ Firestore Document Types (match collection schemas) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface FirestoreProduct {
   id?: string;
@@ -132,7 +132,7 @@ export interface FirestoreEmployee {
   createdAt?: any;
 }
 
-// ─── Activity Log ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Activity Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type ActivityAction =
   | 'LOGIN'
@@ -208,6 +208,15 @@ export interface ProductionReport {
   workHours: number;
   supervisorHourlyRateApplied?: number;
   supervisorIndirectCost?: number;
+  /** ISO timestamp when cost snapshots below were computed */
+  costSnapshotAt?: string;
+  unitCostSnapshot?: number;
+  laborCostSnapshot?: number;
+  /** Sum of line_percentage indirect only (excludes by_qty centers) */
+  lineIndirectShareSnapshot?: number;
+  supervisorIndirectSnapshot?: number;
+  /** Per cost-center indirect share (line_percentage + by_qty); excludes supervisor */
+  indirectByCenterSnapshot?: Record<string, number>;
   notes?: string;
   workOrderId?: string;
   reportType?: 'finished_product' | 'component_injection';
@@ -299,7 +308,7 @@ export interface ProductionPlanFollowUp {
   updatedAt?: any;
 }
 
-// ─── Work Orders ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type WorkOrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type WorkOrderPauseReason = 'manual';
@@ -543,7 +552,7 @@ export interface WorkOrderQualitySummary {
   topDefectReason?: string;
 }
 
-// ─── Notifications ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type NotificationType =
   | 'production_report'
@@ -585,7 +594,7 @@ export interface UserPresence {
   updatedAt?: any;
 }
 
-// ─── Cost Management ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Cost Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface CostCenter {
   id?: string;
@@ -639,7 +648,7 @@ export interface LaborSettings {
   cnyToEgpRate?: number;
 }
 
-// ─── Assets & Depreciation ───────────────────────────────────────────────────
+// â”€â”€â”€ Assets & Depreciation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type AssetDepreciationMethod = 'straight_line' | 'declining_balance';
 export type AssetStatus = 'active' | 'inactive' | 'disposed';
@@ -682,7 +691,7 @@ export interface AssetDepreciationRunResult {
   skippedEntries: number;
 }
 
-// ─── Monthly Production Cost ─────────────────────────────────────────────────
+// â”€â”€â”€ Monthly Production Cost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface MonthlyProductionCost {
   id?: string;
@@ -712,7 +721,7 @@ export interface MonthlyProductionCost {
   calculatedAt?: any;
 }
 
-// ─── System Settings (system_settings/{tenantId}) ───────────────────────────
+// â”€â”€â”€ System Settings (system_settings/{tenantId}) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface WidgetConfig {
   id: string;
@@ -808,7 +817,7 @@ export interface PlanSettings {
   injectionRawMaterialCategoryKeywords: string;
 }
 
-// ─── General Settings (Branding, Theme, Dashboard Display, Alert Toggles) ────
+// â”€â”€â”€ General Settings (Branding, Theme, Dashboard Display, Alert Toggles) â”€â”€â”€â”€
 
 export interface BrandingSettings {
   factoryName: string;
@@ -838,11 +847,11 @@ export interface ThemeSettings {
   sidebarIconStyle: SidebarIconStyle;
   textColor?: string;
   mutedTextColor?: string;
-  /** عرض أقصى لحاوية المحتوى الرئيسي (قيمة CSS، مثل 1536px أو 100%). */
+  /** ط¹ط±ط¶ ط£ظ‚طµظ‰ ظ„ط­ط§ظˆظٹط© ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ط±ط¦ظٹط³ظٹ (ظ‚ظٹظ…ط© CSSطŒ ظ…ط«ظ„ 1536px ط£ظˆ 100%). */
   contentMaxWidth?: string;
   /**
-   * تخصيص عرض المحتوى حسب بادئة المسار (مفتاح = بداية المسار، قيمة = max-width CSS).
-   * مثال: { "/inventory": "1200px" }
+   * طھط®طµظٹطµ ط¹ط±ط¶ ط§ظ„ظ…ط­طھظˆظ‰ ط­ط³ط¨ ط¨ط§ط¯ط¦ط© ط§ظ„ظ…ط³ط§ط± (ظ…ظپطھط§ط­ = ط¨ط¯ط§ظٹط© ط§ظ„ظ…ط³ط§ط±طŒ ظ‚ظٹظ…ط© = max-width CSS).
+   * ظ…ط«ط§ظ„: { "/inventory": "1200px" }
    */
   pageLayoutOverrides?: Record<string, string>;
 }
@@ -898,14 +907,14 @@ export interface AttendanceIntegrationSettings {
   overtimeThresholdMinutes: number;
 }
 
-/** إعدادات اختيارية لعزل صلاحيات الصيانة حسب الفرع (تُقرأ من system_settings عند التوفر). */
+/** ط¥ط¹ط¯ط§ط¯ط§طھ ط§ط®طھظٹط§ط±ظٹط© ظ„ط¹ط²ظ„ طµظ„ط§ط­ظٹط§طھ ط§ظ„طµظٹط§ظ†ط© ط­ط³ط¨ ط§ظ„ظپط±ط¹ (طھظڈظ‚ط±ط£ ظ…ظ† system_settings ط¹ظ†ط¯ ط§ظ„طھظˆظپط±). */
 export interface RepairAccessSettings {
-  /** مدير فرع واحد مقابل مدير على كل مراكز الصيانة */
+  /** ظ…ط¯ظٹط± ظپط±ط¹ ظˆط§ط­ط¯ ظ…ظ‚ط§ط¨ظ„ ظ…ط¯ظٹط± ط¹ظ„ظ‰ ظƒظ„ ظ…ط±ط§ظƒط² ط§ظ„طµظٹط§ظ†ط© */
   managerScope?: 'branch' | 'centers';
 }
 
 export interface RepairWorkflowSettings {
-  /** حالات ديناميكية قابلة للإدارة من إعدادات الصيانة */
+  /** ط­ط§ظ„ط§طھ ط¯ظٹظ†ط§ظ…ظٹظƒظٹط© ظ‚ط§ط¨ظ„ط© ظ„ظ„ط¥ط¯ط§ط±ط© ظ…ظ† ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„طµظٹط§ظ†ط© */
   statuses?: Array<{
     id: string;
     label: string;
@@ -914,18 +923,18 @@ export interface RepairWorkflowSettings {
     isTerminal?: boolean;
     isEnabled?: boolean;
   }>;
-  /** الحالة الافتراضية عند إنشاء طلب جديد */
+  /** ط§ظ„ط­ط§ظ„ط© ط§ظ„ط§ظپطھط±ط§ط¶ظٹط© ط¹ظ†ط¯ ط¥ظ†ط´ط§ط، ط·ظ„ط¨ ط¬ط¯ظٹط¯ */
   initialStatusId?: string;
-  /** حالات تعتبر مفتوحة في التقارير والإحصائيات */
+  /** ط­ط§ظ„ط§طھ طھط¹طھط¨ط± ظ…ظپطھظˆط­ط© ظپظٹ ط§ظ„طھظ‚ط§ط±ظٹط± ظˆط§ظ„ط¥ط­طµط§ط¦ظٹط§طھ */
   openStatusIds?: string[];
 }
 
 export interface RepairDefaultsSettings {
-  /** الضمان الافتراضي عند إنشاء الطلب */
+  /** ط§ظ„ط¶ظ…ط§ظ† ط§ظ„ط§ظپطھط±ط§ط¶ظٹ ط¹ظ†ط¯ ط¥ظ†ط´ط§ط، ط§ظ„ط·ظ„ط¨ */
   defaultWarranty?: 'none' | '3months' | '6months';
-  /** الحد الأدنى الافتراضي لمخزون قطع الغيار */
+  /** ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰ ط§ظ„ط§ظپطھط±ط§ط¶ظٹ ظ„ظ…ط®ط²ظˆظ† ظ‚ط·ط¹ ط§ظ„ط؛ظٹط§ط± */
   defaultMinStock?: number;
-  /** SLA افتراضي بالساعات */
+  /** SLA ط§ظپطھط±ط§ط¶ظٹ ط¨ط§ظ„ط³ط§ط¹ط§طھ */
   defaultSlaHours?: number;
 }
 
@@ -962,19 +971,19 @@ export interface SystemSettings {
   quickActions?: QuickActionItem[];
   exportImport?: ExportImportSettings;
   attendanceIntegration?: AttendanceIntegrationSettings;
-  /** أقل إصدار عميل مسموح (صيغة x.y.z) عند تفعيل forceClientUpdate */
+  /** ط£ظ‚ظ„ ط¥طµط¯ط§ط± ط¹ظ…ظٹظ„ ظ…ط³ظ…ظˆط­ (طµظٹط؛ط© x.y.z) ط¹ظ†ط¯ طھظپط¹ظٹظ„ forceClientUpdate */
   minimumClientVersion?: string;
-  /** عند true مع minimumClientVersion أقل من إصدار البناء، يُمنع استخدام التطبيق حتى التحديث */
+  /** ط¹ظ†ط¯ true ظ…ط¹ minimumClientVersion ط£ظ‚ظ„ ظ…ظ† ط¥طµط¯ط§ط± ط§ظ„ط¨ظ†ط§ط،طŒ ظٹظڈظ…ظ†ط¹ ط§ط³طھط®ط¯ط§ظ… ط§ظ„طھط·ط¨ظٹظ‚ ط­طھظ‰ ط§ظ„طھط­ط¯ظٹط« */
   forceClientUpdate?: boolean;
-  /** رسالة تظهر على شاشة التحديث الإجباري */
+  /** ط±ط³ط§ظ„ط© طھط¸ظ‡ط± ط¹ظ„ظ‰ ط´ط§ط´ط© ط§ظ„طھط­ط¯ظٹط« ط§ظ„ط¥ط¬ط¨ط§ط±ظٹ */
   clientUpdateMessageAr?: string;
-  /** عزل بيانات الصيانة: نطاق المدير وغيره (اختياري) */
+  /** ط¹ط²ظ„ ط¨ظٹط§ظ†ط§طھ ط§ظ„طµظٹط§ظ†ط©: ظ†ط·ط§ظ‚ ط§ظ„ظ…ط¯ظٹط± ظˆط؛ظٹط±ظ‡ (ط§ط®طھظٹط§ط±ظٹ) */
   repairAccess?: RepairAccessSettings;
-  /** إعدادات الصيانة المجمعة (وصول + سير عمل + افتراضيات) */
+  /** ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„طµظٹط§ظ†ط© ط§ظ„ظ…ط¬ظ…ط¹ط© (ظˆطµظˆظ„ + ط³ظٹط± ط¹ظ…ظ„ + ط§ظپطھط±ط§ط¶ظٹط§طھ) */
   repairSettings?: RepairSettings;
 }
 
-// ─── Multi-tenant ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Multi-tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface FirestoreTenant {
   id?: string;
@@ -1007,7 +1016,7 @@ export interface PendingTenant {
   adminUid?: string;
 }
 
-// ─── Dynamic Roles & Permissions ─────────────────────────────────────────────
+// â”€â”€â”€ Dynamic Roles & Permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** @deprecated use FirestoreRole + dynamic permissions instead */
 export type UserRole = 'admin' | 'factory_manager' | 'hall_supervisor' | 'supervisor';

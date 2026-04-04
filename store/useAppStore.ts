@@ -100,7 +100,11 @@ import { eventBus, SystemEvents } from '../shared/events';
 import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
 import { REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
-import { estimateReportCost } from '../utils/costCalculations';
+import {
+  buildProductionReportCostSnapshotPatch,
+  buildSupervisorHourlyRatesMap,
+  estimateReportCost,
+} from '../utils/costCalculations';
 import { zktecoSyncService } from '../modules/attendance/services/zktecoSyncService';
 import { attendanceProcessingService } from '../modules/attendance/services/attendanceProcessingService';
 import type {
@@ -268,6 +272,55 @@ function calculateIndustrialReportTotalCost(params: {
     params.costAllocations,
   );
   return Number(estimate.totalCost || 0);
+}
+function calendarMonthRangeFromYearMonth(yearMonth: string): { start: string; end: string } | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(yearMonth || '').trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  if (mo < 1 || mo > 12) return null;
+  const start = `${yearMonth}-01`;
+  const last = new Date(y, mo, 0).getDate();
+  const end = `${yearMonth}-${String(last).padStart(2, '0')}`;
+  return { start, end };
+}
+
+type CostSnapshotStoreGet = () => {
+  _rawEmployees: FirestoreEmployee[];
+  _rawProducts: FirestoreProduct[];
+  laborSettings: LaborSettings | null;
+  costCenters: CostCenter[];
+  costCenterValues: CostCenterValue[];
+  costAllocations: CostAllocation[];
+  systemSettings: SystemSettings;
+};
+
+async function persistProductionReportCostSnapshot(
+  reportId: string,
+  get: CostSnapshotStoreGet,
+): Promise<void> {
+  const row = await reportService.getById(reportId);
+  if (!row?.date) return;
+  const ym = String(row.date).slice(0, 7);
+  const range = calendarMonthRangeFromYearMonth(ym);
+  if (!range) return;
+  const monthRows = await reportService.getByDateRange(range.start, range.end);
+  const st = get();
+  const supervisorHourlyRates = buildSupervisorHourlyRatesMap(st._rawEmployees);
+  const productCategoryById = new Map<string, string>();
+  st._rawProducts.forEach((p) => {
+    if (p.id) productCategoryById.set(String(p.id), String(p.model || ''));
+  });
+  const patch = buildProductionReportCostSnapshotPatch(row, monthRows, {
+    hourlyRate: Number(st.laborSettings?.hourlyRate ?? 0),
+    costCenters: st.costCenters,
+    costCenterValues: st.costCenterValues,
+    costAllocations: st.costAllocations,
+    supervisorHourlyRates,
+    workingDaysByMonth: st.systemSettings.costMonthlyWorkingDays,
+    productCategoryById,
+  });
+  if (patch) await reportService.update(reportId, patch);
 }
 
 function resolveReportType(
@@ -3018,6 +3071,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         }));
         get()._rebuildProducts();
         get()._rebuildLines();
+        try {
+          await persistProductionReportCostSnapshot(id, get);
+        } catch (snapErr) {
+          console.warn('persistProductionReportCostSnapshot (create):', snapErr);
+        }
         if (activePlan) await get().fetchProductionPlans();
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث البيانات المعروضة';
@@ -3148,6 +3206,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       get()._rebuildProducts();
       get()._rebuildLines();
+      try {
+        await persistProductionReportCostSnapshot(id, get);
+      } catch (snapErr) {
+        console.warn('persistProductionReportCostSnapshot (update):', snapErr);
+      }
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',

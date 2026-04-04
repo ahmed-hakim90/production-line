@@ -1,0 +1,21 @@
+﻿const fs = require("fs");
+const path = require("path");
+const file = path.join(__dirname, "utils", "costCalculations.ts");
+let t = fs.readFileSync(file, "utf8");
+const blockA = `export const calculateDailyLaborCost = (
+  lineReports: ProductionReport[],
+  hourlyRate: number
+): number => {
+  const totalLaborHours = lineReports.reduce(
+    (sum, r) => sum + (r.workersCount || 0) * (r.workHours || 0),
+    0
+  );
+  return totalLaborHours * hourlyRate;
+};
+
+/**
+ * Daily indirect cost allocated to a line for a given month.
+ * Sums across all indirect cost centers.
+ */
+export const calculateDailyIndirectCost = (`;
+if (!t.includes(blockA)) { console.error("blockA missing"); process.exit(1); }

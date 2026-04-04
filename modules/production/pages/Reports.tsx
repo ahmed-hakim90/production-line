@@ -119,6 +119,13 @@ const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>
   (report.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const NOTE_PREVIEW_LENGTH = 10;
 
+
+const BY_QTY_SCOPE_LABELS: Record<'all' | 'category' | 'selected', string> = {
+  all: 'كل المنتجات',
+  category: 'حسب فئة المنتج',
+  selected: 'منتجات محددة',
+};
+
 function ReportCostBreakdownPanel({
   breakdown,
   noCostSettings,
@@ -159,6 +166,97 @@ function ReportCostBreakdownPanel({
         <p className="px-3 py-2 text-[11px] text-[var(--color-text-muted)] bg-[#f8f9fa]/80 dark:bg-slate-900/20 leading-relaxed">
           التكلفة اليومية للخط: {formatCost(breakdown.lineDailyIndirect)} ج.م | إجمالي إنتاج الخط في نفس اليوم: {formatNumber(breakdown.lineDateTotalQty)} | {indirectFormula}
         </p>
+        <div className="px-3 py-2 border-t border-[var(--color-border)] bg-slate-50/50 dark:bg-slate-900/10">
+          <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">
+            مراكز التكلفة غير المباشرة (موزّعة على الخط ثم على التقرير بنسبة الإنتاج اليومي)
+          </p>
+          {breakdown.indirectCenters.length === 0 ? (
+            <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+              لا توجد مراكز غير مباشرة مفعّلة أو موزّعة على هذا الخط للشهر الحالي في البيانات المعروضة.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+              <table className="w-full text-xs text-right border-collapse min-w-[280px]">
+                <thead>
+                  <tr className="bg-[#f8f9fa] dark:bg-slate-900/30 border-b border-[var(--color-border)]">
+                    <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)]">مركز التكلفة</th>
+                    <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">نسبة الخط</th>
+                    <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">يومي للخط</th>
+                    <th className="px-2 py-1.5 font-bold text-primary text-center">نصيب التقرير</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {breakdown.indirectCenters.map((row) => (
+                    <tr key={row.costCenterId} className="hover:bg-[#f8f9fa]/60">
+                      <td className="px-2 py-1.5 font-medium max-w-[140px] truncate" title={row.costCenterName}>
+                        {row.costCenterName}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums">{formatNumber(row.linePercentage)}%</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-[var(--color-text-muted)]">
+                        {formatCost(row.dailyAllocatedToLine)}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums font-bold text-[var(--color-text)]">
+                        {formatCost(row.shareForThisReport)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-[10px] text-[var(--color-text-muted)] mt-2 leading-relaxed">
+            التوزيع على المنتج يتم ضمنياً: كل تقرير يأخذ من نصيب الخط اليومي بنسبة كميته من إجمالي إنتاج الخط في نفس اليوم (وليس بنسبة مئوية منفصلة لكل منتج في هذا العرض).
+          </p>
+        </div>
+        <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[var(--color-text-muted)] font-medium">نصيب التكاليف غير المباشرة (حسب كمية الإنتاج)</span>
+          <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.byQtyShareTotal)} ج.م</span>
+        </div>
+        <div className="px-3 py-2 border-t border-[var(--color-border)] bg-slate-50/50 dark:bg-slate-900/10">
+          <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">
+            مراكز التكلفة غير المباشرة (أساس التوزيع: الكمية — all / فئة / منتجات محددة)
+          </p>
+          {breakdown.byQtyCenters.length === 0 ? (
+            <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+              لا توجد مراكز موزّعة حسب الكمية تنطبق على هذا المنتج في الشهر المعروض.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+              <table className="w-full text-xs text-right border-collapse min-w-[300px]">
+                <thead>
+                  <tr className="bg-[#f8f9fa] dark:bg-slate-900/30 border-b border-[var(--color-border)]">
+                    <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)]">مركز التكلفة</th>
+                    <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">نطاق التوزيع</th>
+                    <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">الدفعة الشهرية (النطاق)</th>
+                    <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">كمية المقسوم عليها</th>
+                    <th className="px-2 py-1.5 font-bold text-primary text-center">نصيب التقرير</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {breakdown.byQtyCenters.map((row) => (
+                    <tr key={row.costCenterId} className="hover:bg-[#f8f9fa]/60">
+                      <td className="px-2 py-1.5 font-medium max-w-[120px] truncate" title={row.costCenterName}>
+                        {row.costCenterName}
+                      </td>
+                      <td className="px-2 py-1.5 text-center text-[var(--color-text-muted)]">
+                        {BY_QTY_SCOPE_LABELS[row.productScope]}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-[var(--color-text-muted)]">
+                        {formatCost(row.monthlyPoolForScope)}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-[var(--color-text-muted)]">
+                        {formatNumber(row.scopeDenominatorQty)}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums font-bold text-[var(--color-text)]">
+                        {formatCost(row.shareForThisReport)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[var(--color-text-muted)] font-medium">نصيب المشرف (غير مباشر)</span>
           <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.supervisorIndirectTotal)} ج.م</span>
@@ -361,6 +459,7 @@ export const Reports: React.FC = () => {
   const productionPlans = useAppStore((s) => s.productionPlans);
   const workOrders = useAppStore((s) => s.workOrders);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
+  const costMonthlyWorkingDays = useAppStore((s) => s.systemSettings.costMonthlyWorkingDays);
 
   const { can } = usePermission();
   const canViewCosts = can('reports.viewCost');
@@ -821,11 +920,28 @@ export const Reports: React.FC = () => {
     [_rawEmployees]
   );
 
+  const productCategoryById = useMemo(() => {
+    const m = new Map<string, string>();
+    _rawProducts.forEach((prod) => {
+      if (prod.id) m.set(String(prod.id), String(prod.model || ''));
+    });
+    return m;
+  }, [_rawProducts]);
+
   const reportCosts = useMemo(() => {
     if (!canViewCosts) return new Map<string, number>();
     const hourlyRate = laborSettings?.hourlyRate ?? 0;
-    return buildReportsCosts(displayedReports, hourlyRate, costCenters, costCenterValues, costAllocations, supervisorHourlyRates);
-  }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates]);
+    return buildReportsCosts(
+      displayedReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      supervisorHourlyRates,
+      costMonthlyWorkingDays,
+      productCategoryById,
+    );
+  }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates, costMonthlyWorkingDays, productCategoryById]);
 
   const hourlyRateForCosts = laborSettings?.hourlyRate ?? 0;
   const noCostSettingsForBreakdown = hourlyRateForCosts <= 0 && costCenters.length === 0;
@@ -840,6 +956,8 @@ export const Reports: React.FC = () => {
       costCenterValues,
       costAllocations,
       supervisorHourlyRates,
+      costMonthlyWorkingDays,
+      productCategoryById,
     );
   }, [
     costDetailReport,
@@ -850,6 +968,8 @@ export const Reports: React.FC = () => {
     costCenterValues,
     costAllocations,
     supervisorHourlyRates,
+    costMonthlyWorkingDays,
+    productCategoryById,
   ]);
 
   const drawerCostBreakdown = useMemo(() => {
@@ -862,6 +982,8 @@ export const Reports: React.FC = () => {
       costCenterValues,
       costAllocations,
       supervisorHourlyRates,
+      costMonthlyWorkingDays,
+      productCategoryById,
     );
   }, [
     selectedReportDrawer,
@@ -872,6 +994,8 @@ export const Reports: React.FC = () => {
     costCenterValues,
     costAllocations,
     supervisorHourlyRates,
+    costMonthlyWorkingDays,
+    productCategoryById,
   ]);
 
   const warehouseBuckets = useMemo(() => {
@@ -2513,6 +2637,8 @@ export const Reports: React.FC = () => {
             costCenterValues,
             costAllocations,
             supervisorHourlyRates,
+            costMonthlyWorkingDays,
+            productCategoryById,
           )
         : undefined;
       const { exportReportsByDateRange } = await import('../../../utils/exportExcel');
@@ -2537,6 +2663,8 @@ export const Reports: React.FC = () => {
     costCenterValues,
     costAllocations,
     supervisorHourlyRates,
+    costMonthlyWorkingDays,
+    productCategoryById,
     lookups,
   ]);
 
