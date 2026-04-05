@@ -7,6 +7,10 @@ import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
+import {
+  buildShareStandardVarianceBanner,
+  computeProductionReportStandardQtyVariance,
+} from '../../../utils/productionReportStandardVariance';
 import type { LineWorkerAssignment, ReportComponentScrapItem } from '../../../types';
 import { ProductionLineStatus } from '../../../types';
 import {
@@ -60,6 +64,8 @@ export const QuickAction: React.FC = () => {
   const saveErrorFromStore = useAppStore((s) => s.error);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
+  const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
 
   const [employeeId, setEmployeeId] = useState('');
   const [lineId, setLineId] = useState('');
@@ -476,7 +482,21 @@ export const QuickAction: React.FC = () => {
   };
 
   const handleShareWhatsApp = async () => {
-    if (!printRef.current) return;
+    if (!printRef.current || !printReport) return;
+    const variance = computeProductionReportStandardQtyVariance({
+      productId,
+      lineId,
+      quantityProduced: printReport.quantityProduced,
+      workersCount: printReport.workersCount,
+      workHours: printReport.workHours,
+      lineProductConfigs,
+      routingTotalTimeSecondsByProduct,
+    });
+    setPrintReport({
+      ...printReport,
+      shareStandardVariance: buildShareStandardVarianceBanner(variance),
+    });
+    await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 150)));
     setExporting(true);
     try {
       const result = await shareToWhatsApp(
@@ -486,6 +506,7 @@ export const QuickAction: React.FC = () => {
       showShareFeedback(result);
     } finally {
       setExporting(false);
+      setPrintReport((prev) => (prev ? { ...prev, shareStandardVariance: undefined } : null));
     }
   };
 

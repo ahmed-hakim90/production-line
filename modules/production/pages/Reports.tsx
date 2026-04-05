@@ -40,6 +40,11 @@ import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { ComponentScrapModal } from '../components/ComponentScrapModal';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
 import {
+  buildShareStandardVarianceBanner,
+  computeProductionReportStandardQtyVariance,
+  shareVarianceTailwindToneClass,
+} from '../../../utils/productionReportStandardVariance';
+import {
   buildReportsCosts,
   buildSupervisorHourlyRatesMap,
   estimateReportCost,
@@ -461,6 +466,8 @@ export const Reports: React.FC = () => {
   const workOrders = useAppStore((s) => s.workOrders);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
   const costMonthlyWorkingDays = useAppStore((s) => s.systemSettings.costMonthlyWorkingDays);
+  const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
 
   const { can } = usePermission();
   const canViewCosts = can('reports.viewCost');
@@ -496,6 +503,32 @@ export const Reports: React.FC = () => {
   const effectiveFormWorkersCount = form.reportType === 'component_injection'
     ? Number(form.workersCount || 0)
     : formWorkersTotal;
+
+  const formStandardVariancePreview = useMemo(() => {
+    if (!showModal) return null;
+    if (!form.lineId?.trim() || !form.productId?.trim()) return null;
+    if (!form.workHours || form.workHours <= 0) return null;
+    if (!form.quantityProduced || form.quantityProduced <= 0) return null;
+    const variance = computeProductionReportStandardQtyVariance({
+      productId: form.productId,
+      lineId: form.lineId,
+      quantityProduced: form.quantityProduced,
+      workersCount: effectiveFormWorkersCount,
+      workHours: form.workHours,
+      lineProductConfigs,
+      routingTotalTimeSecondsByProduct,
+    });
+    return buildShareStandardVarianceBanner(variance);
+  }, [
+    showModal,
+    form.lineId,
+    form.productId,
+    form.workHours,
+    form.quantityProduced,
+    lineProductConfigs,
+    routingTotalTimeSecondsByProduct,
+  ]);
+
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -1337,7 +1370,20 @@ export const Reports: React.FC = () => {
 
   const triggerSingleShare = useCallback(
     async (report: ProductionReport) => {
-      const row = buildReportRow(report);
+      const base = buildReportRow(report);
+      const variance = computeProductionReportStandardQtyVariance({
+        productId: report.productId,
+        lineId: report.lineId,
+        quantityProduced: report.quantityProduced || 0,
+        workersCount: report.workersCount || 0,
+        workHours: report.workHours || 0,
+        lineProductConfigs,
+        routingTotalTimeSecondsByProduct,
+      });
+      const row = {
+        ...base,
+        shareStandardVariance: buildShareStandardVarianceBanner(variance),
+      };
       setSharePrintRow(row);
       await new Promise<void>((r) => {
         requestAnimationFrame(() => setTimeout(r, 150));
@@ -1364,7 +1410,12 @@ export const Reports: React.FC = () => {
         setSharePrintRow(null);
       }
     },
-    [buildReportRow, showShareFeedback]
+    [
+      buildReportRow,
+      lineProductConfigs,
+      routingTotalTimeSecondsByProduct,
+      showShareFeedback,
+    ]
   );
 
   // â”€â”€ CRUD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -3694,6 +3745,21 @@ export const Reports: React.FC = () => {
                 />
               </div>
             </div>
+            {formStandardVariancePreview && (
+              <div
+                className={cn(
+                  'mx-4 sm:mx-6 mb-2 rounded-[var(--border-radius-lg)] border-2 p-3',
+                  shareVarianceTailwindToneClass[formStandardVariancePreview.tone],
+                )}
+              >
+                <p className="text-xs font-bold mb-1">{formStandardVariancePreview.headline}</p>
+                {formStandardVariancePreview.lines.map((line, i) => (
+                  <p key={i} className="text-[11px] font-semibold leading-relaxed opacity-95">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
             {canViewCosts && effectiveFormWorkersCount > 0 && form.workHours > 0 && form.quantityProduced > 0 && form.lineId && (
               (() => {
                 const selectedSupervisorRate = supervisorHourlyRates.get(form.employeeId) ?? 0;

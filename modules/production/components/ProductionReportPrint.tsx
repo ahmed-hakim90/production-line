@@ -10,6 +10,11 @@ import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
 import { getReportWaste } from '../../../utils/calculations';
 import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
+import { cn } from '@/lib/utils';
+import type { ShareStandardVarianceTone } from '../../../utils/productionReportStandardVariance';
+import { shareVarianceTailwindToneClass } from '../../../utils/productionReportStandardVariance';
+
+export type { ShareStandardVarianceTone };
 
 export interface ReportPrintRow {
   reportId?: string;
@@ -30,6 +35,12 @@ export interface ReportPrintRow {
   notes?: string;
   costPerUnit?: number;
   workOrderNumber?: string;
+  /** Filled only for WhatsApp/image share — omitted for print/PDF. */
+  shareStandardVariance?: {
+    headline: string;
+    lines: string[];
+    tone: ShareStandardVarianceTone;
+  };
 }
 
 export interface ReportPrintProps {
@@ -373,9 +384,9 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const total = Number(report.quantityProduced || 0) + Number(report.wasteQuantity || 0);
     const wasteRatio = total > 0 ? ((Number(report.wasteQuantity || 0) / total) * 100).toFixed(dp) : '0';
 
-    return (
+    const layout = (
       <PrintReportLayout
-        ref={ref}
+        ref={report.shareStandardVariance ? undefined : ref}
         exportRootId={exportRootId}
         companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
         reportType="تقرير إنتاج"
@@ -429,6 +440,31 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           { title: 'مراقب الجودة' },
         ]}
       />
+    );
+
+    const v = report.shareStandardVariance;
+    if (!v) {
+      return layout;
+    }
+
+    return (
+      <div ref={ref} className="bg-white w-[640px] mx-auto">
+        <div
+          className={cn(
+            'mx-auto w-full max-w-[640px] border-2 rounded-lg px-4 py-3 mb-3',
+            shareVarianceTailwindToneClass[v.tone],
+          )}
+          style={{ letterSpacing: 'normal' }}
+        >
+          <p className="text-[13px] font-bold leading-snug mb-1.5">{v.headline}</p>
+          {v.lines.map((line, i) => (
+            <p key={i} className="text-[11px] font-semibold leading-relaxed opacity-95">
+              {line}
+            </p>
+          ))}
+        </div>
+        {layout}
+      </div>
     );
   },
 );

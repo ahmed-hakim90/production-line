@@ -494,3 +494,7 @@
 ## [4.0.100] - 2026-04-04
 
 - rm btn print after save quick report
+
+## [4.0.101] - 2026-04-05
+
+- plan for product one by one

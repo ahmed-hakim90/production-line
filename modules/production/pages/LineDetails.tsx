@@ -297,6 +297,15 @@ export const LineDetails: React.FC = () => {
     return effectiveStandardAssemblyMinutes(pid, configStd, routingTotalTimeSecondsByProduct);
   }, [lineProductConfigs, id, activePlan, line, routingTotalTimeSecondsByProduct]);
 
+  const standardTimeSourceLabel = useMemo(() => {
+    const productId = activePlan?.productId || line?.currentProductId;
+    const fallback = lineProductConfigs.find((c) => c.lineId === id);
+    const pid = String(productId || fallback?.productId || '').trim();
+    if (!pid) return '';
+    const sec = routingTotalTimeSecondsByProduct[pid];
+    return sec != null && sec > 0 ? 'مصدر المعيار: مسار نشط' : 'مصدر المعيار: إعداد الخط';
+  }, [activePlan, line, lineProductConfigs, id, routingTotalTimeSecondsByProduct]);
+
   const efficiency = useMemo(
     () => calculateTimeEfficiency(standardTime, avgAssemblyTime),
     [standardTime, avgAssemblyTime]
@@ -768,7 +777,11 @@ export const LineDetails: React.FC = () => {
           unit="دقيقة/وحدة"
           icon="timer"
           colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
-          trend={standardTime > 0 ? `المعياري: ${standardTime} دقيقة` : undefined}
+          trend={
+            standardTime > 0
+              ? `المعياري: ${standardTime} دقيقة${standardTimeSourceLabel ? ` · ${standardTimeSourceLabel}` : ''}`
+              : undefined
+          }
           trendUp={avgAssemblyTime <= standardTime}
         />
         <KPIBox
