@@ -55,6 +55,7 @@ import { qualitySettingsService } from '../modules/quality/services/qualitySetti
 import { reportService } from '../modules/production/services/reportService';
 import { lineStatusService } from '../modules/production/services/lineStatusService';
 import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
+import { routingPlanService } from '../modules/production/routing/services/routingPlanService';
 import { productionPlanService } from '../modules/production/services/productionPlanService';
 import { productionPlanFollowUpService } from '../modules/production/services/productionPlanFollowUpService';
 import { workOrderService } from '../modules/production/services/workOrderService';
@@ -96,6 +97,7 @@ import {
   getOperationalDateString,
   getMonthDateRange,
 } from '../utils/calculations';
+import { buildRoutingTotalSecondsByProductId } from '../utils/routingStandardAssembly';
 import { eventBus, SystemEvents } from '../shared/events';
 import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
@@ -553,6 +555,8 @@ interface AppState {
   monthlyReports: ProductionReport[];
   lineStatuses: LineStatus[];
   lineProductConfigs: LineProductConfig[];
+  /** productId → active routing plan totalTimeSeconds (drives standard assembly minutes on lines). */
+  routingTotalTimeSecondsByProduct: Record<string, number>;
   productionPlans: ProductionPlan[];
   productionPlanFollowUps: ProductionPlanFollowUp[];
   planReports: Record<string, ProductionReport[]>;
@@ -664,6 +668,7 @@ interface AppState {
   fetchReports: (startDate?: string, endDate?: string) => Promise<void>;
   fetchLineStatuses: () => Promise<void>;
   fetchLineProductConfigs: () => Promise<void>;
+  fetchRoutingPlanTotals: () => Promise<void>;
   fetchProductionPlans: () => Promise<void>;
   fetchProductionPlanFollowUps: (planId?: string) => Promise<void>;
 
@@ -912,6 +917,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   monthlyReports: [],
   lineStatuses: [],
   lineProductConfigs: [],
+  routingTotalTimeSecondsByProduct: {},
   productionPlans: [],
   productionPlanFollowUps: [],
   planReports: {},
@@ -1087,6 +1093,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       reportsUiReferenceLoading: false,
       lineStatuses: [],
       lineProductConfigs: [],
+      routingTotalTimeSecondsByProduct: {},
       productionPlans: [],
       productionPlanFollowUps: [],
       planReports: {},
@@ -1316,6 +1323,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
     }
 
+    let routingTotalTimeSecondsByProduct: Record<string, number> = {};
+    try {
+      const activeRoutingPlans = await routingPlanService.getActivePlans();
+      routingTotalTimeSecondsByProduct = buildRoutingTotalSecondsByProductId(activeRoutingPlans);
+    } catch (routingErr) {
+      console.warn('routingPlanService.getActivePlans failed', routingErr);
+    }
+
     const mergedSettings = systemSettingsRaw
       ? {
           ...DEFAULT_SYSTEM_SETTINGS,
@@ -1343,6 +1358,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       _rawEmployees: rawEmployees,
       currentEmployee,
       lineProductConfigs: configs,
+      routingTotalTimeSecondsByProduct,
       todayReports,
       monthlyReports,
       productionReports: [],
@@ -1369,7 +1385,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     reapplyThemeFromAppStore(get);
 
     const allReports = todayReports;
-    const products = buildProducts(rawProducts, allReports, configs);
+    const products = buildProducts(rawProducts, allReports, configs, routingTotalTimeSecondsByProduct);
     const productionLines = buildProductionLines(
       rawLines, rawProducts, rawEmployees, todayReports, lineStatuses, configs,
       productionPlans, planReports, workOrders
@@ -1940,6 +1956,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       get()._rebuildProducts();
     } catch (error) {
       set({ error: (error as Error).message });
+    }
+  },
+
+  fetchRoutingPlanTotals: async () => {
+    try {
+      const plans = await routingPlanService.getActivePlans();
+      const routingTotalTimeSecondsByProduct = buildRoutingTotalSecondsByProductId(plans);
+      set({ routingTotalTimeSecondsByProduct });
+      get()._rebuildProducts();
+    } catch (error) {
+      console.error('fetchRoutingPlanTotals', error);
     }
   },
 
@@ -4131,11 +4158,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal Rebuilders ───────────────────────────────────────────────────
 
   _rebuildProducts: () => {
-    const { _rawProducts, todayReports, productionReports, lineProductConfigs } =
-      get();
+    const {
+      _rawProducts,
+      todayReports,
+      productionReports,
+      lineProductConfigs,
+      routingTotalTimeSecondsByProduct,
+    } = get();
     const allReports =
       productionReports.length > 0 ? productionReports : todayReports;
-    const products = buildProducts(_rawProducts, allReports, lineProductConfigs);
+    const products = buildProducts(
+      _rawProducts,
+      allReports,
+      lineProductConfigs,
+      routingTotalTimeSecondsByProduct,
+    );
     set({ products });
   },
 

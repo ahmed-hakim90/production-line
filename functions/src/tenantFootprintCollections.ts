@@ -81,4 +81,8 @@ export const TENANT_SCOPED_COLLECTIONS: readonly string[] = [
   'product_categories',
   'automation_runs',
   'backups',
+  'production_routing_plans',
+  'production_routing_steps',
+  'production_routing_executions',
+  'production_routing_execution_steps',
 ];

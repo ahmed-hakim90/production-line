@@ -2,7 +2,6 @@ export const MODAL_KEYS = {
   DAILY_WELCOME: 'system.dailyWelcome',
   REPORTS_CREATE: 'reports.create',
   REPORTS_IMPORT: 'reports.import',
-  REPORTS_COMPONENT_SCRAP: 'reports.componentScrap',
   PRODUCTION_PLAN_FOLLOW_UP_CREATE: 'productionPlans.followUp.create',
   WORK_ORDERS_CREATE: 'workOrders.create',
   PRODUCTS_CREATE: 'products.create',

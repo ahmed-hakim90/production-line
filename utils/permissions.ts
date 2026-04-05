@@ -35,6 +35,7 @@ export type Permission =
   | 'quickAction.view'
   | 'costs.view' | 'costs.manage' | 'costs.closePeriod'
   | 'plans.view' | 'plans.create' | 'plans.edit' | 'plans.componentInjection.manage'
+  | 'routing.view' | 'routing.manage' | 'routing.execute' | 'routing.analytics'
   | 'workOrders.view' | 'workOrders.create' | 'workOrders.edit' | 'workOrders.delete' | 'workOrders.viewCost' | 'workOrders.componentInjection.manage'
   | 'quality.view' | 'quality.inspect' | 'quality.approve' | 'quality.print' | 'quality.manageWorkers'
   | 'quality.settings.view' | 'quality.settings.manage'
@@ -141,6 +142,10 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
+      { key: 'routing.view', label: 'عرض مسارات الإنتاج' },
+      { key: 'routing.manage', label: 'إدارة مسارات الإنتاج' },
+      { key: 'routing.execute', label: 'تنفيذ مسار إنتاج (مشرف)' },
+      { key: 'routing.analytics', label: 'تحليلات مسارات الإنتاج' },
       { key: 'lineProductConfig.view', label: 'عرض إعدادات المنتج-الخط' },
     ],
   },
@@ -376,6 +381,15 @@ export function checkPermission(
     permission === 'catalog.categories.delete'
   ) {
     return permissions['products.edit'] === true || permissions['products.create'] === true;
+  }
+  if (permission === 'routing.view' || permission === 'routing.analytics') {
+    return permissions['plans.view'] === true;
+  }
+  if (permission === 'routing.manage') {
+    return permissions['plans.edit'] === true;
+  }
+  if (permission === 'routing.execute') {
+    return permissions['reports.create'] === true || permissions['quickAction.view'] === true;
   }
   return false;
 }

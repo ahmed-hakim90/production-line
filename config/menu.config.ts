@@ -13,6 +13,11 @@ export interface MenuItem {
   /** If set, the item is visible when the user has any of these permissions (OR). */
   anyOfPermissions?: Permission[];
   activePatterns?: string[];
+  /**
+   * When `activePatterns` or the default `path/` prefix matches, skip if the logical path
+   * starts with one of these (e.g. exclude `/production/routing/analytics` from the list item).
+   */
+  activePathExcludePrefixes?: string[];
   badgeSource?: () => Promise<number>;
 }
 
@@ -99,9 +104,19 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'reports', label: 'التقارير', icon: 'bar_chart', path: '/reports', permission: 'reports.view' },
       { key: 'lines', label: 'خطوط الإنتاج', icon: 'precision_manufacturing', path: '/lines', permission: 'lines.view', activePatterns: ['/lines/'] },
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
+      {
+        key: 'routing-list',
+        label: 'مسارات الإنتاج',
+        icon: 'alt_route',
+        path: '/production/routing',
+        permission: 'routing.view',
+        activePathExcludePrefixes: ['/production/routing/analytics', '/production/routing/execution'],
+      },
+      { key: 'routing-analytics', label: 'تحليلات المسارات', icon: 'analytics', path: '/production/routing/analytics', permission: 'routing.analytics' },
+
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'supervisors.view', activePatterns: ['/supervisors/'] },
-      { key: 'supervisor-line-assignments', label: 'توزيع المشرفين', icon: 'alt_route', path: '/supervisor-line-assignments', permission: 'supervisorAssignments.manage' },
+      { key: 'supervisor-line-assignments', label: 'توزيع المشرفين', icon: 'supervisor_account', path: '/supervisor-line-assignments', permission: 'supervisorAssignments.manage' },
       { key: 'production-workers', label: 'عمال الإنتاج', icon: 'construction', path: '/production-workers', permission: 'productionWorkers.view', activePatterns: ['/production-workers/'] },
       { key: 'line-workers', label: 'ربط العمالة بالخطوط', icon: 'group_work', path: '/line-workers', permission: 'lineWorkers.view' },
     ],

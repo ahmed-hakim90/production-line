@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { MENU_CONFIG, ALL_MENU_ITEMS, type MenuItem } from '../config/menu.config';
+import { logicalPathnameFromLocation } from '../lib/tenantPaths';
 
 // ─── Badge Counts (approval-center + payroll, refreshed every 60s) ──────────
 
@@ -43,15 +44,22 @@ export function useBadgeCounts() {
 
 export function useActiveRoute() {
   const { pathname } = useLocation();
+  const logicalPath = logicalPathnameFromLocation(pathname);
 
   const isActive = useCallback(
     (item: MenuItem): boolean => {
-      if (pathname === item.path) return true;
-      if (item.activePatterns?.some((p) => pathname.startsWith(p))) return true;
-      if (item.path !== '/' && pathname.startsWith(item.path + '/')) return true;
+      if (logicalPath === item.path) return true;
+      if (item.activePatterns?.some((p) => logicalPath.startsWith(p))) {
+        if (item.activePathExcludePrefixes?.some((ex) => logicalPath.startsWith(ex))) return false;
+        return true;
+      }
+      if (item.path !== '/' && logicalPath.startsWith(`${item.path}/`)) {
+        if (item.activePathExcludePrefixes?.some((ex) => logicalPath.startsWith(ex))) return false;
+        return true;
+      }
       return false;
     },
-    [pathname],
+    [logicalPath],
   );
 
   const isGroupActive = useCallback(

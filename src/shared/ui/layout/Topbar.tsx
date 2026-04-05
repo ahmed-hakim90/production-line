@@ -268,7 +268,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           )}
 
           {/* Language toggle */}
-          <button
+          {/* <button
             type="button"
             onClick={() => { void handleToggleLanguage(); }}
             className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[11.5px] font-semibold bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text)] hover:border-primary/40 hover:bg-primary/5 transition-colors"
@@ -277,7 +277,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           >
             <Languages size={15} />
             <span className="font-mono">{i18n.language?.startsWith('en') ? 'EN' : 'AR'}</span>
-          </button>
+          </button> */}
 
           {/* Refresh */}
           <button

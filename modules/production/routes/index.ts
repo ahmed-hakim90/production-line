@@ -13,6 +13,11 @@ const ProductionWorkers = lazyNamed(() => import('../pages/ProductionWorkers'), 
 const ProductionWorkerDetails = lazyNamed(() => import('../pages/ProductionWorkerDetails'), 'ProductionWorkerDetails');
 const Reports = lazyNamed(() => import('../pages/Reports'), 'Reports');
 const QuickAction = lazyNamed(() => import('../pages/QuickAction'), 'QuickAction');
+
+const RoutingPlansPage = lazyNamed(() => import('../routing/pages/RoutingPlansPage'), 'RoutingPlansPage');
+const PlanBuilderPage = lazyNamed(() => import('../routing/pages/PlanBuilderPage'), 'PlanBuilderPage');
+const ExecutionPage = lazyNamed(() => import('../routing/pages/ExecutionPage'), 'ExecutionPage');
+const RoutingAnalyticsPage = lazyNamed(() => import('../routing/pages/RoutingAnalyticsPage'), 'RoutingAnalyticsPage');
 const LineWorkerAssignment = lazyNamed(() => import('../pages/LineWorkerAssignment'), 'LineWorkerAssignment');
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
@@ -29,5 +34,13 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/reports', permission: 'reports.view', component: Reports },
   { path: '/quick-action', permission: 'quickAction.view', component: QuickAction },
   { path: '/line-workers', permission: 'lineWorkers.view', component: LineWorkerAssignment },
+  { path: '/production/routing/analytics', permission: 'routing.analytics', component: RoutingAnalyticsPage },
+  { path: '/production/routing/execution/:executionId', permission: 'routing.execute', component: ExecutionPage },
+  {
+    path: '/production/routing/:productId',
+    permissionsAny: ['routing.view', 'routing.execute'],
+    component: PlanBuilderPage,
+  },
+  { path: '/production/routing', permission: 'routing.view', component: RoutingPlansPage },
   { path: '/users', redirectTo: '/employees' },
 ];

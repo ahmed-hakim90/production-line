@@ -18,6 +18,7 @@ export const useDashboardSlice = () =>
     assetDepreciations: s.assetDepreciations,
     laborSettings: s.laborSettings,
     lineProductConfigs: s.lineProductConfigs,
+    routingTotalTimeSecondsByProduct: s.routingTotalTimeSecondsByProduct,
     systemSettings: s.systemSettings,
   })));
 

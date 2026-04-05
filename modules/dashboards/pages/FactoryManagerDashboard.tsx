@@ -22,6 +22,7 @@ import {
   getExecutionDeviationTone,
   getTodayDateString,
 } from '../../../utils/calculations';
+import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
 import { exportProductionPlanShortages } from '../../../utils/exportExcel';
 import {
   formatCost,
@@ -127,6 +128,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
@@ -371,8 +373,13 @@ export const FactoryManagerDashboard: React.FC = () => {
     let standardTotalQty = 0;
     reports.forEach((r) => {
       const config = standardConfigs.find((c) => c.productId === r.productId && c.lineId === r.lineId);
-      if (config && config.standardAssemblyTime > 0 && r.quantityProduced > 0) {
-        const stdLaborPerUnit = (config.standardAssemblyTime / 60) * hourlyRate;
+      const stdMin = effectiveStandardAssemblyMinutes(
+        r.productId,
+        config?.standardAssemblyTime,
+        routingTotalTimeSecondsByProduct,
+      );
+      if (stdMin > 0 && r.quantityProduced > 0) {
+        const stdLaborPerUnit = (stdMin / 60) * hourlyRate;
         standardTotalCost += stdLaborPerUnit * r.quantityProduced;
         standardTotalQty += r.quantityProduced;
       }
@@ -406,7 +413,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       totalLaborCost,
       totalIndirectCost,
     };
-  }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
+  }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
   // â”€â”€ Chart 1: Production vs Cost Per Unit (daily) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

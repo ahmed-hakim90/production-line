@@ -15,8 +15,7 @@ import {
 } from '../components/ProductionReportPrint';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
-import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
-import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { ComponentScrapModal } from '../components/ComponentScrapModal';
 import {
   Select,
   SelectContent,
@@ -50,7 +49,6 @@ const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
 };
 
 export const QuickAction: React.FC = () => {
-  const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const _rawLines = useAppStore((s) => s._rawLines);
@@ -77,6 +75,7 @@ export const QuickAction: React.FC = () => {
   const [hours, setHours] = useState('');
   const [notes, setNotes] = useState('');
   const [componentScrapItems, setComponentScrapItems] = useState<ReportComponentScrapItem[]>([]);
+  const [componentScrapModalOpen, setComponentScrapModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -722,11 +721,7 @@ export const QuickAction: React.FC = () => {
                   type="button"
                   onClick={() => {
                     if (!productId) return;
-                    openModal(MODAL_KEYS.REPORTS_COMPONENT_SCRAP, {
-                      productId,
-                      items: componentScrapItems,
-                      onSave: (items: ReportComponentScrapItem[]) => setComponentScrapItems(items),
-                    });
+                    setComponentScrapModalOpen(true);
                   }}
                   disabled={!productId}
                   className="w-full px-4 py-2.5 bg-[#f8f9fa] hover:bg-[#f0f2f5] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between gap-2"
@@ -1086,6 +1081,14 @@ export const QuickAction: React.FC = () => {
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <SingleReportPrint ref={printRef} report={printReport} printSettings={printTemplate} />
       </div>
+
+      <ComponentScrapModal
+        open={componentScrapModalOpen}
+        onClose={() => setComponentScrapModalOpen(false)}
+        productId={productId}
+        initialItems={componentScrapItems}
+        onSave={setComponentScrapItems}
+      />
     </div>
   );
 };

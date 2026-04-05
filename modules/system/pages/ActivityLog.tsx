@@ -40,6 +40,7 @@ const ACTION_LABELS: Partial<Record<ActivityAction, { label: string; icon: strin
   APPROVE_LOAN: { label: 'موافقة على سلفة', icon: 'check_circle', variant: 'success' },
   REJECT_LOAN: { label: 'رفض سلفة', icon: 'cancel', variant: 'danger' },
   PROCESS_INSTALLMENT: { label: 'معالجة قسط', icon: 'receipt', variant: 'warning' },
+  ROUTING_SOFT_DELETE_PLAN: { label: 'حذف مسار إنتاج', icon: 'delete', variant: 'danger' },
 };
 
 interface ActivityLogUserGroup {

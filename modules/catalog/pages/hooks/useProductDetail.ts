@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/store/useAppStore";
 import type { ProductDetailData } from "../product-details/types";
@@ -23,6 +24,7 @@ import {
   getCurrentMonth,
 } from "@/utils/costCalculations";
 import { calculateProductCostBreakdown } from "@/utils/productCostBreakdown";
+import { effectiveStandardAssemblyMinutes } from "@/utils/routingStandardAssembly";
 import type { ProductionReport } from "@/types";
 
 const toMonthLabel = (month: string) => month;
@@ -52,7 +54,15 @@ export const useProductDetail = (id?: string) => {
   const productRow = useAppStore((s) => (id ? s._rawProducts.find((p) => p.id === id) : undefined));
   const rawLines = useAppStore((s) => s._rawLines);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
-  const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const routingTotals = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
+  const routingTotalsKey = useMemo(
+    () =>
+      Object.entries(routingTotals)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => `${k}:${Math.round(Number(v) || 0)}`)
+        .join("|"),
+    [routingTotals],
+  );
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
@@ -67,7 +77,7 @@ export const useProductDetail = (id?: string) => {
     : "";
 
   return useQuery<ProductDetailData>({
-    queryKey: ["catalog", "product-detail", tenantId, id ?? "", productRevision],
+    queryKey: ["catalog", "product-detail", tenantId, id ?? "", productRevision, routingTotalsKey],
     enabled: Boolean(id) && !productsLoading,
     queryFn: async () => {
       if (!id) throw new Error("missing product id");
@@ -172,8 +182,14 @@ export const useProductDetail = (id?: string) => {
       const avgDailyProduction = uniqueDays > 0 ? Math.round(totalProduced / uniqueDays) : 0;
       const avgAssemblyTime = calculateAvgAssemblyTime(reports);
       const bestLine = findBestLine(reports, rawLines);
-      const config = lineProductConfigs.find((row) => row.productId === id);
-      const standardAssembly = Number(config?.standardAssemblyTime || 0);
+      const { lineProductConfigs: lpc, routingTotalTimeSecondsByProduct: routingByProduct } =
+        useAppStore.getState();
+      const config = lpc.find((row) => row.productId === id);
+      const standardAssembly = effectiveStandardAssemblyMinutes(
+        id,
+        Number(config?.standardAssemblyTime || 0),
+        routingByProduct,
+      );
       const wasteRatio = calculateWasteRatio(totalWaste, totalProduced + totalWaste);
 
       const effectiveCurrentUnitCost =

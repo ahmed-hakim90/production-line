@@ -5,11 +5,12 @@ import { useAppStore } from '../store/useAppStore';
 import { usePermission, type Permission } from '../utils/permissions';
 
 interface ProtectedRouteProps {
-  permission: Permission;
+  permission?: Permission;
+  permissionsAny?: Permission[];
   children: React.ReactNode;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ permission, children }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ permission, permissionsAny, children }) => {
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
   const { can } = usePermission();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
@@ -18,7 +19,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ permission, chil
     return <Navigate to={tenantLoginPath(tenantSlug)} replace />;
   }
 
-  if (!can(permission)) {
+  const allowed =
+    permissionsAny && permissionsAny.length > 0
+      ? permissionsAny.some((p) => can(p))
+      : permission
+        ? can(permission)
+        : false;
+
+  if (!allowed) {
     return <Navigate to={tenantSlug ? `/t/${tenantSlug}/` : '/'} replace />;
   }
 

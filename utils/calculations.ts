@@ -17,6 +17,7 @@ import type {
   SmartStatus,
   WorkOrder,
 } from '../types';
+import { effectiveStandardAssemblyMinutes } from './routingStandardAssembly';
 
 // ─── Core Metrics ───────────────────────────────────────────────────────────
 
@@ -291,7 +292,8 @@ export const sumMaxWorkHoursByDate = (
 export const buildProducts = (
   raw: FirestoreProduct[],
   reports: ProductionReport[],
-  configs: LineProductConfig[]
+  configs: LineProductConfig[],
+  routingTotalsByProduct?: Record<string, number>,
 ): Product[] => {
   return raw.map((p) => {
     const prodReports = reports.filter((r) => r.productId === p.id);
@@ -305,6 +307,11 @@ export const buildProducts = (
       0
     );
     const config = configs.find((c) => c.productId === p.id);
+    const standardMin = effectiveStandardAssemblyMinutes(
+      p.id!,
+      config?.standardAssemblyTime,
+      routingTotalsByProduct,
+    );
     const balance = p.openingBalance + totalProduction - totalWaste;
     const uniqueProductionDays = countUniqueDays(productiveReports);
     const calculatedAvgDailyProduction = uniqueProductionDays > 0
@@ -329,7 +336,7 @@ export const buildProducts = (
       totalProduction,
       avgDailyProduction,
       wasteUnits: totalWaste,
-      avgAssemblyTime: config?.standardAssemblyTime ?? 0,
+      avgAssemblyTime: standardMin,
     };
   });
 };

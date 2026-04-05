@@ -77,6 +77,7 @@ const MENU_ICON_MAP: Record<string, LucideIcon> = {
   receipt_long: ReceiptText,
   rule: Scale,
   science: FlaskConical,
+  supervisor_account: UserCheck,
   settings: Settings,
   shield: Shield,
   space_dashboard: BarChart3,

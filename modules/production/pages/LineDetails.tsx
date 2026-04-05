@@ -35,6 +35,7 @@ import {
   sumMaxWorkHoursByDate,
   getOperationalDateString,
 } from '../../../utils/calculations';
+import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
 import {
   formatCost,
   getCurrentMonth,
@@ -108,6 +109,7 @@ export const LineDetails: React.FC = () => {
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
   const employees = useAppStore((s) => s.employees);
   const productionPlans = useAppStore((s) => s.productionPlans);
   const planReports = useAppStore((s) => s.planReports);
@@ -287,13 +289,13 @@ export const LineDetails: React.FC = () => {
 
   const standardTime = useMemo(() => {
     const productId = activePlan?.productId || line?.currentProductId;
-    if (productId) {
-      const config = lineProductConfigs.find((c) => c.lineId === id && c.productId === productId);
-      if (config) return config.standardAssemblyTime;
-    }
     const fallback = lineProductConfigs.find((c) => c.lineId === id);
-    return fallback?.standardAssemblyTime ?? 0;
-  }, [lineProductConfigs, id, activePlan, line]);
+    const pid = productId || fallback?.productId || '';
+    const configStd = productId
+      ? lineProductConfigs.find((c) => c.lineId === id && c.productId === productId)?.standardAssemblyTime
+      : fallback?.standardAssemblyTime;
+    return effectiveStandardAssemblyMinutes(pid, configStd, routingTotalTimeSecondsByProduct);
+  }, [lineProductConfigs, id, activePlan, line, routingTotalTimeSecondsByProduct]);
 
   const efficiency = useMemo(
     () => calculateTimeEfficiency(standardTime, avgAssemblyTime),

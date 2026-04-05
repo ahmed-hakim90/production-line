@@ -30,6 +30,8 @@ import {
   loadWorkOrderCardMetricsData,
   type WorkOrderCardMetricsData,
 } from '../utils/workOrderCardMetrics';
+import { SearchableSelect } from '@/components/UI';
+import { useActiveRoutingPlansQuery } from '../../production/routing/hooks/routingQueries';
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
@@ -113,6 +115,7 @@ export const EmployeeDashboard: React.FC = () => {
   }));
 
   const { can } = usePermission();
+  const products = useAppStore((s) => s.products);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const transferApprovalPermission = useAppStore(
     (s) => s.systemSettings.planSettings?.transferApprovalPermission || 'inventory.transfers.approve',
@@ -131,6 +134,30 @@ export const EmployeeDashboard: React.FC = () => {
   const [woPrintData, setWoPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
   const handleWoPrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
+
+  const routingShortcutsVisible = can('routing.view') || can('routing.execute');
+  const {
+    data: activeRoutingPlans = [],
+    isLoading: activeRoutingPlansLoading,
+    isError: activeRoutingPlansError,
+    refetch: refetchActiveRoutingPlans,
+  } = useActiveRoutingPlansQuery({ enabled: routingShortcutsVisible });
+  const [selectedRoutingPlanId, setSelectedRoutingPlanId] = useState('');
+
+  const routingPlanOptions = useMemo(() => {
+    const productLabel = (id: string) => products.find((p) => p.id === id)?.name ?? id;
+    return [...activeRoutingPlans]
+      .sort((a, b) => productLabel(a.productId).localeCompare(productLabel(b.productId), 'ar'))
+      .map((p) => ({
+        value: p.id,
+        label: `${productLabel(p.productId)} · إصدار ${p.version}`,
+      }));
+  }, [activeRoutingPlans, products]);
+
+  const selectedRoutingPlan = useMemo(
+    () => activeRoutingPlans.find((p) => p.id === selectedRoutingPlanId),
+    [activeRoutingPlans, selectedRoutingPlanId],
+  );
 
   const STATUS_LABELS: Record<string, string> = { pending: 'قيد الانتظار', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
   const resolveWorkOrderProducedNow = useCallback((wo: WorkOrder): number => {
@@ -530,6 +557,81 @@ export const EmployeeDashboard: React.FC = () => {
           </GhostButton>
         )}
       </div>
+
+      {routingShortcutsVisible && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="material-icons-round text-emerald-600 dark:text-emerald-400 text-xl">alt_route</span>
+              <h3 className="text-sm font-semibold text-[var(--color-text)]">مسارات الإنتاج</h3>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              ابحث عن منتج له مسار نشط، ثم اعرض الخطة أو ابدأ تنفيذ المسار.
+            </p>
+            {activeRoutingPlansError && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-950/30 px-3 py-2 text-xs text-rose-800 dark:text-rose-200 flex flex-wrap items-center gap-2">
+                تعذر تحميل خطط المسارات.
+                <GhostButton
+                  type="button"
+                  className="text-xs border-rose-200 text-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/40"
+                  onClick={() => void refetchActiveRoutingPlans()}
+                >
+                  إعادة المحاولة
+                </GhostButton>
+              </div>
+            )}
+            {activeRoutingPlansLoading ? (
+              <p className="text-sm text-[var(--color-text-muted)]">جاري تحميل الخطط النشطة…</p>
+            ) : routingPlanOptions.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-muted)]">لا توجد خطط مسار نشطة حالياً.</p>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--color-text-muted)] mb-1">
+                    منتج بمسار نشط
+                  </label>
+                  <SearchableSelect
+                    options={routingPlanOptions}
+                    value={selectedRoutingPlanId}
+                    onChange={setSelectedRoutingPlanId}
+                    placeholder="ابحث واختر خطة…"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <PrimaryButton
+                    type="button"
+                    className="shrink-0"
+                    disabled={!selectedRoutingPlan}
+                    onClick={() => {
+                      if (!selectedRoutingPlan) return;
+                      navigate(
+                        `/production/routing/${selectedRoutingPlan.productId}?planId=${selectedRoutingPlan.id}`,
+                      );
+                    }}
+                  >
+                    <span className="material-icons-round text-base">visibility</span>
+                    عرض الخطة
+                  </PrimaryButton>
+                  {can('routing.execute') && (
+                    <GhostButton
+                      type="button"
+                      className="shrink-0 border-emerald-200 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-200"
+                      disabled={!selectedRoutingPlan}
+                      onClick={() => {
+                        if (!selectedRoutingPlan) return;
+                        navigate(`/production/routing/execution/new?productId=${selectedRoutingPlan.productId}`);
+                      }}
+                    >
+                      <span className="material-icons-round text-base">play_arrow</span>
+                      بدء تنفيذ
+                    </GhostButton>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* â”€â”€ Alerts â”€â”€ */}
       {alerts.length > 0 && (

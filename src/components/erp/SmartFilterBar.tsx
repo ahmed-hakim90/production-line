@@ -138,15 +138,17 @@ export function SmartFilterBar({
       )}
     >
       <div className="flex flex-wrap items-center gap-2 p-3">
-        <div className="relative min-w-[160px] flex-1">
-          <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchValue}
-            onChange={(event) => onSearchChange?.(event.target.value)}
-            placeholder={resolvedSearchPlaceholder}
-            className="h-[34px] w-full rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-          />
-        </div>
+        {onSearchChange != null && (
+          <div className="relative min-w-[160px] flex-1">
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchValue}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder={resolvedSearchPlaceholder}
+              className="h-[34px] w-full rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+            />
+          </div>
+        )}
 
         {periods && periods.length > 0 && (
           <div className="flex flex-shrink-0 overflow-hidden rounded-lg border border-slate-200">

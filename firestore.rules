@@ -232,7 +232,8 @@ service cloud.firestore {
         'hr_notifications', 'employee_performance', 'employee_bonuses', 'hr_config_modules',
         'hr_config_audit_logs', 'quality_settings', 'quality_reason_catalog', 'quality_workers_assignments',
         'quality_inspections', 'quality_defects', 'quality_rework_orders', 'quality_capa', 'quality_print_logs',
-        'production_report_uniques', 'product_categories', 'automation_runs', 'backups'
+        'production_report_uniques', 'product_categories', 'automation_runs', 'backups',
+        'production_routing_plans', 'production_routing_steps'
       ];
     }
 
@@ -299,7 +300,7 @@ service cloud.firestore {
         isSuperAdmin()
         || (exists(currentUserPath()) && resource.data.tenantId == currentUserDoc().data.tenantId)
       );
-      /* Super-admin approves pending companies: seedIfEmpty() creates roles for the NEW tenantId — tenant admins use roles.manage on their own tenant. */
+      /* Super-admin approves pending companies: seedIfEmpty() creates roles for the NEW tenantId â€” tenant admins use roles.manage on their own tenant. */
       allow create: if isSuperAdmin()
         || (isActiveUser() && hasPermission('roles.manage') && sameTenantWrite());
       allow update, delete: if isSuperAdmin()
@@ -324,7 +325,10 @@ service cloud.firestore {
 
     match /audit_logs/{docId} {
       allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow write: if false;
+      // auditQueue.service + audit.service create tenant-scoped logs from the client.
+      allow create: if isActiveUser()
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+      allow update, delete: if false;
     }
 
     match /audit_logs/{docId}/{subPath=**} {
@@ -498,6 +502,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+
+    match /production_routing_executions/{docId} {
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow create: if isActiveUser() && sameTenantOrLegacyWrite();
+      allow update: if isActiveUser() && sameTenantOrLegacyUpdate()
+        && resource.data.status != 'completed';
+      allow delete: if isActiveUser() && sameTenantOrLegacyRead() && hasPermission('routing.manage');
+    }
+
+    match /production_routing_execution_steps/{docId} {
+      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow create: if isActiveUser() && sameTenantOrLegacyWrite()
+        && get(/databases/$(database)/documents/production_routing_executions/$(request.resource.data.executionId)).data.status != 'completed';
+      allow update: if isActiveUser() && sameTenantOrLegacyUpdate()
+        && get(/databases/$(database)/documents/production_routing_executions/$(resource.data.executionId)).data.status != 'completed';
+      allow delete: if isActiveUser() && sameTenantOrLegacyRead()
+        && (
+          get(/databases/$(database)/documents/production_routing_executions/$(resource.data.executionId)).data.status != 'completed'
+          || hasPermission('routing.manage')
+        );
+    }
     match /{coll}/{docId} {
       allow read: if isBusinessCollection(coll) && sameTenantOrLegacyRead();
       allow create: if isBusinessCollection(coll) && sameTenantOrLegacyWrite();

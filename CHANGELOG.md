@@ -490,3 +490,7 @@
 ## [4.0.99] - 2026-04-04
 
 - Costs
+
+## [4.0.100] - 2026-04-04
+
+- rm btn print after save quick report

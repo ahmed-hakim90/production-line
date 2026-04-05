@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ExternalLink, Info, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
+import { ComponentScrapModal } from '../../../modules/production/components/ComponentScrapModal';
 import { useAppStore } from '../../../store/useAppStore';
 import { getOperationalDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
-import { useGlobalModalManager } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
 import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
@@ -82,7 +82,6 @@ const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
 export const GlobalCreateReportModal: React.FC = () => {
   const { t } = useTranslation();
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.REPORTS_CREATE);
-  const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const employees = useAppStore((s) => s.employees);
@@ -94,6 +93,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const workOrders = useAppStore((s) => s.workOrders);
   const [form, setForm] = useState<ReportFormState>(emptyForm());
+  const [componentScrapModalOpen, setComponentScrapModalOpen] = useState(false);
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
@@ -266,6 +266,10 @@ export const GlobalCreateReportModal: React.FC = () => {
     ));
   }, [isOpen, payload?.reportType, availableReportTypes]);
 
+  useEffect(() => {
+    if (!isOpen) setComponentScrapModalOpen(false);
+  }, [isOpen]);
+
   if (!isOpen) return null;
   if (!canCreateFinishedReports && !can('reports.edit') && !canManageComponentInjectionReports) return null;
 
@@ -332,6 +336,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={closeModal}
@@ -532,13 +537,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                   type="button"
                   onClick={() => {
                     if (!form.productId) return;
-                    openModal(MODAL_KEYS.REPORTS_COMPONENT_SCRAP, {
-                      productId: form.productId,
-                      items: form.componentScrapItems,
-                      onSave: (items: ReportComponentScrapItem[]) => {
-                        setForm((prev) => ({ ...prev, componentScrapItems: items }));
-                      },
-                    });
+                    setComponentScrapModalOpen(true);
                   }}
                   disabled={!form.productId}
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa] hover:bg-[#f0f2f5] disabled:opacity-60 disabled:cursor-not-allowed text-sm p-3.5 outline-none font-bold transition-all flex items-center justify-between gap-2"
@@ -696,6 +695,14 @@ export const GlobalCreateReportModal: React.FC = () => {
         </div>
       </div>
     </div>
+    <ComponentScrapModal
+      open={componentScrapModalOpen}
+      onClose={() => setComponentScrapModalOpen(false)}
+      productId={form.productId}
+      initialItems={form.componentScrapItems}
+      onSave={(items) => setForm((prev) => ({ ...prev, componentScrapItems: items }))}
+    />
+    </>
   );
 };
 

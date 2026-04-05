@@ -37,6 +37,7 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { ComponentScrapModal } from '../components/ComponentScrapModal';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
 import {
   buildReportsCosts,
@@ -476,6 +477,7 @@ export const Reports: React.FC = () => {
   const canImportFromPage = can('import') && pageControl.importEnabled;
 
   const [showModal, setShowModal] = useState(false);
+  const [componentScrapModalOpen, setComponentScrapModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const formWorkersTotal = useMemo(() => (
@@ -632,6 +634,10 @@ export const Reports: React.FC = () => {
   const openImport = useCallback(() => {
     openModal(MODAL_KEYS.REPORTS_IMPORT, { source: 'reports.page' });
   }, [openModal]);
+
+  useEffect(() => {
+    if (!showModal) setComponentScrapModalOpen(false);
+  }, [showModal]);
 
   // Employee-only filter: basic employees see only their own reports
   const myEmployeeId = useMemo(() => {
@@ -3535,13 +3541,7 @@ export const Reports: React.FC = () => {
                       type="button"
                       onClick={() => {
                         if (!form.productId) return;
-                        openModal(MODAL_KEYS.REPORTS_COMPONENT_SCRAP, {
-                          productId: form.productId,
-                          items: form.componentScrapItems,
-                          onSave: (items: ReportComponentScrapItem[]) => {
-                            setForm((prev) => ({ ...prev, componentScrapItems: items }));
-                          },
-                        });
+                        setComponentScrapModalOpen(true);
                       }}
                       disabled={!form.productId}
                       className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa] hover:bg-[#f0f2f5] disabled:opacity-60 disabled:cursor-not-allowed text-sm p-3.5 outline-none font-bold transition-all flex items-center justify-between gap-2"
@@ -4583,6 +4583,13 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
+      <ComponentScrapModal
+        open={componentScrapModalOpen}
+        onClose={() => setComponentScrapModalOpen(false)}
+        productId={form.productId}
+        initialItems={form.componentScrapItems}
+        onSave={(items) => setForm((prev) => ({ ...prev, componentScrapItems: items }))}
+      />
     </div>
   );
 };

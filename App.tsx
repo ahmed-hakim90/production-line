@@ -926,14 +926,16 @@ const App: React.FC = () => {
                     />
                   );
                 }
-                if (!r.component || !r.permission) return null;
+                if (!r.component || (!r.permission && !(r.permissionsAny && r.permissionsAny.length > 0))) {
+                  return null;
+                }
                 const Component = r.component;
                 return (
                   <Route
                     key={r.path}
                     path={childPath}
                     element={
-                      <ProtectedRoute permission={r.permission}>
+                      <ProtectedRoute permission={r.permission} permissionsAny={r.permissionsAny}>
                         <Suspense fallback={<PageRouteFallback />}>
                           <Component />
                         </Suspense>

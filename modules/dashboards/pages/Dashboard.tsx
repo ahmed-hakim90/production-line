@@ -31,6 +31,7 @@ import {
   calculateDailyCapacity,
   calculateEstimatedDays,
 } from '../../../utils/calculations';
+import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
 import {
   buildLineCosts,
   formatCost,
@@ -133,6 +134,7 @@ export const Dashboard: React.FC = () => {
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
   const loading = useAppStore((s) => s.loading);
   const createLineStatus = useAppStore((s) => s.createLineStatus);
   const updateLineStatus = useAppStore((s) => s.updateLineStatus);
@@ -501,7 +503,12 @@ export const Dashboard: React.FC = () => {
     const config = lineProductConfigs.find(
       (c) => c.productId === selectedProductId
     );
-    const standardTime = config?.standardAssemblyTime ?? avgTime;
+    const std = effectiveStandardAssemblyMinutes(
+      selectedProductId,
+      config?.standardAssemblyTime,
+      routingTotalTimeSecondsByProduct,
+    );
+    const standardTime = std > 0 ? std : avgTime;
     const effectiveTime = standardTime > 0 ? standardTime : avgTime;
 
     const activeLines = _rawLines.filter(
@@ -534,7 +541,7 @@ export const Dashboard: React.FC = () => {
       estimatedDays,
       activeLinesCount: activeLines.length,
     };
-  }, [selectedProductId, planQuantity, todayReports, _rawLines, lineProductConfigs]);
+  }, [selectedProductId, planQuantity, todayReports, _rawLines, lineProductConfigs, routingTotalTimeSecondsByProduct]);
 
   const getVariant = (status: ProductionLineStatus) => {
     switch (status) {

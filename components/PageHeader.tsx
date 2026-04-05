@@ -18,7 +18,9 @@ import React, { useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { tenantHomePath } from '@/lib/tenantPaths';
+import { cn } from '@/lib/utils';
 import {
+  BarChart,
   Check,
   Download,
   Factory,
@@ -53,6 +55,7 @@ import { usePageBackSetter } from '@/src/shared/ui/layout/PageBackContext';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   add: Plus,
+  bar_chart: BarChart,
   check: Check,
   delete: Trash2,
   download: Download,
@@ -194,13 +197,19 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     <div className="erp-page-head">
       {/* Left: title + optional icon */}
       <div className="erp-page-title-block">
-        <h2 className="page-title">
+        <h2 className="page-title flex flex-wrap items-center gap-x-2 gap-y-1">
           {icon && (
-            <span style={{ verticalAlign: 'middle', marginInlineEnd: 6, display: 'inline-flex' }}>
+            <span
+              className={cn(
+                'inline-flex size-9 shrink-0 items-center justify-center rounded-xl',
+                iconBg ?? 'bg-[var(--color-muted)]/55',
+              )}
+              aria-hidden
+            >
               {renderActionIcon(icon, iconColor, 20)}
             </span>
           )}
-          {title}
+          <span className="min-w-0">{title}</span>
         </h2>
         {subtitle && <p className="page-subtitle">{subtitle}</p>}
       </div>

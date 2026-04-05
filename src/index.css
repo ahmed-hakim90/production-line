@@ -5,6 +5,14 @@
 @tailwind utilities;
 
 @layer base {
+  /* Overlays portaled here sit above in-app fixed layers (e.g. Reports z-50 / drawers z-[62]). */
+  #erp-modal-root {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10060;
+  }
+
   /*
    * Design tokens: defaults in :root; at runtime `applyAppTheme()` + `applyTenantTheme()` merge
    * `system_settings.theme` (ThemeSettings) with `tenants/{id}.theme` and set ERP + shadcn CSS vars.
