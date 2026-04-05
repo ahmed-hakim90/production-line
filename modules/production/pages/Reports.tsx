@@ -841,54 +841,6 @@ export const Reports: React.FC = () => {
     () => sortReports(applyReportFilters(allReports)),
     [allReports, applyReportFilters, sortReports],
   );
-  const groupedReports = useMemo(() => {
-    if (reportGroupBy === 'none') return [];
-
-    const groups = new Map<string, {
-      key: string;
-      label: string;
-      reports: ProductionReport[];
-      produced: number;
-      waste: number;
-    }>();
-
-    displayedReports.forEach((report) => {
-      let key = 'unknown';
-      let label = 'غير محدد';
-
-      if (reportGroupBy === 'supervisor') {
-        const supervisorId = String(report.employeeId || '');
-        key = supervisorId || 'supervisor_unknown';
-        label = employees.find((s) => s.id === supervisorId)?.name ?? 'بدون مشرف';
-      } else if (reportGroupBy === 'line') {
-        const lineId = String(report.lineId || '');
-        key = lineId || 'line_unknown';
-        label = _rawLines.find((line) => line.id === lineId)?.name ?? '—';
-      } else if (reportGroupBy === 'product') {
-        const productId = String(report.productId || '');
-        key = productId || 'product_unknown';
-        if (report.reportType === 'component_injection') {
-          label = rawMaterialOptions.find((m) => m.id === productId)?.name ?? '—';
-        } else {
-          label = _rawProducts.find((p) => p.id === productId)?.name ?? '—';
-        }
-      }
-
-      const current = groups.get(key) || {
-        key,
-        label,
-        reports: [],
-        produced: 0,
-        waste: 0,
-      };
-      current.reports.push(report);
-      current.produced += Number(report.quantityProduced || 0);
-      current.waste += Number(deriveReportWaste(report) || 0);
-      groups.set(key, current);
-    });
-
-    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
-  }, [reportGroupBy, displayedReports, employees, _rawLines, rawMaterialOptions, _rawProducts]);
 
   const categoryUsageCount = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1108,6 +1060,100 @@ export const Reports: React.FC = () => {
     (sid: string) => employees.find((s) => s.id === sid)?.name ?? '—',
     [employees]
   );
+
+  const normalizeSearchText = useCallback((s: string) => {
+    return String(s || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+  }, []);
+
+  /** جدول التقارير + التجميع: يطبّق نص البحث على كود التقرير والمنتج والخط والمشرف والكود والكمية… */
+  const searchFilteredReports = useMemo(() => {
+    const q = factorySearch.trim();
+    if (!q) return displayedReports;
+    const nq = normalizeSearchText(q);
+    return displayedReports.filter((r) => {
+      if (normalizeSearchText(String(r.reportCode || '')).includes(nq)) return true;
+      if (normalizeSearchText(getLineName(r.lineId)).includes(nq)) return true;
+      if (normalizeSearchText(getEmployeeName(r.employeeId)).includes(nq)) return true;
+      if (normalizeSearchText(getProductName(r.productId, r.reportType)).includes(nq)) return true;
+      if (r.reportType === 'component_injection') {
+        const m = rawMaterialOptions.find((x) => x.id === r.productId);
+        if (m) {
+          if (normalizeSearchText(m.code || '').includes(nq)) return true;
+          if (normalizeSearchText(String(m.id || '')).includes(nq)) return true;
+        }
+      } else {
+        const p = _rawProducts.find((x) => x.id === r.productId);
+        if (p) {
+          if (normalizeSearchText(String(p.code || '')).includes(nq)) return true;
+          if (normalizeSearchText(String(p.id || '')).includes(nq)) return true;
+        }
+      }
+      if (normalizeSearchText(String(r.quantityProduced ?? '')).includes(nq)) return true;
+      if (normalizeSearchText(String(r.workHours ?? '')).includes(nq)) return true;
+      return false;
+    });
+  }, [
+    displayedReports,
+    factorySearch,
+    normalizeSearchText,
+    getLineName,
+    getEmployeeName,
+    getProductName,
+    _rawProducts,
+    rawMaterialOptions,
+  ]);
+
+  const groupedReports = useMemo(() => {
+    if (reportGroupBy === 'none') return [];
+
+    const groups = new Map<string, {
+      key: string;
+      label: string;
+      reports: ProductionReport[];
+      produced: number;
+      waste: number;
+    }>();
+
+    searchFilteredReports.forEach((report) => {
+      let key = 'unknown';
+      let label = 'غير محدد';
+
+      if (reportGroupBy === 'supervisor') {
+        const supervisorId = String(report.employeeId || '');
+        key = supervisorId || 'supervisor_unknown';
+        label = employees.find((s) => s.id === supervisorId)?.name ?? 'بدون مشرف';
+      } else if (reportGroupBy === 'line') {
+        const lineId = String(report.lineId || '');
+        key = lineId || 'line_unknown';
+        label = _rawLines.find((line) => line.id === lineId)?.name ?? '—';
+      } else if (reportGroupBy === 'product') {
+        const productId = String(report.productId || '');
+        key = productId || 'product_unknown';
+        if (report.reportType === 'component_injection') {
+          label = rawMaterialOptions.find((m) => m.id === productId)?.name ?? '—';
+        } else {
+          label = _rawProducts.find((p) => p.id === productId)?.name ?? '—';
+        }
+      }
+
+      const current = groups.get(key) || {
+        key,
+        label,
+        reports: [],
+        produced: 0,
+        waste: 0,
+      };
+      current.reports.push(report);
+      current.produced += Number(report.quantityProduced || 0);
+      current.waste += Number(deriveReportWaste(report) || 0);
+      groups.set(key, current);
+    });
+
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }, [reportGroupBy, searchFilteredReports, employees, _rawLines, rawMaterialOptions, _rawProducts]);
 
   const factoryGeneralRows = useMemo<FactoryGeneralRow[]>(() => {
     const source = displayedReports;
@@ -1535,7 +1581,7 @@ export const Reports: React.FC = () => {
 
   const tableToolbarFilters = (
     <SmartFilterBar
-      searchPlaceholder="ابحث بالخط أو المشرف أو الصنف..."
+      searchPlaceholder="ابحث: كود التقرير، كود/اسم المنتج، الخط، المشرف، الكمية، الساعات…"
       searchValue={factorySearch}
       onSearchChange={setFactorySearch}
       periods={[
@@ -2476,6 +2522,67 @@ export const Reports: React.FC = () => {
       },
       { header: 'ساعات', headerClassName: 'text-center', className: 'text-center font-bold', render: (r) => <>{r.workHours}</> },
       {
+        id: 'routeVariance',
+        header: 'انحراف (مسار)',
+        headerClassName: 'text-center',
+        className: 'text-center',
+        hideable: true,
+        render: (r) => {
+          const v = computeProductionReportStandardQtyVariance({
+            productId: r.productId,
+            lineId: r.lineId,
+            quantityProduced: r.quantityProduced || 0,
+            workersCount: r.workersCount || 0,
+            workHours: r.workHours || 0,
+            lineProductConfigs,
+            routingTotalTimeSecondsByProduct,
+          });
+          if (v.kind === 'no_standard') {
+            return (
+              <span className="text-[10px] font-bold text-[var(--color-text-muted)]" title="يلزم مسار نشط بزمن خطوات للمنتج">
+                لا مسار
+              </span>
+            );
+          }
+          if (v.kind === 'no_labor') {
+            return <span className="text-[10px] text-[var(--color-text-muted)]">—</span>;
+          }
+          const tip = `متوقع ≈ ${v.expectedQty} — فعلي ${v.actualQty} — ${v.sourceLabel}`;
+          if (v.direction === 'on') {
+            return (
+              <span className="text-xs font-bold text-slate-600 tabular-nums" title={tip}>
+                متوازن
+              </span>
+            );
+          }
+          if (v.direction === 'above') {
+            return (
+              <span className="text-xs font-black text-emerald-700 tabular-nums" title={tip}>
+                +{v.diff}
+              </span>
+            );
+          }
+          return (
+            <span className="text-xs font-black text-rose-700 tabular-nums" title={tip}>
+              {v.diff}
+            </span>
+          );
+        },
+        sortKey: (r) => {
+          const v = computeProductionReportStandardQtyVariance({
+            productId: r.productId,
+            lineId: r.lineId,
+            quantityProduced: r.quantityProduced || 0,
+            workersCount: r.workersCount || 0,
+            workHours: r.workHours || 0,
+            lineProductConfigs,
+            routingTotalTimeSecondsByProduct,
+          });
+          if (v.kind !== 'comparable') return -999999;
+          return v.diff;
+        },
+      },
+      {
         header: 'أمر شغل',
         headerClassName: 'text-center',
         className: 'text-center',
@@ -2554,7 +2661,20 @@ export const Reports: React.FC = () => {
       });
     }
     return cols;
-  }, [canViewCosts, expandedNoteRows, getLineName, getProductName, getEmployeeName, reportCosts, woMap, can, qualityStatusMeta, getQualityReportCode]);
+  }, [
+    canViewCosts,
+    expandedNoteRows,
+    getLineName,
+    getProductName,
+    getEmployeeName,
+    reportCosts,
+    woMap,
+    can,
+    qualityStatusMeta,
+    getQualityReportCode,
+    lineProductConfigs,
+    routingTotalTimeSecondsByProduct,
+  ]);
 
   const handleBulkPrintSelected = useCallback(async (items: ProductionReport[]) => {
     setBulkPrintSource(items);
@@ -2727,11 +2847,18 @@ export const Reports: React.FC = () => {
 
   const reportTableFooter = (
     <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex flex-wrap items-center justify-between gap-2">
-      <span className="text-sm text-[var(--color-text-muted)] font-bold">إجمالي <span className="text-primary">{displayedReports.length}</span> تقرير</span>
-      {displayedReports.length > 0 && (
+      <span className="text-sm text-[var(--color-text-muted)] font-bold">
+        إجمالي <span className="text-primary">{searchFilteredReports.length}</span> تقرير
+        {factorySearch.trim() && displayedReports.length !== searchFilteredReports.length ? (
+          <span className="text-[11px] font-semibold text-[var(--color-text-muted)] ms-1">
+            (من {displayedReports.length} بعد التصفية)
+          </span>
+        ) : null}
+      </span>
+      {searchFilteredReports.length > 0 && (
         <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
-          <span className="text-emerald-600">إنتاج: {formatNumber(displayedReports.reduce((s, r) => s + r.quantityProduced, 0))}</span>
-          <span className="text-rose-500">هالك: {formatNumber(displayedReports.reduce((s, r) => s + deriveReportWaste(r), 0))}</span>
+          <span className="text-emerald-600">إنتاج: {formatNumber(searchFilteredReports.reduce((s, r) => s + r.quantityProduced, 0))}</span>
+          <span className="text-rose-500">هالك: {formatNumber(searchFilteredReports.reduce((s, r) => s + deriveReportWaste(r), 0))}</span>
         </div>
       )}
     </div>
@@ -3124,7 +3251,7 @@ export const Reports: React.FC = () => {
         ) : (
           <SelectableTable<ProductionReport>
             tableId="production-reports-main"
-            data={displayedReports}
+            data={searchFilteredReports}
             columns={reportColumns}
             selectAllScope="filtered"
             enableColumnVisibility

@@ -47,6 +47,11 @@ import { ForcedClientUpdateGate } from './components/ForcedClientUpdateGate';
 import { NotificationPopupOverlay } from './components/NotificationPopupOverlay';
 import { setCurrentTenant } from './lib/currentTenant';
 import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
+import {
+  clearLastVisitedTenantSlugIfMatches,
+  getLastVisitedTenantSlug,
+  setLastVisitedTenantSlug,
+} from './lib/lastTenantSlugStorage';
 import { tenantService } from './services/tenantService';
 import { setAppLanguage, type SupportedLanguage } from './src/i18n';
 import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
@@ -59,6 +64,19 @@ import { useAuthStore } from './store/useAuthStore';
 const HomeDashboardRouter = lazyNamed(() => import('./modules/dashboards/pages/HomeDashboardRouter'), 'HomeDashboardRouter');
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
 const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
+
+/** PWA manifest uses `start_url: /`; redirect to last `/t/{slug}/` when known. */
+const RootEntryOrLanding: React.FC = () => {
+  const last = getLastVisitedTenantSlug();
+  if (last) {
+    return <Navigate to={`/t/${encodeURIComponent(last)}/`} replace />;
+  }
+  return (
+    <Suspense fallback={<PageRouteFallback />}>
+      <LandingPage />
+    </Suspense>
+  );
+};
 const TenantLoginGateway = lazyNamed(
   () => import('./modules/auth/pages/TenantLoginGateway'),
   'TenantLoginGateway',
@@ -483,6 +501,7 @@ const TenantLayout: React.FC = () => {
             setGate('ready');
             return;
           }
+          clearLastVisitedTenantSlugIfMatches(tenantSlug);
           setGate('missing');
           return;
         }
@@ -559,6 +578,12 @@ const TenantLayout: React.FC = () => {
       alive = false;
     };
   }, [tenantSlug, isAuthenticated, userProfile?.tenantId, userProfile?.isSuperAdmin]);
+
+  useEffect(() => {
+    if (gate === 'ready' && tenantSlug.trim()) {
+      setLastVisitedTenantSlug(tenantSlug);
+    }
+  }, [gate, tenantSlug]);
 
   if (gate === 'loading') {
     return <AuthBrandedLoadingPage subtitle="جاري تحميل بيانات الشركة..." />;
@@ -877,14 +902,7 @@ const App: React.FC = () => {
           />
           <Route path="/setup" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/setup`} replace />} />
           <Route path="/pending" element={<Navigate to={`/t/${DEFAULT_TENANT_SLUG}/pending`} replace />} />
-          <Route
-            path="/"
-            element={
-              <Suspense fallback={<PageRouteFallback />}>
-                <LandingPage />
-              </Suspense>
-            }
-          />
+          <Route path="/" element={<RootEntryOrLanding />} />
           <Route
             path="/track"
             element={<TrackLegacyRedirect />}
