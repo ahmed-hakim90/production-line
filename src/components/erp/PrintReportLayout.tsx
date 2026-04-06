@@ -84,7 +84,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       kpis,
       sections,
       signatures,
-      version = "v4.0.57",
+      version = __APP_VERSION__,
       exportRootId = "print-root",
       logoUrl,
       brandAccent = HAKIM_IMAGE_PRIMARY,

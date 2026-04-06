@@ -18,6 +18,8 @@ export interface CaptureOptions {
   width?: number;
   /** Optional window width hint for html2canvas layout. */
   windowWidth?: number;
+  /** Optional window height hint for html2canvas clone (avoids clipped/tall captures). */
+  windowHeight?: number;
 }
 
 const applyRtlFontClone = (clonedDoc: Document) => {
@@ -66,9 +68,21 @@ const ensureCairoLoaded = async () => {
 // ─── Capture a DOM element as a canvas ──────────────────────────────────────
 
 const capture = async (el: HTMLElement, options?: CaptureOptions) => {
-  const { cloneRtlAndFonts = true, width, windowWidth } = options ?? {};
+  const { cloneRtlAndFonts = true, width, windowWidth, windowHeight } = options ?? {};
 
   await ensureCairoLoaded();
+
+  /**
+   * html2canvas defaults `windowWidth` to the document width. On phones that is ~360–430px
+   * while print cards use fixed widths (e.g. 640px). The clone then lays out like a narrow
+   * viewport → squeezed column with large side margins in the PNG. Size the clone from the
+   * target element instead (see also StockTransactions share with explicit windowWidth).
+   */
+  const rect = el.getBoundingClientRect();
+  const measuredW = Math.max(1, el.scrollWidth, el.offsetWidth, Math.round(rect.width));
+  const measuredH = Math.max(1, el.scrollHeight, el.offsetHeight, Math.round(rect.height));
+  const winW = windowWidth ?? (width != null ? width : measuredW);
+  const winH = windowHeight ?? measuredH;
 
   return html2canvas(el, {
     scale: 2,
@@ -76,7 +90,8 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
     backgroundColor: '#ffffff',
     logging: false,
     ...(width != null ? { width } : {}),
-    ...(windowWidth != null ? { windowWidth } : {}),
+    windowWidth: winW,
+    windowHeight: winH,
     ...(cloneRtlAndFonts
       ? {
           onclone: (clonedDoc: Document) => {
