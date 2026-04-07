@@ -3952,7 +3952,7 @@ export const Reports: React.FC = () => {
               );
             })()}
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 shrink-0">
-              {can('print') && (
+              {/* {can('print') && (
                 <Button
                   variant="outline"
                   onClick={() => handleSave(true)}
@@ -3962,7 +3962,7 @@ export const Reports: React.FC = () => {
                   <ReportIcon name="print" className="text-sm" />
                   حفظ وطباعة
                 </Button>
-              )}
+              )} */}
               <Button
                 variant="primary"
                 onClick={() => handleSave(false)}
