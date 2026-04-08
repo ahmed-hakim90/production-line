@@ -768,6 +768,23 @@ export interface MonthlyProductionCost {
   calculatedAt?: any;
 }
 
+// â”€â”€â”€ Online dispatch (BOSTA barcodes: admin â†’ warehouse â†’ post) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export type OnlineDispatchStatus = 'pending' | 'at_warehouse' | 'handed_to_post';
+
+export interface OnlineDispatchShipment {
+  id?: string;
+  tenantId: string;
+  barcode: string;
+  status: OnlineDispatchStatus;
+  createdAt?: unknown;
+  handedToWarehouseAt?: unknown;
+  handedToWarehouseByUid?: string;
+  handedToPostAt?: unknown;
+  handedToPostByUid?: string;
+  notes?: string;
+}
+
 // â”€â”€â”€ System Settings (system_settings/{tenantId}) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface WidgetConfig {
@@ -1006,6 +1023,11 @@ export interface RepairSettings {
 }
 
 export interface SystemSettings {
+  /**
+   * Logical path after tenant prefix for the default home screen, e.g. `/online` or `/online/dashboard`.
+   * Empty/undefined keeps legacy HomeDashboardRouter behavior.
+   */
+  defaultHomeLogicalPath?: string;
   dashboardWidgets: Record<string, WidgetConfig[]>;
   customDashboardWidgets?: CustomWidgetConfig[];
   alertSettings: AlertSettings;

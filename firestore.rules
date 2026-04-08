@@ -44,6 +44,13 @@ service cloud.firestore {
         && currentRoleDoc().data.permissions[permissionKey] == true;
     }
 
+    function onlineDispatchReadPerm() {
+      return hasPermission('onlineDispatch.view')
+        || hasPermission('onlineDispatch.manage')
+        || hasPermission('onlineDispatch.handoffToWarehouse')
+        || hasPermission('onlineDispatch.handoffToPost');
+    }
+
     function isActiveUser() {
       return isAuthenticated()
         && exists(currentUserPath())
@@ -524,6 +531,54 @@ service cloud.firestore {
           || hasPermission('routing.manage')
         );
     }
+
+    match /online_dispatch_shipments/{docId} {
+      allow read: if isActiveUser() && sameTenantOrLegacyRead() && onlineDispatchReadPerm();
+      allow create: if isActiveUser() && sameTenantOrLegacyWrite()
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.barcode is string
+        && request.resource.data.barcode.size() >= 1
+        && request.resource.data.barcode.size() <= 512
+        && (
+          (
+            hasPermission('onlineDispatch.manage')
+            && request.resource.data.status == 'pending'
+            && request.resource.data.createdAt is timestamp
+            && (
+              request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt'])
+              || (
+                request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'notes'])
+                && request.resource.data.notes is string
+              )
+            )
+          )
+          || (
+            hasPermission('onlineDispatch.handoffToWarehouse')
+            && request.resource.data.status == 'at_warehouse'
+            && request.resource.data.handedToWarehouseByUid == request.auth.uid
+            && request.resource.data.createdAt is timestamp
+            && request.resource.data.handedToWarehouseAt is timestamp
+            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'handedToWarehouseAt', 'handedToWarehouseByUid'])
+          )
+        );
+      allow update: if isActiveUser()
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == resource.data.tenantId
+        && request.resource.data.barcode == resource.data.barcode
+        && (
+          (resource.data.status == 'pending'
+            && request.resource.data.status == 'at_warehouse'
+            && hasPermission('onlineDispatch.handoffToWarehouse'))
+          || (resource.data.status == 'at_warehouse'
+            && request.resource.data.status == 'handed_to_post'
+            && hasPermission('onlineDispatch.handoffToPost'))
+          || (resource.data.status == 'at_warehouse'
+            && request.resource.data.status == 'pending'
+            && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse')))
+        );
+      allow delete: if false;
+    }
+
     match /{coll}/{docId} {
       allow read: if isBusinessCollection(coll) && sameTenantOrLegacyRead();
       allow create: if isBusinessCollection(coll) && sameTenantOrLegacyWrite();

@@ -140,6 +140,36 @@ export const MENU_CONFIG: MenuGroup[] = [
     ],
   },
   {
+    key: 'online',
+    label: 'الأونلاين',
+    icon: 'local_shipping',
+    children: [
+      {
+        key: 'online-dash',
+        label: 'لوحة الأونلاين',
+        icon: 'dashboard',
+        path: '/online',
+        permission: 'onlineDispatch.view',
+        activePatterns: ['/online', '/online/dashboard'],
+        activePathExcludePrefixes: ['/online/scan'],
+      },
+      {
+        key: 'online-scan-w',
+        label: 'مسح — للمخزن',
+        icon: 'qr_code_scanner',
+        path: '/online/scan/warehouse',
+        permission: 'onlineDispatch.handoffToWarehouse',
+      },
+      {
+        key: 'online-scan-p',
+        label: 'مسح — للبوسطة',
+        icon: 'qr_code_scanner',
+        path: '/online/scan/post',
+        permission: 'onlineDispatch.handoffToPost',
+      },
+    ],
+  },
+  {
     key: 'hr',
     label: 'فريق العمل',
     icon: 'badge',

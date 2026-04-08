@@ -20,6 +20,7 @@ import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
 import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
 import { CATALOG_ROUTES } from './modules/catalog/routes';
 import { PRODUCTION_ROUTES } from './modules/production/routes';
+import { ONLINE_ROUTES } from './modules/online/routes';
 import { QUALITY_ROUTES } from './modules/quality/routes';
 import { HR_ROUTES } from './modules/hr/routes';
 import { COST_ROUTES } from './modules/costs/routes';
@@ -61,7 +62,6 @@ import { AuthBrandedLoadingPage } from './components/system-ui/AuthLoadingState'
 import { useAppInitialization } from './hooks/useAppInitialization';
 import { useAuthStore } from './store/useAuthStore';
 
-const HomeDashboardRouter = lazyNamed(() => import('./modules/dashboards/pages/HomeDashboardRouter'), 'HomeDashboardRouter');
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
 const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
 
@@ -174,10 +174,12 @@ const LoginRedirect: React.FC = () => {
   return <Navigate to={target} replace />;
 };
 
-/** Unified home: content by role permissions */
+const DefaultHomeEntry = lazyNamed(() => import('./modules/dashboards/pages/DefaultHomeEntry'), 'DefaultHomeEntry');
+
+/** Unified home: optional default path from settings, else dashboards by role */
 const HomeRedirect: React.FC = () => (
   <Suspense fallback={<PageRouteFallback />}>
-    <HomeDashboardRouter />
+    <DefaultHomeEntry />
   </Suspense>
 );
 
@@ -192,6 +194,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...INVENTORY_ROUTES,
   ...ATTENDANCE_ROUTES,
   ...REPAIR_ROUTES,
+  ...ONLINE_ROUTES,
 ];
 
 /** `/products` → `products` (real URLs are `/t/:tenantSlug/products`). */

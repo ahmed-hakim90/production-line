@@ -514,3 +514,7 @@
 ## [4.0.105] - 2026-04-07
 
 - add some Edits
+
+## [4.0.106] - 2026-04-08
+
+- Now Add featurs online

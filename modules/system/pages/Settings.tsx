@@ -56,6 +56,7 @@ import { useBackupRestore } from '../hooks/useBackupRestore';
 import { PageHeader } from '../../../components/PageHeader';
 import { CompanyTenantSection } from '../components/settings/CompanyTenantSection';
 import { UiDensitySection } from '../components/settings/UiDensitySection';
+import { DefaultHomePathSection } from '../components/settings/DefaultHomePathSection';
 
 type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'clientVersion' | 'backup';
 
@@ -331,6 +332,8 @@ export const Settings: React.FC = () => {
     setLocalForceClientUpdate,
     localClientUpdateMessageAr,
     setLocalClientUpdateMessageAr,
+    localDefaultHomePath,
+    setLocalDefaultHomePath,
     normalizeQuickActions,
     getQuickActionMatch,
     normalizeCustomWidgets,
@@ -484,6 +487,8 @@ export const Settings: React.FC = () => {
           section === 'clientVersion' ? localForceClientUpdate : systemSettings.forceClientUpdate,
         clientUpdateMessageAr:
           section === 'clientVersion' ? localClientUpdateMessageAr.trim() : systemSettings.clientUpdateMessageAr,
+        defaultHomeLogicalPath:
+          section === 'general' ? localDefaultHomePath.trim() : systemSettings.defaultHomeLogicalPath,
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم الحفظ بنجاح');
@@ -492,7 +497,7 @@ export const Settings: React.FC = () => {
       setSaveMessage('فشل الحفظ');
     }
     setSaving(false);
-  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, localMinimumClientVersion, localForceClientUpdate, localClientUpdateMessageAr, updateSystemSettings]);
+  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, localMinimumClientVersion, localForceClientUpdate, localClientUpdateMessageAr, localDefaultHomePath, updateSystemSettings]);
   const handleSaveAll = useCallback(async () => {
     setSaving(true);
     setSaveMessage('');
@@ -514,6 +519,7 @@ export const Settings: React.FC = () => {
         minimumClientVersion: localMinimumClientVersion.trim(),
         forceClientUpdate: localForceClientUpdate,
         clientUpdateMessageAr: localClientUpdateMessageAr.trim(),
+        defaultHomeLogicalPath: localDefaultHomePath.trim(),
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
@@ -540,6 +546,7 @@ export const Settings: React.FC = () => {
     localMinimumClientVersion,
     localForceClientUpdate,
     localClientUpdateMessageAr,
+    localDefaultHomePath,
     normalizeCustomWidgets,
     normalizeQuickActions,
     updateSystemSettings,
@@ -924,6 +931,10 @@ export const Settings: React.FC = () => {
             saving={saving}
             onSave={() => handleSave('general')}
           />
+
+          {can('settings.edit') && (
+            <DefaultHomePathSection value={localDefaultHomePath} onChange={setLocalDefaultHomePath} />
+          )}
 
           <UiDensitySection />
 

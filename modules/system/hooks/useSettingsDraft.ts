@@ -61,6 +61,7 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     minimumClientVersion: systemSettings.minimumClientVersion ?? '',
     forceClientUpdate: systemSettings.forceClientUpdate === true,
     clientUpdateMessageAr: systemSettings.clientUpdateMessageAr ?? '',
+    defaultHomeLogicalPath: systemSettings.defaultHomeLogicalPath ?? '',
   }), [systemSettings]);
   const sourceSignature = useMemo(() => JSON.stringify(normalizedSource), [normalizedSource]);
   const initialSourceSignatureRef = useRef<string>(sourceSignature);
@@ -124,6 +125,9 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
   const [localClientUpdateMessageAr, setLocalClientUpdateMessageAr] = useState(
     () => normalizedSource.clientUpdateMessageAr,
   );
+  const [localDefaultHomePath, setLocalDefaultHomePath] = useState(
+    () => normalizedSource.defaultHomeLogicalPath,
+  );
 
   useEffect(() => {
     if (sourceSignature === initialSourceSignatureRef.current || didInitialHydrationRef.current) return;
@@ -143,6 +147,7 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     setLocalMinimumClientVersion(normalizedSource.minimumClientVersion);
     setLocalForceClientUpdate(normalizedSource.forceClientUpdate);
     setLocalClientUpdateMessageAr(normalizedSource.clientUpdateMessageAr);
+    setLocalDefaultHomePath(normalizedSource.defaultHomeLogicalPath);
     didInitialHydrationRef.current = true;
   }, [normalizedSource, sourceSignature]);
 
@@ -228,6 +233,8 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     setLocalForceClientUpdate,
     localClientUpdateMessageAr,
     setLocalClientUpdateMessageAr,
+    localDefaultHomePath,
+    setLocalDefaultHomePath,
     normalizeQuickActions,
     getQuickActionMatch,
     normalizeCustomWidgets,

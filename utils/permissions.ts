@@ -70,6 +70,7 @@ export type Permission =
   | 'repair.treasury.view' | 'repair.treasury.manage'
   | 'repair.settings.manage'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
+  | 'onlineDispatch.view' | 'onlineDispatch.manage' | 'onlineDispatch.handoffToWarehouse' | 'onlineDispatch.handoffToPost'
   | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -152,6 +153,16 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'supplyCycles.manage', label: 'إنشاء وتعديل دورات التوريد' },
       { key: 'supplyCycles.close', label: 'إقفال دورة توريد' },
       { key: 'supplyCycles.delete', label: 'حذف دورة توريد (مسودة/فارغة)' },
+    ],
+  },
+  {
+    key: 'online',
+    label: 'الأونلاين (تسليم بوسطة)',
+    permissions: [
+      { key: 'onlineDispatch.view', label: 'عرض لوحة الأونلاين والتقارير اليومية' },
+      { key: 'onlineDispatch.manage', label: 'تسجيل باركود شحنة BOSTA وإدارة السجلات' },
+      { key: 'onlineDispatch.handoffToWarehouse', label: 'مسح: تم التسليم للمخزن' },
+      { key: 'onlineDispatch.handoffToPost', label: 'مسح: تم التسليم للبوسطة' },
     ],
   },
   {
@@ -305,6 +316,8 @@ const PERMISSION_GROUP_ORDER: string[] = [
   'production',
   // Inventory
   'inventory',
+  // Online dispatch
+  'online',
   // Quality
   'quality',
   // HR

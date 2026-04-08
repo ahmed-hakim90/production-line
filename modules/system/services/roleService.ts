@@ -188,6 +188,28 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
         ]),
         roleKey: 'accountant',
       },
+      {
+        name: 'موظف أونلاين (شحن)',
+        color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+        permissions: permsFrom([
+          'dashboard.view',
+          'onlineDispatch.view',
+          'onlineDispatch.manage',
+          'onlineDispatch.handoffToWarehouse',
+          'print',
+          'export',
+        ]),
+      },
+      {
+        name: 'موظف مخزن (بوسطة)',
+        color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+        permissions: permsFrom([
+          'dashboard.view',
+          'onlineDispatch.view',
+          'onlineDispatch.handoffToPost',
+          'print',
+        ]),
+      },
     ];
   }
   return _defaultRoles;
