@@ -66,6 +66,12 @@ export default defineConfig(({ mode }) => {
               },
             ]
           },
+          // If the browser reports "Expected a JavaScript module but server responded with
+          // text/html" for /assets/*.js, the response body is usually index.html (SPA fallback).
+          // Typical causes: (1) stale index.html referencing an old hashed chunk after deploy,
+          // (2) Service Worker or HTTP cache mixing versions — try hard refresh, clear site data,
+          // or unregister the SW (DevTools → Application). (3) Rare: Vercel asset 404; confirm
+          // the chunk exists in the current deployment output.
           workbox: {
             navigateFallback: '/index.html',
             // Skip precaching very large hashed chunks; they are still fetched at runtime.

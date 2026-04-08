@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { useFirestoreUserLabels } from '../utils/firestoreUserLabels';
+import { onlineDispatchCreatorUid, onlineDispatchLastStatusActorUid } from '../utils/onlineDispatchActorUids';
 import { PageHeader } from '../../../components/PageHeader';
 import { usePermission } from '../../../utils/permissions';
 import { onlineDispatchService } from '../services/onlineDispatchService';
@@ -50,6 +52,19 @@ export const OnlineDashboard: React.FC = () => {
       .slice(0, 40);
   }, [rows]);
 
+  const dashboardActorUids = useMemo(() => {
+    const ids: string[] = [];
+    for (const r of recent) {
+      const c = onlineDispatchCreatorUid(r);
+      const l = onlineDispatchLastStatusActorUid(r);
+      if (c) ids.push(c);
+      if (l) ids.push(l);
+    }
+    return ids;
+  }, [recent]);
+
+  const userLabels = useFirestoreUserLabels(dashboardActorUids);
+
   const confirmRevert = async () => {
     if (!revertTarget || !uid) return;
     setRevertBusy(true);
@@ -83,6 +98,8 @@ export const OnlineDashboard: React.FC = () => {
             <thead>
               <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg)]">
                 <th className="text-right py-2 px-3">الباركود</th>
+                <th className="text-right py-2 px-3 min-w-[7rem]">المنشئ</th>
+                <th className="text-right py-2 px-3 min-w-[7rem]">مغيّر الحالة</th>
                 <th className="text-right py-2 px-3">الحالة</th>
                 {canRevertWarehouseScan && (
                   <th className="text-right py-2 px-3 w-[1%] whitespace-nowrap">إجراء</th>
@@ -90,9 +107,26 @@ export const OnlineDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {recent.map((r) => (
+              {recent.map((r) => {
+                const creatorUid = onlineDispatchCreatorUid(r);
+                const lastUid = onlineDispatchLastStatusActorUid(r);
+                return (
                 <tr key={r.id} className="border-b border-[var(--color-border)]/60">
                   <td className="py-2 px-3 font-mono text-xs">{r.barcode}</td>
+                  <td className="py-2 px-3 text-xs text-[var(--color-text)]">
+                    {creatorUid ? (
+                      <span className="break-words">{userLabels[creatorUid] ?? '…'}</span>
+                    ) : (
+                      <span className="text-[var(--color-text-muted)]">—</span>
+                    )}
+                  </td>
+                  <td className="py-2 px-3 text-xs text-[var(--color-text)]">
+                    {lastUid ? (
+                      <span className="break-words">{userLabels[lastUid] ?? '…'}</span>
+                    ) : (
+                      <span className="text-[var(--color-text-muted)]">—</span>
+                    )}
+                  </td>
                   <td className="py-2 px-3">
                     <span
                       className={cn(
@@ -123,11 +157,12 @@ export const OnlineDashboard: React.FC = () => {
                     </td>
                   )}
                 </tr>
-              ))}
+              );
+              })}
               {recent.length === 0 && (
                 <tr>
                   <td
-                    colSpan={canRevertWarehouseScan ? 3 : 2}
+                    colSpan={canRevertWarehouseScan ? 5 : 4}
                     className="py-8 text-center text-[var(--color-text-muted)]"
                   >
                     لا توجد شحنات بعد

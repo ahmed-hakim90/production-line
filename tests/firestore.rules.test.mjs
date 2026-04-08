@@ -253,6 +253,8 @@ await seed();
       createdAt: Timestamp.now(),
       handedToWarehouseAt: Timestamp.now(),
       handedToWarehouseByUid: 'userAODWarehouseOnly',
+      createdByUid: 'userAODWarehouseOnly',
+      lastStatusByUid: 'userAODWarehouseOnly',
     }),
   );
   await assertFails(

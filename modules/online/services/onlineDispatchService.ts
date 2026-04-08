@@ -181,7 +181,7 @@ export const onlineDispatchService = {
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OnlineDispatchShipment) }));
   },
 
-  async createShipment(input: { notes?: string } = {}): Promise<{ id: string; barcode: string }> {
+  async createShipment(input: { notes?: string; createdByUid?: string } = {}): Promise<{ id: string; barcode: string }> {
     if (!isConfigured) throw new Error('Firebase غير مهيأ');
     const tenantId = getCurrentTenantId();
     const barcode = await generateUniqueBarcode();
@@ -193,6 +193,10 @@ export const onlineDispatchService = {
       createdAt: serverTimestamp(),
     };
     if (trimmedNotes) payload.notes = trimmedNotes;
+    if (input.createdByUid) {
+      payload.createdByUid = input.createdByUid;
+      payload.lastStatusByUid = input.createdByUid;
+    }
     const ref = await addDoc(collection(db, COLLECTION), payload);
     return { id: ref.id, barcode };
   },
@@ -233,6 +237,8 @@ export const onlineDispatchService = {
         createdAt: serverTimestamp(),
         handedToWarehouseAt: serverTimestamp(),
         handedToWarehouseByUid: uid,
+        createdByUid: uid,
+        lastStatusByUid: uid,
       });
       cooldown.set(ck, Date.now());
       return { id: ref.id, barcode, status: 'at_warehouse' };
@@ -256,6 +262,7 @@ export const onlineDispatchService = {
         status: 'at_warehouse' as OnlineDispatchStatus,
         handedToWarehouseAt: serverTimestamp(),
         handedToWarehouseByUid: uid,
+        lastStatusByUid: uid,
       });
     });
     cooldown.set(ck, Date.now());
@@ -299,6 +306,7 @@ export const onlineDispatchService = {
         status: 'handed_to_post' as OnlineDispatchStatus,
         handedToPostAt: serverTimestamp(),
         handedToPostByUid: uid,
+        lastStatusByUid: uid,
       });
     });
     cooldown.set(ck, Date.now());
@@ -343,6 +351,7 @@ export const onlineDispatchService = {
         status: 'pending' as OnlineDispatchStatus,
         handedToWarehouseAt: deleteField(),
         handedToWarehouseByUid: deleteField(),
+        lastStatusByUid: _uid,
       });
     });
   },

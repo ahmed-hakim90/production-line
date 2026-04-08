@@ -550,6 +550,17 @@ service cloud.firestore {
                 request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'notes'])
                 && request.resource.data.notes is string
               )
+              || (
+                request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'createdByUid', 'lastStatusByUid'])
+                && request.resource.data.createdByUid == request.auth.uid
+                && request.resource.data.lastStatusByUid == request.auth.uid
+              )
+              || (
+                request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'notes', 'createdByUid', 'lastStatusByUid'])
+                && request.resource.data.notes is string
+                && request.resource.data.createdByUid == request.auth.uid
+                && request.resource.data.lastStatusByUid == request.auth.uid
+              )
             )
           )
           || (
@@ -558,7 +569,9 @@ service cloud.firestore {
             && request.resource.data.handedToWarehouseByUid == request.auth.uid
             && request.resource.data.createdAt is timestamp
             && request.resource.data.handedToWarehouseAt is timestamp
-            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'handedToWarehouseAt', 'handedToWarehouseByUid'])
+            && request.resource.data.createdByUid == request.auth.uid
+            && request.resource.data.lastStatusByUid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'handedToWarehouseAt', 'handedToWarehouseByUid', 'createdByUid', 'lastStatusByUid'])
           )
         );
       allow update: if isActiveUser()

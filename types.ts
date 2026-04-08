@@ -778,6 +778,10 @@ export interface OnlineDispatchShipment {
   barcode: string;
   status: OnlineDispatchStatus;
   createdAt?: unknown;
+  /** Set when an admin creates a pending row, or mirrored on first-scan create paths. */
+  createdByUid?: string;
+  /** Last user who moved the shipment to the current `status` (warehouse / post / revert). */
+  lastStatusByUid?: string;
   handedToWarehouseAt?: unknown;
   handedToWarehouseByUid?: string;
   handedToPostAt?: unknown;

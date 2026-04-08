@@ -18,9 +18,8 @@ import { Input } from '@/components/ui/input';
 import { toast } from '../../../components/Toast';
 import { cn } from '@/lib/utils';
 import { ScanLine } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
-import type { FirestoreUser, OnlineDispatchShipment, OnlineDispatchStatus } from '../../../types';
+import type { OnlineDispatchShipment, OnlineDispatchStatus } from '../../../types';
+import { useFirestoreUserLabels } from '../utils/firestoreUserLabels';
 
 type ScanMode = 'warehouse' | 'post';
 
@@ -61,58 +60,6 @@ function shipmentToPostSessionRow(r: OnlineDispatchShipment & { id: string }): S
     phase: 'post',
     actorUid: r.handedToPostByUid,
   };
-}
-
-function resolveUserLabelFromDoc(data: Partial<FirestoreUser> | undefined, uid: string): string {
-  const name = String(data?.displayName || '').trim();
-  const email = String(data?.email || '').trim();
-  if (name) return name;
-  if (email) return email;
-  return uid.length > 12 ? `${uid.slice(0, 8)}…` : uid;
-}
-
-/** Resolves `users/{uid}` displayName/email for scan actor UIDs shown in the day list. */
-function useActorDisplayLabels(rows: SessionScanRow[]): Record<string, string> {
-  const [labels, setLabels] = useState<Record<string, string>>({});
-  const fetchKey = useMemo(() => {
-    const s = new Set<string>();
-    for (const r of rows) {
-      if (r.actorUid) s.add(r.actorUid);
-    }
-    return [...s].sort().join('|');
-  }, [rows]);
-
-  useEffect(() => {
-    if (!isConfigured || !fetchKey) {
-      setLabels({});
-      return;
-    }
-    const uids = fetchKey.split('|');
-    let cancelled = false;
-    void (async () => {
-      const next: Record<string, string> = {};
-      await Promise.all(
-        uids.map(async (uid) => {
-          try {
-            const snap = await getDoc(doc(db, 'users', uid));
-            if (!snap.exists()) {
-              next[uid] = 'غير معروف';
-              return;
-            }
-            next[uid] = resolveUserLabelFromDoc(snap.data() as Partial<FirestoreUser>, uid);
-          } catch {
-            next[uid] = 'غير معروف';
-          }
-        }),
-      );
-      if (!cancelled) setLabels(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchKey]);
-
-  return labels;
 }
 
 function playFeedbackTone(type: 'success' | 'error') {
@@ -566,7 +513,7 @@ function SessionScanList(props: {
   const { scanMode, dispatchDayStartMs, dayListLoading, rows, canDeleteWarehouse, deletingKey, onDeleteWarehouse } =
     props;
 
-  const actorLabels = useActorDisplayLabels(rows);
+  const actorLabels = useFirestoreUserLabels(rows.map((row) => row.actorUid));
 
   const dispatchDayLabel = new Date(dispatchDayStartMs).toLocaleString('ar-EG', {
     weekday: 'short',
