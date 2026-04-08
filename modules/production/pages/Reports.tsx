@@ -52,7 +52,14 @@ import {
   getProductionReportCostBreakdown,
   type ProductionReportCostBreakdown,
 } from '../../../utils/costCalculations';
-import { ProductionReport, LineWorkerAssignment, WorkOrder, QualityStatus, ReportComponentScrapItem, ProductionLineStatus } from '../../../types';
+import {
+  ProductionReport,
+  LineWorkerAssignment,
+  WorkOrder,
+  QualityStatus,
+  ReportComponentScrapItem,
+  ProductionLineStatus,
+} from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import type { ShareResult } from '../../../utils/reportExport';
 import type {
@@ -63,6 +70,7 @@ import type {
 import type { ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
+import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
 import { useLocation } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import {
@@ -1811,7 +1819,27 @@ export const Reports: React.FC = () => {
       setTimeout(() => setSaveToast(null), 3500);
       return;
     }
-    const payload = { ...form, workersCount: effectiveFormWorkersCount };
+    /** ربط التوريد التلقائي عند الإنشاء يُنفَّذ داخل createReport؛ هنا فقط عند تعديل تقرير لتحديث/إزالة الربط */
+    let autoSupplyCycleId: string | null = null;
+    if (editId) {
+      try {
+        autoSupplyCycleId = await supplyCycleService.findAutoLinkForReport({
+          productId: form.productId,
+          date: form.date,
+          reportType: form.reportType,
+        });
+      } catch {
+        autoSupplyCycleId = null;
+      }
+    }
+
+    const payload = {
+      ...form,
+      workersCount: effectiveFormWorkersCount,
+    } as typeof form & { workersCount: number; supplyCycleId?: string };
+    if (editId) {
+      payload.supplyCycleId = autoSupplyCycleId || '';
+    }
     const duplicated = await hasDuplicateLineSupervisorReport(
       {
         date: payload.date,

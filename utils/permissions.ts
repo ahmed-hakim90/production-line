@@ -25,6 +25,7 @@ export type Permission =
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
   | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only'
+  | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
   | 'assets.view' | 'assets.create' | 'assets.edit' | 'assets.delete' | 'assets.depreciation.run' | 'assets.depreciation.view'
@@ -147,6 +148,10 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'routing.execute', label: 'تنفيذ مسار إنتاج (مشرف)' },
       { key: 'routing.analytics', label: 'تحليلات مسارات الإنتاج' },
       { key: 'lineProductConfig.view', label: 'عرض إعدادات المنتج-الخط' },
+      { key: 'supplyCycles.view', label: 'عرض دورات التوريد (باتش)' },
+      { key: 'supplyCycles.manage', label: 'إنشاء وتعديل دورات التوريد' },
+      { key: 'supplyCycles.close', label: 'إقفال دورة توريد' },
+      { key: 'supplyCycles.delete', label: 'حذف دورة توريد (مسودة/فارغة)' },
     ],
   },
   {

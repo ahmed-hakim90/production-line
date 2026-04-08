@@ -38,7 +38,7 @@ import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/u
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
 import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
-import { FirestoreProduct, ProductionReport } from '../../../types';
+import type { Product, FirestoreProduct, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
 import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
@@ -59,6 +59,7 @@ import { warehouseService } from '../../inventory/services/warehouseService';
 import type { Warehouse as InventoryWarehouse } from '../../inventory/types';
 import { categoryService } from '../../catalog/services/categoryService';
 import { monthlyProductionCostService } from '../../costs/services/monthlyProductionCostService';
+import { reportService } from '../services/reportService';
 import {
   Select,
   SelectContent,
@@ -309,8 +310,45 @@ export const Products: React.FC = () => {
     setCurrentPage(1);
   };
 
+  /** إجمالي ما تم إنتاجه من التقارير (مثل صفحة تفاصيل المنتج)، وليس رصيد مخزن التام */
+  const [lifetimeProducedByProductId, setLifetimeProducedByProductId] = useState<Record<string, number>>({});
+  const [lifetimeProducedReady, setLifetimeProducedReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void reportService
+      .getAll()
+      .then((reports) => {
+        if (cancelled) return;
+        const next: Record<string, number> = {};
+        for (const r of reports) {
+          const pid = String(r.productId || '').trim();
+          if (!pid) continue;
+          next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
+        }
+        setLifetimeProducedByProductId(next);
+        setLifetimeProducedReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLifetimeProducedByProductId({});
+          setLifetimeProducedReady(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const productsForTable = useMemo((): Product[] => {
+    return products.map((p) => ({
+      ...p,
+      totalProduction: lifetimeProducedReady ? (lifetimeProducedByProductId[p.id] ?? 0) : p.totalProduction,
+    }));
+  }, [products, lifetimeProducedByProductId, lifetimeProducedReady]);
+
   const filtered = useMemo(() => {
-    return products.filter((p) => {
+    return productsForTable.filter((p) => {
       const matchSearch =
         !search ||
         p.name.includes(search) ||
@@ -319,7 +357,7 @@ export const Products: React.FC = () => {
       const matchStock = !stockFilter || p.stockStatus === stockFilter;
       return matchSearch && matchCategory && matchStock;
     });
-  }, [products, search, categoryFilter, stockFilter]);
+  }, [productsForTable, search, categoryFilter, stockFilter]);
 
   useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [search, categoryFilter, stockFilter]);
 
@@ -696,7 +734,7 @@ export const Products: React.FC = () => {
     const selectedWarehouse = warehouseId
       ? warehouses.find((w) => w.id === warehouseId)
       : undefined;
-    const data = products.map((p) => {
+    const data = productsForTable.map((p) => {
       const warehouseStock = warehouseId
         ? productWarehouseBalances.getValue(warehouseId, p.id)
         : undefined;
@@ -741,7 +779,7 @@ export const Products: React.FC = () => {
       columnLabels.push('المخزن', 'رصيد المخزن');
     }
     if (visibleColumns.openingStock) columnLabels.push('رصيد مفكك');
-    if (visibleColumns.totalProduction) columnLabels.push('تم الصنع');
+    if (visibleColumns.totalProduction) columnLabels.push('ما تم إنتاجه');
     if (visibleColumns.wasteUnits) columnLabels.push('الهالك');
     if (visibleColumns.stockLevel) columnLabels.push('منتج تام');
 
@@ -970,7 +1008,7 @@ export const Products: React.FC = () => {
                 </th>
                 <th className="erp-th cursor-pointer select-none" onClick={() => handleSort('name')}>المنتج <SortIcon col="name" /></th>
                 {visibleColumns.openingStock && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('openingStock')}>رصيد مفكك <SortIcon col="openingStock" /></th>}
-                {visibleColumns.totalProduction && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('totalProduction')}>تم الصنع <SortIcon col="totalProduction" /></th>}
+                {visibleColumns.totalProduction && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('totalProduction')}>ما تم إنتاجه <SortIcon col="totalProduction" /></th>}
                 {visibleColumns.wasteUnits && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('wasteUnits')}>الهالك <SortIcon col="wasteUnits" /></th>}
                 {visibleColumns.stockLevel && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('stockLevel')}>منتج تام <SortIcon col="stockLevel" /></th>}
                 {canViewSellingPrice && visibleColumns.sellingPrice && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('sellingPrice')}>سعر البيع <SortIcon col="sellingPrice" /></th>}
@@ -1005,7 +1043,6 @@ export const Products: React.FC = () => {
               )}
               {paginated.map((product) => {
                 const decomposedBalance = productWarehouseBalances.getValue(planSettings?.decomposedSourceWarehouseId, product.id);
-                const finishedBalance = productWarehouseBalances.getValue(planSettings?.finishedReceiveWarehouseId, product.id);
                 const wasteBalance = productWarehouseBalances.getValue(planSettings?.wasteReceiveWarehouseId, product.id);
                 const finalBalance = productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, product.id);
                 return (
@@ -1045,7 +1082,7 @@ export const Products: React.FC = () => {
                   {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-[var(--color-text)] tabular-nums">{formatNumber(decomposedBalance)}</td>}
                   {visibleColumns.totalProduction && <td className="px-4 py-4 text-center">
                     <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-emerald-50 text-emerald-600 text-sm font-bold tabular-nums">
-                      {formatNumber(finishedBalance)}
+                      {formatNumber(product.totalProduction)}
                     </span>
                   </td>}
                   {visibleColumns.wasteUnits && <td className="px-4 py-4 text-center">
@@ -1764,7 +1801,7 @@ export const Products: React.FC = () => {
             <div className="p-6 space-y-3 overflow-y-auto flex-1 min-h-0">
               {[
                 { key: 'openingStock' as const, label: 'رصيد مفكك', icon: 'call_split' },
-                { key: 'totalProduction' as const, label: 'تم الصنع', icon: 'precision_manufacturing' },
+                { key: 'totalProduction' as const, label: 'ما تم إنتاجه', icon: 'precision_manufacturing' },
                 { key: 'wasteUnits' as const, label: 'الهالك', icon: 'delete_sweep' },
                 { key: 'stockLevel' as const, label: 'منتج تام', icon: 'inventory_2' },
                 ...(canViewSellingPrice ? [{ key: 'sellingPrice' as const, label: 'سعر البيع', icon: 'sell' }] : []),

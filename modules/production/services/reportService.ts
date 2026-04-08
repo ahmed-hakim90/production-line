@@ -15,6 +15,7 @@ import {
   startAfter,
   QueryDocumentSnapshot,
   runTransaction,
+  deleteField,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { ProductionReport } from '../../../types';
@@ -70,6 +71,12 @@ export interface ReportPagedParams {
   employeeId?: string;
 }
 
+export interface ReportSupplyCyclePagedParams {
+  supplyCycleId: string;
+  limit?: number;
+  cursor?: FirestoreCursor;
+}
+
 async function generateNextReportCode(): Promise<string> {
   const year = new Date().getFullYear();
   try {
@@ -112,6 +119,43 @@ export const reportService = {
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
     return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
+  async listBySupplyCycleIdPaged(
+    params: ReportSupplyCyclePagedParams,
+  ): Promise<FirestorePageResult<ProductionReport>> {
+    if (!isConfigured || !params.supplyCycleId?.trim()) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+    const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));
+    const constraints: any[] = [
+      where('supplyCycleId', '==', params.supplyCycleId.trim()),
+      orderBy('date', 'desc'),
+    ];
+    if (params.cursor) constraints.push(startAfter(params.cursor));
+    constraints.push(limit(pageSize));
+    const q = tenantQuery(db, COLLECTION, ...constraints);
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
+  async listAllBySupplyCycleId(supplyCycleId: string): Promise<ProductionReport[]> {
+    if (!isConfigured || !supplyCycleId.trim()) return [];
+    const all: ProductionReport[] = [];
+    let cursor: FirestoreCursor = null;
+    do {
+      const page = await this.listBySupplyCycleIdPaged({
+        supplyCycleId: supplyCycleId.trim(),
+        limit: MAX_PAGE_SIZE,
+        cursor,
+      });
+      all.push(...page.items);
+      if (!page.hasMore || !page.nextCursor) break;
+      cursor = page.nextCursor;
+    } while (true);
+    return all;
   },
 
   async getAll(): Promise<ProductionReport[]> {
@@ -221,8 +265,14 @@ export const reportService = {
           throw createReportDuplicateError();
         }
 
+        const supplyCycleId =
+          typeof data.supplyCycleId === 'string' && data.supplyCycleId.trim()
+            ? data.supplyCycleId.trim()
+            : undefined;
+        const { supplyCycleId: _sc, ...dataWithoutCycle } = data as typeof data & { supplyCycleId?: string };
         tx.set(reportRef, {
-          ...data,
+          ...dataWithoutCycle,
+          ...(supplyCycleId ? { supplyCycleId } : {}),
           tenantId: getCurrentTenantId(),
           reportType: resolveReportType(data.reportType),
           reportCode,
@@ -256,6 +306,11 @@ export const reportService = {
     if (!isConfigured) return;
     try {
       const { id: _id, createdAt: _ts, ...fields } = data as any;
+      if (Object.prototype.hasOwnProperty.call(fields, 'supplyCycleId') && fields.supplyCycleId === '') {
+        fields.supplyCycleId = deleteField();
+      } else if (typeof fields.supplyCycleId === 'string' && fields.supplyCycleId.trim()) {
+        fields.supplyCycleId = fields.supplyCycleId.trim();
+      }
       if (Object.keys(fields).length === 0) return;
 
       const reportRef = doc(db, COLLECTION, id);

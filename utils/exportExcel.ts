@@ -5,7 +5,17 @@
  */
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import type { ProductionReport, Product, FirestoreProduct, FirestoreEmployee, WorkOrder, WorkOrderStatus, ProductionPlan } from '../types';
+import type {
+  ProductionReport,
+  Product,
+  FirestoreProduct,
+  FirestoreEmployee,
+  WorkOrder,
+  WorkOrderStatus,
+  ProductionPlan,
+  SupplyCycle,
+  SupplyCycleWasteLine,
+} from '../types';
 import type { ProductCostBreakdown } from './productCostBreakdown';
 import { formatOperationDateTime, getReportWaste } from './calculations';
 import type { FirestoreAttendanceLog, FirestoreLeaveRequest, FirestoreEmployeeLoan } from '../modules/hr/types';
@@ -871,4 +881,46 @@ export function exportLoanRequestsMultiSheet(
   const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `${fileName}.xlsx`);
+}
+
+/** تصدير قائمة دورات التوريد */
+export function exportSupplyCyclesListExcel(
+  rows: Record<string, string | number>[],
+  dateLabel: string,
+) {
+  downloadExcel(rows, 'دورات التوريد', `دورات-التوريد-${dateLabel}`);
+}
+
+/** تصدير تفاصيل دورة: ملخص + سطور الهالك */
+export function exportSupplyCycleDetailExcel(
+  cycle: SupplyCycle,
+  summaryRow: Record<string, string | number>,
+  wasteLines: SupplyCycleWasteLine[],
+  wasteLabelMap: (line: SupplyCycleWasteLine) => string,
+) {
+  const dateLabel = new Date().toISOString().slice(0, 10);
+  const safeCode = String(cycle.batchCode || 'batch').replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ');
+  const wb = XLSX.utils.book_new();
+
+  const summarySheet = XLSX.utils.json_to_sheet([summaryRow]);
+  if (!summarySheet['!views']) summarySheet['!views'] = [];
+  (summarySheet['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'ملخص');
+
+  const wasteRows = wasteLines.map((w) => ({
+    المصدر: w.source === 'manual' ? 'يدوي' : 'تقرير إنتاج',
+    الكمية: w.quantity,
+    ملاحظة: w.note || '—',
+    تفاصيل: wasteLabelMap(w),
+  }));
+  const wasteSheet = XLSX.utils.json_to_sheet(
+    wasteRows.length ? wasteRows : [{ المصدر: '—', الكمية: 0, ملاحظة: 'لا توجد سطور', تفاصيل: '—' }],
+  );
+  if (!wasteSheet['!views']) wasteSheet['!views'] = [];
+  (wasteSheet['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, wasteSheet, 'هالك يدوي');
+
+  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `دورة-توريد-${safeCode}-${dateLabel}.xlsx`);
 }

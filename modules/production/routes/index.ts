@@ -19,6 +19,8 @@ const PlanBuilderPage = lazyNamed(() => import('../routing/pages/PlanBuilderPage
 const ExecutionPage = lazyNamed(() => import('../routing/pages/ExecutionPage'), 'ExecutionPage');
 const RoutingAnalyticsPage = lazyNamed(() => import('../routing/pages/RoutingAnalyticsPage'), 'RoutingAnalyticsPage');
 const LineWorkerAssignment = lazyNamed(() => import('../pages/LineWorkerAssignment'), 'LineWorkerAssignment');
+const SupplyCyclesList = lazyNamed(() => import('../pages/SupplyCyclesList'), 'SupplyCyclesList');
+const SupplyCycleDetail = lazyNamed(() => import('../pages/SupplyCycleDetail'), 'SupplyCycleDetail');
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/lines', permission: 'lines.view', component: Lines },
@@ -32,6 +34,8 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/production-workers', permission: 'productionWorkers.view', component: ProductionWorkers },
   { path: '/production-workers/:id', permission: 'productionWorkers.view', component: ProductionWorkerDetails },
   { path: '/reports', permission: 'reports.view', component: Reports },
+  { path: '/supply-cycles', permission: 'supplyCycles.view', component: SupplyCyclesList },
+  { path: '/supply-cycles/:cycleId', permission: 'supplyCycles.view', component: SupplyCycleDetail },
   { path: '/quick-action', permission: 'quickAction.view', component: QuickAction },
   { path: '/line-workers', permission: 'lineWorkers.view', component: LineWorkerAssignment },
   { path: '/production/routing/analytics', permission: 'routing.analytics', component: RoutingAnalyticsPage },

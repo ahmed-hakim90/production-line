@@ -9,6 +9,7 @@ export interface ExportImportPageRegistryItem {
 
 export const EXPORT_IMPORT_PAGE_REGISTRY: ExportImportPageRegistryItem[] = [
   { key: 'reports', label: 'صفحة التقارير', path: '/reports' },
+  { key: 'supply_cycles', label: 'صفحة دورات التوريد', path: '/supply-cycles' },
   { key: 'products', label: 'صفحة المنتجات', path: '/products' },
   { key: 'productionWorkers', label: 'صفحة عمال الإنتاج', path: '/production-workers' },
   { key: 'supervisors', label: 'صفحة المشرفين', path: '/supervisors' },

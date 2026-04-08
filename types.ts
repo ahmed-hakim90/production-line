@@ -220,6 +220,8 @@ export interface ProductionReport {
   indirectByCenterSnapshot?: Record<string, number>;
   notes?: string;
   workOrderId?: string;
+  /** اختياري: ربط التقرير بدورة توريد (باتش) لاحتساب الهالك والتتبع */
+  supplyCycleId?: string;
   reportType?: 'finished_product' | 'component_injection';
   componentScrapItems?: ReportComponentScrapItem[];
   createdAt?: any;
@@ -229,6 +231,50 @@ export interface ReportComponentScrapItem {
   materialId: string;
   materialName: string;
   quantity: number;
+}
+
+/** دورة توريد / باتش — خام أو تام */
+export type SupplyCycleKind = 'raw_material' | 'finished_good';
+export type SupplyCycleStatus = 'draft' | 'open' | 'closed';
+
+export interface SupplyCycle {
+  id?: string;
+  tenantId?: string;
+  /** كود مسلسل تلقائي SC-YYYY-NNNN (Supply Cycle) */
+  batchCode: string;
+  kind: SupplyCycleKind;
+  itemId: string;
+  /** تسمية اختيارية (مثلاً رقم أوردر خارجي) */
+  externalLabel?: string;
+  periodStart: string;
+  periodEnd: string;
+  openingQty: number;
+  receivedQty: number;
+  consumedQty: number;
+  status: SupplyCycleStatus;
+  closedAt?: any;
+  closedByUid?: string;
+  /** لقطات عند الإقفال */
+  closedWasteTotal?: number;
+  closedRemaining?: number;
+  createdAt?: any;
+  createdByUid?: string;
+  updatedAt?: any;
+  updatedByUid?: string;
+}
+
+export type SupplyCycleWasteLineSource = 'manual' | 'production_report';
+
+export interface SupplyCycleWasteLine {
+  id?: string;
+  tenantId?: string;
+  cycleId: string;
+  source: SupplyCycleWasteLineSource;
+  reportId?: string;
+  quantity: number;
+  note?: string;
+  createdAt?: any;
+  createdByUid?: string;
 }
 
 export interface LineStatus {
@@ -816,6 +862,8 @@ export interface PlanSettings {
   efficiencyCalculationMode: 'standard' | 'weighted';
   averageProductionMode: 'daily' | 'weekly' | 'monthly';
   injectionRawMaterialCategoryKeywords: string;
+  /** بادئة كود دورة التوريد (مثال SC) — الصيغة PREFIX-YYYY-NNNN */
+  supplyCycleBatchCodePrefix?: string;
 }
 
 // â”€â”€â”€ General Settings (Branding, Theme, Dashboard Display, Alert Toggles) â”€â”€â”€â”€

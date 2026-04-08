@@ -53,6 +53,7 @@ import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
 import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 import { reportService } from '../modules/production/services/reportService';
+import { supplyCycleService } from '../modules/production/services/supplyCycleService';
 import { lineStatusService } from '../modules/production/services/lineStatusService';
 import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
 import { routingPlanService } from '../modules/production/routing/services/routingPlanService';
@@ -2801,7 +2802,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       }
 
-      const reportData = { ...data, reportType, workOrderId: activeWO?.id || data.workOrderId || '' };
+      let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
+        ...data,
+        reportType,
+        workOrderId: activeWO?.id || data.workOrderId || '',
+      };
+      const rawCycleId =
+        typeof (data as ProductionReport & { supplyCycleId?: string }).supplyCycleId === 'string'
+          ? (data as ProductionReport & { supplyCycleId?: string }).supplyCycleId!.trim()
+          : '';
+      if (!rawCycleId) {
+        try {
+          const linkedCycleId = await supplyCycleService.findAutoLinkForReport({
+            productId: String(data.productId || '').trim(),
+            date: String(data.date || '').trim(),
+            reportType: reportType === 'component_injection' ? 'component_injection' : 'finished_product',
+          });
+          if (linkedCycleId) {
+            reportData = { ...reportData, supplyCycleId: linkedCycleId };
+          }
+        } catch {
+          /* ignore auto-link failures */
+        }
+      }
+
       const { uid, userDisplayName, userEmail } = get();
       trackedOperation = actionTrackerService.startOperation({
         module: 'production',

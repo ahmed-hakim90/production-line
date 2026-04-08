@@ -174,7 +174,6 @@ export const useProductDetail = (id?: string) => {
       const finishedBalance = getWarehouseBalance(systemSettings.planSettings?.finishedReceiveWarehouseId, id);
       const wasteBalance = getWarehouseBalance(systemSettings.planSettings?.wasteReceiveWarehouseId, id);
       const finalBalance = getWarehouseBalance(systemSettings.planSettings?.finalProductWarehouseId, id);
-      const decomposedBalanceAfterProduction = Math.max(0, decomposedBalance - finishedBalance - wasteBalance);
 
       const totalProduced = reports.reduce((sum, row) => sum + Number(row.quantityProduced || 0), 0);
       const totalWaste = reports.reduce((sum, row) => sum + getReportWaste(row), 0);
@@ -447,7 +446,7 @@ export const useProductDetail = (id?: string) => {
         supervisorOptions,
         kpis: [
           { id: "k1", label: "رصيد مفكك", value: decomposedBalance, unit: "وحدة", icon: "inventory_2", tone: "gray" },
-          { id: "k2", label: "رصيد بعد الإنتاج", value: decomposedBalanceAfterProduction, unit: "وحدة", icon: "bar_chart", tone: "amber" },
+          { id: "k2", label: "ما تم إنتاجه", value: totalProduced, unit: "وحدة", icon: "factory", tone: "amber" },
           { id: "k3", label: "تم الصنع", value: finishedBalance, unit: "وحدة", icon: "inventory_2", tone: "blue" },
           { id: "k4", label: "الهالك", value: wasteBalance, unit: "وحدة", icon: "bar_chart", tone: "coral" },
           { id: "k5", label: "منتج تام", value: finalBalance, unit: "وحدة", icon: "inventory_2", tone: "teal" },

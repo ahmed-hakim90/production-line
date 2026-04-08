@@ -4,6 +4,7 @@ import { useTenantNavigate } from "@/lib/useTenantNavigate";
 import {
   BarChart3,
   Boxes,
+  Factory,
   FileText,
   LineChart,
   Loader2,
@@ -35,6 +36,7 @@ import type { ProductMaterial } from "../../../types";
 import { useGlobalModalManager } from "../../../components/modal-manager/GlobalModalManager";
 import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
 import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
+import { calculateWasteRatio } from "@/utils/calculations";
 import { usePermission } from "../../../utils/permissions";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +87,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   insights: LineChart,
   bar_chart: BarChart3,
   description: FileText,
+  /** إنتاج / ما تم إنتاجه */
+  factory: Factory,
 };
 
 const renderIcon = (name: string, size = 16, className = "") => {
@@ -305,6 +309,61 @@ export const ProductDetails: React.FC = () => {
 
   const pageSize = 10;
   const filteredUniqueDays = useMemo(() => new Set(filteredReports.map((row) => row.date)).size, [filteredReports]);
+
+  /** مؤشرات وأداء تتبع فلاتر الفترة/الخط/المشرف (نفس منطق الجداول والرسوم) */
+  const displayKpis = useMemo(() => {
+    if (!data?.kpis) return [];
+    const producedFiltered = filteredReports.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const wasteFiltered = filteredReports.reduce((sum, row) => sum + Number(row.waste || 0), 0);
+    const wasteRatioPct = calculateWasteRatio(wasteFiltered, producedFiltered + wasteFiltered);
+    return data.kpis.map((kpi) => {
+      if (kpi.id === "k2") return { ...kpi, value: producedFiltered };
+      if (kpi.id === "k6") return { ...kpi, value: `${wasteRatioPct}%` };
+      return kpi;
+    });
+  }, [data?.kpis, filteredReports]);
+
+  const displayPerformanceCards = useMemo(() => {
+    if (!data?.performanceCards) return [];
+    const totalQty = filteredReports.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const avgDaily =
+      filteredUniqueDays > 0 ? Math.round(totalQty / filteredUniqueDays) : 0;
+
+    const lineTotals = new Map<string, number>();
+    filteredReports.forEach((row) => {
+      const name = String(row.line || "").trim();
+      if (!name || name === "—") return;
+      lineTotals.set(name, (lineTotals.get(name) || 0) + Number(row.quantity || 0));
+    });
+    let bestLineName = "—";
+    let bestQty = 0;
+    lineTotals.forEach((qty, name) => {
+      if (qty > bestQty) {
+        bestQty = qty;
+        bestLineName = name;
+      }
+    });
+
+    const totalWorkerHours = filteredReports.reduce(
+      (sum, row) => sum + Number(row.workers || 0) * Number(row.hours || 0),
+      0,
+    );
+    const avgAssembly =
+      totalQty > 0 ? Number(((totalWorkerHours * 60) / totalQty).toFixed(2)) : 0;
+
+    return data.performanceCards.map((card) => {
+      if (card.id === "p1") return { ...card, value: `${avgDaily} وحدة/يوم` };
+      if (card.id === "p2") return { ...card, value: bestLineName };
+      if (card.id === "p3") {
+        return {
+          ...card,
+          value: avgAssembly > 0 ? `${avgAssembly} دقيقة/وحدة` : "—",
+        };
+      }
+      return card;
+    });
+  }, [data?.performanceCards, filteredReports, filteredUniqueDays]);
+
   const totalPages = Math.max(1, Math.ceil(filteredReports.length / pageSize));
   const rawMaterialCost = useMemo(
     () => productMaterials.reduce((sum, row) => sum + Number(row.quantityUsed || 0) * Number(row.unitCost || 0), 0),
@@ -701,7 +760,7 @@ export const ProductDetails: React.FC = () => {
           <SectionSkeleton rows={3} height={68} />
         ) : (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-            {data.kpis.map((kpi) => {
+            {displayKpis.map((kpi) => {
               const wrap = TONE_ICON_WRAP[kpi.tone];
               const value = typeof kpi.value === "number" ? arNumber(kpi.value) : kpi.value;
               return (
@@ -729,7 +788,7 @@ export const ProductDetails: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:col-span-2">
-              {data.performanceCards.map((item) => {
+              {displayPerformanceCards.map((item) => {
                 const valueCls = TONE_VALUE_TEXT[item.tone];
                 return (
                   <div key={item.id} className={cn("space-y-2 p-3", NESTED_TILE)}>

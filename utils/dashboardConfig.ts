@@ -215,6 +215,7 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   efficiencyCalculationMode: 'standard',
   averageProductionMode: 'daily',
   injectionRawMaterialCategoryKeywords: 'حقن',
+  supplyCycleBatchCodePrefix: 'SC',
 };
 
 export const DEFAULT_BRANDING: BrandingSettings = {

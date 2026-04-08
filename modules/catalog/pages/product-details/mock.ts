@@ -50,7 +50,7 @@ export const PRODUCT_DETAIL_MOCK: ProductDetailData = {
   supervisorOptions: ["كل المشرفين", "رامى ابراهيم اسكندر ابراهيم", "محمد عبدالوهاب علي"],
   kpis: [
     { id: "k1", label: "رصيد مفكك", value: 9000, unit: "وحدة", icon: "grid_view", tone: "teal" },
-    { id: "k2", label: "رصيد بعد الإنتاج", value: 8967, unit: "وحدة", icon: "trending_up", tone: "teal" },
+    { id: "k2", label: "ما تم إنتاجه", value: 8967, unit: "وحدة", icon: "factory", tone: "amber" },
     { id: "k3", label: "تم الصنع", value: 33, unit: "وحدة", icon: "stars", tone: "blue" },
     { id: "k4", label: "الهالك", value: 0, unit: "وحدة", icon: "warning", tone: "coral" },
     { id: "k5", label: "منتج تام", value: 714, unit: "وحدة", icon: "check_circle", tone: "teal" },

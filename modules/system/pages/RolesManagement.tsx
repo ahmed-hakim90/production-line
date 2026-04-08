@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card } from '../components/UI';
 import {
@@ -8,8 +9,11 @@ import {
 } from '../../../utils/permissions';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { userService } from '../../../services/userService';
+import { withTenantPath } from '../../../lib/tenantPaths';
 
 export const RolesManagement: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const roles = useAppStore((s) => s.roles);
   const deleteRole = useAppStore((s) => s.deleteRole);
   const userRoleId = useAppStore((s) => s.userRoleId);
@@ -17,10 +21,61 @@ export const RolesManagement: React.FC = () => {
   const { openModal } = useGlobalModalManager();
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [userCountByRoleId, setUserCountByRoleId] = useState<Record<string, number>>({});
+  const [userCountsLoading, setUserCountsLoading] = useState(true);
+
+  const roleIdsKey = useMemo(
+    () =>
+      [...roles]
+        .map((r) => r.id)
+        .filter(Boolean)
+        .sort()
+        .join(','),
+    [roles],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setUserCountsLoading(true);
+      try {
+        const users = await userService.getAll();
+        if (cancelled) return;
+        const counts: Record<string, number> = {};
+        users.forEach((u) => {
+          const rid = String(u.roleId || '').trim();
+          if (!rid) return;
+          counts[rid] = (counts[rid] || 0) + 1;
+        });
+        setUserCountByRoleId(counts);
+      } catch {
+        if (!cancelled) setUserCountByRoleId({});
+      } finally {
+        if (!cancelled) setUserCountsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roleIdsKey]);
 
   const handleDelete = async (id: string) => {
-    await deleteRole(id);
-    setDeleteConfirmId(null);
+    setDeleteBusy(true);
+    try {
+      const users = await userService.getAll();
+      const linked = users.filter((u) => String(u.roleId || '').trim() === id);
+      if (linked.length > 0) {
+        window.alert(
+          `لا يمكن حذف الدور: يوجد ${linked.length} مستخدم مرتبط بهذا الدور. عيّن لهم دوراً آخر من «إدارة المستخدمين» ثم أعد المحاولة.`,
+        );
+        return;
+      }
+      await deleteRole(id);
+      setDeleteConfirmId(null);
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   const enabledCount = (perms: Record<string, boolean>) => Object.values(perms).filter(Boolean).length;
@@ -31,7 +86,9 @@ export const RolesManagement: React.FC = () => {
       <div className="erp-page-head">
         <div className="erp-page-title-block">
           <h1 className="page-title">الأدوار والصلاحيات</h1>
-          <p className="page-subtitle">إدارة الأدوار والتحكم في صلاحيات المستخدمين</p>
+          <p className="page-subtitle">
+            إدارة الأدوار والتحكم في صلاحيات المستخدمين. لعرض من له أي دور أو تغيير دور مستخدم، استخدم «إدارة المستخدمين» (صلاحية منفصلة عن إدارة الأدوار).
+          </p>
         </div>
         {can('roles.manage') && (
           <div className="erp-page-actions">
@@ -85,6 +142,23 @@ export const RolesManagement: React.FC = () => {
                     <div className="text-right shrink-0">
                       <p className="text-lg font-bold text-[var(--color-text)] leading-tight">{count}</p>
                       <p className="text-[10px] font-bold text-[var(--color-text-muted)] leading-tight">/ {ALL_PERMISSIONS.length} صلاحية</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/80 px-3 py-2">
+                    <span className="text-[11px] font-bold text-[var(--color-text-muted)]">مستخدمو الدور</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-[var(--color-text)] tabular-nums">
+                        {userCountsLoading ? '…' : userCountByRoleId[role.id!] ?? 0}
+                      </span>
+                      {can('users.manage') && role.id && (
+                        <Link
+                          to={withTenantPath(tenantSlug, `/system/users?role=${encodeURIComponent(role.id)}`)}
+                          className="text-[11px] font-bold text-primary hover:underline"
+                        >
+                          عرض القائمة
+                        </Link>
+                      )}
                     </div>
                   </div>
 
@@ -162,13 +236,29 @@ export const RolesManagement: React.FC = () => {
               <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف الدور</h3>
-            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا الدور؟ تأكد من عدم وجود مستخدمين مرتبطين به.</p>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">
+              {deleteConfirmId && (userCountByRoleId[deleteConfirmId] ?? 0) > 0 ? (
+                <>
+                  لا يمكن المتابعة: يوجد{' '}
+                  <span className="font-bold text-[var(--color-text)]">{userCountByRoleId[deleteConfirmId]}</span>{' '}
+                  مستخدم مرتبط بهذا الدور. عيّن لهم دوراً آخر من إدارة المستخدمين ثم احذف الدور.
+                </>
+              ) : (
+                'هل أنت متأكد من حذف هذا الدور؟ لن يُسمح بالحذف إن وُجد مستخدمون مرتبطون به.'
+              )}
+            </p>
             <div className="flex items-center justify-center gap-2">
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirmId(null)}>إلغاء</button>
+              <button className="btn btn-secondary" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusy}>
+                إلغاء
+              </button>
               <button
-                className="btn"
+                className="btn disabled:opacity-50"
                 style={{ background: '#ef4444', color: '#fff', borderColor: '#ef4444' }}
                 onClick={() => handleDelete(deleteConfirmId)}
+                disabled={
+                  deleteBusy ||
+                  Boolean(deleteConfirmId && (userCountByRoleId[deleteConfirmId] ?? 0) > 0)
+                }
               >
                 <span className="material-icons-round" style={{ fontSize: 15 }}>delete</span>
                 نعم، احذف

@@ -104,6 +104,27 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
         </div>
 
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="material-icons-round text-primary text-lg">inventory_2</span>
+            <p className="text-sm font-bold text-[var(--color-text)]">بادئة كود دورة التوريد (باتش)</p>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)] mb-3">
+            تُستخدم في الصيغة PREFIX-سنة-تسلسل (مثال SC-2026-0001). حروف وأرقام إنجليزية فقط، 2–6 أحرف.
+          </p>
+          <input
+            type="text"
+            maxLength={6}
+            className="w-full max-w-xs border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-mono uppercase"
+            value={localPlanSettings.supplyCycleBatchCodePrefix ?? 'SC'}
+            onChange={(e) => {
+              const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+              setLocalPlanSettings((p) => ({ ...p, supplyCycleBatchCodePrefix: v || 'SC' }));
+            }}
+            placeholder="SC"
+          />
+        </div>
+
+        <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">warehouse</span>
             <p className="text-sm font-bold text-[var(--color-text)]">مخزن استقبال الإنتاج</p>

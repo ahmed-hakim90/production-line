@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Button, LoadingSkeleton } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -41,6 +42,7 @@ export const UsersManagement: React.FC = () => {
   const createUser = useAppStore((s) => s.createUser);
   const currentUid = useAppStore((s) => s.uid);
   const { openModal } = useGlobalModalManager();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<UserManagementRow[]>([]);
   const [roles, setRoles] = useState<FirestoreRole[]>([]);
@@ -50,6 +52,7 @@ export const UsersManagement: React.FC = () => {
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'not_created'>('all');
+  const roleFilter = searchParams.get('role') || 'all';
   const statusTabs: Array<{ key: 'all' | 'active' | 'pending' | 'not_created'; label: string }> = [
     { key: 'all', label: 'الكل' },
     { key: 'pending', label: 'انتظار الموافقة' },
@@ -98,6 +101,10 @@ export const UsersManagement: React.FC = () => {
       if (statusFilter === 'active' && !row.user.isActive) return false;
       if (statusFilter === 'pending' && row.user.isActive) return false;
       if (statusFilter === 'not_created' && row.user.isActive) return false;
+      if (roleFilter !== 'all') {
+        const rid = String(row.user.roleId || '').trim();
+        if (rid !== roleFilter) return false;
+      }
       if (!needle) return true;
       const email = String(row.user.email || '').toLowerCase();
       const displayName = getUserDisplayName(row).toLowerCase();
@@ -108,7 +115,28 @@ export const UsersManagement: React.FC = () => {
         employeeName.includes(needle)
       );
     });
-  }, [rows, query, statusFilter]);
+  }, [rows, query, statusFilter, roleFilter]);
+
+  const roleFilterOptions = useMemo(
+    () =>
+      sortByName(roles.filter((r) => r.id)).map((role) => ({
+        value: String(role.id || ''),
+        label: String(role.name || role.id || ''),
+      })),
+    [roles],
+  );
+
+  const setRoleFilterParam = (value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (!value || value === 'all') next.delete('role');
+        else next.set('role', value);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const createEmployeeOptions = useMemo(() => {
     return employees
@@ -246,7 +274,11 @@ export const UsersManagement: React.FC = () => {
     'الموظف المرتبط': row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط',
     'الحالة': row.user.isActive ? 'مفعل' : 'انتظار الموافقة',
   }));
-  const activeFilterCount = [query.trim(), statusFilter !== 'all' ? statusFilter : ''].filter(Boolean).length;
+  const activeFilterCount = [
+    query.trim(),
+    statusFilter !== 'all' ? statusFilter : '',
+    roleFilter !== 'all' ? roleFilter : '',
+  ].filter(Boolean).length;
 
   const handleApproveUserAccess = async (
     row: UserManagementRow,
@@ -347,7 +379,7 @@ export const UsersManagement: React.FC = () => {
     <div className="space-y-4 erp-ds-clean">
       <PageHeader
         title="إدارة المستخدمين"
-        subtitle="إنشاء المستخدمين يدوياً وربطهم بالموظفين والتحكم في التفعيل والحذف النهائي"
+        subtitle="إنشاء المستخدمين يدوياً وربطهم بالموظفين وتعيين الدور والتحكم في التفعيل والحذف النهائي. زر «فك الربط» في نافذة المستخدم يخص الموظف وليس الدور — لتغيير الدور اختر دوراً آخر واحفظ."
         backAction={false}
         extra={(
           <>
@@ -430,9 +462,18 @@ export const UsersManagement: React.FC = () => {
               })),
               width: 'w-[180px]',
             },
+            {
+              key: 'role',
+              placeholder: 'كل الأدوار',
+              options: roleFilterOptions,
+              width: 'w-[200px]',
+            },
           ]}
-          quickFilterValues={{ status: statusFilter }}
-          onQuickFilterChange={(_, value) => setStatusFilter(value as 'all' | 'active' | 'pending' | 'not_created')}
+          quickFilterValues={{ status: statusFilter, role: roleFilter }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'status') setStatusFilter(value as 'all' | 'active' | 'pending' | 'not_created');
+            if (key === 'role') setRoleFilterParam(value);
+          }}
           onApply={() => undefined}
           applyLabel="عرض"
           extra={activeFilterCount > 0 ? (
@@ -442,6 +483,7 @@ export const UsersManagement: React.FC = () => {
               onClick={() => {
                 setQuery('');
                 setStatusFilter('all');
+                setRoleFilterParam('all');
               }}
             >
               مسح ({activeFilterCount})
