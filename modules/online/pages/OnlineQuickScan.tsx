@@ -17,7 +17,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '../../../components/Toast';
 import { cn } from '@/lib/utils';
-import type { OnlineDispatchShipment, OnlineDispatchStatus } from '../../../types';
+import { ScanLine } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db, isConfigured } from '../../auth/services/firebase';
+import type { FirestoreUser, OnlineDispatchShipment, OnlineDispatchStatus } from '../../../types';
 
 type ScanMode = 'warehouse' | 'post';
 
@@ -29,6 +32,8 @@ type SessionScanRow = {
   scannedAtMs: number;
   /** Which scan screen recorded this row */
   phase: 'warehouse' | 'post';
+  /** User who performed this phase's handoff (warehouse vs post), when stored on the shipment */
+  actorUid?: string;
 };
 type InputMode = 'manual' | 'camera';
 
@@ -41,6 +46,7 @@ function shipmentToWarehouseSessionRow(r: OnlineDispatchShipment & { id: string 
     status: r.status,
     scannedAtMs,
     phase: 'warehouse',
+    actorUid: r.handedToWarehouseByUid,
   };
 }
 
@@ -53,7 +59,60 @@ function shipmentToPostSessionRow(r: OnlineDispatchShipment & { id: string }): S
     status: r.status,
     scannedAtMs,
     phase: 'post',
+    actorUid: r.handedToPostByUid,
   };
+}
+
+function resolveUserLabelFromDoc(data: Partial<FirestoreUser> | undefined, uid: string): string {
+  const name = String(data?.displayName || '').trim();
+  const email = String(data?.email || '').trim();
+  if (name) return name;
+  if (email) return email;
+  return uid.length > 12 ? `${uid.slice(0, 8)}…` : uid;
+}
+
+/** Resolves `users/{uid}` displayName/email for scan actor UIDs shown in the day list. */
+function useActorDisplayLabels(rows: SessionScanRow[]): Record<string, string> {
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const fetchKey = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rows) {
+      if (r.actorUid) s.add(r.actorUid);
+    }
+    return [...s].sort().join('|');
+  }, [rows]);
+
+  useEffect(() => {
+    if (!isConfigured || !fetchKey) {
+      setLabels({});
+      return;
+    }
+    const uids = fetchKey.split('|');
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, string> = {};
+      await Promise.all(
+        uids.map(async (uid) => {
+          try {
+            const snap = await getDoc(doc(db, 'users', uid));
+            if (!snap.exists()) {
+              next[uid] = 'غير معروف';
+              return;
+            }
+            next[uid] = resolveUserLabelFromDoc(snap.data() as Partial<FirestoreUser>, uid);
+          } catch {
+            next[uid] = 'غير معروف';
+          }
+        }),
+      );
+      if (!cancelled) setLabels(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchKey]);
+
+  return labels;
 }
 
 function playFeedbackTone(type: 'success' | 'error') {
@@ -336,6 +395,9 @@ export const OnlineQuickScan: React.FC = () => {
     return <Navigate to="/online" replace />;
   }
 
+  const dayListLoading = scanMode === 'warehouse' ? warehouseListLoading : postListLoading;
+  const dayScanCount = scanMode === 'warehouse' ? warehouseDayRows.length : postDayRows.length;
+
   return (
     <div className="erp-page max-w-lg mx-auto space-y-6 px-2 sm:px-0">
       <PageHeader
@@ -346,6 +408,11 @@ export const OnlineQuickScan: React.FC = () => {
             : 'يُعرض أدناه هل الباركود مسجّل؛ ثم سجّل التسليم للبوسطة عند جاهزية الشحنة'
         }
         icon="search"
+        secondaryAction={{
+          label: 'عودة للوحة',
+          icon: 'layout_dashboard',
+          onClick: () => navigate('/online'),
+        }}
       />
 
       <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:p-6 space-y-4">
@@ -367,6 +434,50 @@ export const OnlineQuickScan: React.FC = () => {
           >
             {cameraPriming ? 'جاري طلب الكاميرا…' : 'كاميرا الموبايل'}
           </Button>
+        </div>
+        <div
+          className={cn(
+            'flex items-stretch justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm',
+            scanMode === 'warehouse'
+              ? 'border-sky-500/35 bg-gradient-to-l from-sky-500/[0.14] to-transparent dark:from-sky-500/20'
+              : 'border-emerald-500/35 bg-gradient-to-l from-emerald-500/[0.14] to-transparent dark:from-emerald-500/20',
+          )}
+          aria-live="polite"
+          role="status"
+        >
+          <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 text-right">
+            <div className="flex items-center justify-end gap-2">
+              <span className="text-sm font-bold leading-tight text-[var(--color-text)]">
+                عدد المسح اليوم
+              </span>
+              <ScanLine
+                className={cn(
+                  'h-5 w-5 shrink-0',
+                  scanMode === 'warehouse'
+                    ? 'text-sky-600 dark:text-sky-400'
+                    : 'text-emerald-600 dark:text-emerald-400',
+                )}
+                aria-hidden
+              />
+            </div>
+            <span className="text-[11px] leading-snug text-[var(--color-text-muted)]">
+              يُحتسب من الساعة {WAREHOUSE_DISPATCH_DAY_START_HOUR}:00 صباحًا (بداية يوم العمل)
+            </span>
+          </div>
+          <div
+            className={cn(
+              'flex min-h-[3.5rem] min-w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-xl px-3 tabular-nums',
+              scanMode === 'warehouse'
+                ? 'bg-sky-600/20 text-sky-950 dark:bg-sky-500/25 dark:text-sky-50'
+                : 'bg-emerald-600/20 text-emerald-950 dark:bg-emerald-500/25 dark:text-emerald-50',
+            )}
+          >
+            {dayListLoading ? (
+              <span className="text-3xl font-bold leading-none animate-pulse opacity-60">…</span>
+            ) : (
+              <span className="text-3xl font-bold leading-none tracking-tight">{dayScanCount}</span>
+            )}
+          </div>
         </div>
         {/* <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
           على الموبايل (خصوصاً Safari على آيفون) يجب السماح بالكاميرا من نافذة المتصفح عند الضغط أعلاه؛ إن لم تظهر، تحقق من إعدادات الموقع أو أن الصفحة تُفتح عبر HTTPS.
@@ -417,23 +528,12 @@ export const OnlineQuickScan: React.FC = () => {
             onScannerError={(m) => toast.error(m)}
           />
         )}
-
-        <div className="flex flex-wrap gap-2 pt-1">
-          {inputMode === 'manual' && (
-            <Button type="button" className="h-12 min-w-[120px] text-base" onClick={() => void runScan(value)} disabled={busy}>
-              تسجيل
-            </Button>
-          )}
-          <Button type="button" variant="outline" className="h-12 min-w-[120px] text-base" onClick={() => navigate('/online')}>
-            عودة للوحة
-          </Button>
-        </div>
       </div>
 
       <SessionScanList
         scanMode={scanMode}
         dispatchDayStartMs={dispatchDayStartMs}
-        dayListLoading={scanMode === 'warehouse' ? warehouseListLoading : postListLoading}
+        dayListLoading={dayListLoading}
         rows={scanMode === 'warehouse' ? warehouseDayRows : postDayRows}
         canDeleteWarehouse={canRevertWarehouseScan}
         deletingKey={deletingKey}
@@ -465,6 +565,8 @@ function SessionScanList(props: {
 }) {
   const { scanMode, dispatchDayStartMs, dayListLoading, rows, canDeleteWarehouse, deletingKey, onDeleteWarehouse } =
     props;
+
+  const actorLabels = useActorDisplayLabels(rows);
 
   const dispatchDayLabel = new Date(dispatchDayStartMs).toLocaleString('ar-EG', {
     weekday: 'short',
@@ -510,6 +612,13 @@ function SessionScanList(props: {
                 <div className="min-w-0 space-y-1">
                   <p className="font-mono text-xs font-semibold break-all dir-ltr text-left">{row.barcode}</p>
                   <p className="text-xs text-[var(--color-text-muted)]">
+                    {row.actorUid ? (
+                      <>
+                        من {actorLabels[row.actorUid] ?? '…'} ·{' '}
+                      </>
+                    ) : (
+                      <>من غير مسجّل · </>
+                    )}
                     {new Date(row.scannedAtMs).toLocaleString('ar-EG', {
                       hour: '2-digit',
                       minute: '2-digit',
