@@ -102,12 +102,12 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
               className="w-[180px] sm:w-[200px]"
             />
           </div>
-          {can('onlineDispatch.handoffToWarehouse') && (
+          {(can('onlineDispatch.handoffToWarehouse') || can('onlineDispatch.manage')) && (
             <Button type="button" variant="default" onClick={() => navigate('/online/scan/warehouse')}>
               مسح — للمخزن
             </Button>
           )}
-          {can('onlineDispatch.handoffToPost') && (
+          {(can('onlineDispatch.handoffToPost') || can('onlineDispatch.manage')) && (
             <Button type="button" variant="secondary" onClick={() => navigate('/online/scan/post')}>
               مسح — للبوسطة
             </Button>

@@ -51,6 +51,18 @@ service cloud.firestore {
         || hasPermission('onlineDispatch.handoffToPost');
     }
 
+    /** Warehouse scan create/update, or full online manager. */
+    function onlineDispatchCanWarehouseHandoff() {
+      return hasPermission('onlineDispatch.handoffToWarehouse')
+        || hasPermission('onlineDispatch.manage');
+    }
+
+    /** Post handoff update, or full online manager. */
+    function onlineDispatchCanPostHandoff() {
+      return hasPermission('onlineDispatch.handoffToPost')
+        || hasPermission('onlineDispatch.manage');
+    }
+
     function isActiveUser() {
       return isAuthenticated()
         && exists(currentUserPath())
@@ -564,7 +576,7 @@ service cloud.firestore {
             )
           )
           || (
-            hasPermission('onlineDispatch.handoffToWarehouse')
+            onlineDispatchCanWarehouseHandoff()
             && request.resource.data.status == 'at_warehouse'
             && request.resource.data.handedToWarehouseByUid == request.auth.uid
             && request.resource.data.createdAt is timestamp
@@ -581,10 +593,10 @@ service cloud.firestore {
         && (
           (resource.data.status == 'pending'
             && request.resource.data.status == 'at_warehouse'
-            && hasPermission('onlineDispatch.handoffToWarehouse'))
+            && onlineDispatchCanWarehouseHandoff())
           || (resource.data.status == 'at_warehouse'
             && request.resource.data.status == 'handed_to_post'
-            && hasPermission('onlineDispatch.handoffToPost'))
+            && onlineDispatchCanPostHandoff())
           || (resource.data.status == 'at_warehouse'
             && request.resource.data.status == 'pending'
             && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse')))

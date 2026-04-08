@@ -150,6 +150,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         icon: 'dashboard',
         path: '/online',
         permission: 'onlineDispatch.view',
+        anyOfPermissions: ['onlineDispatch.view', 'onlineDispatch.manage'],
         activePatterns: ['/online', '/online/dashboard'],
         activePathExcludePrefixes: ['/online/scan'],
       },
@@ -159,6 +160,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         icon: 'qr_code_scanner',
         path: '/online/scan/warehouse',
         permission: 'onlineDispatch.handoffToWarehouse',
+        anyOfPermissions: ['onlineDispatch.handoffToWarehouse', 'onlineDispatch.manage'],
       },
       {
         key: 'online-scan-p',
@@ -166,6 +168,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         icon: 'qr_code_scanner',
         path: '/online/scan/post',
         permission: 'onlineDispatch.handoffToPost',
+        anyOfPermissions: ['onlineDispatch.handoffToPost', 'onlineDispatch.manage'],
       },
     ],
   },

@@ -22,7 +22,7 @@ export function resolveDefaultHomeLogicalPath(
   const n = normalizeDefaultHomeLogicalPath(raw);
   if (!n || n === '/') return null;
   if (n === '/online' || n === '/online/dashboard') {
-    return can('onlineDispatch.view') ? n : null;
+    return can('onlineDispatch.view') || can('onlineDispatch.manage') ? n : null;
   }
   return null;
 }

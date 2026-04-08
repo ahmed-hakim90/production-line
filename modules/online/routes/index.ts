@@ -5,11 +5,23 @@ const OnlineDashboard = lazyNamed(() => import('../pages/OnlineDashboard'), 'Onl
 const OnlineQuickScan = lazyNamed(() => import('../pages/OnlineQuickScan'), 'OnlineQuickScan');
 
 export const ONLINE_ROUTES: AppRouteDef[] = [
-  { path: '/online', permission: 'onlineDispatch.view', component: OnlineDashboard },
-  { path: '/online/dashboard', permission: 'onlineDispatch.view', component: OnlineDashboard },
+  {
+    path: '/online',
+    permissionsAny: ['onlineDispatch.view', 'onlineDispatch.manage'],
+    component: OnlineDashboard,
+  },
+  {
+    path: '/online/dashboard',
+    permissionsAny: ['onlineDispatch.view', 'onlineDispatch.manage'],
+    component: OnlineDashboard,
+  },
   {
     path: '/online/scan/:mode',
-    permissionsAny: ['onlineDispatch.handoffToWarehouse', 'onlineDispatch.handoffToPost'],
+    permissionsAny: [
+      'onlineDispatch.manage',
+      'onlineDispatch.handoffToWarehouse',
+      'onlineDispatch.handoffToPost',
+    ],
     component: OnlineQuickScan,
   },
 ];

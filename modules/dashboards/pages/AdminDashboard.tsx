@@ -1487,7 +1487,7 @@ export const AdminDashboard: React.FC = () => {
 
       <CustomDashboardWidgets dashboardKey="adminDashboard" systemSettings={systemSettings} />
 
-      {can('onlineDispatch.view') && (
+      {(can('onlineDispatch.view') || can('onlineDispatch.manage')) && (
         <Card>
           <div className="flex flex-col sm:flex-row sm:items-start gap-3 mb-4">
             <div className="flex items-start gap-2 min-w-0">

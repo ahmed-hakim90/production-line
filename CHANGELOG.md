@@ -534,3 +534,7 @@
 ## [4.0.110] - 2026-04-08
 
 - Add Edit redirect
+
+## [4.0.111] - 2026-04-08
+
+- Add Edit redirect 2

@@ -20,7 +20,7 @@ export const HomeDashboardRouter: React.FC = () => {
   if (can('adminDashboard.view')) return <AdminDashboard />;
   if (can('factoryDashboard.view')) return <FactoryManagerDashboard />;
   if (can('employeeDashboard.view')) return <EmployeeDashboard />;
-  if (can('onlineDispatch.view')) {
+  if (can('onlineDispatch.view') || can('onlineDispatch.manage')) {
     return <Navigate to={withTenantPath(tenantSlug, '/online')} replace />;
   }
   return <Dashboard />;

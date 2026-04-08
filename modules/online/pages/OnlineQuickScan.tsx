@@ -123,9 +123,9 @@ export const OnlineQuickScan: React.FC = () => {
 
   const allowed =
     scanMode === 'warehouse'
-      ? can('onlineDispatch.handoffToWarehouse')
+      ? can('onlineDispatch.handoffToWarehouse') || can('onlineDispatch.manage')
       : scanMode === 'post'
-        ? can('onlineDispatch.handoffToPost')
+        ? can('onlineDispatch.handoffToPost') || can('onlineDispatch.manage')
         : false;
 
   const [value, setValue] = useState('');
