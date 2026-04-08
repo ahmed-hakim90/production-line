@@ -57,6 +57,7 @@ import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
+import { OnlineDispatchKpisSection } from '../../online/components/OnlineDispatchKpisSection';
 import { adminService, type SystemUsers } from '../services/adminService';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
@@ -1485,6 +1486,27 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       <CustomDashboardWidgets dashboardKey="adminDashboard" systemSettings={systemSettings} />
+
+      {can('onlineDispatch.view') && (
+        <Card>
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3 mb-4">
+            <div className="flex items-start gap-2 min-w-0">
+              {renderDashboardIcon('local_shipping', 'text-primary text-xl shrink-0 mt-0.5')}
+              <div>
+                <h3 className="text-sm font-bold text-[var(--color-text)]">الأونلاين — تسليم بوسطة</h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  مؤشرات الطابور والتسليمات والتسجيلات حسب الفترة (نفس منطق لوحة الأونلاين)
+                </p>
+              </div>
+            </div>
+            <GhostButton type="button" onClick={() => navigate('/online')} className="sm:mr-auto shrink-0">
+              {renderDashboardIcon('open_in_new', 'text-sm')}
+              <span>لوحة الأونلاين الكاملة</span>
+            </GhostButton>
+          </div>
+          <OnlineDispatchKpisSection compact showControls={false} />
+        </Card>
+      )}
 
 
       {/* â”€â”€ Operational KPIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}

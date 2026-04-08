@@ -1275,6 +1275,22 @@
         { "fieldPath": "tenantId", "order": "ASCENDING" },
         { "fieldPath": "barcode", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "online_dispatch_shipments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "handedToWarehouseAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "online_dispatch_shipments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "handedToPostAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -576,7 +576,10 @@ service cloud.firestore {
             && request.resource.data.status == 'pending'
             && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse')))
         );
-      allow delete: if false;
+      allow delete: if isActiveUser()
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && resource.data.status == 'at_warehouse'
+        && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse'));
     }
 
     match /{coll}/{docId} {

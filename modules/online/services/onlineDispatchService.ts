@@ -6,10 +6,13 @@ import {
   getDocs,
   limit,
   onSnapshot,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   where,
+  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
@@ -21,8 +24,19 @@ const COLLECTION = 'online_dispatch_shipments';
 export const BOSTA_BARCODE_PREFIX = 'BOSTA_';
 /** Max length for stored/scanned barcodes (aligned with Firestore rules). */
 export const MAX_DISPATCH_BARCODE_LENGTH = 512;
+/** Tracking number length after BOSTA_ (labels may use 6–15 digits). */
+const MIN_TRACK_DIGITS = 6;
+const MAX_TRACK_DIGITS = 15;
 const DIGITS_LEN = 10;
 const SCAN_COOLDOWN_MS = 1200;
+/** Local «day» for warehouse handoff lists: rolls at this hour (default 08:00). */
+export const WAREHOUSE_DISPATCH_DAY_START_HOUR = 8;
+
+export type OnlineDispatchScanResult = {
+  id: string;
+  barcode: string;
+  status: OnlineDispatchStatus;
+};
 
 const cooldown = new Map<string, number>();
 
@@ -30,14 +44,63 @@ function cooldownKey(kind: 'w' | 'p', barcode: string) {
   return `${kind}:${barcode}`;
 }
 
-/** Trim only; barcode value must match what is stored on the shipment. */
+/**
+ * Extracts the numeric tracking id from labels like `BOSTA_81355112`, `D-04-81355112`, or digits-only.
+ */
+export function extractBostaTrackingDigits(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const upper = t.toUpperCase();
+  const prefixAt = upper.indexOf(BOSTA_BARCODE_PREFIX.toUpperCase());
+  if (prefixAt !== -1) {
+    const after = t.slice(prefixAt + BOSTA_BARCODE_PREFIX.length);
+    const m = after.match(/^\d+/);
+    if (m && m[0].length >= MIN_TRACK_DIGITS && m[0].length <= MAX_TRACK_DIGITS) return m[0];
+  }
+  const end = t.match(/(\d{6,})$/);
+  if (end && end[1].length <= MAX_TRACK_DIGITS) return end[1];
+  const allDigits = t.replace(/\D/g, '');
+  if (allDigits.length >= MIN_TRACK_DIGITS && allDigits.length <= MAX_TRACK_DIGITS) return allDigits;
+  return null;
+}
+
+/** Canonical form `BOSTA_<digits>` when a tracking id is found; otherwise trimmed raw (legacy). */
 export function normalizeBostaBarcode(raw: string): string {
+  const digits = extractBostaTrackingDigits(raw);
+  if (digits) return `${BOSTA_BARCODE_PREFIX}${digits}`;
   return raw.trim();
 }
 
 export function isValidDispatchBarcode(s: string): boolean {
   const t = s.trim();
+  if (!t || t.length > MAX_DISPATCH_BARCODE_LENGTH) return false;
+  const p = BOSTA_BARCODE_PREFIX;
+  if (t.length >= p.length && t.slice(0, p.length).toUpperCase() === p.toUpperCase()) {
+    const rest = t.slice(p.length);
+    if (!/^\d+$/.test(rest)) return false;
+    return rest.length >= MIN_TRACK_DIGITS && rest.length <= MAX_TRACK_DIGITS;
+  }
+  return true;
+}
+
+function isQueryableBarcodeCandidate(b: string): boolean {
+  const t = b.trim();
   return t.length > 0 && t.length <= MAX_DISPATCH_BARCODE_LENGTH;
+}
+
+async function findFirstShipmentDocByBarcodes(
+  candidates: string[],
+): Promise<QueryDocumentSnapshot | null> {
+  const seen = new Set<string>();
+  for (const b of candidates) {
+    const t = b.trim();
+    if (!isQueryableBarcodeCandidate(t) || seen.has(t)) continue;
+    seen.add(t);
+    const q = query(tenantQuery(db, COLLECTION, where('barcode', '==', t)), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) return snap.docs[0]!;
+  }
+  return null;
 }
 
 function randomDigits(len: number): string {
@@ -67,8 +130,56 @@ export async function generateUniqueBarcode(): Promise<string> {
   throw new Error('تعذر توليد باركود فريد، حاول مرة أخرى');
 }
 
+/**
+ * Start of the current warehouse «dispatch day» in local time: [day 08:00, next day 08:00).
+ * Before 08:00, the window begins yesterday at 08:00.
+ */
+export function getWarehouseDispatchDayStartMs(
+  atMs: number = Date.now(),
+  boundaryHour: number = WAREHOUSE_DISPATCH_DAY_START_HOUR,
+): number {
+  const at = new Date(atMs);
+  const boundary = new Date(at.getFullYear(), at.getMonth(), at.getDate(), boundaryHour, 0, 0, 0);
+  if (at.getTime() < boundary.getTime()) {
+    boundary.setDate(boundary.getDate() - 1);
+  }
+  return boundary.getTime();
+}
+
 export const onlineDispatchService = {
   collectionName: COLLECTION,
+
+  /**
+   * All shipments whose warehouse handoff timestamp falls in the current dispatch day (from 08:00 local).
+   * Newest handoffs first. Includes rows later handed to post if warehouse scan was today.
+   */
+  async listWarehouseHandoffsForDispatchDay(): Promise<Array<OnlineDispatchShipment & { id: string }>> {
+    if (!isConfigured) return [];
+    const startMs = getWarehouseDispatchDayStartMs();
+    const startTs = Timestamp.fromMillis(startMs);
+    const q = query(
+      tenantQuery(db, COLLECTION, where('handedToWarehouseAt', '>=', startTs), orderBy('handedToWarehouseAt', 'desc')),
+      limit(400),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OnlineDispatchShipment) }));
+  },
+
+  /**
+   * Shipments handed to post within the current dispatch day (from 08:00 local), by `handedToPostAt`.
+   * Newest first. Status is expected to be `handed_to_post`.
+   */
+  async listPostHandoffsForDispatchDay(): Promise<Array<OnlineDispatchShipment & { id: string }>> {
+    if (!isConfigured) return [];
+    const startMs = getWarehouseDispatchDayStartMs();
+    const startTs = Timestamp.fromMillis(startMs);
+    const q = query(
+      tenantQuery(db, COLLECTION, where('handedToPostAt', '>=', startTs), orderBy('handedToPostAt', 'desc')),
+      limit(400),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OnlineDispatchShipment) }));
+  },
 
   async createShipment(input: { notes?: string } = {}): Promise<{ id: string; barcode: string }> {
     if (!isConfigured) throw new Error('Firebase غير مهيأ');
@@ -88,20 +199,19 @@ export const onlineDispatchService = {
 
   async getByBarcode(barcode: string): Promise<(OnlineDispatchShipment & { id: string }) | null> {
     if (!isConfigured) return null;
+    const rawT = barcode.trim();
+    if (!rawT) return null;
     const normalized = normalizeBostaBarcode(barcode);
     if (!isValidDispatchBarcode(normalized)) return null;
-    const q = query(
-      tenantQuery(db, COLLECTION, where('barcode', '==', normalized)),
-      limit(1),
-    );
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const d = snap.docs[0]!;
+    const candidates = rawT === normalized ? [normalized] : [normalized, rawT];
+    const d = await findFirstShipmentDocByBarcodes(candidates);
+    if (!d) return null;
     return { id: d.id, ...(d.data() as OnlineDispatchShipment) };
   },
 
-  async applyWarehouseScan(uid: string, rawBarcode: string): Promise<void> {
+  async applyWarehouseScan(uid: string, rawBarcode: string): Promise<OnlineDispatchScanResult> {
     if (!isConfigured) throw new Error('Firebase غير مهيأ');
+    const rawT = rawBarcode.trim();
     const barcode = normalizeBostaBarcode(rawBarcode);
     if (!isValidDispatchBarcode(barcode)) {
       throw new Error('أدخل باركودًا غير فارغ (حد أقصى ٥١٢ حرفًا)');
@@ -112,11 +222,11 @@ export const onlineDispatchService = {
       throw new Error('تم تجاهل المسح المتكرر السريع لنفس الباركود');
     }
 
-    const q0 = query(tenantQuery(db, COLLECTION, where('barcode', '==', barcode)), limit(1));
-    const snap0 = await getDocs(q0);
-    if (snap0.empty) {
+    const candidates = rawT === barcode ? [barcode] : [barcode, rawT];
+    const found = await findFirstShipmentDocByBarcodes(candidates);
+    if (!found) {
       const tenantId = getCurrentTenantId();
-      await addDoc(collection(db, COLLECTION), {
+      const ref = await addDoc(collection(db, COLLECTION), {
         tenantId,
         barcode,
         status: 'at_warehouse' as OnlineDispatchStatus,
@@ -125,9 +235,10 @@ export const onlineDispatchService = {
         handedToWarehouseByUid: uid,
       });
       cooldown.set(ck, Date.now());
-      return;
+      return { id: ref.id, barcode, status: 'at_warehouse' };
     }
-    const docRef = snap0.docs[0]!.ref;
+    const docRef = found.ref;
+    const row = found.data() as OnlineDispatchShipment;
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(docRef);
       if (!snap.exists()) throw new Error('لا يوجد سجل لهذا الباركود');
@@ -148,10 +259,12 @@ export const onlineDispatchService = {
       });
     });
     cooldown.set(ck, Date.now());
+    return { id: docRef.id, barcode: row.barcode, status: 'at_warehouse' };
   },
 
-  async applyPostScan(uid: string, rawBarcode: string): Promise<void> {
+  async applyPostScan(uid: string, rawBarcode: string): Promise<OnlineDispatchScanResult> {
     if (!isConfigured) throw new Error('Firebase غير مهيأ');
+    const rawT = rawBarcode.trim();
     const barcode = normalizeBostaBarcode(rawBarcode);
     if (!isValidDispatchBarcode(barcode)) {
       throw new Error('أدخل باركودًا غير فارغ (حد أقصى ٥١٢ حرفًا)');
@@ -162,12 +275,13 @@ export const onlineDispatchService = {
       throw new Error('تم تجاهل المسح المتكرر السريع لنفس الباركود');
     }
 
-    const q0 = query(tenantQuery(db, COLLECTION, where('barcode', '==', barcode)), limit(1));
-    const snap0 = await getDocs(q0);
-    if (snap0.empty) {
+    const candidates = rawT === barcode ? [barcode] : [barcode, rawT];
+    const found = await findFirstShipmentDocByBarcodes(candidates);
+    if (!found) {
       throw new Error('هذا الباركود غير مسجّل — امسح من «تسليم للمخزن» أولًا لتسجيله');
     }
-    const docRef = snap0.docs[0]!.ref;
+    const docRef = found.ref;
+    const rowBefore = found.data() as OnlineDispatchShipment;
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(docRef);
       if (!snap.exists()) throw new Error('هذا الباركود غير مسجّل — امسح من «تسليم للمخزن» أولًا لتسجيله');
@@ -188,6 +302,27 @@ export const onlineDispatchService = {
       });
     });
     cooldown.set(ck, Date.now());
+    return { id: docRef.id, barcode: rowBefore.barcode, status: 'handed_to_post' };
+  },
+
+  /**
+   * Permanently removes the shipment document (only while `at_warehouse`).
+   * Requires Firestore rules: manage or handoffToWarehouse.
+   */
+  async deleteWarehouseShipment(_uid: string, docId: string): Promise<void> {
+    if (!isConfigured) throw new Error('Firebase غير مهيأ');
+    const tenantId = getCurrentTenantId();
+    const docRef = doc(db, COLLECTION, docId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) throw new Error('لا يوجد سجل لهذه الشحنة');
+      const cur = snap.data() as OnlineDispatchShipment;
+      if (cur.tenantId !== tenantId) throw new Error('لا يمكن حذف شحنة من مستأجر آخر');
+      if (cur.status !== 'at_warehouse') {
+        throw new Error('يمكن الحذف النهائي فقط لشحنة عند المخزن ولم تُسجَّل للبوسطة بعد');
+      }
+      tx.delete(docRef);
+    });
   },
 
   /**
@@ -250,26 +385,37 @@ function toMillis(ts: unknown): number {
   return Number.isFinite(p) ? p : 0;
 }
 
+/** For UI: warehouse handoff / post handoff timestamps from Firestore. */
+export function onlineDispatchTsToMs(ts: unknown): number {
+  return toMillis(ts);
+}
+
 export function isTimestampInRange(ms: number, startMs: number, endMs: number): boolean {
   if (!ms) return false;
   return ms >= startMs && ms <= endMs;
 }
 
-/** Count handoffs whose timestamps fall within [startMs, endMs] (local day boundaries ok). */
+/** Handoffs in range and creations in range (by timestamps). */
 export function summarizeOnlineDispatchByRange(
   rows: Array<OnlineDispatchShipment & { id: string }>,
   startMs: number,
   endMs: number,
-): { toWarehouse: number; toPost: number; queueAtWarehouse: number } {
+): {
+  toWarehouse: number;
+  toPost: number;
+  createdInPeriod: number;
+} {
   let toWarehouse = 0;
   let toPost = 0;
-  let queueAtWarehouse = 0;
+  let createdInPeriod = 0;
   for (const r of rows) {
-    if (r.status === 'at_warehouse') queueAtWarehouse += 1;
+    const cr = toMillis(r.createdAt);
+    if (isTimestampInRange(cr, startMs, endMs)) createdInPeriod += 1;
+
     const hw = toMillis(r.handedToWarehouseAt);
     if (isTimestampInRange(hw, startMs, endMs)) toWarehouse += 1;
     const hp = toMillis(r.handedToPostAt);
     if (isTimestampInRange(hp, startMs, endMs)) toPost += 1;
   }
-  return { toWarehouse, toPost, queueAtWarehouse };
+  return { toWarehouse, toPost, createdInPeriod };
 }

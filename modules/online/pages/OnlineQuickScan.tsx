@@ -1,26 +1,25 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import {
+  getWarehouseDispatchDayStartMs,
   isValidDispatchBarcode,
   normalizeBostaBarcode,
   onlineDispatchService,
+  onlineDispatchTsToMs,
+  WAREHOUSE_DISPATCH_DAY_START_HOUR,
 } from '../services/onlineDispatchService';
 import { OnlineCameraBarcodeScanner } from '../components/OnlineCameraBarcodeScanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { toast } from '../../../components/Toast';
 import { cn } from '@/lib/utils';
-import type { OnlineDispatchStatus } from '../../../types';
+import type { OnlineDispatchShipment, OnlineDispatchStatus } from '../../../types';
 
 type ScanMode = 'warehouse' | 'post';
-
-const SESSION_MAX = 40;
 
 type SessionScanRow = {
   clientKey: string;
@@ -32,6 +31,30 @@ type SessionScanRow = {
   phase: 'warehouse' | 'post';
 };
 type InputMode = 'manual' | 'camera';
+
+function shipmentToWarehouseSessionRow(r: OnlineDispatchShipment & { id: string }): SessionScanRow {
+  const scannedAtMs = onlineDispatchTsToMs(r.handedToWarehouseAt) || Date.now();
+  return {
+    clientKey: `${r.id}-${scannedAtMs}`,
+    docId: r.id,
+    barcode: r.barcode,
+    status: r.status,
+    scannedAtMs,
+    phase: 'warehouse',
+  };
+}
+
+function shipmentToPostSessionRow(r: OnlineDispatchShipment & { id: string }): SessionScanRow {
+  const scannedAtMs = onlineDispatchTsToMs(r.handedToPostAt) || Date.now();
+  return {
+    clientKey: `${r.id}-${scannedAtMs}`,
+    docId: r.id,
+    barcode: r.barcode,
+    status: r.status,
+    scannedAtMs,
+    phase: 'post',
+  };
+}
 
 function playFeedbackTone(type: 'success' | 'error') {
   const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -102,9 +125,15 @@ export const OnlineQuickScan: React.FC = () => {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>('manual');
-  const [wedgeAutoSubmit, setWedgeAutoSubmit] = useState(true);
   const [cameraPriming, setCameraPriming] = useState(false);
-  const [sessionScans, setSessionScans] = useState<SessionScanRow[]>([]);
+  /** Warehouse: server list — `handedToWarehouseAt` within dispatch day (from 08:00 local). */
+  const [warehouseDayRows, setWarehouseDayRows] = useState<SessionScanRow[]>([]);
+  const [warehouseListLoading, setWarehouseListLoading] = useState(false);
+  /** Post: server list — `handedToPostAt` within the same dispatch day. */
+  const [postDayRows, setPostDayRows] = useState<SessionScanRow[]>([]);
+  const [postListLoading, setPostListLoading] = useState(false);
+  /** Recompute dispatch-day start after 08:00 rollover without full reload. */
+  const [dispatchDayClockTick, setDispatchDayClockTick] = useState(0);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   /** Post mode only: debounced lookup for «مسجّل أم لا». */
   const [postLookup, setPostLookup] = useState<
@@ -113,9 +142,57 @@ export const OnlineQuickScan: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const wedgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const postLookupGenRef = useRef(0);
+  /** Prevents overlapping Firestore runs while the camera keeps decoding frames. */
+  const cameraScanLockRef = useRef(false);
 
   const canRevertWarehouseScan =
     Boolean(uid) && (can('onlineDispatch.manage') || can('onlineDispatch.handoffToWarehouse'));
+
+  const dispatchDayStartMs = useMemo(
+    () => getWarehouseDispatchDayStartMs(Date.now()),
+    [dispatchDayClockTick],
+  );
+
+  useEffect(() => {
+    const id = window.setInterval(() => setDispatchDayClockTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const loadWarehouseDispatchDayList = useCallback(async () => {
+    if (!uid) return;
+    setWarehouseListLoading(true);
+    try {
+      const rows = await onlineDispatchService.listWarehouseHandoffsForDispatchDay();
+      setWarehouseDayRows(rows.map(shipmentToWarehouseSessionRow));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'تعذر تحميل قائمة المخزن');
+    } finally {
+      setWarehouseListLoading(false);
+    }
+  }, [uid]);
+
+  const loadPostDispatchDayList = useCallback(async () => {
+    if (!uid) return;
+    setPostListLoading(true);
+    try {
+      const rows = await onlineDispatchService.listPostHandoffsForDispatchDay();
+      setPostDayRows(rows.map(shipmentToPostSessionRow));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'تعذر تحميل قائمة البوسطة');
+    } finally {
+      setPostListLoading(false);
+    }
+  }, [uid]);
+
+  useEffect(() => {
+    if (scanMode !== 'warehouse' || !uid) return;
+    void loadWarehouseDispatchDayList();
+  }, [scanMode, uid, dispatchDayStartMs, loadWarehouseDispatchDayList]);
+
+  useEffect(() => {
+    if (scanMode !== 'post' || !uid) return;
+    void loadPostDispatchDayList();
+  }, [scanMode, uid, dispatchDayStartMs, loadPostDispatchDayList]);
 
   const selectCameraMode = useCallback(async () => {
     if (inputMode === 'camera') return;
@@ -161,47 +238,17 @@ export const OnlineQuickScan: React.FC = () => {
     async (code: string) => {
       const trimmed = code.trim();
       if (!trimmed || !uid || !scanMode) return;
-      setBusy(true);
+      const isManual = inputMode === 'manual';
+      if (isManual) setBusy(true);
       try {
-        const normalized = normalizeBostaBarcode(trimmed);
         if (scanMode === 'warehouse') {
           await onlineDispatchService.applyWarehouseScan(uid, trimmed);
           toast.success('تم تسجيل التسليم للمخزن');
-          const row = await onlineDispatchService.getByBarcode(normalized);
-          if (row) {
-            setSessionScans((prev) =>
-              [
-                {
-                  clientKey: `${row.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                  docId: row.id,
-                  barcode: row.barcode,
-                  status: row.status,
-                  scannedAtMs: Date.now(),
-                  phase: 'warehouse' as const,
-                },
-                ...prev,
-              ].slice(0, SESSION_MAX),
-            );
-          }
+          await loadWarehouseDispatchDayList();
         } else {
           await onlineDispatchService.applyPostScan(uid, trimmed);
           toast.success('تم تسجيل التسليم للبوسطة');
-          const row = await onlineDispatchService.getByBarcode(normalized);
-          if (row) {
-            setSessionScans((prev) =>
-              [
-                {
-                  clientKey: `${row.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                  docId: row.id,
-                  barcode: row.barcode,
-                  status: row.status,
-                  scannedAtMs: Date.now(),
-                  phase: 'post' as const,
-                },
-                ...prev,
-              ].slice(0, SESSION_MAX),
-            );
-          }
+          await loadPostDispatchDayList();
         }
         playFeedbackTone('success');
         setValue('');
@@ -210,13 +257,11 @@ export const OnlineQuickScan: React.FC = () => {
         toast.error(msg);
         playFeedbackTone('error');
       } finally {
-        setBusy(false);
-        if (inputMode === 'manual') {
-          inputRef.current?.focus();
-        }
+        if (isManual) setBusy(false);
+        if (isManual) inputRef.current?.focus();
       }
     },
-    [scanMode, uid, inputMode],
+    [scanMode, uid, inputMode, loadWarehouseDispatchDayList, loadPostDispatchDayList],
   );
 
   const deleteWarehouseSessionRow = useCallback(
@@ -224,27 +269,31 @@ export const OnlineQuickScan: React.FC = () => {
       if (!uid || entry.phase !== 'warehouse' || entry.status !== 'at_warehouse') return;
       setDeletingKey(entry.clientKey);
       try {
-        await onlineDispatchService.revertWarehouseHandoff(uid, entry.docId);
-        toast.success('تم حذف مسح المخزن — عاد الباركود لانتظار أول مسح');
-        setSessionScans((prev) => prev.filter((r) => r.clientKey !== entry.clientKey));
+        await onlineDispatchService.deleteWarehouseShipment(uid, entry.docId);
+        toast.success('تم حذف السجل نهائيًا من النظام');
+        await loadWarehouseDispatchDayList();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'فشل الحذف');
       } finally {
         setDeletingKey(null);
       }
     },
-    [uid],
+    [uid, loadWarehouseDispatchDayList],
   );
 
   const onCameraDecoded = useCallback(
     (text: string) => {
-      void runScan(text);
+      if (cameraScanLockRef.current) return;
+      cameraScanLockRef.current = true;
+      void runScan(text).finally(() => {
+        cameraScanLockRef.current = false;
+      });
     },
     [runScan],
   );
 
   useEffect(() => {
-    if (!wedgeAutoSubmit || inputMode !== 'manual' || busy) {
+    if (inputMode !== 'manual' || busy) {
       if (wedgeTimerRef.current) {
         clearTimeout(wedgeTimerRef.current);
         wedgeTimerRef.current = null;
@@ -266,7 +315,7 @@ export const OnlineQuickScan: React.FC = () => {
         wedgeTimerRef.current = null;
       }
     };
-  }, [value, wedgeAutoSubmit, inputMode, busy, runScan]);
+  }, [value, inputMode, busy, runScan]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -319,15 +368,15 @@ export const OnlineQuickScan: React.FC = () => {
             {cameraPriming ? 'جاري طلب الكاميرا…' : 'كاميرا الموبايل'}
           </Button>
         </div>
-        <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+        {/* <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
           على الموبايل (خصوصاً Safari على آيفون) يجب السماح بالكاميرا من نافذة المتصفح عند الضغط أعلاه؛ إن لم تظهر، تحقق من إعدادات الموقع أو أن الصفحة تُفتح عبر HTTPS.
-        </p>
+        </p> */}
 
         {inputMode === 'manual' ? (
           <>
-            <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+            {/* <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
               استخدم لوحة المفاتيح أو قارئ الباركود المتصل (يُدخل النص كلوحة مفاتيح): ركّز الحقل ثم امسح، وعادةً يُرسل القارئ زر Enter؛ أو اضغط «تسجيل».
-            </p>
+            </p> */}
             <Input
               ref={inputRef}
               dir="ltr"
@@ -341,17 +390,6 @@ export const OnlineQuickScan: React.FC = () => {
               autoCapitalize="off"
               spellCheck={false}
             />
-            <div className="flex items-start gap-3 rounded-lg border border-[var(--color-border)]/80 bg-[var(--color-bg)] p-3">
-              <Checkbox
-                id="wedge-auto"
-                checked={wedgeAutoSubmit}
-                onCheckedChange={(c) => setWedgeAutoSubmit(c === true)}
-                disabled={busy}
-              />
-              <Label htmlFor="wedge-auto" className="text-sm font-normal leading-snug cursor-pointer">
-                إرسال تلقائي بعد توقف الإدخال لحظة (لقارئ لا يُرسل Enter) — قد يتعارض مع الكتابة اليدوية البطيئة
-              </Label>
-            </div>
             {scanMode === 'post' && postLookup !== 'idle' && (
               <p
                 className={cn(
@@ -375,7 +413,6 @@ export const OnlineQuickScan: React.FC = () => {
         ) : (
           <OnlineCameraBarcodeScanner
             active={inputMode === 'camera'}
-            disabled={busy}
             onDecoded={onCameraDecoded}
             onScannerError={(m) => toast.error(m)}
           />
@@ -395,7 +432,9 @@ export const OnlineQuickScan: React.FC = () => {
 
       <SessionScanList
         scanMode={scanMode}
-        rows={sessionScans.filter((r) => r.phase === scanMode)}
+        dispatchDayStartMs={dispatchDayStartMs}
+        dayListLoading={scanMode === 'warehouse' ? warehouseListLoading : postListLoading}
+        rows={scanMode === 'warehouse' ? warehouseDayRows : postDayRows}
         canDeleteWarehouse={canRevertWarehouseScan}
         deletingKey={deletingKey}
         onDeleteWarehouse={deleteWarehouseSessionRow}
@@ -405,8 +444,8 @@ export const OnlineQuickScan: React.FC = () => {
 };
 
 const PHASE_SESSION_TITLE: Record<ScanMode, string> = {
-  warehouse: 'مسجّل في هذه الجلسة — تسليم للمخزن',
-  post: 'مسجّل في هذه الجلسة — تسليم للبوسطة',
+  warehouse: 'تسليم للمخزن — اليوم (من 8 صباحًا)',
+  post: 'تسليم للبوسطة — اليوم (من 8 صباحًا)',
 };
 
 const STATUS_LABEL: Record<OnlineDispatchStatus, string> = {
@@ -417,20 +456,44 @@ const STATUS_LABEL: Record<OnlineDispatchStatus, string> = {
 
 function SessionScanList(props: {
   scanMode: ScanMode;
+  dispatchDayStartMs: number;
+  dayListLoading: boolean;
   rows: SessionScanRow[];
   canDeleteWarehouse: boolean;
   deletingKey: string | null;
   onDeleteWarehouse: (row: SessionScanRow) => void;
 }) {
-  const { scanMode, rows, canDeleteWarehouse, deletingKey, onDeleteWarehouse } = props;
+  const { scanMode, dispatchDayStartMs, dayListLoading, rows, canDeleteWarehouse, deletingKey, onDeleteWarehouse } =
+    props;
+
+  const dispatchDayLabel = new Date(dispatchDayStartMs).toLocaleString('ar-EG', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const warehouseSubtitle = `كل الشحنات التي سُجِّل لها تسليم المخزن منذ بداية «يوم العمل» عند الساعة ${WAREHOUSE_DISPATCH_DAY_START_HOUR}:00 صباحًا (${dispatchDayLabel}) حتى الآن. يبدأ يوم جديد كل يوم عند نفس الساعة. القائمة من قاعدة البيانات.`;
+
+  const postSubtitle = `كل الشحنات التي سُجِّل لها تسليم البوسطة منذ بداية «يوم العمل» عند الساعة ${WAREHOUSE_DISPATCH_DAY_START_HOUR}:00 صباحًا (${dispatchDayLabel}) حتى الآن. يبدأ يوم جديد كل يوم عند نفس الساعة. القائمة من قاعدة البيانات.`;
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
-      <div className="px-4 py-3 bg-[var(--color-bg)] border-b border-[var(--color-border)] font-bold text-sm">
-        {PHASE_SESSION_TITLE[scanMode]}
+      <div className="px-4 py-3 bg-[var(--color-bg)] border-b border-[var(--color-border)] space-y-1">
+        <div className="font-bold text-sm">{PHASE_SESSION_TITLE[scanMode]}</div>
+        <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+          {scanMode === 'warehouse' ? warehouseSubtitle : postSubtitle}
+        </p>
       </div>
-      {rows.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-[var(--color-text-muted)] text-center">لا توجد عمليات مسح في هذه الجلسة بعد</p>
+      {dayListLoading ? (
+        <p className="px-4 py-6 text-sm text-[var(--color-text-muted)] text-center">جاري تحميل قائمة اليوم…</p>
+      ) : rows.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-[var(--color-text-muted)] text-center">
+          {scanMode === 'warehouse'
+            ? 'لا توجد عمليات مسح مخزن في نطاق اليوم بعد'
+            : 'لا توجد عمليات تسليم بوسطة في نطاق اليوم بعد'}
+        </p>
       ) : (
         <ul className="divide-y divide-[var(--color-border)]/70">
           {rows.map((row) => {
@@ -464,7 +527,7 @@ function SessionScanList(props: {
                     disabled={deletingKey === row.clientKey}
                     onClick={() => void onDeleteWarehouse(row)}
                   >
-                    {deletingKey === row.clientKey ? 'جاري…' : 'حذف المسح'}
+                    {deletingKey === row.clientKey ? 'جاري…' : 'حذف نهائي'}
                   </Button>
                 ) : null}
               </li>
@@ -474,7 +537,7 @@ function SessionScanList(props: {
       )}
       {scanMode === 'warehouse' && (
         <p className="px-4 py-2 text-[11px] text-[var(--color-text-muted)] border-t border-[var(--color-border)]/60 bg-[var(--color-bg)]/50">
-          «حذف المسح» يتراجع عن تسليم المخزن فقط طالما لم يُسجَّل التسليم للبوسطة بعد، ويتطلب صلاحية الإدارة أو مسح المخزن.
+          «حذف نهائي» يزيل سجل الشحنة من قاعدة البيانات بالكامل طالما كانت عند المخزن ولم تُسجَّل للبوسطة بعد؛ يتطلب صلاحية الإدارة أو مسح المخزن.
         </p>
       )}
     </div>

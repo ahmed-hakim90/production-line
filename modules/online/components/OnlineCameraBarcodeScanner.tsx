@@ -12,10 +12,19 @@ function disposeHtml5Scanner(html5: Html5Qrcode | null) {
       /* ignore */
     }
   };
+  /** If start() is still resolving, state may be NOT_STARTED while getUserMedia already opened — stop() throws; close stream via renderedCamera. */
+  const closeRenderedCameraIfAny = () => {
+    const rc = (html5 as unknown as { renderedCamera?: { close: () => Promise<void> } }).renderedCamera;
+    if (rc && typeof rc.close === 'function') {
+      void rc.close().then(clearSafe, clearSafe);
+    } else {
+      clearSafe();
+    }
+  };
   try {
     void html5.stop().then(clearSafe, clearSafe);
   } catch {
-    clearSafe();
+    closeRenderedCameraIfAny();
   }
 }
 
@@ -91,16 +100,14 @@ export const OnlineCameraBarcodeScanner: React.FC<OnlineCameraBarcodeScannerProp
     };
   }, [active, disabled, elementId]);
 
-  if (!active) {
-    return null;
-  }
-
+  /** Keep the host #elementId in the DOM while tearing down so html5-qrcode can stop tracks; hiding avoids `return null` removing the node before useEffect cleanup. */
   return (
-    <div className={cn('space-y-2', className)}>
-      <p className="text-xs text-[var(--color-text-muted)]">{hint}</p>
+    <div className={cn('space-y-2', className, !active && 'hidden')}>
+      <p className={cn('text-xs text-[var(--color-text-muted)]', !active && 'sr-only')}>{hint}</p>
       <div
         id={elementId}
         className="w-full min-h-[220px] rounded-lg overflow-hidden border border-[var(--color-border)] bg-black/5"
+        aria-hidden={!active}
       />
     </div>
   );

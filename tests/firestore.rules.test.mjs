@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { deleteField, doc, getDoc, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, getDoc, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 
 const projectId = `erp-rules-${Date.now()}`;
 const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
@@ -124,6 +124,20 @@ const seed = async () => {
       handedToWarehouseAt: Timestamp.now(),
       handedToWarehouseByUid: 'userAOnlineDispatch',
     });
+    await setDoc(doc(db, 'online_dispatch_shipments', 'odDeleteAtWarehouse'), {
+      tenantId: 'tenantA',
+      barcode: 'BOSTA_8888888888',
+      status: 'at_warehouse',
+      handedToWarehouseAt: Timestamp.now(),
+      handedToWarehouseByUid: 'userAOnlineDispatch',
+    });
+    await setDoc(doc(db, 'online_dispatch_shipments', 'odDeletePostOnly'), {
+      tenantId: 'tenantA',
+      barcode: 'BOSTA_7777777777',
+      status: 'at_warehouse',
+      handedToWarehouseAt: Timestamp.now(),
+      handedToWarehouseByUid: 'userAOnlineDispatch',
+    });
   });
 };
 
@@ -179,7 +193,15 @@ await seed();
   );
 }
 
-// 5) Revert first warehouse handoff: at_warehouse -> pending
+// 5) Hard-delete at_warehouse (manage / handoffToWarehouse); post-only cannot delete
+{
+  const odDb = testEnv.authenticatedContext('userAOnlineDispatch').firestore();
+  await assertSucceeds(deleteDoc(doc(odDb, 'online_dispatch_shipments', 'odDeleteAtWarehouse')));
+  const postOnlyDb = testEnv.authenticatedContext('userAODPostOnly').firestore();
+  await assertFails(deleteDoc(doc(postOnlyDb, 'online_dispatch_shipments', 'odDeletePostOnly')));
+}
+
+// 5b) Revert first warehouse handoff via update: at_warehouse -> pending (dashboard / legacy)
 {
   const odDb = testEnv.authenticatedContext('userAOnlineDispatch').firestore();
   await assertSucceeds(

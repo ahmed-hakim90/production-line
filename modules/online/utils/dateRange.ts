@@ -6,6 +6,16 @@ export function parseYmdToLocalBounds(ymd: string): { startMs: number; endMs: nu
   return { startMs: start.getTime(), endMs: end.getTime() };
 }
 
+/** Inclusive local range from first day 00:00:00 to last day 23:59:59. Swaps if fromYmd is after toYmd. */
+export function parseYmdRangeToLocalBounds(fromYmd: string, toYmd: string): { startMs: number; endMs: number } {
+  const a = parseYmdToLocalBounds(fromYmd);
+  const b = parseYmdToLocalBounds(toYmd);
+  if (a.startMs <= b.startMs) {
+    return { startMs: a.startMs, endMs: b.endMs };
+  }
+  return { startMs: b.startMs, endMs: a.endMs };
+}
+
 export function todayYmd(): string {
   const n = new Date();
   const y = n.getFullYear();
