@@ -13,11 +13,15 @@ import {
   WAREHOUSE_DISPATCH_DAY_START_HOUR,
 } from '../services/onlineDispatchService';
 import { OnlineCameraBarcodeScanner } from '../components/OnlineCameraBarcodeScanner';
+import { OnlineDataPaginationFooter } from '../components/OnlineDataPaginationFooter';
+import { OnlineDispatchStatusBadge } from '../components/OnlineDispatchStatusBadge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from '../../../components/Toast';
 import { cn } from '@/lib/utils';
-import { ScanLine } from 'lucide-react';
+import { Loader2, ScanLine, Trash2 } from 'lucide-react';
 import type { OnlineDispatchShipment, OnlineDispatchStatus } from '../../../types';
 import { useFirestoreUserLabels } from '../utils/firestoreUserLabels';
 
@@ -362,8 +366,17 @@ export const OnlineQuickScan: React.FC = () => {
         }}
       />
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-2">
+      <Card className="shadow-sm">
+        <CardHeader className="border-b bg-muted/30 px-4 py-4 sm:px-6">
+          <CardTitle className="text-base font-semibold">
+            {scanMode === 'warehouse' ? 'مسح المخزن' : 'مسح البوسطة'}
+          </CardTitle>
+          <CardDescription className="text-xs">
+            اختر طريقة الإدخال وتابع عدد عمليات اليوم ضمن يوم العمل (من الساعة {WAREHOUSE_DISPATCH_DAY_START_HOUR}:00).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 sm:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Button
             type="button"
             variant={inputMode === 'manual' ? 'default' : 'outline'}
@@ -384,19 +397,15 @@ export const OnlineQuickScan: React.FC = () => {
         </div>
         <div
           className={cn(
-            'flex items-stretch justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm',
-            scanMode === 'warehouse'
-              ? 'border-sky-500/35 bg-gradient-to-l from-sky-500/[0.14] to-transparent dark:from-sky-500/20'
-              : 'border-emerald-500/35 bg-gradient-to-l from-emerald-500/[0.14] to-transparent dark:from-emerald-500/20',
+            'flex items-stretch justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3 shadow-sm',
+            scanMode === 'warehouse' ? 'border-sky-500/30' : 'border-emerald-500/30',
           )}
           aria-live="polite"
           role="status"
         >
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 text-right">
             <div className="flex items-center justify-end gap-2">
-              <span className="text-sm font-bold leading-tight text-[var(--color-text)]">
-                عدد المسح اليوم
-              </span>
+              <span className="text-sm font-semibold leading-tight text-foreground">عدد المسح اليوم</span>
               <ScanLine
                 className={cn(
                   'h-5 w-5 shrink-0',
@@ -407,16 +416,16 @@ export const OnlineQuickScan: React.FC = () => {
                 aria-hidden
               />
             </div>
-            <span className="text-[11px] leading-snug text-[var(--color-text-muted)]">
+            <span className="text-xs leading-snug text-muted-foreground">
               يُحتسب من الساعة {WAREHOUSE_DISPATCH_DAY_START_HOUR}:00 صباحًا (بداية يوم العمل)
             </span>
           </div>
           <div
             className={cn(
-              'flex min-h-[3.5rem] min-w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-xl px-3 tabular-nums',
+              'flex min-h-[3.5rem] min-w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-md border border-border bg-card px-3 tabular-nums shadow-sm',
               scanMode === 'warehouse'
-                ? 'bg-sky-600/20 text-sky-950 dark:bg-sky-500/25 dark:text-sky-50'
-                : 'bg-emerald-600/20 text-emerald-950 dark:bg-emerald-500/25 dark:text-emerald-50',
+                ? 'text-sky-800 dark:text-sky-100'
+                : 'text-emerald-800 dark:text-emerald-100',
             )}
           >
             {dayListLoading ? (
@@ -435,24 +444,30 @@ export const OnlineQuickScan: React.FC = () => {
             {/* <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
               استخدم لوحة المفاتيح أو قارئ الباركود المتصل (يُدخل النص كلوحة مفاتيح): ركّز الحقل ثم امسح، وعادةً يُرسل القارئ زر Enter؛ أو اضغط «تسجيل».
             </p> */}
-            <Input
-              ref={inputRef}
-              dir="ltr"
-              className={cn('font-mono text-lg h-14 min-h-[3.5rem]', busy && 'opacity-60')}
-              placeholder="الباركود…"
-              value={value}
-              onChange={onChange}
-              onKeyDown={onKeyDown}
-              disabled={busy}
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-            />
+            <div className="space-y-2">
+              <Label htmlFor="online-scan-barcode" className="text-xs text-muted-foreground">
+                الباركود
+              </Label>
+              <Input
+                id="online-scan-barcode"
+                ref={inputRef}
+                dir="ltr"
+                className={cn('min-h-[3.5rem] font-mono text-lg h-14', busy && 'opacity-60')}
+                placeholder="الباركود…"
+                value={value}
+                onChange={onChange}
+                onKeyDown={onKeyDown}
+                disabled={busy}
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+              />
+            </div>
             {scanMode === 'post' && postLookup !== 'idle' && (
               <p
                 className={cn(
                   'text-sm rounded-lg border px-3 py-2',
-                  postLookup === 'loading' && 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)]',
+                  postLookup === 'loading' && 'border-border bg-muted/40 text-muted-foreground',
                   postLookup === 'missing' && 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-100',
                   postLookup === 'pending' && 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-100',
                   postLookup === 'at_warehouse' && 'border-sky-500/40 bg-sky-500/10 text-sky-900 dark:text-sky-100',
@@ -475,7 +490,8 @@ export const OnlineQuickScan: React.FC = () => {
             onScannerError={(m) => toast.error(m)}
           />
         )}
-      </div>
+        </CardContent>
+      </Card>
 
       <SessionScanList
         scanMode={scanMode}
@@ -495,11 +511,7 @@ const PHASE_SESSION_TITLE: Record<ScanMode, string> = {
   post: 'تسليم للبوسطة — اليوم (من 8 صباحًا)',
 };
 
-const STATUS_LABEL: Record<OnlineDispatchStatus, string> = {
-  pending: 'في انتظار المخزن',
-  at_warehouse: 'عند المخزن',
-  handed_to_post: 'تم للبوسطة',
-};
+const SCAN_LIST_PAGE_SIZE = 20;
 
 function SessionScanList(props: {
   scanMode: ScanMode;
@@ -513,7 +525,24 @@ function SessionScanList(props: {
   const { scanMode, dispatchDayStartMs, dayListLoading, rows, canDeleteWarehouse, deletingKey, onDeleteWarehouse } =
     props;
 
-  const actorLabels = useFirestoreUserLabels(rows.map((row) => row.actorUid));
+  const [listPage, setListPage] = useState(1);
+
+  useEffect(() => {
+    setListPage(1);
+  }, [scanMode, dispatchDayStartMs]);
+
+  const listTotalPages = Math.max(1, Math.ceil(rows.length / SCAN_LIST_PAGE_SIZE));
+
+  useEffect(() => {
+    setListPage((p) => Math.min(p, listTotalPages));
+  }, [listTotalPages]);
+
+  const visibleRows = useMemo(
+    () => rows.slice((listPage - 1) * SCAN_LIST_PAGE_SIZE, listPage * SCAN_LIST_PAGE_SIZE),
+    [rows, listPage],
+  );
+
+  const actorLabels = useFirestoreUserLabels(visibleRows.map((row) => row.actorUid));
 
   const dispatchDayLabel = new Date(dispatchDayStartMs).toLocaleString('ar-EG', {
     weekday: 'short',
@@ -528,74 +557,93 @@ function SessionScanList(props: {
   const postSubtitle = `كل الشحنات التي سُجِّل لها تسليم البوسطة منذ بداية «يوم العمل» عند الساعة ${WAREHOUSE_DISPATCH_DAY_START_HOUR}:00 صباحًا (${dispatchDayLabel}) حتى الآن. يبدأ يوم جديد كل يوم عند نفس الساعة. القائمة من قاعدة البيانات.`;
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
-      <div className="px-4 py-3 bg-[var(--color-bg)] border-b border-[var(--color-border)] space-y-1">
-        <div className="font-bold text-sm">{PHASE_SESSION_TITLE[scanMode]}</div>
-        <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+    <Card className="overflow-hidden shadow-sm">
+      <CardHeader className="space-y-1 border-b bg-muted/30 px-4 py-4 sm:px-6">
+        <CardTitle className="text-base font-semibold">{PHASE_SESSION_TITLE[scanMode]}</CardTitle>
+        <CardDescription className="text-xs leading-relaxed">
           {scanMode === 'warehouse' ? warehouseSubtitle : postSubtitle}
-        </p>
-      </div>
+        </CardDescription>
+      </CardHeader>
       {dayListLoading ? (
-        <p className="px-4 py-6 text-sm text-[var(--color-text-muted)] text-center">جاري تحميل قائمة اليوم…</p>
+        <CardContent className="py-8">
+          <p className="text-center text-sm text-muted-foreground">جاري تحميل قائمة اليوم…</p>
+        </CardContent>
       ) : rows.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-[var(--color-text-muted)] text-center">
-          {scanMode === 'warehouse'
-            ? 'لا توجد عمليات مسح مخزن في نطاق اليوم بعد'
-            : 'لا توجد عمليات تسليم بوسطة في نطاق اليوم بعد'}
-        </p>
+        <CardContent className="py-8">
+          <p className="text-center text-sm text-muted-foreground">
+            {scanMode === 'warehouse'
+              ? 'لا توجد عمليات مسح مخزن في نطاق اليوم بعد'
+              : 'لا توجد عمليات تسليم بوسطة في نطاق اليوم بعد'}
+          </p>
+        </CardContent>
       ) : (
-        <ul className="divide-y divide-[var(--color-border)]/70">
-          {rows.map((row) => {
-            const showDelete =
-              scanMode === 'warehouse' &&
-              row.phase === 'warehouse' &&
-              row.status === 'at_warehouse' &&
-              canDeleteWarehouse;
-            return (
-              <li
-                key={row.clientKey}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 text-sm"
-              >
-                <div className="min-w-0 space-y-1">
-                  <p className="font-mono text-xs font-semibold break-all dir-ltr text-left">{row.barcode}</p>
-                  <p className="text-xs text-[var(--color-text-muted)]">
-                    {row.actorUid ? (
-                      <>
-                        من {actorLabels[row.actorUid] ?? '…'} ·{' '}
-                      </>
-                    ) : (
-                      <>من غير مسجّل · </>
-                    )}
-                    {new Date(row.scannedAtMs).toLocaleString('ar-EG', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}{' '}
-                    · {STATUS_LABEL[row.status]}
-                  </p>
-                </div>
-                {showDelete ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/10"
-                    disabled={deletingKey === row.clientKey}
-                    onClick={() => void onDeleteWarehouse(row)}
-                  >
-                    {deletingKey === row.clientKey ? 'جاري…' : 'حذف نهائي'}
-                  </Button>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+        <CardContent className="p-0">
+          <ul className="divide-y divide-border">
+            {visibleRows.map((row) => {
+              const showDelete =
+                scanMode === 'warehouse' &&
+                row.phase === 'warehouse' &&
+                row.status === 'at_warehouse' &&
+                canDeleteWarehouse;
+              return (
+                <li
+                  key={row.clientKey}
+                  className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-left font-mono text-xs font-semibold break-all dir-ltr">{row.barcode}</p>
+                      <OnlineDispatchStatusBadge status={row.status} shortLabel className="shrink-0" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {row.actorUid ? (
+                        <>من {actorLabels[row.actorUid] ?? '…'} · </>
+                      ) : (
+                        <>من غير مسجّل · </>
+                      )}
+                      {new Date(row.scannedAtMs).toLocaleString('ar-EG', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  {showDelete ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive border-destructive/40 hover:bg-destructive/10"
+                      title="حذف نهائي"
+                      aria-label="حذف نهائي"
+                      disabled={deletingKey === row.clientKey}
+                      onClick={() => void onDeleteWarehouse(row)}
+                    >
+                      {deletingKey === row.clientKey ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      )}
+                    </Button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </CardContent>
       )}
+      <OnlineDataPaginationFooter
+        page={listPage}
+        totalPages={listTotalPages}
+        totalItems={rows.length}
+        onPageChange={setListPage}
+        itemLabel={scanMode === 'warehouse' ? 'مسح مخزن' : 'تسليم بوسطة'}
+      />
       {scanMode === 'warehouse' && (
-        <p className="px-4 py-2 text-[11px] text-[var(--color-text-muted)] border-t border-[var(--color-border)]/60 bg-[var(--color-bg)]/50">
+        <p className="border-t border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
           «حذف نهائي» يزيل سجل الشحنة من قاعدة البيانات بالكامل طالما كانت عند المخزن ولم تُسجَّل للبوسطة بعد؛ يتطلب صلاحية الإدارة أو مسح المخزن.
         </p>
       )}
-    </div>
+    </Card>
   );
 }

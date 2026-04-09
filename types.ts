@@ -87,6 +87,11 @@ export interface FirestoreProduct {
   unitsPerCarton?: number;
   sellingPrice?: number;
   autoDeductComponentScrapFromDecomposed?: boolean;
+  /**
+   * Optional seconds/unit for report expected-qty variance when there is no active routing plan,
+   * or the plan has no positive step total. Overridden when an active plan supplies its own basis.
+   */
+  routingTargetUnitSeconds?: number;
 }
 
 export interface ProductMaterial {

@@ -337,13 +337,33 @@ export const exportProductionPlanShortages = (
 
 // ─── Products Export ─────────────────────────────────────────────────────────
 
-interface ProductExportData {
+/** Balances aligned with Products table (decomposed / waste / finished warehouses). */
+export interface ProductExportDisplayBalances {
+  decomposed: number;
+  waste: number;
+  finished: number;
+}
+
+export interface ProductExportMonthlyCostRow {
+  laborCost: number;
+  indirectCost: number;
+  totalCost: number;
+  costPerUnit: number;
+}
+
+export interface ProductExportData {
   product: Product;
   raw: FirestoreProduct;
   costBreakdown?: ProductCostBreakdown | null;
   rawMaterialsDetails?: string;
   warehouseName?: string;
   warehouseStock?: number;
+  /** Table-aligned stock columns; required for new exports. */
+  displayBalances: ProductExportDisplayBalances;
+  /** Sum of quantityProduced from current calendar month reports. */
+  monthlyProductionQty: number;
+  /** Monthly production cost snapshot (same source as Products cost columns). */
+  monthlyCost?: ProductExportMonthlyCostRow | null;
 }
 
 const fmtCost = (v: number) => v > 0 ? Number(v.toFixed(2)) : 0;
@@ -366,28 +386,51 @@ export const PRODUCT_EXPORT_DEFAULTS: ProductExportOptions = {
   chinesePriceCny: false,
 };
 
+export interface ProductExportFileMeta {
+  sheetName: string;
+  /** Without .xlsx */
+  fileBaseName: string;
+}
+
 export const exportAllProducts = (
   data: ProductExportData[],
   includeCosts: boolean,
+  canViewSellingPrice: boolean,
   options: ProductExportOptions = PRODUCT_EXPORT_DEFAULTS,
   cnyToEgpRate: number = 0,
-  columnOrder?: string[]
+  columnOrder?: string[],
+  fileMeta?: ProductExportFileMeta
 ) => {
   const rows = data.map((d) => {
+    const bal = d.displayBalances;
     const base: Record<string, any> = {
       'الكود': d.raw.code,
       'اسم المنتج': d.raw.name,
       'الفئة': d.raw.model || '—',
+      'تارجت المتوقع تقارير (ث)':
+        d.raw.routingTargetUnitSeconds != null && Number(d.raw.routingTargetUnitSeconds) > 0
+          ? Math.round(Number(d.raw.routingTargetUnitSeconds))
+          : '—',
     };
     if (d.warehouseName) {
       base['المخزن'] = d.warehouseName;
       base['رصيد المخزن'] = Number(d.warehouseStock || 0);
     }
     if (options.stock) {
-      base['إجمالي الإنتاج'] = d.product.totalProduction;
-      base['إجمالي الهالك'] = d.product.wasteUnits;
-      base['الرصيد الحالي'] = d.product.stockLevel;
-      base['حالة المخزون'] = d.product.stockStatus === 'available' ? 'متوفر' : d.product.stockStatus === 'low' ? 'منخفض' : 'نفذ';
+      base['رصيد مفكك'] = Number(bal.decomposed);
+      base['ما تم إنتاجه'] = Number(d.product.totalProduction);
+      base['كمية الإنتاج (الشهر الحالي)'] = Number(d.monthlyProductionQty);
+      base['الهالك'] = Number(bal.waste);
+      base['منتج تام'] = Number(bal.finished);
+    }
+    if (includeCosts) {
+      const mc = d.monthlyCost;
+      const hasMonthlyCost = !!(mc && mc.totalCost > 0);
+      base['إجمالي التكلفة'] = hasMonthlyCost ? fmtCost(mc!.totalCost) : '—';
+      base['مباشر / غير مباشر'] = hasMonthlyCost
+        ? `${fmtCost(mc!.laborCost)} مباشر / ${fmtCost(mc!.indirectCost)} غ.مباشر`
+        : '—';
+      base['تكلفة الوحدة'] = hasMonthlyCost ? fmtCost(mc!.costPerUnit) : '—';
     }
     if (includeCosts && d.costBreakdown && options.productCosts) {
       base['تكلفة الوحدة الصينية'] = fmtCost(d.costBreakdown.chineseUnitCost);
@@ -404,13 +447,13 @@ export const exportAllProducts = (
     if (includeCosts && d.costBreakdown && options.manufacturingCosts) {
       base['نصيب المصاريف الصناعية (م. وغ.م)'] = fmtCost(d.costBreakdown.productionOverheadShare);
     }
-    if (includeCosts && d.costBreakdown && (options.productCosts || options.manufacturingCosts)) {
-      base['إجمالي التكلفة المحسوبة'] = fmtCost(d.costBreakdown.totalCalculatedCost);
+    if (includeCosts && d.costBreakdown && options.productCosts) {
+      base['إجمالي التكلفة المحسوبة (للوحدة)'] = fmtCost(d.costBreakdown.totalCalculatedCost);
     }
-    if (options.sellingPrice) {
+    if (canViewSellingPrice && options.sellingPrice) {
       base['سعر البيع'] = d.raw.sellingPrice ? fmtCost(d.raw.sellingPrice) : 0;
     }
-    if (options.profitMargin && includeCosts && d.costBreakdown) {
+    if (options.profitMargin && includeCosts && d.costBreakdown && canViewSellingPrice) {
       const sp = d.raw.sellingPrice ?? 0;
       const tc = d.costBreakdown.totalCalculatedCost;
       const profit = sp - tc;
@@ -425,7 +468,9 @@ export const exportAllProducts = (
     }, {});
   });
   const date = new Date().toISOString().slice(0, 10);
-  downloadExcel(rows, 'المنتجات', `المنتجات-${date}`);
+  const sheet = fileMeta?.sheetName ?? 'المنتجات';
+  const fileBase = fileMeta?.fileBaseName ?? `المنتجات-${date}`;
+  downloadExcel(rows, sheet, fileBase);
 };
 
 // ─── Single Product Export ────────────────────────────────────────────────────
@@ -469,6 +514,10 @@ export const exportSingleProduct = (data: SingleProductExportData, includeCosts:
     'الكود': data.raw.code,
     'اسم المنتج': data.raw.name,
     'الفئة': data.raw.model || '—',
+    'تارجت المتوقع تقارير (ث)':
+      data.raw.routingTargetUnitSeconds != null && Number(data.raw.routingTargetUnitSeconds) > 0
+        ? Math.round(Number(data.raw.routingTargetUnitSeconds))
+        : '—',
     'إجمالي الإنتاج': data.totalProduction,
     'إجمالي الهالك': data.totalWaste,
     'نسبة الهالك': data.wasteRatio,

@@ -334,6 +334,23 @@ export const onlineDispatchService = {
   },
 
   /**
+   * Permanently deletes the shipment document regardless of status (pending / at_warehouse / handed_to_post).
+   * Requires Firestore rule `onlineDispatch.deletePermanent`, or the same rules as {@link deleteWarehouseShipment}.
+   */
+  async deleteShipmentDocument(_uid: string, docId: string): Promise<void> {
+    if (!isConfigured) throw new Error('Firebase غير مهيأ');
+    const tenantId = getCurrentTenantId();
+    const docRef = doc(db, COLLECTION, docId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) throw new Error('لا يوجد سجل لهذه الشحنة');
+      const cur = snap.data() as OnlineDispatchShipment;
+      if (cur.tenantId !== tenantId) throw new Error('لا يمكن حذف شحنة من مستأجر آخر');
+      tx.delete(docRef);
+    });
+  },
+
+  /**
    * Undo the first handoff (warehouse scan): at_warehouse → pending.
    * Requires Firestore rules: manage or handoffToWarehouse.
    */
@@ -402,6 +419,40 @@ export function onlineDispatchTsToMs(ts: unknown): number {
 export function isTimestampInRange(ms: number, startMs: number, endMs: number): boolean {
   if (!ms) return false;
   return ms >= startMs && ms <= endMs;
+}
+
+/**
+ * نافذة «يوم عمل التوزيع» لتاريخ تقويم محلي: من الساعة 08:00 لذلك اليوم حتى 08:00 اليوم التالي (نصف مفتوحة من النهاية).
+ */
+export function getDispatchDayBoundsForCalendarYmd(ymd: string): { startMs: number; endExclusiveMs: number } {
+  const parts = ymd.trim().split('-').map(Number);
+  const y = parts[0];
+  const mo = parts[1];
+  const d = parts[2];
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) {
+    const s = getWarehouseDispatchDayStartMs();
+    return { startMs: s, endExclusiveMs: s + 24 * 60 * 60 * 1000 };
+  }
+  const start = new Date(y!, mo! - 1, d!, WAREHOUSE_DISPATCH_DAY_START_HOUR, 0, 0, 0);
+  const startMs = start.getTime();
+  return { startMs, endExclusiveMs: startMs + 24 * 60 * 60 * 1000 };
+}
+
+/**
+ * سُلِّم للمخزن ضمن يوم العمل المحدد، ولم يُسجَّل تسليم البوسطة ضمن **نفس** يوم العمل (ما زال عند المخزن، أو سُجِّل للبوسطة بعد ذلك).
+ */
+export function filterWarehouseButNotPostSameDispatchDay(
+  rows: Array<OnlineDispatchShipment & { id: string }>,
+  calendarYmd: string,
+): Array<OnlineDispatchShipment & { id: string }> {
+  const { startMs, endExclusiveMs } = getDispatchDayBoundsForCalendarYmd(calendarYmd);
+  return rows.filter((r) => {
+    const hw = onlineDispatchTsToMs(r.handedToWarehouseAt);
+    if (!hw || hw < startMs || hw >= endExclusiveMs) return false;
+    const hp = onlineDispatchTsToMs(r.handedToPostAt);
+    if (!hp) return true;
+    return hp < startMs || hp >= endExclusiveMs;
+  });
 }
 
 /** Handoffs in range and creations in range (by timestamps). */

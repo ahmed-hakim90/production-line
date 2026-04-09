@@ -71,6 +71,7 @@ export type Permission =
   | 'repair.settings.manage'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
   | 'onlineDispatch.view' | 'onlineDispatch.manage' | 'onlineDispatch.handoffToWarehouse' | 'onlineDispatch.handoffToPost'
+  | 'onlineDispatch.deletePermanent'
   | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -163,6 +164,10 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'onlineDispatch.manage', label: 'تسجيل باركود شحنة BOSTA وإدارة السجلات' },
       { key: 'onlineDispatch.handoffToWarehouse', label: 'مسح: تم التسليم للمخزن' },
       { key: 'onlineDispatch.handoffToPost', label: 'مسح: تم التسليم للبوسطة' },
+      {
+        key: 'onlineDispatch.deletePermanent',
+        label: 'حذف نهائي لسجل شحنة من قاعدة البيانات (أي حالة) — من لوحة الأونلاين',
+      },
     ],
   },
   {

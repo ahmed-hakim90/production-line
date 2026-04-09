@@ -86,7 +86,17 @@ export const GlobalCreateProductModal: React.FC = () => {
     setSaving(true);
     setMessage(null);
     try {
-      const id = await createProduct(form);
+      const createData: Omit<FirestoreProduct, 'id'> = { ...form };
+      if (
+        typeof createData.routingTargetUnitSeconds !== 'number' ||
+        !Number.isFinite(createData.routingTargetUnitSeconds) ||
+        createData.routingTargetUnitSeconds <= 0
+      ) {
+        delete (createData as { routingTargetUnitSeconds?: number }).routingTargetUnitSeconds;
+      } else {
+        createData.routingTargetUnitSeconds = Math.round(createData.routingTargetUnitSeconds);
+      }
+      const id = await createProduct(createData);
       if (!id) throw new Error('create failed');
       setMessage({ type: 'success', text: t('modalManager.createProduct.createSuccess') });
       setForm(emptyForm);
@@ -182,6 +192,25 @@ export const GlobalCreateProductModal: React.FC = () => {
               />
               {t('modalManager.createProduct.autoDeductScrap')}
             </label>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+              تارجت المتوقع في التقارير (ثانية/وحدة)
+            </label>
+            <input
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
+              type="number"
+              min={1}
+              step={1}
+              value={form.routingTargetUnitSeconds ?? ''}
+              placeholder="اختياري — بدون مسار"
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                if (v === '') setForm({ ...form, routingTargetUnitSeconds: undefined });
+                else setForm({ ...form, routingTargetUnitSeconds: Math.round(Number(v)) });
+              }}
+            />
           </div>
 
           {canViewCosts && (

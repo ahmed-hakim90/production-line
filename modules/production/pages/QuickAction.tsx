@@ -65,7 +65,9 @@ export const QuickAction: React.FC = () => {
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
-  const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
+  const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
+  const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
+  const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
 
   const [employeeId, setEmployeeId] = useState('');
   const [lineId, setLineId] = useState('');
@@ -490,7 +492,9 @@ export const QuickAction: React.FC = () => {
       workersCount: printReport.workersCount,
       workHours: printReport.workHours,
       lineProductConfigs,
-      routingTotalTimeSecondsByProduct,
+      routingVarianceBasisSecondsByProduct,
+      routingPlanTargetUnitSecondsByProduct,
+      routingProductTargetUnitSecondsByProduct,
     });
     setPrintReport({
       ...printReport,

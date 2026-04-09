@@ -71,8 +71,13 @@ export const RolesManagement: React.FC = () => {
         );
         return;
       }
-      await deleteRole(id);
-      setDeleteConfirmId(null);
+      try {
+        await deleteRole(id);
+        setDeleteConfirmId(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        window.alert(`تعذّر حذف الدور من قاعدة البيانات.\n\n${msg}`);
+      }
     } finally {
       setDeleteBusy(false);
     }

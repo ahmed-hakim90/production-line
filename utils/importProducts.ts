@@ -24,6 +24,7 @@ export interface ParsedProductRow {
     outerCartonCost: boolean;
     unitsPerCarton: boolean;
     sellingPrice: boolean;
+    routingTargetUnitSeconds: boolean;
   };
   name: string;
   code: string;
@@ -33,6 +34,8 @@ export interface ParsedProductRow {
   outerCartonCost: number;
   unitsPerCarton: number;
   sellingPrice: number;
+  /** Parsed seconds/unit when column present; 0 means empty or invalid cell */
+  routingTargetUnitSeconds: number;
   materials: ParsedProductMaterialInput[];
   errors: string[];
   changes?: string[];
@@ -90,6 +93,9 @@ const HEADER_MAP: Record<string, string> = {
   'سعر البيع': 'sellingPrice',
   'سعر بيع': 'sellingPrice',
   'سعر': 'sellingPrice',
+  'تارجت المتوقع تقارير (ث)': 'routingTargetUnitSeconds',
+  'تارجت تقارير (ث)': 'routingTargetUnitSeconds',
+  'تارجت المتوقع (ث)': 'routingTargetUnitSeconds',
 };
 
 const MATERIAL_HEADER_MAP: Record<string, string> = {
@@ -138,6 +144,9 @@ function describeChanges(existing: FirestoreProduct, next: Omit<FirestoreProduct
   if ((existing.outerCartonCost || 0) !== next.outerCartonCost) changes.push(`كرتونة خارجية`);
   if ((existing.unitsPerCarton || 0) !== next.unitsPerCarton) changes.push(`وحدات/كرتونة`);
   if ((existing.sellingPrice || 0) !== next.sellingPrice) changes.push(`سعر البيع`);
+  const prevT = existing.routingTargetUnitSeconds;
+  const nextT = next.routingTargetUnitSeconds;
+  if ((prevT ?? 0) !== (nextT ?? 0)) changes.push(`تارجت التقارير (ث/وحدة)`);
   return changes;
 }
 
@@ -197,6 +206,7 @@ export function parseProductsExcel(
           outerCartonCost: hasField('outerCartonCost'),
           unitsPerCarton: hasField('unitsPerCarton'),
           sellingPrice: hasField('sellingPrice'),
+          routingTargetUnitSeconds: hasField('routingTargetUnitSeconds'),
         };
 
         const lookup = buildLookup(existingProducts);
@@ -240,6 +250,14 @@ export function parseProductsExcel(
           const outerCartonCost = Number(getValue('outerCartonCost')) || 0;
           const unitsPerCarton = Number(getValue('unitsPerCarton')) || 0;
           const sellingPrice = Number(getValue('sellingPrice')) || 0;
+          const routingRaw = getValue('routingTargetUnitSeconds');
+          const routingTargetUnitSecondsParsed = Number(routingRaw);
+          const routingTargetUnitSeconds =
+            providedFields.routingTargetUnitSeconds &&
+            Number.isFinite(routingTargetUnitSecondsParsed) &&
+            routingTargetUnitSecondsParsed > 0
+              ? Math.round(routingTargetUnitSecondsParsed)
+              : 0;
 
           if (action === 'create' && currentCode) {
             errors.push(`الكود الحالي "${currentCode}" غير موجود`);
@@ -270,6 +288,7 @@ export function parseProductsExcel(
             outerCartonCost,
             unitsPerCarton,
             sellingPrice,
+            routingTargetUnitSeconds,
             materials: [],
             errors,
           };
@@ -377,6 +396,10 @@ export function toProductData(row: ParsedProductRow): Omit<FirestoreProduct, 'id
     outerCartonCost: row.providedFields.outerCartonCost ? row.outerCartonCost : base.outerCartonCost,
     unitsPerCarton: row.providedFields.unitsPerCarton ? row.unitsPerCarton : base.unitsPerCarton,
     sellingPrice: row.providedFields.sellingPrice ? row.sellingPrice : base.sellingPrice,
+    routingTargetUnitSeconds:
+      row.providedFields.routingTargetUnitSeconds && row.routingTargetUnitSeconds > 0
+        ? row.routingTargetUnitSeconds
+        : undefined,
   };
 }
 
@@ -394,6 +417,10 @@ export function toProductDataWithExisting(
     outerCartonCost: Number(existing.outerCartonCost || 0),
     unitsPerCarton: Number(existing.unitsPerCarton || 0),
     sellingPrice: Number(existing.sellingPrice || 0),
+    routingTargetUnitSeconds:
+      existing.routingTargetUnitSeconds != null && Number(existing.routingTargetUnitSeconds) > 0
+        ? Math.round(Number(existing.routingTargetUnitSeconds))
+        : undefined,
   };
   return {
     name: row.providedFields.name ? row.name : base.name,
@@ -405,5 +432,10 @@ export function toProductDataWithExisting(
     outerCartonCost: row.providedFields.outerCartonCost ? row.outerCartonCost : base.outerCartonCost,
     unitsPerCarton: row.providedFields.unitsPerCarton ? row.unitsPerCarton : base.unitsPerCarton,
     sellingPrice: row.providedFields.sellingPrice ? row.sellingPrice : base.sellingPrice,
+    routingTargetUnitSeconds: row.providedFields.routingTargetUnitSeconds
+      ? row.routingTargetUnitSeconds > 0
+        ? row.routingTargetUnitSeconds
+        : undefined
+      : base.routingTargetUnitSeconds,
   };
 }

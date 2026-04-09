@@ -32,15 +32,16 @@ export const ExecutionPage: React.FC = () => {
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
   const products = useAppStore((s) => s.products);
+  const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const hourlyRate = Number(laborSettings?.hourlyRate ?? 0);
 
   const isNew = executionId === 'new';
-  const initialProduct = searchParams.get('productId') ?? '';
+  const initialProduct = (searchParams.get('productId') ?? '').trim();
 
-  const [phase, setPhase] = useState<Phase>(isNew ? 'pick' : 'run');
+  const [phase, setPhase] = useState<Phase>(() => (isNew ? (initialProduct ? 'preview' : 'pick') : 'run'));
   const [productId, setProductId] = useState(initialProduct);
   const [quantity, setQuantity] = useState(1);
   const [stepIndex, setStepIndex] = useState(0);
@@ -227,6 +228,14 @@ export const ExecutionPage: React.FC = () => {
     () => products.map((p) => ({ value: p.id, label: p.name })),
     [products],
   );
+
+  const pickedProductLabel = useMemo(() => {
+    if (!productId) return '';
+    const n = products.find((p) => p.id === productId)?.name?.trim();
+    if (n) return n;
+    const raw = _rawProducts.find((p) => p.id === productId)?.name?.trim();
+    return raw || productId;
+  }, [productId, products, _rawProducts]);
 
   const timeBetter =
     currentStepRow && elapsedSeconds > 0 ? elapsedSeconds <= currentStepRow.standardDurationSeconds : null;
@@ -449,6 +458,9 @@ export const ExecutionPage: React.FC = () => {
         />
         <Card className="shadow-sm">
           <CardContent className="space-y-6 p-4 sm:p-6">
+            <p className="text-sm font-semibold text-foreground">
+              المنتج: <span className="font-bold text-primary">{pickedProductLabel}</span>
+            </p>
             {!previewPlan && (
               <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-950 dark:text-amber-100">
                 لا توجد خطة مسار نشطة لهذا المنتج. أنشئ مساراً من «مسارات الإنتاج» أولاً.

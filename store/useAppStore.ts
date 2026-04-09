@@ -98,7 +98,13 @@ import {
   getOperationalDateString,
   getMonthDateRange,
 } from '../utils/calculations';
-import { buildRoutingTotalSecondsByProductId } from '../utils/routingStandardAssembly';
+import {
+  buildRoutingTotalSecondsByProductId,
+  buildRoutingVarianceBasisSecondsByProductId,
+  buildRoutingTargetSecondsOnlyByProductId,
+  buildProductRoutingTargetSecondsByProductId,
+  mergeProductTargetsIntoRoutingVarianceBasis,
+} from '../utils/routingStandardAssembly';
 import { eventBus, SystemEvents } from '../shared/events';
 import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
@@ -558,6 +564,12 @@ interface AppState {
   lineProductConfigs: LineProductConfig[];
   /** productId → active routing plan totalTimeSeconds (drives standard assembly minutes on lines). */
   routingTotalTimeSecondsByProduct: Record<string, number>;
+  /** productId → seconds/unit for expected-qty variance in reports (plan basis, merged with product target when no plan basis). */
+  routingVarianceBasisSecondsByProduct: Record<string, number>;
+  /** productId → plan routingTargetUnitSeconds when set (sparse; for labels/UI). */
+  routingTargetUnitSecondsByProduct: Record<string, number>;
+  /** productId → product.routingTargetUnitSeconds when set (sparse). */
+  routingProductTargetUnitSecondsByProduct: Record<string, number>;
   productionPlans: ProductionPlan[];
   productionPlanFollowUps: ProductionPlanFollowUp[];
   planReports: Record<string, ProductionReport[]>;
@@ -919,6 +931,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   lineStatuses: [],
   lineProductConfigs: [],
   routingTotalTimeSecondsByProduct: {},
+  routingVarianceBasisSecondsByProduct: {},
+  routingTargetUnitSecondsByProduct: {},
+  routingProductTargetUnitSecondsByProduct: {},
   productionPlans: [],
   productionPlanFollowUps: [],
   planReports: {},
@@ -1095,6 +1110,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       lineStatuses: [],
       lineProductConfigs: [],
       routingTotalTimeSecondsByProduct: {},
+      routingVarianceBasisSecondsByProduct: {},
+      routingTargetUnitSecondsByProduct: {},
+      routingProductTargetUnitSecondsByProduct: {},
       productionPlans: [],
       productionPlanFollowUps: [],
       planReports: {},
@@ -1324,14 +1342,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
     }
 
-    let routingTotalTimeSecondsByProduct: Record<string, number> = {};
-    try {
-      const activeRoutingPlans = await routingPlanService.getActivePlans();
-      routingTotalTimeSecondsByProduct = buildRoutingTotalSecondsByProductId(activeRoutingPlans);
-    } catch (routingErr) {
-      console.warn('routingPlanService.getActivePlans failed', routingErr);
-    }
-
     const mergedSettings = systemSettingsRaw
       ? {
           ...DEFAULT_SYSTEM_SETTINGS,
@@ -1347,6 +1357,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       mergedSettings.planSettings?.rawMaterialWarehouseId,
     );
 
+    let routingTotalTimeSecondsByProduct: Record<string, number> = {};
+    let routingVarianceBasisSecondsByProduct: Record<string, number> = {};
+    let routingTargetUnitSecondsByProduct: Record<string, number> = {};
+    let routingProductTargetUnitSecondsByProduct: Record<string, number> =
+      buildProductRoutingTargetSecondsByProductId(filteredRawProducts);
+    try {
+      const activeRoutingPlans = await routingPlanService.getActivePlans();
+      routingTotalTimeSecondsByProduct = buildRoutingTotalSecondsByProductId(activeRoutingPlans);
+      const varianceFromPlans = buildRoutingVarianceBasisSecondsByProductId(activeRoutingPlans);
+      routingTargetUnitSecondsByProduct =
+        buildRoutingTargetSecondsOnlyByProductId(activeRoutingPlans);
+      routingProductTargetUnitSecondsByProduct =
+        buildProductRoutingTargetSecondsByProductId(filteredRawProducts);
+      routingVarianceBasisSecondsByProduct = mergeProductTargetsIntoRoutingVarianceBasis(
+        varianceFromPlans,
+        routingProductTargetUnitSecondsByProduct,
+      );
+    } catch (routingErr) {
+      console.warn('routingPlanService.getActivePlans failed', routingErr);
+      routingVarianceBasisSecondsByProduct = mergeProductTargetsIntoRoutingVarianceBasis(
+        {},
+        routingProductTargetUnitSecondsByProduct,
+      );
+    }
+
     // Resolve current employee record for the logged-in user
     const uid = get().uid;
     const currentEmployee = uid
@@ -1360,6 +1395,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentEmployee,
       lineProductConfigs: configs,
       routingTotalTimeSecondsByProduct,
+      routingVarianceBasisSecondsByProduct,
+      routingTargetUnitSecondsByProduct,
+      routingProductTargetUnitSecondsByProduct,
       todayReports,
       monthlyReports,
       productionReports: [],
@@ -1471,7 +1509,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       await roleService.delete(id);
       await get().fetchRoles();
     } catch (error) {
-      set({ error: (error as Error).message });
+      const message = error instanceof Error ? error.message : String(error);
+      set({ error: message });
+      throw error;
     }
   },
 
@@ -1485,6 +1525,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const filteredRawProducts = await filterProductsByRawMaterialWarehouse(rawProducts, rawMaterialWarehouseId);
       set({ _rawProducts: filteredRawProducts });
       get()._rebuildProducts();
+      await get().fetchRoutingPlanTotals();
       set({ productsLoading: false });
     } catch (error) {
       set({ error: (error as Error).message, productsLoading: false });
@@ -1964,7 +2005,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const plans = await routingPlanService.getActivePlans();
       const routingTotalTimeSecondsByProduct = buildRoutingTotalSecondsByProductId(plans);
-      set({ routingTotalTimeSecondsByProduct });
+      const varianceFromPlans = buildRoutingVarianceBasisSecondsByProductId(plans);
+      const routingTargetUnitSecondsByProduct = buildRoutingTargetSecondsOnlyByProductId(plans);
+      const productTargets = buildProductRoutingTargetSecondsByProductId(get()._rawProducts);
+      const routingVarianceBasisSecondsByProduct = mergeProductTargetsIntoRoutingVarianceBasis(
+        varianceFromPlans,
+        productTargets,
+      );
+      set({
+        routingTotalTimeSecondsByProduct,
+        routingVarianceBasisSecondsByProduct,
+        routingTargetUnitSecondsByProduct,
+        routingProductTargetUnitSecondsByProduct: productTargets,
+      });
       get()._rebuildProducts();
     } catch (error) {
       console.error('fetchRoutingPlanTotals', error);

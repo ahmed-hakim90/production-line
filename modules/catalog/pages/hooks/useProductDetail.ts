@@ -55,6 +55,8 @@ export const useProductDetail = (id?: string) => {
   const rawLines = useAppStore((s) => s._rawLines);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
   const routingTotals = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
+  const routingTargetsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
+  const routingProductTargetsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
   const routingTotalsKey = useMemo(
     () =>
       Object.entries(routingTotals)
@@ -62,6 +64,22 @@ export const useProductDetail = (id?: string) => {
         .map(([k, v]) => `${k}:${Math.round(Number(v) || 0)}`)
         .join("|"),
     [routingTotals],
+  );
+  const routingTargetsKey = useMemo(
+    () =>
+      Object.entries(routingTargetsByProduct)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => `${k}:${Math.round(Number(v) || 0)}`)
+        .join("|"),
+    [routingTargetsByProduct],
+  );
+  const routingProductTargetsKey = useMemo(
+    () =>
+      Object.entries(routingProductTargetsByProduct)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => `${k}:${Math.round(Number(v) || 0)}`)
+        .join("|"),
+    [routingProductTargetsByProduct],
   );
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
@@ -73,11 +91,20 @@ export const useProductDetail = (id?: string) => {
   const productsLoading = useAppStore((s) => s.productsLoading);
 
   const productRevision = productRow
-    ? `${String(productRow.code)}|${String(productRow.model ?? "")}|${String(productRow.openingBalance ?? 0)}`
+    ? `${String(productRow.code)}|${String(productRow.model ?? "")}|${String(productRow.openingBalance ?? 0)}|${String(productRow.routingTargetUnitSeconds ?? "")}`
     : "";
 
   return useQuery<ProductDetailData>({
-    queryKey: ["catalog", "product-detail", tenantId, id ?? "", productRevision, routingTotalsKey],
+    queryKey: [
+      "catalog",
+      "product-detail",
+      tenantId,
+      id ?? "",
+      productRevision,
+      routingTotalsKey,
+      routingTargetsKey,
+      routingProductTargetsKey,
+    ],
     enabled: Boolean(id) && !productsLoading,
     queryFn: async () => {
       if (!id) throw new Error("missing product id");
@@ -190,6 +217,23 @@ export const useProductDetail = (id?: string) => {
         routingByProduct,
       );
       const wasteRatio = calculateWasteRatio(totalWaste, totalProduced + totalWaste);
+
+      const {
+        routingTargetUnitSecondsByProduct: routePlanTargets,
+        routingProductTargetUnitSecondsByProduct: routeProdTargets,
+      } = useAppStore.getState();
+      const planT = id ? routePlanTargets[id] : undefined;
+      const prodT = id ? routeProdTargets[id] : undefined;
+      const targetSec =
+        planT != null && planT > 0
+          ? Math.round(planT)
+          : prodT != null && prodT > 0
+            ? Math.round(prodT)
+            : 0;
+      const targetUnitCycleDisplay =
+        targetSec > 0
+          ? `${targetSec} ث (~${(targetSec / 60).toFixed(2)} د/وحدة)`
+          : "غير محدد";
 
       const effectiveCurrentUnitCost =
         currentMonthCost && Number(currentMonthCost.totalProducedQty || 0) > 0
@@ -457,6 +501,7 @@ export const useProductDetail = (id?: string) => {
           { id: "p2", label: "أفضل خط إنتاج", value: bestLine, tone: "blue" },
           { id: "p3", label: "وقت التجميع الفعلي", value: avgAssemblyTime > 0 ? `${avgAssemblyTime} دقيقة/وحدة` : "—", tone: "gray" },
           { id: "p4", label: "وقت التجميع القياسي", value: standardAssembly > 0 ? `${standardAssembly} دقيقة/وحدة` : "غير محدد", tone: "gray" },
+          { id: "p5", label: "تارجت المتوقع (مسار أو منتج)", value: targetUnitCycleDisplay, tone: "amber" },
         ],
         monthlyCostDate: toMonthLabel(currentMonth),
         monthlyCostColumns: [

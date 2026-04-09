@@ -475,7 +475,9 @@ export const Reports: React.FC = () => {
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
   const costMonthlyWorkingDays = useAppStore((s) => s.systemSettings.costMonthlyWorkingDays);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
-  const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
+  const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
+  const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
+  const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
 
   const { can } = usePermission();
   const canViewCosts = can('reports.viewCost');
@@ -524,7 +526,9 @@ export const Reports: React.FC = () => {
       workersCount: effectiveFormWorkersCount,
       workHours: form.workHours,
       lineProductConfigs,
-      routingTotalTimeSecondsByProduct,
+      routingVarianceBasisSecondsByProduct,
+      routingPlanTargetUnitSecondsByProduct,
+      routingProductTargetUnitSecondsByProduct,
     });
     return buildShareStandardVarianceBanner(variance);
   }, [
@@ -534,7 +538,9 @@ export const Reports: React.FC = () => {
     form.workHours,
     form.quantityProduced,
     lineProductConfigs,
-    routingTotalTimeSecondsByProduct,
+    routingVarianceBasisSecondsByProduct,
+    routingPlanTargetUnitSecondsByProduct,
+    routingProductTargetUnitSecondsByProduct,
   ]);
 
   const [saving, setSaving] = useState(false);
@@ -1432,7 +1438,9 @@ export const Reports: React.FC = () => {
         workersCount: report.workersCount || 0,
         workHours: report.workHours || 0,
         lineProductConfigs,
-        routingTotalTimeSecondsByProduct,
+        routingVarianceBasisSecondsByProduct,
+        routingPlanTargetUnitSecondsByProduct,
+        routingProductTargetUnitSecondsByProduct,
       });
       const row = {
         ...base,
@@ -1467,7 +1475,9 @@ export const Reports: React.FC = () => {
     [
       buildReportRow,
       lineProductConfigs,
-      routingTotalTimeSecondsByProduct,
+      routingVarianceBasisSecondsByProduct,
+      routingPlanTargetUnitSecondsByProduct,
+      routingProductTargetUnitSecondsByProduct,
       showShareFeedback,
     ]
   );
@@ -2563,12 +2573,14 @@ export const Reports: React.FC = () => {
             workersCount: r.workersCount || 0,
             workHours: r.workHours || 0,
             lineProductConfigs,
-            routingTotalTimeSecondsByProduct,
+            routingVarianceBasisSecondsByProduct,
+            routingPlanTargetUnitSecondsByProduct,
+            routingProductTargetUnitSecondsByProduct,
           });
           if (v.kind === 'no_standard') {
             return (
-              <span className="text-[10px] font-bold text-[var(--color-text-muted)]" title="يلزم مسار نشط بزمن خطوات للمنتج">
-                لا مسار
+              <span className="text-[10px] font-bold text-[var(--color-text-muted)]" title="يلزم مسار نشط أو تارجت منتج/مسار لاحتساب المتوقع">
+                لا مرجع
               </span>
             );
           }
@@ -2604,7 +2616,9 @@ export const Reports: React.FC = () => {
             workersCount: r.workersCount || 0,
             workHours: r.workHours || 0,
             lineProductConfigs,
-            routingTotalTimeSecondsByProduct,
+            routingVarianceBasisSecondsByProduct,
+            routingPlanTargetUnitSecondsByProduct,
+            routingProductTargetUnitSecondsByProduct,
           });
           if (v.kind !== 'comparable') return -999999;
           return v.diff;
@@ -2701,7 +2715,9 @@ export const Reports: React.FC = () => {
     qualityStatusMeta,
     getQualityReportCode,
     lineProductConfigs,
-    routingTotalTimeSecondsByProduct,
+    routingVarianceBasisSecondsByProduct,
+    routingPlanTargetUnitSecondsByProduct,
+    routingProductTargetUnitSecondsByProduct,
   ]);
 
   const handleBulkPrintSelected = useCallback(async (items: ProductionReport[]) => {

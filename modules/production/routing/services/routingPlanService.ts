@@ -73,6 +73,8 @@ export const routingPlanService = {
     createdBy: string;
     deactivatePlanId?: string;
     stepRows: { name: string; durationSeconds: number; workersCount: number }[];
+    /** Optional; seconds per unit for report expected-qty variance. Omitted when unset or invalid. */
+    routingTargetUnitSeconds?: number;
   }): Promise<{ planId: string }> {
     if (!isConfigured) throw new Error('Firebase not configured');
     const tenantId = getCurrentTenantId();
@@ -82,6 +84,12 @@ export const routingPlanService = {
       totalTimeSeconds: totalTimeSecondsFromSteps(params.stepRows),
       totalManTimeSeconds: totalManTimeSecondsFromSteps(params.stepRows),
     };
+    const targetSec =
+      typeof params.routingTargetUnitSeconds === 'number' &&
+      Number.isFinite(params.routingTargetUnitSeconds) &&
+      params.routingTargetUnitSeconds > 0
+        ? Math.round(params.routingTargetUnitSeconds)
+        : undefined;
 
     if (params.deactivatePlanId) {
       await updateDoc(doc(db, COLLECTION, params.deactivatePlanId), {
@@ -98,6 +106,7 @@ export const routingPlanService = {
       isDeleted: false,
       totalTimeSeconds: totals.totalTimeSeconds,
       totalManTimeSeconds: totals.totalManTimeSeconds,
+      ...(targetSec != null ? { routingTargetUnitSeconds: targetSec } : {}),
       createdBy: params.createdBy,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),

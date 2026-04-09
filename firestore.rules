@@ -323,8 +323,12 @@ service cloud.firestore {
       /* Super-admin approves pending companies: seedIfEmpty() creates roles for the NEW tenantId â€” tenant admins use roles.manage on their own tenant. */
       allow create: if isSuperAdmin()
         || (isActiveUser() && hasPermission('roles.manage') && sameTenantWrite());
-      allow update, delete: if isSuperAdmin()
+      /* Updates must keep tenantId stable. Deletes have no request.resource â€” sameTenantUpdate() always fails for delete. */
+      allow update: if isSuperAdmin()
         || (isActiveUser() && hasPermission('roles.manage') && sameTenantUpdate());
+      allow delete: if isSuperAdmin()
+        || (isActiveUser() && hasPermission('roles.manage')
+          && resource.data.tenantId == currentUserDoc().data.tenantId);
     }
 
     match /dashboardStats/{tenantId}/daily/{dayId} {
@@ -603,8 +607,13 @@ service cloud.firestore {
         );
       allow delete: if isActiveUser()
         && resource.data.tenantId == currentUserDoc().data.tenantId
-        && resource.data.status == 'at_warehouse'
-        && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse'));
+        && (
+          hasPermission('onlineDispatch.deletePermanent')
+          || (
+            resource.data.status == 'at_warehouse'
+            && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse'))
+          )
+        );
     }
 
     match /{coll}/{docId} {

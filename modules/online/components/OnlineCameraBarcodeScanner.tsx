@@ -76,7 +76,15 @@ export const OnlineCameraBarcodeScanner: React.FC<OnlineCameraBarcodeScannerProp
     void html5
       .start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 280, height: 200 } },
+        {
+          fps: 10,
+          /** Scan box sized for a capped preview (see container max-height). */
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const w = Math.min(280, Math.floor(viewfinderWidth * 0.85));
+            const h = Math.min(200, Math.floor(viewfinderHeight * 0.45));
+            return { width: Math.max(200, w), height: Math.max(120, h) };
+          },
+        },
         (decodedText) => {
           if (cancelled) return;
           onDecodedRef.current(decodedText);
@@ -106,7 +114,13 @@ export const OnlineCameraBarcodeScanner: React.FC<OnlineCameraBarcodeScannerProp
       <p className={cn('text-xs text-[var(--color-text-muted)]', !active && 'sr-only')}>{hint}</p>
       <div
         id={elementId}
-        className="w-full min-h-[220px] rounded-lg overflow-hidden border border-[var(--color-border)] bg-black/5"
+        className={cn(
+          'relative w-full overflow-hidden rounded-lg border border-[var(--color-border)] bg-black',
+          /* Cap height on phones: full sensor stream is often very tall */
+          'max-h-[min(58dvh,380px)] min-h-[200px] sm:max-h-[min(52dvh,420px)]',
+          '[&_video]:mx-auto [&_video]:block [&_video]:max-h-[min(58dvh,380px)] [&_video]:w-full [&_video]:object-contain sm:[&_video]:max-h-[min(52dvh,420px)]',
+          '[&_canvas]:max-h-[inherit]',
+        )}
         aria-hidden={!active}
       />
     </div>

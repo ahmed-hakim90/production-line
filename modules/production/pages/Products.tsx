@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   AlertCircle,
@@ -42,7 +41,7 @@ import type { Product, FirestoreProduct, ProductionReport } from '../../../types
 import { usePermission } from '../../../utils/permissions';
 import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
 import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
-import { exportAllProducts, PRODUCT_EXPORT_DEFAULTS } from '../../../utils/exportExcel';
+import { exportAllProducts } from '../../../utils/exportExcel';
 import type { ProductExportOptions } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import type { ProductMaterial } from '../../../types';
@@ -70,10 +69,12 @@ import {
 import { useManagedPrint } from '../../../utils/printManager';
 import { shareToWhatsApp } from '../../../utils/reportExport';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { deleteField } from 'firebase/firestore';
 
 type ProductTableColumnKey =
   | 'openingStock'
   | 'totalProduction'
+  | 'monthlyProductionQty'
   | 'wasteUnits'
   | 'stockLevel'
   | 'totalCost'
@@ -141,6 +142,7 @@ const ProductIcon = ({
 const DEFAULT_VISIBLE_COLUMNS: Record<ProductTableColumnKey, boolean> = {
   openingStock: true,
   totalProduction: true,
+  monthlyProductionQty: true,
   wasteUnits: true,
   stockLevel: true,
   totalCost: true,
@@ -153,6 +155,44 @@ const DEFAULT_VISIBLE_COLUMNS: Record<ProductTableColumnKey, boolean> = {
   outerCartonCost: true,
   unitsPerCarton: true,
 };
+
+function buildProductExportColumnOrder(
+  prefs: Record<ProductTableColumnKey, boolean>,
+  hasWarehouse: boolean,
+  viewCosts: boolean,
+  viewSellingPrice: boolean,
+  extras: { rawMaterials: boolean; productionOverhead: boolean; calculatedUnit: boolean },
+): string[] {
+  const labels: string[] = ['الكود', 'اسم المنتج', 'الفئة', 'تارجت المتوقع تقارير (ث)'];
+  if (hasWarehouse) {
+    labels.push('المخزن', 'رصيد المخزن');
+  }
+  if (prefs.openingStock) labels.push('رصيد مفكك');
+  if (prefs.totalProduction) labels.push('ما تم إنتاجه');
+  if (prefs.monthlyProductionQty) labels.push('كمية الإنتاج (الشهر الحالي)');
+  if (prefs.wasteUnits) labels.push('الهالك');
+  if (prefs.stockLevel) labels.push('منتج تام');
+  if (viewCosts) {
+    if (prefs.totalCost) labels.push('إجمالي التكلفة');
+    if (prefs.directIndirect) labels.push('مباشر / غير مباشر');
+    if (prefs.costPerUnit) labels.push('تكلفة الوحدة');
+    if (extras.rawMaterials) {
+      labels.push('تكلفة المواد الخام', 'تفاصيل المواد الخام');
+    }
+    if (prefs.chineseUnitCost) labels.push('تكلفة الوحدة الصينية');
+    if (prefs.chinesePriceCny) labels.push('السعر باليوان');
+    if (prefs.innerBoxCost) labels.push('تكلفة العلبة الداخلية');
+    if (prefs.outerCartonCost) labels.push('تكلفة الكرتونة');
+    if (prefs.unitsPerCarton) labels.push('وحدات/كرتونة');
+    if (extras.productionOverhead) labels.push('نصيب المصاريف الصناعية (م. وغ.م)');
+    if (extras.calculatedUnit) labels.push('إجمالي التكلفة المحسوبة (للوحدة)');
+  }
+  if (viewSellingPrice && prefs.sellingPrice) labels.push('سعر البيع');
+  if (viewSellingPrice && prefs.sellingPrice && viewCosts && extras.calculatedUnit) {
+    labels.push('هامش الربح (ج.م)', 'نسبة هامش الربح %');
+  }
+  return labels;
+}
 
 const shortProductName = (name: string): string => {
   const parts = name.trim().split(/\s+/);
@@ -220,7 +260,15 @@ export const Products: React.FC = () => {
 
   // Export customization
   const [showColumnsModal, setShowColumnsModal] = useState(false);
-  const [exportOptions, setExportOptions] = useState<ProductExportOptions>({ ...PRODUCT_EXPORT_DEFAULTS });
+  const [exportScope, setExportScope] = useState<'all' | 'current_month'>('all');
+  const [exportColumnPrefs, setExportColumnPrefs] = useState<Record<ProductTableColumnKey, boolean>>(() => ({
+    ...DEFAULT_VISIBLE_COLUMNS,
+  }));
+  const [exportCostExtras, setExportCostExtras] = useState({
+    rawMaterials: true,
+    productionOverhead: true,
+    calculatedUnit: true,
+  });
   const [visibleColumns, setVisibleColumns] = useState<Record<ProductTableColumnKey, boolean>>(() => {
     if (typeof window === 'undefined') return DEFAULT_VISIBLE_COLUMNS;
     try {
@@ -254,6 +302,10 @@ export const Products: React.FC = () => {
   const [warehouses, setWarehouses] = useState<InventoryWarehouse[]>([]);
   const [showWarehouseExportModal, setShowWarehouseExportModal] = useState(false);
   const [exportWarehouseId, setExportWarehouseId] = useState('');
+  const [exportMonth, setExportMonth] = useState(getCurrentMonth());
+  const [exportMonthReports, setExportMonthReports] = useState<ProductionReport[]>([]);
+  const [exportMonthLoading, setExportMonthLoading] = useState(false);
+  const [exportingProducts, setExportingProducts] = useState(false);
 
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const [detailDrawerProductId, setDetailDrawerProductId] = useState<string | null>(null);
@@ -359,7 +411,55 @@ export const Products: React.FC = () => {
     });
   }, [productsForTable, search, categoryFilter, stockFilter]);
 
+  const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
+  const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
+  const monthlyQtyByProductId = useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const r of monthlyReports) {
+      const pid = String(r.productId || '').trim();
+      if (!pid) continue;
+      next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
+    }
+    return next;
+  }, [monthlyReports]);
+
+  const exportMonthQtyByProductId = useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const r of exportMonthReports) {
+      const pid = String(r.productId || '').trim();
+      if (!pid) continue;
+      next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
+    }
+    return next;
+  }, [exportMonthReports]);
+
   useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [search, categoryFilter, stockFilter]);
+
+  useEffect(() => {
+    if (!showWarehouseExportModal || exportScope !== 'current_month') return;
+    const monthKey = /^\d{4}-\d{2}$/.test(exportMonth) ? exportMonth : getCurrentMonth();
+    const [yearText, monthText] = monthKey.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const monthStart = `${monthKey}-01`;
+    const monthEnd = `${monthKey}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
+    let cancelled = false;
+    setExportMonthLoading(true);
+    void ensureProductionReportsForRange(monthStart, monthEnd, { maxAgeMs: 5 * 60 * 1000 })
+      .then((rows) => {
+        if (cancelled) return;
+        setExportMonthReports(rows);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setExportMonthReports([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setExportMonthLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [showWarehouseExportModal, exportScope, exportMonth, ensureProductionReportsForRange]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -371,11 +471,16 @@ export const Products: React.FC = () => {
       if (sortKey === 'code') {
         return sortDir === 'asc' ? a.code.localeCompare(b.code) : b.code.localeCompare(a.code);
       }
+      if (sortKey === 'monthlyProductionQty') {
+        va = monthlyQtyByProductId[a.id] ?? 0;
+        vb = monthlyQtyByProductId[b.id] ?? 0;
+        return sortDir === 'asc' ? (va > vb ? 1 : -1) : (vb > va ? 1 : -1);
+      }
       va = (a as any)[sortKey] ?? 0;
       vb = (b as any)[sortKey] ?? 0;
       return sortDir === 'asc' ? (va > vb ? 1 : -1) : (vb > va ? 1 : -1);
     });
-  }, [filtered, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir, monthlyQtyByProductId]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const paginated = useMemo(
@@ -493,8 +598,10 @@ export const Products: React.FC = () => {
     return () => { cancelled = true; };
   }, [canViewCosts]);
 
-  const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
-  const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
+  const monthExportProductCount = useMemo(
+    () => productsForTable.filter((p) => (exportMonthQtyByProductId[p.id] ?? 0) > 0).length,
+    [productsForTable, exportMonthQtyByProductId],
+  );
 
   const productWarehouseBalances = useMemo(() => {
     const keyOf = (warehouseId: string, productId: string) => `${warehouseId}__${productId}`;
@@ -557,6 +664,10 @@ export const Products: React.FC = () => {
       unitsPerCarton: raw?.unitsPerCarton ?? 0,
       sellingPrice: raw?.sellingPrice ?? 0,
       autoDeductComponentScrapFromDecomposed: raw?.autoDeductComponentScrapFromDecomposed === true,
+      routingTargetUnitSeconds:
+        raw?.routingTargetUnitSeconds != null && Number(raw.routingTargetUnitSeconds) > 0
+          ? Math.round(Number(raw.routingTargetUnitSeconds))
+          : undefined,
     });
     setSaveMsg(null);
     setShowModal(true);
@@ -569,10 +680,24 @@ export const Products: React.FC = () => {
     setSaveMsg(null);
     try {
       if (editId) {
-        await updateProduct(editId, form);
+        const t = form.routingTargetUnitSeconds;
+        const hasTarget = typeof t === 'number' && Number.isFinite(t) && t > 0;
+        const payload: Record<string, unknown> = { ...form };
+        payload.routingTargetUnitSeconds = hasTarget ? Math.round(t) : deleteField();
+        await updateProduct(editId, payload as Partial<FirestoreProduct>);
         setSaveMsg({ type: 'success', text: 'تم حفظ تعديلات المنتج بنجاح' });
       } else {
-        await createProduct(form);
+        const createData: Omit<FirestoreProduct, 'id'> = { ...form };
+        if (
+          typeof createData.routingTargetUnitSeconds !== 'number' ||
+          !Number.isFinite(createData.routingTargetUnitSeconds) ||
+          createData.routingTargetUnitSeconds <= 0
+        ) {
+          delete (createData as { routingTargetUnitSeconds?: number }).routingTargetUnitSeconds;
+        } else {
+          createData.routingTargetUnitSeconds = Math.round(createData.routingTargetUnitSeconds);
+        }
+        await createProduct(createData);
         setSaveMsg({ type: 'success', text: 'تم إضافة المنتج بنجاح' });
         setForm(emptyForm);
       }
@@ -719,7 +844,36 @@ export const Products: React.FC = () => {
     setImportSaving(false);
   };
 
-  const doExportProducts = async (opts: ProductExportOptions, warehouseId?: string) => {
+  const doExportProducts = async (warehouseId?: string) => {
+    setExportingProducts(true);
+    try {
+    const prefs = exportColumnPrefs;
+    const extras = exportCostExtras;
+    const stock =
+      prefs.openingStock ||
+      prefs.totalProduction ||
+      prefs.monthlyProductionQty ||
+      prefs.wasteUnits ||
+      prefs.stockLevel;
+    const productCostsOpt =
+      canViewCosts &&
+      (extras.rawMaterials ||
+        extras.calculatedUnit ||
+        prefs.chineseUnitCost ||
+        prefs.innerBoxCost ||
+        prefs.outerCartonCost ||
+        prefs.unitsPerCarton ||
+        prefs.chinesePriceCny);
+    const manufacturingCosts = canViewCosts && extras.productionOverhead;
+    const opts: ProductExportOptions = {
+      stock,
+      productCosts: !!productCostsOpt,
+      manufacturingCosts,
+      sellingPrice: canViewSellingPrice && prefs.sellingPrice,
+      profitMargin: canViewSellingPrice && prefs.sellingPrice && canViewCosts && extras.calculatedUnit,
+      chinesePriceCny: prefs.chinesePriceCny,
+    };
+
     const materialsByProduct = new Map<string, ProductMaterial[]>();
     await Promise.all(_rawProducts.map(async (rp) => {
       if (!rp.id) return;
@@ -734,7 +888,13 @@ export const Products: React.FC = () => {
     const selectedWarehouse = warehouseId
       ? warehouses.find((w) => w.id === warehouseId)
       : undefined;
-    const data = productsForTable.map((p) => {
+    const monthlyQtyMap = exportScope === 'current_month' ? exportMonthQtyByProductId : monthlyQtyByProductId;
+    const sourceProducts =
+      exportScope === 'current_month'
+        ? productsForTable.filter((p) => (monthlyQtyMap[p.id] ?? 0) > 0)
+        : productsForTable;
+
+    const data = sourceProducts.map((p) => {
       const warehouseStock = warehouseId
         ? productWarehouseBalances.getValue(warehouseId, p.id)
         : undefined;
@@ -745,6 +905,20 @@ export const Products: React.FC = () => {
             stockStatus: (Number(warehouseStock || 0) > 0 ? 'available' : 'out') as 'available' | 'out',
           }
         : p;
+      const pid = productForExport.id;
+      const displayBalances = {
+        decomposed: productWarehouseBalances.getValue(planSettings?.decomposedSourceWarehouseId, pid),
+        waste: productWarehouseBalances.getValue(planSettings?.wasteReceiveWarehouseId, pid),
+        finished: productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, pid),
+      };
+      const monthlyCostRow = canViewCosts
+        ? {
+            laborCost: productCosts[pid]?.laborCost ?? 0,
+            indirectCost: productCosts[pid]?.indirectCost ?? 0,
+            totalCost: productCosts[pid]?.totalCost ?? 0,
+            costPerUnit: productCosts[pid]?.costPerUnit ?? 0,
+          }
+        : null;
       const raw = _rawProducts.find((r) => r.id === p.id);
       if (!raw) {
         return {
@@ -754,6 +928,9 @@ export const Products: React.FC = () => {
           rawMaterialsDetails: '—',
           warehouseName: selectedWarehouse?.name,
           warehouseStock,
+          displayBalances,
+          monthlyProductionQty: monthlyQtyMap[p.id] ?? 0,
+          monthlyCost: monthlyCostRow,
         };
       }
 
@@ -772,33 +949,39 @@ export const Products: React.FC = () => {
         rawMaterialsDetails,
         warehouseName: selectedWarehouse?.name,
         warehouseStock,
+        displayBalances,
+        monthlyProductionQty: monthlyQtyMap[p.id] ?? 0,
+        monthlyCost: monthlyCostRow,
       };
     });
-    const columnLabels: string[] = ['الكود', 'اسم المنتج', 'الفئة'];
-    if (selectedWarehouse?.name) {
-      columnLabels.push('المخزن', 'رصيد المخزن');
-    }
-    if (visibleColumns.openingStock) columnLabels.push('رصيد مفكك');
-    if (visibleColumns.totalProduction) columnLabels.push('ما تم إنتاجه');
-    if (visibleColumns.wasteUnits) columnLabels.push('الهالك');
-    if (visibleColumns.stockLevel) columnLabels.push('منتج تام');
 
-    if (canViewCosts && visibleColumns.chineseUnitCost) columnLabels.push('تكلفة الوحدة الصينية');
-    if (canViewCosts && visibleColumns.chinesePriceCny) columnLabels.push('السعر باليوان');
-    if (canViewCosts) columnLabels.push('تكلفة المواد الخام');
-    if (canViewCosts) columnLabels.push('تفاصيل المواد الخام');
-    if (canViewCosts && visibleColumns.innerBoxCost) columnLabels.push('تكلفة العلبة الداخلية');
-    if (canViewCosts && visibleColumns.outerCartonCost) columnLabels.push('تكلفة الكرتونة');
-    if (canViewCosts && visibleColumns.unitsPerCarton) columnLabels.push('وحدات/كرتونة');
-    if (canViewCosts && visibleColumns.totalCost) columnLabels.push('إجمالي التكلفة المحسوبة');
-    if (canViewCosts && visibleColumns.costPerUnit) columnLabels.push('نصيب المصاريف الصناعية (م. وغ.م)');
-    if (canViewSellingPrice && visibleColumns.sellingPrice) columnLabels.push('سعر البيع');
-    if (canViewCosts && canViewSellingPrice && visibleColumns.sellingPrice) {
-      columnLabels.push('هامش الربح (ج.م)');
-      columnLabels.push('نسبة هامش الربح %');
-    }
+    const columnLabels = buildProductExportColumnOrder(
+      prefs,
+      !!selectedWarehouse?.name,
+      canViewCosts,
+      canViewSellingPrice,
+      extras,
+    );
 
-    exportAllProducts(data, canViewCosts, opts, laborSettings?.cnyToEgpRate ?? 0, columnLabels);
+    const date = new Date().toISOString().slice(0, 10);
+    const monthKey = exportScope === 'current_month' ? exportMonth : getCurrentMonth();
+    const fileMeta =
+      exportScope === 'current_month'
+        ? { sheetName: `منتجات ${monthKey}`, fileBaseName: `المنتجات-شهر-${monthKey}` }
+        : { sheetName: 'المنتجات', fileBaseName: `المنتجات-${date}` };
+
+    exportAllProducts(
+      data,
+      canViewCosts,
+      canViewSellingPrice,
+      opts,
+      laborSettings?.cnyToEgpRate ?? 0,
+      columnLabels,
+      fileMeta,
+    );
+    } finally {
+      setExportingProducts(false);
+    }
   };
 
   const toggleColumn = (key: ProductTableColumnKey, checked: boolean) => {
@@ -807,6 +990,10 @@ export const Products: React.FC = () => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(next));
     }
+  };
+
+  const toggleExportColumn = (key: ProductTableColumnKey, checked: boolean) => {
+    setExportColumnPrefs((prev) => ({ ...prev, [key]: checked }));
   };
 
   const SortIcon = ({ col }: { col: string }) => (
@@ -854,15 +1041,19 @@ export const Products: React.FC = () => {
             group: 'تصدير',
             hidden: !canExportFromPage || products.length === 0,
             onClick: () => {
-              const opts: ProductExportOptions = {
-                stock: visibleColumns.openingStock || visibleColumns.totalProduction || visibleColumns.wasteUnits || visibleColumns.stockLevel,
-                productCosts: visibleColumns.chineseUnitCost || visibleColumns.innerBoxCost || visibleColumns.outerCartonCost || visibleColumns.unitsPerCarton || visibleColumns.totalCost || visibleColumns.chinesePriceCny,
-                manufacturingCosts: visibleColumns.costPerUnit,
-                sellingPrice: canViewSellingPrice && visibleColumns.sellingPrice,
-                profitMargin: canViewSellingPrice && visibleColumns.sellingPrice,
-                chinesePriceCny: visibleColumns.chinesePriceCny,
-              };
-              setExportOptions(opts);
+              setExportScope('all');
+              setExportColumnPrefs({ ...visibleColumns });
+              setShowWarehouseExportModal(true);
+            },
+          },
+          {
+            label: 'تصدير منتجات الشهر (Excel)',
+            icon: 'table_chart',
+            group: 'تصدير',
+            hidden: !canExportFromPage || products.length === 0,
+            onClick: () => {
+              setExportScope('current_month');
+              setExportColumnPrefs({ ...visibleColumns });
               setShowWarehouseExportModal(true);
             },
           },
@@ -1009,6 +1200,11 @@ export const Products: React.FC = () => {
                 <th className="erp-th cursor-pointer select-none" onClick={() => handleSort('name')}>المنتج <SortIcon col="name" /></th>
                 {visibleColumns.openingStock && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('openingStock')}>رصيد مفكك <SortIcon col="openingStock" /></th>}
                 {visibleColumns.totalProduction && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('totalProduction')}>ما تم إنتاجه <SortIcon col="totalProduction" /></th>}
+                {visibleColumns.monthlyProductionQty && (
+                  <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('monthlyProductionQty')}>
+                    إنتاج الشهر <SortIcon col="monthlyProductionQty" />
+                  </th>
+                )}
                 {visibleColumns.wasteUnits && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('wasteUnits')}>الهالك <SortIcon col="wasteUnits" /></th>}
                 {visibleColumns.stockLevel && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('stockLevel')}>منتج تام <SortIcon col="stockLevel" /></th>}
                 {canViewSellingPrice && visibleColumns.sellingPrice && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('sellingPrice')}>سعر البيع <SortIcon col="sellingPrice" /></th>}
@@ -1085,6 +1281,13 @@ export const Products: React.FC = () => {
                       {formatNumber(product.totalProduction)}
                     </span>
                   </td>}
+                  {visibleColumns.monthlyProductionQty && (
+                    <td className="px-4 py-4 text-center">
+                      <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-sky-50 text-sky-700 text-sm font-bold tabular-nums">
+                        {formatNumber(monthlyQtyByProductId[product.id] ?? 0)}
+                      </span>
+                    </td>
+                  )}
                   {visibleColumns.wasteUnits && <td className="px-4 py-4 text-center">
                     {wasteBalance > 0 ? (
                       <span className="text-sm font-bold text-rose-500 tabular-nums">{formatNumber(wasteBalance)}</span>
@@ -1488,7 +1691,29 @@ export const Products: React.FC = () => {
                 </label>
               </div>
 
-              {/* â”€â”€ Cost Breakdown Fields â”€â”€ */}
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                  تارجت المتوقع في التقارير (ثانية/وحدة)
+                </label>
+                <input
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={form.routingTargetUnitSeconds ?? ''}
+                  placeholder="اختياري — يُستخدم عند عدم وجود مسار نشط (أو يكمّل عند غياب أساس من المسار)"
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    if (v === '') setForm({ ...form, routingTargetUnitSeconds: undefined });
+                    else setForm({ ...form, routingTargetUnitSeconds: Math.round(Number(v)) });
+                  }}
+                />
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  عند وجود مسار نشط بزمن خطوات أو بتارجت مسار، يُعتمد المسار أولاً. بدون مسار، يُحسب انحراف الكمية في التقرير من هذا الحقل.
+                </p>
+              </div>
+
+              {/* Cost breakdown (costs permission) */}
               {canViewCosts && (
                 <>
                   <div className="border-t border-[var(--color-border)] pt-4">
@@ -1741,44 +1966,135 @@ export const Products: React.FC = () => {
       {/* â”€â”€ Export Warehouse Selector Modal â”€â”€ */}
       {showWarehouseExportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <ProductIcon name="warehouse" className="text-primary" />
-                <h3 className="text-lg font-bold">تصدير المنتجات بالمخزن</h3>
+                <h3 className="text-lg font-bold">
+                  {exportScope === 'current_month' ? 'تصدير منتجات الشهر الحالي' : 'تصدير المنتجات'}
+                </h3>
               </div>
-              <button onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+              <button type="button" onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <ProductIcon name="close" />
               </button>
             </div>
-            <div className="p-6 space-y-3">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المخزن للتصدير</label>
-              <Select value={exportWarehouseId || 'all'} onValueChange={(value) => setExportWarehouseId(value === 'all' ? '' : value)}>
-                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 font-medium">
-                  <SelectValue placeholder="كل المخازن (بدون تحديد)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل المخازن (بدون تحديد)</SelectItem>
-                  {warehouses.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
+              {exportScope === 'current_month' && exportMonthReports.length === 0 && !exportMonthLoading && (
+                <p className="text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-[var(--border-radius-lg)] px-3 py-2">
+                  لا توجد تقارير إنتاج في الشهر المحدد حالياً.
+                </p>
+              )}
+              {exportScope === 'current_month' && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر الشهر</label>
+                  <input
+                    type="month"
+                    value={exportMonth}
+                    onChange={(e) => setExportMonth(e.target.value)}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 font-medium bg-transparent"
+                  />
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    يتم تصدير المنتجات التي لها كمية إنتاج أكبر من صفر في تقارير الشهر المختار.
+                  </p>
+                </div>
+              )}
+              {exportScope === 'current_month' && monthExportProductCount === 0 && !exportMonthLoading && (
+                <p className="text-xs font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-[var(--border-radius-lg)] px-3 py-2">
+                  لا يوجد منتج بكمية إنتاج مسجّلة في الشهر المحدد.
+                </p>
+              )}
+              {exportScope === 'current_month' && exportMonthLoading && (
+                <p className="text-xs font-bold text-sky-700 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-[var(--border-radius-lg)] px-3 py-2">
+                  جاري تحميل تقارير الشهر المحدد...
+                </p>
+              )}
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المخزن للتصدير</label>
+                <Select value={exportWarehouseId || 'all'} onValueChange={(value) => setExportWarehouseId(value === 'all' ? '' : value)}>
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 font-medium">
+                    <SelectValue placeholder="كل المخازن (بدون تحديد)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل المخازن (بدون تحديد)</SelectItem>
+                    {warehouses.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  عند اختيار مخزن سيتم تضمين عمود اسم المخزن ورصيد المنتج داخل هذا المخزن في ملف الإكسل.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-bold text-[var(--color-text-muted)]">أعمدة التصدير</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[200px] overflow-y-auto pr-1">
+                  {[
+                    { key: 'openingStock' as const, label: 'رصيد مفكك' },
+                    { key: 'totalProduction' as const, label: 'ما تم إنتاجه' },
+                    { key: 'monthlyProductionQty' as const, label: 'كمية الإنتاج (الشهر)' },
+                    { key: 'wasteUnits' as const, label: 'الهالك' },
+                    { key: 'stockLevel' as const, label: 'منتج تام' },
+                    ...(canViewSellingPrice ? [{ key: 'sellingPrice' as const, label: 'سعر البيع' }] : []),
+                    ...(canViewCosts
+                      ? ([
+                          { key: 'totalCost' as const, label: 'إجمالي التكلفة' },
+                          { key: 'directIndirect' as const, label: 'مباشر / غير مباشر' },
+                          { key: 'costPerUnit' as const, label: 'تكلفة الوحدة' },
+                          { key: 'chineseUnitCost' as const, label: 'تكلفة الوحدة الصينية' },
+                          { key: 'chinesePriceCny' as const, label: 'السعر باليوان' },
+                          { key: 'innerBoxCost' as const, label: 'تكلفة العلبة الداخلية' },
+                          { key: 'outerCartonCost' as const, label: 'تكلفة الكرتونة' },
+                          { key: 'unitsPerCarton' as const, label: 'وحدات/كرتونة' },
+                        ] as const)
+                      : []),
+                  ].map((opt) => (
+                    <label key={opt.key} className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportColumnPrefs[opt.key]}
+                        onChange={(e) => toggleExportColumn(opt.key, e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-primary shrink-0"
+                      />
+                      <span className="truncate">{opt.label}</span>
+                    </label>
                   ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-[var(--color-text-muted)]">
-                عند اختيار مخزن سيتم تضمين عمود اسم المخزن ورصيد المنتج داخل هذا المخزن في ملف الإكسل.
-              </p>
+                </div>
+              </div>
+
+              {canViewCosts && (
+                <div className="space-y-2 border-t border-[var(--color-border)] pt-3">
+                  <p className="text-sm font-bold text-[var(--color-text-muted)]">تفاصيل تكلفة المنتج (للتصدير)</p>
+                  {([
+                    { k: 'rawMaterials' as const, label: 'تكلفة وتفاصيل المواد الخام' },
+                    { k: 'productionOverhead' as const, label: 'نصيب المصاريف الصناعية (من التفصيل)' },
+                    { k: 'calculatedUnit' as const, label: 'إجمالي التكلفة المحسوبة (للوحدة)' },
+                  ]).map((row) => (
+                    <label key={row.k} className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={exportCostExtras[row.k]}
+                        onChange={(e) => setExportCostExtras((prev) => ({ ...prev, [row.k]: e.target.checked }))}
+                        className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-primary shrink-0"
+                      />
+                      <span>{row.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
               <Button variant="outline" onClick={() => setShowWarehouseExportModal(false)}>إلغاء</Button>
               <Button
                 variant="primary"
+                disabled={exportingProducts || exportMonthLoading || (exportScope === 'current_month' && monthExportProductCount === 0)}
                 onClick={() => {
-                  void doExportProducts(exportOptions, exportWarehouseId || undefined);
+                  void doExportProducts(exportWarehouseId || undefined);
                   setShowWarehouseExportModal(false);
                 }}
               >
                 <ProductIcon name="download" className="text-sm" />
-                تصدير Excel
+                {exportingProducts ? 'جاري التصدير...' : 'تصدير Excel'}
               </Button>
             </div>
           </div>
@@ -1802,6 +2118,7 @@ export const Products: React.FC = () => {
               {[
                 { key: 'openingStock' as const, label: 'رصيد مفكك', icon: 'call_split' },
                 { key: 'totalProduction' as const, label: 'ما تم إنتاجه', icon: 'precision_manufacturing' },
+                { key: 'monthlyProductionQty' as const, label: 'إنتاج الشهر (تقارير)', icon: 'precision_manufacturing' },
                 { key: 'wasteUnits' as const, label: 'الهالك', icon: 'delete_sweep' },
                 { key: 'stockLevel' as const, label: 'منتج تام', icon: 'inventory_2' },
                 ...(canViewSellingPrice ? [{ key: 'sellingPrice' as const, label: 'سعر البيع', icon: 'sell' }] : []),

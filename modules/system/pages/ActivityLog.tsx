@@ -22,6 +22,20 @@ const HIDDEN_ACTIVITY_ACTIONS = new Set<ActivityAction>([
   'DELETE_REPORT',
 ]);
 
+function formatActivityMetadataJson(metadata: Record<string, unknown> | undefined): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const keys = Object.keys(metadata as object).filter((k) => {
+    const v = (metadata as Record<string, unknown>)[k];
+    return v !== undefined && v !== null && v !== '';
+  });
+  if (keys.length === 0) return null;
+  try {
+    return JSON.stringify(metadata, null, 2);
+  } catch {
+    return null;
+  }
+}
+
 const ACTION_LABELS: Partial<Record<ActivityAction, { label: string; icon: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }>> = {
   LOGIN: { label: 'تسجيل دخول', icon: 'login', variant: 'info' },
   LOGOUT: { label: 'تسجيل خروج', icon: 'logout', variant: 'neutral' },
@@ -307,7 +321,9 @@ export const ActivityLogPage: React.FC = () => {
       <div className="erp-page-head">
         <div className="erp-page-title-block">
           <h1 className="page-title">سجل النشاط</h1>
-          <p className="page-subtitle">تتبع جميع الأحداث والعمليات في النظام</p>
+          <p className="page-subtitle">
+            تتبع الأحداث والعمليات؛ يُعرض {PAGE_SIZE} سجلًا في كل دفعة (تحميل المزيد). أحداث تقارير الإنتاج (إنشاء/تعديل/حذف) غير معروضة هنا.
+          </p>
         </div>
         <div className="erp-page-actions">
           <button
@@ -531,6 +547,24 @@ export const ActivityLogPage: React.FC = () => {
                                   </div>
                                   <p className="text-sm font-medium text-[var(--color-text)]">{log.description}</p>
                                   <p className="text-xs text-[var(--color-text-muted)] mt-1">{formatTimestamp(log.timestamp)}</p>
+                                  {(() => {
+                                    const extra = formatActivityMetadataJson(log.metadata as Record<string, unknown> | undefined);
+                                    if (!extra) return null;
+                                    return (
+                                      <details className="mt-2 group/details">
+                                        <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)] list-none flex items-center gap-1">
+                                          <span className="material-icons-round text-sm transition-transform group-open/details:rotate-90" style={{ fontSize: 16 }}>chevron_right</span>
+                                          بيانات إضافية (metadata)
+                                        </summary>
+                                        <pre
+                                          className="mt-2 p-2.5 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] border border-[var(--color-border)] overflow-x-auto max-h-56 overflow-y-auto font-mono text-[11px] leading-relaxed text-left"
+                                          dir="ltr"
+                                        >
+                                          {extra}
+                                        </pre>
+                                      </details>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             );

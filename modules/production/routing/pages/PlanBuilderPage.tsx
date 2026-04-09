@@ -81,6 +81,7 @@ export const PlanBuilderPage: React.FC = () => {
   const { data: sourceSteps = [], isLoading: stepsLoading } = useRoutingStepsQuery(sourcePlanId || undefined);
 
   const [steps, setSteps] = useState<RoutingStepDraft[]>([newRoutingDraft()]);
+  const [routingTargetUnitSeconds, setRoutingTargetUnitSeconds] = useState<number | undefined>(undefined);
   const publish = usePublishRoutingPlanMutation();
 
   useEffect(() => {
@@ -94,6 +95,27 @@ export const PlanBuilderPage: React.FC = () => {
       })),
     );
   }, [sourcePlanId, sourceSteps]);
+
+  useEffect(() => {
+    if (!sourcePlan) return;
+    const t = sourcePlan.routingTargetUnitSeconds;
+    setRoutingTargetUnitSeconds(
+      t != null && Number(t) > 0 ? Math.round(Number(t)) : undefined,
+    );
+  }, [sourcePlan?.id, sourcePlan?.routingTargetUnitSeconds]);
+
+  useEffect(() => {
+    if (!routeProductId || sourcePlanId) return;
+    let cancelled = false;
+    void routingPlanService.getActivePlanForProduct(routeProductId).then((p) => {
+      if (cancelled || !p) return;
+      const t = p.routingTargetUnitSeconds;
+      if (t != null && Number(t) > 0) setRoutingTargetUnitSeconds(Math.round(Number(t)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [routeProductId, sourcePlanId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -129,19 +151,34 @@ export const PlanBuilderPage: React.FC = () => {
 
   const handleSave = async () => {
     if (!uid || !routeProductId || readonly || !can('routing.manage')) return;
-    const unnamed = steps.filter((s) => !s.name.trim()).length;
+    const meaningfulSteps = steps.filter((s) => {
+      const hasName = s.name.trim().length > 0;
+      const hasDuration = Number(s.durationSeconds) > 0;
+      const hasWorkers = Number(s.workersCount) > 0;
+      return hasName || hasDuration || hasWorkers;
+    });
+    const unnamed = meaningfulSteps.filter((s) => !s.name.trim()).length;
     if (unnamed > 0) {
       toast.warning('عُد تسمية الخطوات', {
         description: `يوجد ${unnamed} خطوة بلا اسم واضح. أضف اسماً لكل خطوة لتسهيل التنفيذ والتقارير.`,
       });
       return;
     }
-    const rows = steps.map((s) => ({
+    const rows = meaningfulSteps.map((s) => ({
       name: s.name.trim() || 'خطوة',
       durationSeconds: s.durationSeconds,
       workersCount: s.workersCount,
     }));
-    if (rows.length === 0) return;
+    const hasTarget =
+      typeof routingTargetUnitSeconds === 'number' &&
+      Number.isFinite(routingTargetUnitSeconds) &&
+      routingTargetUnitSeconds > 0;
+    if (rows.length === 0 && !hasTarget) {
+      toast.warning('لا توجد بيانات للحفظ', {
+        description: 'أدخل خطوة واحدة على الأقل أو حدِّد تارجت المسار.',
+      });
+      return;
+    }
     let deactivate: string | undefined;
     try {
       if (fromPlanId) {
@@ -155,6 +192,7 @@ export const PlanBuilderPage: React.FC = () => {
         createdBy: uid,
         deactivatePlanId: deactivate,
         stepRows: rows,
+        routingTargetUnitSeconds,
       });
       void useAppStore.getState().fetchRoutingPlanTotals();
       toast.success('تم حفظ مسار الإنتاج');
@@ -237,6 +275,42 @@ export const PlanBuilderPage: React.FC = () => {
               iconClassName="text-amber-600 dark:text-amber-400"
             />
           </div>
+          {readonly && sourcePlan && (
+            <p className="text-sm text-muted-foreground">
+              تارجت المسار (للتقارير):{' '}
+              {sourcePlan.routingTargetUnitSeconds != null && Number(sourcePlan.routingTargetUnitSeconds) > 0
+                ? `${Math.round(Number(sourcePlan.routingTargetUnitSeconds))} ث/وحدة`
+                : 'غير محدد'}
+            </p>
+          )}
+
+          {!readonly && (
+            <Card className="shadow-sm">
+              <CardContent className="space-y-2 p-4">
+                <label className="text-sm font-semibold text-foreground" htmlFor="routing-target-seconds">
+                  تارجت المسار (ثانية/وحدة) — لاحتساب المتوقع في تقارير الإنتاج
+                </label>
+                <input
+                  id="routing-target-seconds"
+                  type="number"
+                  min={1}
+                  step={1}
+                  disabled={effectiveReadonly}
+                  className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm tabular-nums"
+                  value={routingTargetUnitSeconds ?? ''}
+                  placeholder="اختياري — يُفضّل على مجموع الخطوات لانحراف الكمية"
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    if (v === '') setRoutingTargetUnitSeconds(undefined);
+                    else setRoutingTargetUnitSeconds(Math.round(Number(v)));
+                  }}
+                />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  إن وُجد، يُستخدم لحساب الكمية المتوقعة في التقرير مقابل ساعات التشغيل. إن تُرك فارغاً يُعتمد مجموع زمن الخطوات أعلاه.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="overflow-hidden shadow-sm">
             <CardHeader className="border-b bg-muted/30 px-4 py-3 sm:px-6">

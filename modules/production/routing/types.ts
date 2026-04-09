@@ -13,6 +13,11 @@ export interface ProductionRoutingPlan {
   totalTimeSeconds: number;
   /** Same aggregation as totalTimeSeconds (parallel workers per step do not multiply time). Kept for backward compatibility with older plans. */
   totalManTimeSeconds: number;
+  /**
+   * Optional seconds per finished unit for production variance (expected qty in reports).
+   * When set, overrides totalTimeSeconds for that calculation; display standard still uses step sum.
+   */
+  routingTargetUnitSeconds?: number;
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;

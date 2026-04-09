@@ -61,6 +61,7 @@ export const PRODUCT_DETAIL_MOCK: ProductDetailData = {
     { id: "p2", label: "أفضل خط إنتاج", value: "خط 3", tone: "blue" },
     { id: "p3", label: "وقت التجميع الفعلي", value: "19.73 دقيقة/وحدة", tone: "gray" },
     { id: "p4", label: "وقت التجميع القياسي", value: "غير محدد", tone: "gray" },
+    { id: "p5", label: "تارجت المتوقع (مسار أو منتج)", value: "غير محدد", tone: "amber" },
   ],
   monthlyCostDate: "مارس 2026",
   monthlyCostColumns: [

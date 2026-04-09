@@ -27,6 +27,7 @@ export const RoutingPlansPage: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
   const products = useAppStore((s) => s.products);
+  const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
   const userEmail = useAppStore((s) => s.userEmail);
@@ -35,7 +36,16 @@ export const RoutingPlansPage: React.FC = () => {
   const deletePlanMut = useSoftDeleteRoutingPlanMutation();
   const [pickProductId, setPickProductId] = useState('');
 
-  const productName = (id: string) => products.find((p) => p.id === id)?.name ?? id;
+  const productName = useCallback(
+    (id: string) => {
+      const fromTable = products.find((p) => p.id === id)?.name?.trim();
+      if (fromTable) return fromTable;
+      const fromRaw = _rawProducts.find((p) => p.id === id)?.name?.trim();
+      if (fromRaw) return fromRaw;
+      return id;
+    },
+    [products, _rawProducts],
+  );
 
   const resolveCreatorLabel = useCallback(
     (createdByUid: string) => {
@@ -79,7 +89,7 @@ export const RoutingPlansPage: React.FC = () => {
 
   const sorted = useMemo(
     () => [...plans].sort((a, b) => productName(a.productId).localeCompare(productName(b.productId), 'ar')),
-    [plans, products],
+    [plans, productName],
   );
 
   const productOptions = useMemo(
@@ -178,6 +188,12 @@ export const RoutingPlansPage: React.FC = () => {
                   <CardContent className="space-y-3 p-4 pt-0">
                     <div className="space-y-1 text-sm tabular-nums">
                       <div className="font-medium">{formatDurationSeconds(plan.totalTimeSeconds)}</div>
+                      <div className="text-muted-foreground text-[11px]">
+                        تارجت التقارير:{' '}
+                        {plan.routingTargetUnitSeconds != null && plan.routingTargetUnitSeconds > 0
+                          ? `${Math.round(plan.routingTargetUnitSeconds)} ث/وحدة`
+                          : '—'}
+                      </div>
                       {plan.totalManTimeSeconds > plan.totalTimeSeconds + 0.5 && (
                         <div className="text-muted-foreground text-[11px]">
                           (إصدار قديم: زمن-عمالة مسجّل {formatDurationSeconds(plan.totalManTimeSeconds)})
@@ -202,6 +218,7 @@ export const RoutingPlansPage: React.FC = () => {
                     <TableHead className="text-start">المنتج</TableHead>
                     <TableHead className="text-center">الإصدار</TableHead>
                     <TableHead className="text-start">إجمالي زمن المسار</TableHead>
+                    <TableHead className="text-center">تارجت التقارير</TableHead>
                     <TableHead className="text-start">أنشئ بواسطة</TableHead>
                     <TableHead className="text-start">تاريخ الإنشاء</TableHead>
                     <TableHead className="text-end">إجراءات</TableHead>
@@ -221,6 +238,11 @@ export const RoutingPlansPage: React.FC = () => {
                             </div>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="text-center text-sm tabular-nums">
+                        {plan.routingTargetUnitSeconds != null && plan.routingTargetUnitSeconds > 0
+                          ? `${Math.round(plan.routingTargetUnitSeconds)} ث`
+                          : '—'}
                       </TableCell>
                       <TableCell className="text-sm">{resolveCreatorLabel(plan.createdBy)}</TableCell>
                       <TableCell className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
