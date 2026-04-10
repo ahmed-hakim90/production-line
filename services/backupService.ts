@@ -124,6 +124,10 @@ const ALL_COLLECTIONS = [
   'dashboardStats',
   'tenants',
   'backups',
+  'customer_deposit_customers',
+  'customer_deposit_company_bank_accounts',
+  'customer_deposit_entries',
+  'customer_deposit_adjustments',
 ] as const;
 
 const COLLECTION_GROUPS = [

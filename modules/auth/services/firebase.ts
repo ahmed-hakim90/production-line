@@ -435,6 +435,45 @@ export const deleteRepairBranchCascadeCallable = async (
   }
 };
 
+export type ImportCustomerDepositsPackMode = 'merge' | 'replace_module';
+
+export const importCustomerDepositsPackCallable = async (
+  pack: Record<string, unknown>,
+  mode: ImportCustomerDepositsPackMode,
+): Promise<{
+  ok: true;
+  mode: ImportCustomerDepositsPackMode;
+  written: {
+    customers: number;
+    companyBankAccounts: number;
+    entries: number;
+    adjustments: number;
+  };
+  deletedBefore?: number;
+}> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { pack: Record<string, unknown>; mode: ImportCustomerDepositsPackMode },
+    {
+      ok: true;
+      mode: ImportCustomerDepositsPackMode;
+      written: {
+        customers: number;
+        companyBankAccounts: number;
+        entries: number;
+        adjustments: number;
+      };
+      deletedBefore?: number;
+    }
+  >(functionsClient, 'importCustomerDepositsPack');
+  try {
+    const result = await callable({ pack, mode });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
 /** Super-admin: restore backup JSON via Admin SDK (bypasses client Firestore rules). */
 export type ImportTenantBackupMode = 'merge' | 'replace' | 'full_reset';
 

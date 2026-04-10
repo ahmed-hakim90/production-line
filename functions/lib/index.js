@@ -2,13 +2,14 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
-import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
 import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRestore.js';
+import { runImportCustomerDepositsPack } from './customerDepositsPackImport.js';
 initializeApp();
 const db = getFirestore();
 const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
@@ -22,6 +23,67 @@ const ROLES_COLLECTION = 'roles';
 const ASSETS_COLLECTION = 'assets';
 const ASSET_DEPRECIATIONS_COLLECTION = 'asset_depreciations';
 const FCM_TOKEN_SUBCOLLECTION = 'fcmTokens';
+const REPAIR_JOBS_COLLECTION = 'repair_jobs';
+const REPAIR_BRANCHES_COLLECTION = 'repair_branches';
+const REPAIR_SPARE_PARTS_COLLECTION = 'repair_spare_parts';
+const REPAIR_SPARE_PARTS_STOCK_COLLECTION = 'repair_spare_parts_stock';
+const REPAIR_PARTS_TRANSACTIONS_COLLECTION = 'repair_parts_transactions';
+const REPAIR_SALES_INVOICES_COLLECTION = 'repair_sales_invoices';
+const REPAIR_TREASURY_SESSIONS_COLLECTION = 'repair_treasury_sessions';
+const REPAIR_TREASURY_ENTRIES_COLLECTION = 'repair_treasury_entries';
+const REPAIR_PM_PLANS_COLLECTION = 'repair_pm_plans';
+const STOCK_TRANSACTIONS_COLLECTION = 'stock_transactions';
+const STOCK_ITEMS_COLLECTION = 'stock_items';
+const STOCK_COUNTS_COLLECTION = 'stock_counts';
+const INVENTORY_TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
+const asComparable = (value) => {
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return value;
+    }
+    return JSON.stringify(value ?? null);
+};
+const buildFieldDelta = (beforeData, afterData) => {
+    const keys = new Set([
+        ...Object.keys(beforeData || {}),
+        ...Object.keys(afterData || {}),
+    ]);
+    const changes = [];
+    keys.forEach((field) => {
+        const oldValue = beforeData?.[field];
+        const newValue = afterData?.[field];
+        if (asComparable(oldValue) === asComparable(newValue))
+            return;
+        changes.push({ field, oldValue: oldValue ?? null, newValue: newValue ?? null });
+    });
+    return changes;
+};
+const writeAuditDelta = async (params) => {
+    const changes = buildFieldDelta(params.beforeData, params.afterData);
+    if (changes.length === 0)
+        return;
+    const updatedBy = String(params.afterData.updatedBy || params.afterData.updatedById || params.afterData.lastUpdatedBy || 'system');
+    const parentRef = db.collection('audit_logs').doc(params.docId);
+    await parentRef.set({
+        sourceCollection: params.collectionName,
+        sourceDocId: params.docId,
+        updatedBy,
+        updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    const batch = db.batch();
+    changes.forEach((change) => {
+        const ref = parentRef.collection('changes').doc();
+        batch.set(ref, {
+            field: change.field,
+            oldValue: change.oldValue,
+            newValue: change.newValue,
+            updatedBy,
+            timestamp: FieldValue.serverTimestamp(),
+            sourceCollection: params.collectionName,
+            sourceDocId: params.docId,
+        });
+    });
+    await batch.commit();
+};
 const toNumber = (value) => {
     const parsed = Number(value || 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -72,6 +134,15 @@ const calculateMonthlyDepreciationSafe = (purchaseCost, salvageValue, usefulLife
     const safeLife = Math.max(1, Math.floor(toNumberSafe(usefulLifeMonths, 1)));
     return Math.max(0, safeCost - safeSalvage) / safeLife;
 };
+const computeRepairSessionBalance = (entries) => (entries.reduce((sum, entry) => {
+    const amount = toNumberSafe(entry.amount, 0);
+    const type = String(entry.entryType || '');
+    if (type === 'OPENING' || type === 'INCOME' || type === 'TRANSFER_IN')
+        return sum + amount;
+    if (type === 'EXPENSE' || type === 'TRANSFER_OUT')
+        return sum - amount;
+    return sum;
+}, 0));
 const runAssetDepreciationForPeriod = async (periodInput) => {
     const period = normalizePeriod(periodInput);
     const periodEnd = periodEndDate(period);
@@ -219,6 +290,49 @@ const hasAnyPermission = async (uid, permissionKeys) => {
     const permissions = role.permissions || {};
     return permissionKeys.some((key) => permissions[key] === true);
 };
+const hasRepairBranchManagePermission = async (uid) => {
+    const userSnap = await db.collection(USERS_COLLECTION).doc(uid).get();
+    if (!userSnap.exists)
+        return false;
+    const user = userSnap.data();
+    if (user?.isSuperAdmin === true)
+        return true;
+    return hasAnyPermission(uid, ['repair.branches.manage', 'roles.manage']);
+};
+const deleteByBranchId = async (collectionName, branchId) => {
+    let deleted = 0;
+    while (true) {
+        const snap = await db
+            .collection(collectionName)
+            .where('branchId', '==', branchId)
+            .limit(400)
+            .get();
+        if (snap.empty)
+            break;
+        const batch = db.batch();
+        snap.docs.forEach((row) => batch.delete(row.ref));
+        await batch.commit();
+        deleted += snap.size;
+    }
+    return deleted;
+};
+const deleteByField = async (collectionName, fieldName, fieldValue) => {
+    let deleted = 0;
+    while (true) {
+        const snap = await db
+            .collection(collectionName)
+            .where(fieldName, '==', fieldValue)
+            .limit(400)
+            .get();
+        if (snap.empty)
+            break;
+        const batch = db.batch();
+        snap.docs.forEach((row) => batch.delete(row.ref));
+        await batch.commit();
+        deleted += snap.size;
+    }
+    return deleted;
+};
 const applyDelta = async (report, factor) => {
     const tid = String(report.tenantId || 'global').trim() || 'global';
     const root = statsRootForTenant(tid);
@@ -250,6 +364,57 @@ export const aggregateProductionReports = onDocumentWritten({
     if (after) {
         await applyDelta(after, 1);
     }
+});
+export const auditProductionOrdersUpdates = onDocumentUpdated({
+    document: 'production_orders/{docId}',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (event) => {
+    const beforeData = (event.data?.before?.data() || {});
+    const afterData = (event.data?.after?.data() || {});
+    const docId = String(event.params.docId || '').trim();
+    if (!docId)
+        return;
+    await writeAuditDelta({
+        collectionName: 'production_orders',
+        docId,
+        beforeData,
+        afterData,
+    });
+});
+export const auditInventoryTransactionsUpdates = onDocumentUpdated({
+    document: 'inventory_transactions/{docId}',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (event) => {
+    const beforeData = (event.data?.before?.data() || {});
+    const afterData = (event.data?.after?.data() || {});
+    const docId = String(event.params.docId || '').trim();
+    if (!docId)
+        return;
+    await writeAuditDelta({
+        collectionName: 'inventory_transactions',
+        docId,
+        beforeData,
+        afterData,
+    });
+});
+export const auditPayrollRunsUpdates = onDocumentUpdated({
+    document: 'payroll_runs/{docId}',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async (event) => {
+    const beforeData = (event.data?.before?.data() || {});
+    const afterData = (event.data?.after?.data() || {});
+    const docId = String(event.params.docId || '').trim();
+    if (!docId)
+        return;
+    await writeAuditDelta({
+        collectionName: 'payroll_runs',
+        docId,
+        beforeData,
+        afterData,
+    });
 });
 export const sendPushOnNotificationCreate = onDocumentWritten({
     document: 'notifications/{notificationId}',
@@ -629,6 +794,132 @@ export const scheduledAssetDepreciationJob = onSchedule({
 }, async () => {
     await runAssetDepreciationForPeriod();
 });
+export const scheduledRepairTreasuryAutoCloseJob = onSchedule({
+    schedule: '0 0 * * *',
+    timeZone: 'Africa/Cairo',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async () => {
+    const sessionsSnap = await db
+        .collection(REPAIR_TREASURY_SESSIONS_COLLECTION)
+        .where('status', '==', 'open')
+        .get();
+    for (const sessionDoc of sessionsSnap.docs) {
+        const session = sessionDoc.data();
+        const sessionId = sessionDoc.id;
+        const branchId = String(session.branchId || '').trim();
+        const tenantId = String(session.tenantId || '').trim();
+        if (!branchId || !tenantId)
+            continue;
+        if (session.needsManualClose === true)
+            continue;
+        const entriesSnap = await db
+            .collection(REPAIR_TREASURY_ENTRIES_COLLECTION)
+            .where('sessionId', '==', sessionId)
+            .get();
+        const entries = entriesSnap.docs.map((d) => d.data());
+        const computedBalance = computeRepairSessionBalance(entries);
+        const expectedCandidates = [
+            session.expectedClosingBalance,
+            session.actualBalance,
+            session.closingBalance,
+        ];
+        const expectedBalance = expectedCandidates.find((value) => Number.isFinite(Number(value)));
+        const hasExpectedBalance = expectedBalance !== undefined;
+        const diff = hasExpectedBalance
+            ? Math.abs(toNumberSafe(expectedBalance, computedBalance) - computedBalance)
+            : 0;
+        if (hasExpectedBalance && diff > 0.01) {
+            await sessionDoc.ref.set({
+                needsManualClose: true,
+                closeBlockReason: 'balance_mismatch',
+                closeDifference: diff,
+                autoCloseCheckedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            continue;
+        }
+        const closedAt = new Date().toISOString();
+        const batch = db.batch();
+        batch.set(sessionDoc.ref, {
+            status: 'closed',
+            closedAt,
+            closedBy: 'system:auto-close',
+            closedByName: 'System Auto Close',
+            closingBalance: computedBalance,
+            needsManualClose: false,
+            closeBlockReason: '',
+            autoClosedAt: FieldValue.serverTimestamp(),
+            autoCloseSource: 'auto-midnight-close',
+        }, { merge: true });
+        const closingRef = db.collection(REPAIR_TREASURY_ENTRIES_COLLECTION).doc();
+        batch.set(closingRef, {
+            tenantId,
+            branchId,
+            sessionId,
+            entryType: 'CLOSING',
+            amount: computedBalance,
+            note: 'إقفال تلقائي منتصف الليل',
+            createdBy: 'system:auto-close',
+            createdByName: 'System Auto Close',
+            createdAt: closedAt,
+        });
+        await batch.commit();
+    }
+});
+export const scheduledGeneratePreventiveMaintenanceTickets = onSchedule({
+    schedule: '0 5 * * *',
+    timeZone: 'Africa/Cairo',
+    region: 'us-central1',
+    memory: '256MiB',
+}, async () => {
+    const now = Date.now();
+    const plansSnap = await db.collection(REPAIR_PM_PLANS_COLLECTION).where('isActive', '==', true).get();
+    for (const planDoc of plansSnap.docs) {
+        const plan = planDoc.data();
+        const tenantId = String(plan.tenantId || '').trim();
+        const branchId = String(plan.branchId || '').trim();
+        const machineName = String(plan.machineName || 'Machine').trim();
+        const nextDueAt = String(plan.nextDueAt || '').trim();
+        if (!tenantId || !branchId || !nextDueAt)
+            continue;
+        const dueMs = Date.parse(nextDueAt);
+        if (!Number.isFinite(dueMs) || dueMs > now)
+            continue;
+        const receiptNo = `PM-${Date.now()}`;
+        const createdAtIso = new Date().toISOString();
+        const slaHours = Number.isFinite(Number(plan.defaultSlaHours)) ? Number(plan.defaultSlaHours) : 24;
+        const dueAtIso = new Date(now + slaHours * 60 * 60 * 1000).toISOString();
+        await db.collection(REPAIR_JOBS_COLLECTION).add({
+            tenantId,
+            receiptNo,
+            branchId,
+            customerName: 'Preventive Maintenance',
+            customerPhone: '-',
+            deviceType: 'Machine',
+            deviceBrand: machineName,
+            deviceModel: machineName,
+            problemDescription: 'Scheduled preventive maintenance task',
+            status: 'received',
+            warranty: 'none',
+            partsUsed: [],
+            createdAt: createdAtIso,
+            updatedAt: createdAtIso,
+            assignedAt: null,
+            resolvedAt: null,
+            slaHours,
+            dueAt: dueAtIso,
+            preventivePlanId: planDoc.id,
+            isPreventive: true,
+        });
+        const everyDays = Math.max(1, Math.floor(Number(plan.everyDays || 0)));
+        const nextCycle = new Date(now + everyDays * 24 * 60 * 60 * 1000).toISOString();
+        await planDoc.ref.set({
+            lastGeneratedAt: createdAtIso,
+            nextDueAt: nextCycle,
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+    }
+});
 export const runAssetDepreciationJob = onCall({
     region: 'us-central1',
     memory: '256MiB',
@@ -647,6 +938,181 @@ export const runAssetDepreciationJob = onCall({
     }
     const requestedPeriod = String(request.data?.period || '').trim();
     return runAssetDepreciationForPeriod(requestedPeriod || undefined);
+});
+export const importCustomerDepositsPack = onCall({
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    const data = request.data;
+    const mode = data?.mode === 'replace_module' ? 'replace_module' : 'merge';
+    const pack = data?.pack;
+    if (pack == null) {
+        throw new HttpsError('invalid-argument', 'يجب تمرير pack.');
+    }
+    return runImportCustomerDepositsPack({ db, requesterUid, rawPack: pack, mode });
+});
+export const deleteRepairBranchCascade = onCall({
+    region: 'us-central1',
+    memory: '1GiB',
+    timeoutSeconds: 540,
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const allowed = await hasRepairBranchManagePermission(requesterUid);
+    if (!allowed) {
+        throw new HttpsError('permission-denied', 'لا تملك صلاحية حذف الفروع.');
+    }
+    const branchId = String(request.data?.branchId || '').trim();
+    if (!branchId) {
+        throw new HttpsError('invalid-argument', 'يجب تمرير branchId.');
+    }
+    const branchRef = db.collection(REPAIR_BRANCHES_COLLECTION).doc(branchId);
+    const branchSnap = await branchRef.get();
+    if (!branchSnap.exists) {
+        throw new HttpsError('not-found', 'الفرع غير موجود.');
+    }
+    const branchData = branchSnap.data();
+    const branchTenantId = String(branchData?.tenantId || '').trim();
+    const userSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const userData = userSnap.data();
+    if (!userData?.isSuperAdmin) {
+        const requesterTenantId = String(userData?.tenantId || '').trim();
+        if (!requesterTenantId || requesterTenantId !== branchTenantId) {
+            throw new HttpsError('permission-denied', 'لا يمكنك حذف فرع خارج شركتك.');
+        }
+    }
+    const deletedCounts = {};
+    const unlinkedCounts = {};
+    const branchTechnicianIds = Array.isArray(branchData.technicianIds)
+        ? (branchData.technicianIds || [])
+            .map((id) => String(id || '').trim())
+            .filter(Boolean)
+        : [];
+    const managerEmployeeId = String(branchData.managerEmployeeId || '').trim();
+    unlinkedCounts.technicians = branchTechnicianIds.length;
+    unlinkedCounts.managers = managerEmployeeId ? 1 : 0;
+    deletedCounts[REPAIR_TREASURY_ENTRIES_COLLECTION] = await deleteByBranchId(REPAIR_TREASURY_ENTRIES_COLLECTION, branchId);
+    deletedCounts[REPAIR_TREASURY_SESSIONS_COLLECTION] = await deleteByBranchId(REPAIR_TREASURY_SESSIONS_COLLECTION, branchId);
+    deletedCounts[REPAIR_PARTS_TRANSACTIONS_COLLECTION] = await deleteByBranchId(REPAIR_PARTS_TRANSACTIONS_COLLECTION, branchId);
+    deletedCounts[REPAIR_SPARE_PARTS_STOCK_COLLECTION] = await deleteByBranchId(REPAIR_SPARE_PARTS_STOCK_COLLECTION, branchId);
+    deletedCounts[REPAIR_SPARE_PARTS_COLLECTION] = await deleteByBranchId(REPAIR_SPARE_PARTS_COLLECTION, branchId);
+    deletedCounts[REPAIR_SALES_INVOICES_COLLECTION] = await deleteByBranchId(REPAIR_SALES_INVOICES_COLLECTION, branchId);
+    deletedCounts[REPAIR_PM_PLANS_COLLECTION] = await deleteByBranchId(REPAIR_PM_PLANS_COLLECTION, branchId);
+    deletedCounts[REPAIR_JOBS_COLLECTION] = await deleteByBranchId(REPAIR_JOBS_COLLECTION, branchId);
+    const warehouseId = String(branchData?.warehouseId || '').trim();
+    if (warehouseId) {
+        deletedCounts[STOCK_TRANSACTIONS_COLLECTION] =
+            await deleteByField(STOCK_TRANSACTIONS_COLLECTION, 'warehouseId', warehouseId);
+        deletedCounts[`${STOCK_TRANSACTIONS_COLLECTION}_toWarehouseId`] =
+            await deleteByField(STOCK_TRANSACTIONS_COLLECTION, 'toWarehouseId', warehouseId);
+        deletedCounts[STOCK_ITEMS_COLLECTION] = await deleteByField(STOCK_ITEMS_COLLECTION, 'warehouseId', warehouseId);
+        deletedCounts[STOCK_COUNTS_COLLECTION] = await deleteByField(STOCK_COUNTS_COLLECTION, 'warehouseId', warehouseId);
+        deletedCounts[`${INVENTORY_TRANSFER_REQUESTS_COLLECTION}_fromWarehouseId`] =
+            await deleteByField(INVENTORY_TRANSFER_REQUESTS_COLLECTION, 'fromWarehouseId', warehouseId);
+        deletedCounts[`${INVENTORY_TRANSFER_REQUESTS_COLLECTION}_toWarehouseId`] =
+            await deleteByField(INVENTORY_TRANSFER_REQUESTS_COLLECTION, 'toWarehouseId', warehouseId);
+        const warehouseRef = db.collection('warehouses').doc(warehouseId);
+        const warehouseSnap = await warehouseRef.get();
+        if (warehouseSnap.exists) {
+            await warehouseRef.delete();
+            deletedCounts.warehouses = 1;
+        }
+        else {
+            deletedCounts.warehouses = 0;
+        }
+    }
+    await branchRef.delete();
+    deletedCounts[REPAIR_BRANCHES_COLLECTION] = 1;
+    const deletedFirestoreDocs = Object.values(deletedCounts).reduce((sum, value) => sum + Number(value || 0), 0);
+    return {
+        ok: true,
+        branchId,
+        branchName: String(branchData?.name || ''),
+        deletedFirestoreDocs,
+        deletedCounts,
+        unlinkedCounts,
+    };
+});
+export const runMonthlyOverheadAllocation = onCall({
+    region: 'us-central1',
+    memory: '512MiB',
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid)
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    const permitted = await hasAnyPermission(requesterUid, ['costs.manage', 'roles.manage']);
+    if (!permitted)
+        throw new HttpsError('permission-denied', 'ليس لديك صلاحية إدارة التكاليف.');
+    const month = String(request.data?.month || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+        throw new HttpsError('invalid-argument', 'صيغة الشهر يجب أن تكون YYYY-MM.');
+    }
+    const rows = await db.collection('monthly_production_costs').where('month', '==', month).get();
+    let totalDirect = 0;
+    let totalIndirect = 0;
+    let totalOrders = 0;
+    rows.forEach((docSnap) => {
+        const row = docSnap.data();
+        totalDirect += Number(row.directCost || 0);
+        totalIndirect += Number(row.indirectCost || 0);
+        totalOrders += 1;
+    });
+    const totalCost = totalDirect + totalIndirect;
+    await db.collection('monthly_costs').doc(month).set({
+        month,
+        totalDirect,
+        totalIndirect,
+        totalCost,
+        orderCount: totalOrders,
+        updatedBy: requesterUid,
+        updatedAt: FieldValue.serverTimestamp(),
+        source: 'runMonthlyOverheadAllocation',
+    }, { merge: true });
+    return { ok: true, month, totalDirect, totalIndirect, totalCost, orderCount: totalOrders };
+});
+export const calculateMonthlyCostVariance = onCall({
+    region: 'us-central1',
+    memory: '512MiB',
+}, async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid)
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    const permitted = await hasAnyPermission(requesterUid, ['costs.manage', 'roles.manage']);
+    if (!permitted)
+        throw new HttpsError('permission-denied', 'ليس لديك صلاحية إدارة التكاليف.');
+    const month = String(request.data?.month || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+        throw new HttpsError('invalid-argument', 'صيغة الشهر يجب أن تكون YYYY-MM.');
+    }
+    const rows = await db.collection('monthly_production_costs').where('month', '==', month).get();
+    let flagged = 0;
+    for (const rowDoc of rows.docs) {
+        const row = rowDoc.data();
+        const actual = Number(row.totalProductionCost || 0);
+        const standard = Number(row.standardCost || 0);
+        const variance = actual - standard;
+        if (Math.abs(variance) <= 0.0001)
+            continue;
+        flagged += 1;
+        await db.collection('cost_variances').doc(`${month}_${rowDoc.id}`).set({
+            month,
+            productId: String(row.productId || ''),
+            monthlyCostDocId: rowDoc.id,
+            standardCost: standard,
+            actualCost: actual,
+            variance,
+            status: 'open',
+            ownerId: '',
+            notes: '',
+            updatedBy: requesterUid,
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+    }
+    return { ok: true, month, flagged };
 });
 const TENANT_FOOTPRINT_AVG_DOC_BYTES = 900;
 /** Super-admin: aggregate document counts per tenant (for platform insights). */
@@ -903,4 +1369,82 @@ export const resolveTenantSlug = onCall({
         };
     }
     return { exists: false };
+});
+const sanitizeTrackText = (value) => String(value || '').trim();
+const sanitizeTrackSlug = (value) => sanitizeTrackText(value).toLowerCase();
+const normalizeTrackPhone = (value) => sanitizeTrackText(value).replace(/\s+/g, '');
+const toEpochMs = (value) => {
+    if (!value)
+        return 0;
+    if (typeof value === 'string') {
+        const parsed = Date.parse(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+    }
+    if (typeof value === 'object' && value !== null) {
+        const v = value;
+        if (typeof v.toDate === 'function') {
+            const ms = v.toDate().getTime();
+            return Number.isFinite(ms) ? ms : 0;
+        }
+        const sec = typeof v.seconds === 'number' ? v.seconds : (typeof v._seconds === 'number' ? v._seconds : 0);
+        return Number.isFinite(sec) ? sec * 1000 : 0;
+    }
+    return 0;
+};
+/** Public: track one repair job by slug + receipt + phone with minimal fields only. */
+export const trackRepairJobPublic = onCall({
+    region: 'us-central1',
+    memory: '128MiB',
+    cors: true,
+    invoker: 'public',
+}, async (request) => {
+    const payload = (request.data || {});
+    const tenantSlug = sanitizeTrackSlug(payload.tenantSlug);
+    const receiptNo = sanitizeTrackText(payload.receiptNo);
+    const phone = normalizeTrackPhone(payload.phone);
+    if (!tenantSlug || !/^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$/.test(tenantSlug)) {
+        throw new HttpsError('invalid-argument', 'معرّف الشركة غير صالح.');
+    }
+    if (!receiptNo || receiptNo.length > 64) {
+        throw new HttpsError('invalid-argument', 'رقم الإيصال غير صالح.');
+    }
+    if (!phone || phone.length > 20) {
+        throw new HttpsError('invalid-argument', 'رقم الهاتف غير صالح.');
+    }
+    const slugSnap = await db.collection(TENANT_SLUGS_COLLECTION).doc(tenantSlug).get();
+    const tenantId = String(slugSnap.data()?.tenantId || '').trim();
+    if (!slugSnap.exists || !tenantId) {
+        return { found: false, reason: 'tenant_not_found' };
+    }
+    const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+    const tenantStatus = String(tenantSnap.data()?.status || '');
+    if (!tenantSnap.exists || tenantStatus !== 'active') {
+        return { found: false, reason: 'tenant_not_active' };
+    }
+    const snap = await db
+        .collection(REPAIR_JOBS_COLLECTION)
+        .where('tenantId', '==', tenantId)
+        .where('receiptNo', '==', receiptNo)
+        .where('customerPhone', '==', phone)
+        .limit(1)
+        .get();
+    if (snap.empty) {
+        return { found: false, reason: 'not_found' };
+    }
+    const row = snap.docs[0];
+    const data = row.data();
+    return {
+        found: true,
+        job: {
+            receiptNo: String(data.receiptNo || ''),
+            customerName: String(data.customerName || ''),
+            deviceBrand: String(data.deviceBrand || ''),
+            deviceModel: String(data.deviceModel || ''),
+            status: String(data.status || 'received'),
+            updatedAtMs: toEpochMs(data.updatedAt),
+        },
+    };
 });

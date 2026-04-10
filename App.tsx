@@ -21,6 +21,7 @@ import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
 import { CATALOG_ROUTES } from './modules/catalog/routes';
 import { PRODUCTION_ROUTES } from './modules/production/routes';
 import { ONLINE_ROUTES } from './modules/online/routes';
+import { CUSTOMER_DEPOSIT_ROUTES } from './modules/customers/routes';
 import { QUALITY_ROUTES } from './modules/quality/routes';
 import { HR_ROUTES } from './modules/hr/routes';
 import { COST_ROUTES } from './modules/costs/routes';
@@ -195,6 +196,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...ATTENDANCE_ROUTES,
   ...REPAIR_ROUTES,
   ...ONLINE_ROUTES,
+  ...CUSTOMER_DEPOSIT_ROUTES,
 ];
 
 /** `/products` → `products` (real URLs are `/t/:tenantSlug/products`). */

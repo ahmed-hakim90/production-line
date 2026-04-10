@@ -25,6 +25,7 @@ import {
   Download,
   Factory,
   FileDown,
+  Landmark,
   LayoutDashboard,
   Loader2,
   MoreHorizontal,
@@ -40,6 +41,7 @@ import {
   Package,
   Upload,
   User,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -62,6 +64,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   download: Download,
   factory: Factory,
   file_download: FileDown,
+  landmark: Landmark,
   layout_dashboard: LayoutDashboard,
   edit: Pencil,
   more_horiz: MoreHorizontal,
@@ -73,6 +76,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   settings: Settings,
   upload: Upload,
   user: User,
+  wallet: Wallet,
 };
 
 function renderActionIcon(icon?: string, className?: string, size = 16) {

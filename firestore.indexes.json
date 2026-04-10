@@ -1291,6 +1291,108 @@
         { "fieldPath": "tenantId", "order": "ASCENDING" },
         { "fieldPath": "handedToPostAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "customer_deposit_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "depositDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "customerId", "order": "ASCENDING" },
+        { "fieldPath": "depositDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "companyBankAccountId", "order": "ASCENDING" },
+        { "fieldPath": "depositDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_customers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "codeNormalized", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_customers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "codeNormalized", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_company_bank_accounts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "accountNumberNormalized", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_company_bank_accounts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "accountNumberNormalized", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_adjustments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "effectiveDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_adjustments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "customerId", "order": "ASCENDING" },
+        { "fieldPath": "effectiveDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_adjustments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "companyBankAccountId", "order": "ASCENDING" },
+        { "fieldPath": "effectiveDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "customer_deposit_adjustments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

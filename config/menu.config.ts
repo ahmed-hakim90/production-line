@@ -173,6 +173,43 @@ export const MENU_CONFIG: MenuGroup[] = [
     ],
   },
   {
+    key: 'customers',
+    label: 'العملاء والإيداعات',
+    icon: 'account_balance',
+    children: [
+      {
+        key: 'customer-deposits',
+        label: 'إيداعات البنك',
+        icon: 'payments',
+        path: '/customers/deposits',
+        permission: 'customerDeposits.view',
+        anyOfPermissions: [
+          'customerDeposits.view',
+          'customerDeposits.create',
+          'customerDeposits.confirm',
+          'customerDeposits.manage',
+        ],
+        activePatterns: ['/customers/deposits'],
+        activePathExcludePrefixes: ['/customers/deposits/master'],
+      },
+      {
+        key: 'customer-deposit-new',
+        label: 'إيداع جديد',
+        icon: 'add_circle',
+        path: '/customers/deposits/new',
+        permission: 'customerDeposits.create',
+        anyOfPermissions: ['customerDeposits.create', 'customerDeposits.manage'],
+      },
+      {
+        key: 'customer-deposit-master',
+        label: 'إعداد العملاء والبنوك',
+        icon: 'tune',
+        path: '/customers/deposits/master',
+        permission: 'customerDeposits.manage',
+      },
+    ],
+  },
+  {
     key: 'hr',
     label: 'فريق العمل',
     icon: 'badge',

@@ -14,6 +14,7 @@ import {
   type AdminBackupFileInput,
   type AdminRestoreMode,
 } from './tenantImportRestore.js';
+import { runImportCustomerDepositsPack } from './customerDepositsPackImport.js';
 
 initializeApp();
 
@@ -1129,6 +1130,24 @@ export const runAssetDepreciationJob = onCall(
 
     const requestedPeriod = String((request.data as { period?: string } | undefined)?.period || '').trim();
     return runAssetDepreciationForPeriod(requestedPeriod || undefined);
+  },
+);
+
+export const importCustomerDepositsPack = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    const data = request.data as { pack?: unknown; mode?: string } | undefined;
+    const mode = data?.mode === 'replace_module' ? 'replace_module' : 'merge';
+    const pack = data?.pack;
+    if (pack == null) {
+      throw new HttpsError('invalid-argument', 'يجب تمرير pack.');
+    }
+    return runImportCustomerDepositsPack({ db, requesterUid, rawPack: pack, mode });
   },
 );
 

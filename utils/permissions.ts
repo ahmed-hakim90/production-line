@@ -72,6 +72,7 @@ export type Permission =
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
   | 'onlineDispatch.view' | 'onlineDispatch.manage' | 'onlineDispatch.handoffToWarehouse' | 'onlineDispatch.handoffToPost'
   | 'onlineDispatch.deletePermanent'
+  | 'customerDeposits.view' | 'customerDeposits.create' | 'customerDeposits.confirm' | 'customerDeposits.manage'
   | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -154,6 +155,16 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'supplyCycles.manage', label: 'إنشاء وتعديل دورات التوريد' },
       { key: 'supplyCycles.close', label: 'إقفال دورة توريد' },
       { key: 'supplyCycles.delete', label: 'حذف دورة توريد (مسودة/فارغة)' },
+    ],
+  },
+  {
+    key: 'customers',
+    label: 'العملاء وإيداعات البنك',
+    permissions: [
+      { key: 'customerDeposits.view', label: 'عرض الإيداعات والكشوف والأرصدة' },
+      { key: 'customerDeposits.create', label: 'تسجيل إيداع جديد (معلق)' },
+      { key: 'customerDeposits.confirm', label: 'تأكيد إيداع (موكّد) — الخزينة' },
+      { key: 'customerDeposits.manage', label: 'إدارة كاملة (ماستر العملاء/الحسابات والتسويات)' },
     ],
   },
   {
@@ -323,6 +334,8 @@ const PERMISSION_GROUP_ORDER: string[] = [
   'inventory',
   // Online dispatch
   'online',
+  // Customers / bank deposits
+  'customers',
   // Quality
   'quality',
   // HR
@@ -413,6 +426,14 @@ export function checkPermission(
   }
   if (permission === 'routing.execute') {
     return permissions['reports.create'] === true || permissions['quickAction.view'] === true;
+  }
+  if (
+    (permission === 'customerDeposits.view' ||
+      permission === 'customerDeposits.create' ||
+      permission === 'customerDeposits.confirm') &&
+    permissions['customerDeposits.manage'] === true
+  ) {
+    return true;
   }
   return false;
 }

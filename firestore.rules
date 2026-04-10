@@ -51,6 +51,65 @@ service cloud.firestore {
         || hasPermission('onlineDispatch.handoffToPost');
     }
 
+    function customerDepositsReadPerm() {
+      return isSuperAdmin()
+        || hasPermission('customerDeposits.view')
+        || hasPermission('customerDeposits.create')
+        || hasPermission('customerDeposits.confirm')
+        || hasPermission('customerDeposits.manage');
+    }
+
+    /** تسجيل إيداع معلق أو تحديث مسلسل الإيداعات — يشمل المشرف العام (الواجهة قد تعتمد على دور غير مزامن مع القواعد). */
+    function customerDepositsCanCreatePendingEntry() {
+      return hasPermission('customerDeposits.create')
+        || hasPermission('customerDeposits.manage')
+        || isSuperAdmin();
+    }
+
+    function depositEntryAmountOk() {
+      return request.resource.data.amount is int
+        || request.resource.data.amount is float
+        || request.resource.data.amount is number;
+    }
+
+    function depositEntryTenantOk() {
+      return isActiveUser()
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == resource.data.tenantId;
+    }
+
+    function depositEntryConfirmUpdate() {
+      return (hasPermission('customerDeposits.confirm') || hasPermission('customerDeposits.manage'))
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'confirmed'
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.customerId == resource.data.customerId
+        && request.resource.data.companyBankAccountId == resource.data.companyBankAccountId
+        && request.resource.data.depositDate == resource.data.depositDate
+        && request.resource.data.depositorName == resource.data.depositorName
+        && request.resource.data.depositorAccountNumber == resource.data.depositorAccountNumber
+        && request.resource.data.customerCodeSnapshot == resource.data.customerCodeSnapshot
+        && request.resource.data.customerNameSnapshot == resource.data.customerNameSnapshot
+        && request.resource.data.bankLabelSnapshot == resource.data.bankLabelSnapshot
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.confirmedByUid == request.auth.uid
+        && request.resource.data.confirmedAt is timestamp;
+    }
+
+    function depositEntryCreatorPendingUpdate() {
+      return hasPermission('customerDeposits.create')
+        && !(hasPermission('customerDeposits.manage'))
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'pending'
+        && resource.data.createdByUid == request.auth.uid;
+    }
+
+    /** المسلسل لا يُغيّر بعد الإنشاء (سجلات بلا حقل تبقى قابلة للتحديث دون إضافة مسلسل من العميل). */
+    function depositEntrySerialUnchanged() {
+      return !('depositSerial' in resource.data)
+        || request.resource.data.depositSerial == resource.data.depositSerial;
+    }
+
     /** Warehouse scan create/update, or full online manager. */
     function onlineDispatchCanWarehouseHandoff() {
       return hasPermission('onlineDispatch.handoffToWarehouse')
@@ -614,6 +673,119 @@ service cloud.firestore {
             && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse'))
           )
         );
+    }
+
+    match /customer_deposit_customers/{docId} {
+      allow read: if isActiveUser()
+        && customerDepositsReadPerm()
+        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
+      allow create: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.code is string
+        && request.resource.data.codeNormalized is string
+        && request.resource.data.name is string
+        && request.resource.data.openingBalance is number
+        && request.resource.data.isActive is bool;
+      allow update: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    match /customer_deposit_company_bank_accounts/{docId} {
+      allow read: if isActiveUser()
+        && customerDepositsReadPerm()
+        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
+      allow create: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.accountNumber is string
+        && request.resource.data.accountNumberNormalized is string
+        && request.resource.data.bankLabel is string
+        && request.resource.data.openingBalance is number
+        && request.resource.data.isActive is bool;
+      allow update: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    match /customer_deposit_adjustments/{docId} {
+      allow read: if isActiveUser()
+        && customerDepositsReadPerm()
+        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
+      allow create: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.effectiveDate is string
+        && request.resource.data.signedAmount is number
+        && request.resource.data.note is string
+        && request.resource.data.createdByUid == request.auth.uid
+        && (
+          (request.resource.data.customerId is string && request.resource.data.customerId != '')
+          || (request.resource.data.companyBankAccountId is string && request.resource.data.companyBankAccountId != '')
+        );
+      allow update: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && resource.data.tenantId == currentUserDoc().data.tenantId;
+    }
+
+    match /customer_deposit_entry_sequences/{tenantDocId} {
+      allow read: if isActiveUser()
+        && customerDepositsReadPerm()
+        && tenantDocId == currentUserDoc().data.tenantId
+        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
+      allow create, update: if isActiveUser()
+        && tenantDocId == currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && customerDepositsCanCreatePendingEntry()
+        && request.resource.data.nextSeq is int
+        && request.resource.data.nextSeq >= 1
+        && request.resource.data.freeSerials is list;
+    }
+
+    match /customer_deposit_entries/{docId} {
+      allow read: if isActiveUser()
+        && customerDepositsReadPerm()
+        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
+      allow create: if isActiveUser()
+        && customerDepositsCanCreatePendingEntry()
+        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.depositSerial is int
+        && request.resource.data.depositSerial >= 1
+        && depositEntryAmountOk()
+        && request.resource.data.depositorName is string
+        && request.resource.data.depositorAccountNumber is string
+        && request.resource.data.customerId is string
+        && request.resource.data.customerCodeSnapshot is string
+        && request.resource.data.customerNameSnapshot is string
+        && request.resource.data.companyBankAccountId is string
+        && request.resource.data.bankLabelSnapshot is string
+        && request.resource.data.depositDate is string;
+      allow update: if isActiveUser()
+        && depositEntryTenantOk()
+        && depositEntrySerialUnchanged()
+        && (
+          (hasPermission('customerDeposits.manage'))
+          || (depositEntryConfirmUpdate())
+          || (depositEntryCreatorPendingUpdate())
+        );
+      allow delete: if isActiveUser()
+        && hasPermission('customerDeposits.manage')
+        && resource.data.tenantId == currentUserDoc().data.tenantId;
     }
 
     match /{coll}/{docId} {

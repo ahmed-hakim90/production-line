@@ -87,6 +87,11 @@ export const ALL_BACKUP_COLLECTIONS = [
     'dashboardStats',
     'tenants',
     'backups',
+    'customer_deposit_customers',
+    'customer_deposit_company_bank_accounts',
+    'customer_deposit_entries',
+    'customer_deposit_adjustments',
+    'customer_deposit_entry_sequences',
 ];
 const MAX_JSON_CHARS = 28 * 1024 * 1024;
 async function readCollectionTenantScoped(db, name, tenantId) {
@@ -102,6 +107,10 @@ async function readCollectionTenantScoped(db, name, tenantId) {
     }
     if (name === 'tenants') {
         const d = await db.collection('tenants').doc(tenantId).get();
+        return d.exists ? [{ _docId: d.id, ...d.data() }] : [];
+    }
+    if (name === 'customer_deposit_entry_sequences') {
+        const d = await db.collection('customer_deposit_entry_sequences').doc(tenantId).get();
         return d.exists ? [{ _docId: d.id, ...d.data() }] : [];
     }
     if (name === 'user_devices') {

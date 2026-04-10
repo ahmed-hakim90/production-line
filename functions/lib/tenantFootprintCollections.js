@@ -81,4 +81,12 @@ export const TENANT_SCOPED_COLLECTIONS = [
     'product_categories',
     'automation_runs',
     'backups',
+    'production_routing_plans',
+    'production_routing_steps',
+    'production_routing_executions',
+    'production_routing_execution_steps',
+    'customer_deposit_customers',
+    'customer_deposit_company_bank_accounts',
+    'customer_deposit_entries',
+    'customer_deposit_adjustments',
 ];

@@ -542,3 +542,7 @@
 ## [4.0.112] - 2026-04-08
 
 - Add Edit redirect 3
+
+## [4.0.113] - 2026-04-09
+
+- Add Edit for online
