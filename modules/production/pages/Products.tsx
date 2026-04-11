@@ -67,7 +67,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useManagedPrint } from '../../../utils/printManager';
-import { shareToWhatsApp } from '../../../utils/reportExport';
+import { shareToWhatsApp, waitForExportPaint } from '../../../utils/reportExport';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { deleteField } from 'firebase/firestore';
 
@@ -1008,6 +1008,7 @@ export const Products: React.FC = () => {
     if (!el || !detailDrawerProduct) return;
     setDrawerShareBusy(true);
     try {
+      await waitForExportPaint(150);
       await shareToWhatsApp(
         el,
         `product-${detailDrawerProduct.code || detailDrawerProduct.id}`,

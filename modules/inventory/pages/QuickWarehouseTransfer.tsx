@@ -8,7 +8,7 @@ import { stockService } from '../services/stockService';
 import type { RawMaterial, Warehouse, StockItemBalance } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
-import { exportToPDF, exportAsImage, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
+import { exportToPDF, exportAsImage, shareToWhatsApp, waitForExportPaint, type ShareResult } from '../../../utils/reportExport';
 import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData } from '../components/StockTransferPrint';
 import {
   INV_REF_REGEX,
@@ -342,6 +342,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
     if (!transferShareCardRef.current || !savedPrintData) return;
     setExporting(true);
     try {
+      await waitForExportPaint(150);
       const result = await shareToWhatsApp(
         transferShareCardRef.current,
         `تحويل مخزن ${savedPrintData.transferNo}`,

@@ -1447,16 +1447,14 @@ export const Reports: React.FC = () => {
         shareStandardVariance: buildShareStandardVarianceBanner(variance),
       };
       setSharePrintRow(row);
-      await new Promise<void>((r) => {
-        requestAnimationFrame(() => setTimeout(r, 150));
-      });
+      const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
+      await waitForExportPaint(150);
       if (!sharePrintRef.current) {
         setSharePrintRow(null);
         return;
       }
       setExporting(true);
       try {
-        const { shareToWhatsApp } = await import('../../../utils/reportExport');
         const result = await shareToWhatsApp(
           sharePrintRef.current,
           `تقرير-إنتاج-${row.date}-${row.lineName}`,
@@ -2075,7 +2073,8 @@ export const Reports: React.FC = () => {
     if (!bulkPrintRef.current) return;
     setExporting(true);
     try {
-      const { shareToWhatsApp } = await import('../../../utils/reportExport');
+      const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
+      await waitForExportPaint(150);
       const result = await shareToWhatsApp(bulkPrintRef.current, `تقارير الإنتاج ${startDate}`);
       showShareFeedback(result);
     } finally {

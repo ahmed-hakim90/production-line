@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
-import { exportAsImage, exportToPDF, shareToWhatsApp, ShareResult } from '../../../utils/reportExport';
+import { exportAsImage, exportToPDF, shareToWhatsApp, waitForExportPaint, ShareResult } from '../../../utils/reportExport';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
@@ -500,7 +500,7 @@ export const QuickAction: React.FC = () => {
       ...printReport,
       shareStandardVariance: buildShareStandardVarianceBanner(variance),
     });
-    await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 150)));
+    await waitForExportPaint(150);
     setExporting(true);
     try {
       const result = await shareToWhatsApp(

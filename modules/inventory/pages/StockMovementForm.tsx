@@ -9,7 +9,7 @@ import { warehouseService } from '../services/warehouseService';
 import type { RawMaterial, Warehouse, StockItemBalance } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
-import { exportToPDF, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
+import { exportToPDF, shareToWhatsApp, waitForExportPaint, type ShareResult } from '../../../utils/reportExport';
 import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData } from '../components/StockTransferPrint';
 import type { TransferDisplayUnitMode } from '../utils/transferUnits';
 import {
@@ -374,7 +374,7 @@ export const StockMovementForm: React.FC = () => {
           setShowPrintPreview(true);
         } else if (afterSaveAction === 'share') {
           setPrintData(payload);
-          await new Promise((r) => setTimeout(r, 250));
+          await waitForExportPaint(150);
           if (transferShareCardRef.current) {
             const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${payload.transferNo}`);
             showShareFeedback(result);

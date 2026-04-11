@@ -11,7 +11,7 @@ import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData
 import { useManagedPrint } from '../../../utils/printManager';
 import { useAppStore } from '../../../store/useAppStore';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
-import { shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
+import { shareToWhatsApp, waitForExportPaint, type ShareResult } from '../../../utils/reportExport';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { toast } from '../../../components/Toast';
@@ -286,11 +286,6 @@ export const StockTransactions: React.FC = () => {
     setTimeout(() => setShareToast(null), 6000);
   }, []);
 
-  const waitForSharePaint = () =>
-    new Promise<void>((r) => {
-      requestAnimationFrame(() => setTimeout(r, 150));
-    });
-
   const buildSharePayloadFromTransferLine = (row: StockTransaction): StockTransferPrintData | null => {
     const transferNo = row.referenceNo?.trim();
     if (!transferNo) return null;
@@ -366,7 +361,7 @@ export const StockTransactions: React.FC = () => {
       }
 
       setShareTransferData(payload);
-      await waitForSharePaint();
+      await waitForExportPaint(150);
       if (!transferShareCardRef.current) {
         setShareTransferData(null);
         return;
@@ -419,7 +414,7 @@ export const StockTransactions: React.FC = () => {
   const sharePendingTransfer = async (row: InventoryTransferRequest) => {
     const payload = buildPendingPrintData(row);
     setShareTransferData(payload);
-    await waitForSharePaint();
+    await waitForExportPaint(150);
     if (!transferShareCardRef.current) {
       setShareTransferData(null);
       return;

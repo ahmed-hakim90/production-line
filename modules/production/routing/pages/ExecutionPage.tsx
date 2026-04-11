@@ -20,7 +20,7 @@ import { routingExecutionService } from '../services/routingExecutionService';
 import { formatDurationSeconds } from '../domain/calculations';
 import type { ProductionRoutingStep } from '../types';
 import { RoutingExecutionPrint } from '../components/RoutingExecutionPrint';
-import { exportAsImage, exportToPDF, shareToWhatsApp, type ShareResult } from '@/utils/reportExport';
+import { exportAsImage, exportToPDF, shareToWhatsApp, waitForExportPaint, type ShareResult } from '@/utils/reportExport';
 
 type Phase = 'pick' | 'preview' | 'run' | 'done';
 
@@ -125,6 +125,7 @@ export const ExecutionPage: React.FC = () => {
     if (!printRef.current || !execution) return;
     setExporting(true);
     try {
+      await waitForExportPaint(150);
       const result = await shareToWhatsApp(
         printRef.current,
         `تنفيذ مسار - ${executionProductName || execution.productId}`,

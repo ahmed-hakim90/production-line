@@ -27,12 +27,11 @@ const applyRtlFontClone = (clonedDoc: Document) => {
   clonedDoc.documentElement.setAttribute('lang', 'ar');
   clonedDoc.documentElement.style.direction = 'rtl';
 
-  const link = clonedDoc.createElement('link');
-  link.rel = 'stylesheet';
-  link.href =
-    'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap';
-  clonedDoc.head.appendChild(link);
-
+  /**
+   * Do not inject a Google Fonts <link> here — it loads asynchronously and html2canvas
+   * rasterizes before the font applies, causing intermittent wrong Arabic/layout.
+   * Cairo is preloaded in the real document via ensureCairoLoaded() before capture.
+   */
   const style = clonedDoc.createElement('style');
   /* letter-spacing (e.g. Tailwind tracking-*) breaks Arabic cursive joins in html2canvas */
   style.textContent = `
@@ -65,12 +64,66 @@ const ensureCairoLoaded = async () => {
   }
 };
 
+/** Min clone viewport width for Hakim print/share cards (matches PrintReportLayout `w-[640px]`). */
+const EXPORT_CARD_MIN_WINDOW_WIDTH = 640;
+
+const isWideExportCardRoot = (node: HTMLElement): boolean =>
+  node.matches('.print-root, .print-report, .arabic-export-root') ||
+  !!node.querySelector('.print-root, .print-report, .arabic-export-root');
+
+const waitForImagesInElement = async (root: HTMLElement, timeoutMs = 4000) => {
+  const imgs = [...root.querySelectorAll('img')] as HTMLImageElement[];
+  if (!imgs.length) return;
+
+  await Promise.all(
+    imgs.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          const finish = () => resolve();
+          if (img.complete && img.naturalWidth > 0) {
+            finish();
+            return;
+          }
+          img.addEventListener('load', finish, { once: true });
+          img.addEventListener('error', finish, { once: true });
+          setTimeout(finish, timeoutMs);
+        }),
+    ),
+  );
+
+  await Promise.all(
+    imgs.map(async (img) => {
+      try {
+        if (typeof img.decode === 'function') await img.decode();
+      } catch {
+        /* decode can reject for broken images; capture still proceeds */
+      }
+    }),
+  );
+};
+
+/**
+ * Lets React commit and the browser paint before html2canvas reads layout.
+ * Optional extra delay (ms) after two animation frames — use after heavy state updates.
+ */
+export const waitForExportPaint = (extraDelayMs = 0): Promise<void> =>
+  new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (extraDelayMs > 0) setTimeout(resolve, extraDelayMs);
+        else queueMicrotask(resolve);
+      });
+    });
+  });
+
 // ─── Capture a DOM element as a canvas ──────────────────────────────────────
 
 const capture = async (el: HTMLElement, options?: CaptureOptions) => {
   const { cloneRtlAndFonts = true, width, windowWidth, windowHeight } = options ?? {};
 
   await ensureCairoLoaded();
+  await waitForImagesInElement(el);
+  await waitForExportPaint();
 
   /**
    * html2canvas defaults `windowWidth` to the document width. On phones that is ~360–430px
@@ -81,7 +134,11 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
   const rect = el.getBoundingClientRect();
   const measuredW = Math.max(1, el.scrollWidth, el.offsetWidth, Math.round(rect.width));
   const measuredH = Math.max(1, el.scrollHeight, el.offsetHeight, Math.round(rect.height));
-  const winW = windowWidth ?? (width != null ? width : measuredW);
+  const wideCard = isWideExportCardRoot(el);
+  const winW =
+    windowWidth != null ? windowWidth : width != null ? width : wideCard
+      ? Math.max(measuredW, EXPORT_CARD_MIN_WINDOW_WIDTH)
+      : measuredW;
   const winH = windowHeight ?? measuredH;
 
   return html2canvas(el, {
@@ -275,6 +332,8 @@ export type ShareResult = {
 
 // ─── Share as image to WhatsApp ─────────────────────────────────────────────
 
+const MOBILE_SHARE_JPEG_QUALITY = 0.97;
+
 export const shareToWhatsApp = async (
   el: HTMLElement,
   title: string,
@@ -282,7 +341,6 @@ export const shareToWhatsApp = async (
 ): Promise<ShareResult> => {
   const canvas = await capture(el, captureOptions);
   const pngBlob = await canvasToBlob(canvas, 'image/png');
-  const jpgBlob = await canvasToBlob(canvas, 'image/jpeg', 0.92);
   const fileBaseName = toSafeFileBaseName(title);
 
   const tryNativeShare = async (file: File): Promise<ShareResult | null> => {
@@ -299,22 +357,23 @@ export const shareToWhatsApp = async (
     }
   };
 
-  // Mobile: prefer JPEG for smaller share payload
+  const pngFile = new File([pngBlob], `${fileBaseName}.png`, { type: 'image/png' });
+
+  // Mobile: prefer PNG for sharp borders/text; fall back to high-quality JPEG if share target rejects PNG
   if (isMobile()) {
-    const mobileFile = new File([jpgBlob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
-    const mobileResult = await tryNativeShare(mobileFile);
-    if (mobileResult) return mobileResult;
+    const pngShare = await tryNativeShare(pngFile);
+    if (pngShare) return pngShare;
+    const jpgBlob = await canvasToBlob(canvas, 'image/jpeg', MOBILE_SHARE_JPEG_QUALITY);
+    const jpgFile = new File([jpgBlob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
+    const jpgShare = await tryNativeShare(jpgFile);
+    if (jpgShare) return jpgShare;
   } else {
-    // Desktop: some browsers support Web Share with files (e.g. Chrome)
-    const pngFile = new File([pngBlob], `${fileBaseName}.png`, { type: 'image/png' });
     const desktopResult = await tryNativeShare(pngFile);
     if (desktopResult) return desktopResult;
   }
 
   const isMobileDevice = isMobile();
-  const fileName = `${fileBaseName}.${isMobileDevice ? 'jpg' : 'png'}`;
-  const downloadTargetBlob = isMobileDevice ? jpgBlob : pngBlob;
-  downloadBlob(downloadTargetBlob, fileName);
+  downloadBlob(pngBlob, `${fileBaseName}.png`);
 
   let copied = false;
 
