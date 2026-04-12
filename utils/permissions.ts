@@ -71,6 +71,7 @@ export type Permission =
   | 'repair.settings.manage'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
   | 'onlineDispatch.view' | 'onlineDispatch.manage' | 'onlineDispatch.handoffToWarehouse' | 'onlineDispatch.handoffToPost'
+  | 'onlineDispatch.cancelFromWarehouseQueue'
   | 'onlineDispatch.deletePermanent'
   | 'customerDeposits.view' | 'customerDeposits.create' | 'customerDeposits.confirm' | 'customerDeposits.manage'
   | 'print' | 'export' | 'import';
@@ -175,6 +176,10 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'onlineDispatch.manage', label: 'تسجيل باركود شحنة BOSTA وإدارة السجلات' },
       { key: 'onlineDispatch.handoffToWarehouse', label: 'مسح: تم التسليم للمخزن' },
       { key: 'onlineDispatch.handoffToPost', label: 'مسح: تم التسليم للبوسطة' },
+      {
+        key: 'onlineDispatch.cancelFromWarehouseQueue',
+        label: 'إلغاء شحنة من التسليم (بعد مسح المخزن) — لا تُحسب في انتظار البوسطة',
+      },
       {
         key: 'onlineDispatch.deletePermanent',
         label: 'حذف نهائي لسجل شحنة من قاعدة البيانات (أي حالة) — من لوحة الأونلاين',
@@ -434,6 +439,9 @@ export function checkPermission(
     permissions['customerDeposits.manage'] === true
   ) {
     return true;
+  }
+  if (permission === 'onlineDispatch.cancelFromWarehouseQueue') {
+    return permissions['onlineDispatch.manage'] === true;
   }
   return false;
 }

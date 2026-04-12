@@ -117,6 +117,17 @@ const seed = async () => {
       isActive: true,
       roleId: 'tenantA-od-warehouse-only',
     });
+    await setDoc(doc(db, 'roles', 'tenantA-od-cancel-only'), {
+      tenantId: 'tenantA',
+      permissions: {
+        'onlineDispatch.cancelFromWarehouseQueue': true,
+      },
+    });
+    await setDoc(doc(db, 'users', 'userAOnlineDispatchCancel'), {
+      tenantId: 'tenantA',
+      isActive: true,
+      roleId: 'tenantA-od-cancel-only',
+    });
     await setDoc(doc(db, 'online_dispatch_shipments', 'odRevert'), {
       tenantId: 'tenantA',
       barcode: 'BOSTA_9999999999',
@@ -134,6 +145,13 @@ const seed = async () => {
     await setDoc(doc(db, 'online_dispatch_shipments', 'odDeletePostOnly'), {
       tenantId: 'tenantA',
       barcode: 'BOSTA_7777777777',
+      status: 'at_warehouse',
+      handedToWarehouseAt: Timestamp.now(),
+      handedToWarehouseByUid: 'userAOnlineDispatch',
+    });
+    await setDoc(doc(db, 'online_dispatch_shipments', 'odCancelTarget'), {
+      tenantId: 'tenantA',
+      barcode: 'BOSTA_6666666666',
       status: 'at_warehouse',
       handedToWarehouseAt: Timestamp.now(),
       handedToWarehouseByUid: 'userAOnlineDispatch',
@@ -263,6 +281,29 @@ await seed();
       barcode: 'SCAN_PENDING_BAD',
       status: 'pending',
       createdAt: Timestamp.now(),
+    }),
+  );
+}
+
+// 8) Cancel from warehouse queue: cancel-only may read and set at_warehouse -> cancelled; warehouse-only cannot cancel
+{
+  const cancelDb = testEnv.authenticatedContext('userAOnlineDispatchCancel').firestore();
+  await assertSucceeds(getDoc(doc(cancelDb, 'online_dispatch_shipments', 'odCancelTarget')));
+  await assertSucceeds(
+    updateDoc(doc(cancelDb, 'online_dispatch_shipments', 'odCancelTarget'), {
+      status: 'cancelled',
+      cancelledAt: Timestamp.now(),
+      cancelledByUid: 'userAOnlineDispatchCancel',
+      lastStatusByUid: 'userAOnlineDispatchCancel',
+    }),
+  );
+  const whDb2 = testEnv.authenticatedContext('userAODWarehouseOnly').firestore();
+  await assertFails(
+    updateDoc(doc(whDb2, 'online_dispatch_shipments', 'odDeletePostOnly'), {
+      status: 'cancelled',
+      cancelledAt: Timestamp.now(),
+      cancelledByUid: 'userAODWarehouseOnly',
+      lastStatusByUid: 'userAODWarehouseOnly',
     }),
   );
 }

@@ -3,6 +3,10 @@ import { lazyNamed } from '../../shared/routes/lazyNamed';
 
 const OnlineDashboard = lazyNamed(() => import('../pages/OnlineDashboard'), 'OnlineDashboard');
 const OnlineQuickScan = lazyNamed(() => import('../pages/OnlineQuickScan'), 'OnlineQuickScan');
+const OnlineCancelDispatchScan = lazyNamed(
+  () => import('../pages/OnlineCancelDispatchScan'),
+  'OnlineCancelDispatchScan',
+);
 
 export const ONLINE_ROUTES: AppRouteDef[] = [
   {
@@ -23,5 +27,10 @@ export const ONLINE_ROUTES: AppRouteDef[] = [
       'onlineDispatch.handoffToPost',
     ],
     component: OnlineQuickScan,
+  },
+  {
+    path: '/online/cancel-dispatch-scan',
+    permissionsAny: ['onlineDispatch.cancelFromWarehouseQueue', 'onlineDispatch.manage'],
+    component: OnlineCancelDispatchScan,
   },
 ];

@@ -152,7 +152,16 @@ export const MENU_CONFIG: MenuGroup[] = [
         permission: 'onlineDispatch.view',
         anyOfPermissions: ['onlineDispatch.view', 'onlineDispatch.manage'],
         activePatterns: ['/online', '/online/dashboard'],
-        activePathExcludePrefixes: ['/online/scan'],
+        activePathExcludePrefixes: ['/online/scan', '/online/cancel-dispatch-scan'],
+      },
+      {
+        key: 'online-cancel-dispatch',
+        label: 'إلغاء من التسليم (مسح)',
+        icon: 'block',
+        path: '/online/cancel-dispatch-scan',
+        permission: 'onlineDispatch.cancelFromWarehouseQueue',
+        anyOfPermissions: ['onlineDispatch.cancelFromWarehouseQueue', 'onlineDispatch.manage'],
+        activePatterns: ['/online/cancel-dispatch-scan'],
       },
       {
         key: 'online-scan-w',

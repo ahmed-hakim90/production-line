@@ -96,7 +96,7 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
             )}
           >
             <div className={tileClass}>
-              <p className="text-xs text-muted-foreground">طابور المخزن (حالي)</p>
+              <p className="text-xs text-muted-foreground">اوردر لم يتم تسليمه</p>
               <p className={cn(numClass, 'mt-1 text-primary')}>{queueCount}</p>
             </div>
             <div className={tileClass}>

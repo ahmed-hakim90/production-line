@@ -440,12 +440,12 @@ export const exportAllProducts = (
       base['تكلفة المواد الخام'] = fmtCost(d.costBreakdown.rawMaterialCost);
       base['تفاصيل المواد الخام'] = d.rawMaterialsDetails || '—';
       base['تكلفة العلبة الداخلية'] = fmtCost(d.costBreakdown.innerBoxCost);
-      base['تكلفة الكرتونة'] = fmtCost(d.costBreakdown.outerCartonCost);
+      base['سعر الكرتونة الخارجية (كامل)'] = fmtCost(d.costBreakdown.outerCartonCost);
       base['وحدات/كرتونة'] = d.costBreakdown.unitsPerCarton;
-      base['نصيب الكرتونة'] = fmtCost(d.costBreakdown.cartonShare);
+      base['نصيب الكرتونة الخارجية'] = fmtCost(d.costBreakdown.cartonShare);
     }
     if (includeCosts && d.costBreakdown && options.manufacturingCosts) {
-      base['نصيب المصاريف الصناعية (م. وغ.م)'] = fmtCost(d.costBreakdown.productionOverheadShare);
+      base['نصيب مصاريف الإنتاج (متوسط الشهر)'] = fmtCost(d.costBreakdown.productionOverheadShare);
     }
     if (includeCosts && d.costBreakdown && options.productCosts) {
       base['إجمالي التكلفة المحسوبة (للوحدة)'] = fmtCost(d.costBreakdown.totalCalculatedCost);
@@ -546,8 +546,8 @@ export const exportSingleProduct = (data: SingleProductExportData, includeCosts:
       { 'عنصر التكلفة': 'تكلفة العلبة الداخلية', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.innerBoxCost) },
       { 'عنصر التكلفة': 'تكلفة الكرتونة الخارجية', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.outerCartonCost) },
       { 'عنصر التكلفة': 'وحدات في الكرتونة', 'النوع': '—', 'القيمة (ج.م)': cb.unitsPerCarton },
-      { 'عنصر التكلفة': 'نصيب الكرتونة', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.cartonShare) },
-      { 'عنصر التكلفة': 'نصيب المصاريف الصناعية (م. وغ.م)', 'النوع': 'تكاليف صناعية', 'القيمة (ج.م)': fmtCost(cb.productionOverheadShare) },
+      { 'عنصر التكلفة': 'نصيب الكرتونة الخارجية', 'النوع': 'تكاليف المنتج', 'القيمة (ج.م)': fmtCost(cb.cartonShare) },
+      { 'عنصر التكلفة': 'نصيب مصاريف الإنتاج (متوسط الشهر)', 'النوع': 'تكاليف صناعية', 'القيمة (ج.م)': fmtCost(cb.productionOverheadShare) },
       { 'عنصر التكلفة': '═ إجمالي التكلفة المحسوبة', 'النوع': '', 'القيمة (ج.م)': fmtCost(totalCalculatedCost || 0) },
     ];
     if (sp > 0) {

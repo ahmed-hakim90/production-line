@@ -775,7 +775,7 @@ export interface MonthlyProductionCost {
 
 // â”€â”€â”€ Online dispatch (BOSTA barcodes: admin â†’ warehouse â†’ post) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export type OnlineDispatchStatus = 'pending' | 'at_warehouse' | 'handed_to_post';
+export type OnlineDispatchStatus = 'pending' | 'at_warehouse' | 'handed_to_post' | 'cancelled';
 
 export interface OnlineDispatchShipment {
   id?: string;
@@ -785,12 +785,15 @@ export interface OnlineDispatchShipment {
   createdAt?: unknown;
   /** Set when an admin creates a pending row, or mirrored on first-scan create paths. */
   createdByUid?: string;
-  /** Last user who moved the shipment to the current `status` (warehouse / post / revert). */
+  /** Last user who moved the shipment to the current `status` (warehouse / post / revert / cancel). */
   lastStatusByUid?: string;
   handedToWarehouseAt?: unknown;
   handedToWarehouseByUid?: string;
   handedToPostAt?: unknown;
   handedToPostByUid?: string;
+  /** Set when a user cancels the shipment from the warehouse handoff queue (no longer expected at post). */
+  cancelledAt?: unknown;
+  cancelledByUid?: string;
   notes?: string;
 }
 

@@ -16,7 +16,8 @@ import {
   getWorkingDaysForMonth,
 } from '../../../utils/costCalculations';
 import { productMaterialService } from '../../production/services/productMaterialService';
-import type { MonthlyProductionCost } from '../../../types';
+import type { MonthlyProductionCost, ProductMaterial } from '../../../types';
+import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -34,8 +35,17 @@ import {
 } from '@/components/ui/dialog';
 import { useDeviationAnalysis } from '../hooks/useDeviationAnalysis';
 import { analyzeDeviation } from '../analysis/deviationEngine';
+import { cn } from '@/lib/utils';
 
-type ExtraColumnKey = 'materialsAndPackaging' | 'sellingPrice' | 'profit';
+type ExtraColumnKey =
+  | 'unitCostChinese'
+  | 'unitCostRawMaterials'
+  | 'unitCostInnerBox'
+  | 'unitCostCartonShare'
+  | 'unitCostProductionOverhead'
+  | 'materialsAndPackaging'
+  | 'sellingPrice'
+  | 'profit';
 type MonthlyCostBaseColumnKey =
   | 'rowIndex'
   | 'productCode'
@@ -56,7 +66,12 @@ const EXTRA_COLUMNS_PREF_KEY = 'monthly_costs_extra_columns_v1';
 const CENTER_COLUMNS_PREF_KEY = 'monthly_costs_center_columns_v1';
 const BASE_COLUMNS_PREF_KEY = 'monthly_costs_base_columns_v1';
 const DEFAULT_EXTRA_COLUMNS: Record<ExtraColumnKey, boolean> = {
-  materialsAndPackaging: true,
+  unitCostChinese: true,
+  unitCostRawMaterials: true,
+  unitCostInnerBox: true,
+  unitCostCartonShare: true,
+  unitCostProductionOverhead: true,
+  materialsAndPackaging: false,
   sellingPrice: true,
   profit: true,
 };
@@ -94,6 +109,26 @@ const shortProductName = (name: string): string => {
   const parts = name.trim().split(/\s+/);
   if (parts.length <= 2) return name;
   return `${parts[0]} ${parts[1]}`;
+};
+
+const monthlyCostRecordKey = (r: MonthlyProductionCost) => r.id ?? `${r.productId}__${r.month}`;
+
+const weightedAvgUnit = (
+  rows: MonthlyProductionCost[],
+  pick: (bd: ProductCostBreakdown) => number,
+  breakdownMap: Map<string, ProductCostBreakdown>,
+): number => {
+  let w = 0;
+  let sum = 0;
+  for (const r of rows) {
+    const q = Number(r.totalProducedQty || 0);
+    if (q <= 0) continue;
+    const bd = breakdownMap.get(monthlyCostRecordKey(r));
+    if (!bd) continue;
+    sum += pick(bd) * q;
+    w += q;
+  }
+  return w > 0 ? sum / w : 0;
 };
 
 /** كم كرتونة = إجمالي الوحدات المنتجة ÷ وحدات لكل كرتونة (من بطاقة المنتج). */
@@ -219,10 +254,14 @@ export const MonthlyProductionCosts: React.FC = () => {
     }
   });
   const [materialsTotalMap, setMaterialsTotalMap] = useState<Record<string, number>>({});
+  const [materialsByProductId, setMaterialsByProductId] = useState<Record<string, ProductMaterial[]>>({});
   const [prevMonthInfoMap, setPrevMonthInfoMap] = useState<Record<string, PrevMonthProductInfo>>({});
+  /** When true, rows with saved totalProducedQty === 0 are hidden (legacy behavior). Default false so all calculated products appear. */
+  const [hideZeroQtyCostRows, setHideZeroQtyCostRows] = useState(false);
   const mountedRef = useRef(true);
   const fetchRequestRef = useRef(0);
   const materialTotalCacheRef = useRef<Record<string, number>>({});
+  const materialsListByProductCacheRef = useRef<Record<string, ProductMaterial[]>>({});
 
   useEffect(() => {
     mountedRef.current = true;
@@ -481,6 +520,20 @@ export const MonthlyProductionCosts: React.FC = () => {
     return new Map(_rawProducts.map((p) => [p.id || '', p]));
   }, [_rawProducts]);
 
+  const unitBreakdownByRecordKey = useMemo(() => {
+    const map = new Map<string, ProductCostBreakdown>();
+    for (const r of records) {
+      const raw = rawProductMap.get(r.productId);
+      if (!raw) continue;
+      const mats = materialsByProductId[r.productId] ?? [];
+      map.set(
+        monthlyCostRecordKey(r),
+        calculateProductCostBreakdown(raw, mats, Number(r.averageUnitCost) || 0),
+      );
+    }
+    return map;
+  }, [records, rawProductMap, materialsByProductId]);
+
   const toggleExtraColumn = (key: ExtraColumnKey, checked: boolean) => {
     const next = { ...extraColumns, [key]: checked };
     setExtraColumns(next);
@@ -515,6 +568,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     );
     if (productIds.length === 0) {
       setMaterialsTotalMap({});
+      setMaterialsByProductId({});
       return;
     }
     const missingProductIds = productIds.filter((pid) => materialTotalCacheRef.current[pid] === undefined);
@@ -523,24 +577,32 @@ export const MonthlyProductionCosts: React.FC = () => {
         try {
           const allMaterials = await productMaterialService.getAll();
           const aggregated: Record<string, number> = {};
+          const lists: Record<string, ProductMaterial[]> = {};
           allMaterials.forEach((material) => {
             const pid = String(material.productId || '');
             if (!pid) return;
-            aggregated[pid] = (aggregated[pid] || 0) + (material.quantityUsed || 0) * (material.unitCost || 0);
+            aggregated[pid] = (aggregated[pid] || 0) + Number(material.quantityUsed || 0) * Number(material.unitCost || 0);
+            if (!lists[pid]) lists[pid] = [];
+            lists[pid].push(material);
           });
           materialTotalCacheRef.current = aggregated;
+          materialsListByProductCacheRef.current = lists;
         } catch {
           missingProductIds.forEach((pid) => {
             materialTotalCacheRef.current[pid] = materialTotalCacheRef.current[pid] ?? 0;
+            materialsListByProductCacheRef.current[pid] = materialsListByProductCacheRef.current[pid] ?? [];
           });
         }
       }
       if (cancelled) return;
       const next: Record<string, number> = {};
+      const nextLists: Record<string, ProductMaterial[]> = {};
       productIds.forEach((pid) => {
         next[pid] = materialTotalCacheRef.current[pid] ?? 0;
+        nextLists[pid] = materialsListByProductCacheRef.current[pid] ?? [];
       });
       setMaterialsTotalMap(next);
+      setMaterialsByProductId(nextLists);
     };
     void loadMaterialTotals();
     return () => { cancelled = true; };
@@ -610,10 +672,14 @@ export const MonthlyProductionCosts: React.FC = () => {
   };
 
   const allClosed = records.length > 0 && records.every((r) => r.isClosed);
-  const tableRecords = useMemo(
-    () => records.filter((r) => (r.totalProducedQty || 0) > 0),
-    [records]
+  const zeroQtyRecordCount = useMemo(
+    () => records.filter((r) => (r.totalProducedQty || 0) <= 0).length,
+    [records],
   );
+  const tableRecords = useMemo(() => {
+    if (!hideZeroQtyCostRows) return records.slice();
+    return records.filter((r) => (r.totalProducedQty || 0) > 0);
+  }, [records, hideZeroQtyCostRows]);
   const categoryOptions = useMemo(
     () => (Array.from(new Set(tableRecords.map((r) => String(productCategoryMap.get(r.productId) || 'غير مصنف')))) as string[])
       .sort((a, b) => a.localeCompare(b, 'ar')),
@@ -630,6 +696,17 @@ export const MonthlyProductionCosts: React.FC = () => {
       return matchCategory && matchSearch;
     });
   }, [tableRecords, searchTerm, categoryFilter, productNameMap, productCodeMap, productCategoryMap]);
+
+  const unitBreakdownWeightedForDisplay = useMemo(
+    () => ({
+      chinese: weightedAvgUnit(displayRecords, (b) => b.chineseUnitCost, unitBreakdownByRecordKey),
+      rawMaterial: weightedAvgUnit(displayRecords, (b) => b.rawMaterialCost, unitBreakdownByRecordKey),
+      inner: weightedAvgUnit(displayRecords, (b) => b.innerBoxCost, unitBreakdownByRecordKey),
+      cartonShare: weightedAvgUnit(displayRecords, (b) => b.cartonShare, unitBreakdownByRecordKey),
+      overhead: weightedAvgUnit(displayRecords, (b) => b.productionOverheadShare, unitBreakdownByRecordKey),
+    }),
+    [displayRecords, unitBreakdownByRecordKey],
+  );
 
   const totalQty = displayRecords.reduce((s, r) => s + r.totalProducedQty, 0);
   const totalCost = displayRecords.reduce((s, r) => s + r.totalProductionCost, 0);
@@ -844,6 +921,22 @@ export const MonthlyProductionCosts: React.FC = () => {
         row['الانحراف عن الشهر السابق (%)'] =
           closedPrevAvg != null && closedPrevAvg > 0 ? deviationPercent : '—';
       }
+      const bdRow = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
+      if (extraColumns.unitCostChinese) {
+        row['تكلفة الوحدة الصينية (ج.م/وحدة)'] = bdRow ? bdRow.chineseUnitCost : '—';
+      }
+      if (extraColumns.unitCostRawMaterials) {
+        row['المواد الخام (ج.م/وحدة)'] = bdRow ? bdRow.rawMaterialCost : '—';
+      }
+      if (extraColumns.unitCostInnerBox) {
+        row['العلبة الداخلية (ج.م/وحدة)'] = bdRow ? bdRow.innerBoxCost : '—';
+      }
+      if (extraColumns.unitCostCartonShare) {
+        row['نصيب الكرتونة الخارجية (ج.م/وحدة)'] = bdRow ? bdRow.cartonShare : '—';
+      }
+      if (extraColumns.unitCostProductionOverhead) {
+        row['نصيب مصاريف الإنتاج — متوسط الشهر (ج.م/وحدة)'] = bdRow ? bdRow.productionOverheadShare : '—';
+      }
       if (extraColumns.materialsAndPackaging) row['إجمالي تكلفة المواد والتغليف (ج.م/وحدة)'] = materialsAndPackaging;
       if (extraColumns.sellingPrice) row['سعر البيع (ج.م/وحدة)'] = sellingPrice;
       if (extraColumns.profit) row['ربح الوحدة (ج.م/وحدة)'] = sellingPrice > 0 ? unitProfit : '—';
@@ -1004,7 +1097,7 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       {/* Table */}
       <Card>
-        {tableRecords.length > 0 && (
+        {records.length > 0 && (
           <div className="p-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center gap-3">
             <div className="flex items-center gap-2 w-full md:w-auto md:ml-auto">
               <span className="material-icons-round text-[var(--color-text-muted)] text-sm">search</span>
@@ -1026,6 +1119,18 @@ export const MonthlyProductionCosts: React.FC = () => {
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
+            <label className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)] cursor-pointer shrink-0 select-none">
+              <input
+                type="checkbox"
+                className="rounded border-[var(--color-border)]"
+                checked={hideZeroQtyCostRows}
+                onChange={(e) => setHideZeroQtyCostRows(e.target.checked)}
+              />
+              إخفاء المنتجات ذات الكمية المعتمدة = 0
+              {zeroQtyRecordCount > 0 && (
+                <span className="tabular-nums text-[var(--color-text-muted)]">({zeroQtyRecordCount})</span>
+              )}
+            </label>
             {displayRecords.length > 0 && (
               <>
                 <Button variant="outline" onClick={() => setShowColumnsModal(true)}>
@@ -1047,11 +1152,19 @@ export const MonthlyProductionCosts: React.FC = () => {
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full" />
             </div>
+          ) : records.length > 0 && tableRecords.length === 0 && hideZeroQtyCostRows ? (
+            <div className="text-center py-16 text-slate-500 px-4">
+              <span className="material-icons-round text-5xl mb-3 block text-slate-400">filter_alt_off</span>
+              <p className="font-semibold text-lg">كل السجلات المحفوظة لهذا الشهر بكمية إنتاج معتمدة = 0</p>
+              <p className="text-sm mt-2 max-w-md mx-auto">
+                ألغِ خيار «إخفاء المنتجات ذات الكمية المعتمدة = 0» أعلاه لعرضها في الجدول ومقارنتها بالتقارير.
+              </p>
+            </div>
           ) : displayRecords.length === 0 ? (
             <div className="text-center py-16 text-slate-400">
               <span className="material-icons-round text-5xl mb-3 block">price_check</span>
               <p className="font-semibold text-lg">لا توجد نتائج مطابقة للفلاتر الحالية</p>
-              <p className="text-sm mt-1">جرظ‘ب تغيير البحث أو الفئة</p>
+              <p className="text-sm mt-1">جرّب تغيير البحث أو الفئة</p>
             </div>
           ) : (
             <table className="erp-table w-full text-sm">
@@ -1085,6 +1198,36 @@ export const MonthlyProductionCosts: React.FC = () => {
                   {baseColumns.prevDeviation && (
                     <th className="erp-th">الانحراف عن {previousMonthLabel}</th>
                   )}
+                  {extraColumns.unitCostChinese && (
+                    <th className="erp-th min-w-[100px]">
+                      تكلفة الوحدة الصينية
+                      <span className="block text-[10px] font-normal opacity-80">ج.م/وحدة</span>
+                    </th>
+                  )}
+                  {extraColumns.unitCostRawMaterials && (
+                    <th className="erp-th min-w-[100px]">
+                      المواد الخام
+                      <span className="block text-[10px] font-normal opacity-80">ج.م/وحدة</span>
+                    </th>
+                  )}
+                  {extraColumns.unitCostInnerBox && (
+                    <th className="erp-th min-w-[100px]">
+                      العلبة الداخلية
+                      <span className="block text-[10px] font-normal opacity-80">ج.م/وحدة</span>
+                    </th>
+                  )}
+                  {extraColumns.unitCostCartonShare && (
+                    <th className="erp-th min-w-[110px]">
+                      نصيب الكرتونة الخارجية
+                      <span className="block text-[10px] font-normal opacity-80">ج.م/وحدة</span>
+                    </th>
+                  )}
+                  {extraColumns.unitCostProductionOverhead && (
+                    <th className="erp-th min-w-[120px]">
+                      نصيب مصاريف الإنتاج
+                      <span className="block text-[10px] font-normal opacity-80">متوسط الشهر / وحدة</span>
+                    </th>
+                  )}
                   {extraColumns.materialsAndPackaging && (
                     <th className="erp-th">إجمالي تكلفة المواد والتغليف</th>
                   )}
@@ -1099,10 +1242,15 @@ export const MonthlyProductionCosts: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {displayRecords.map((r, i) => (
+                {displayRecords.map((r, i) => {
+                  const zeroSavedQty = (r.totalProducedQty || 0) <= 0;
+                  return (
                   <tr
                     key={r.id}
-                    className="border-t border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors cursor-pointer"
+                    className={cn(
+                      'border-t border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors cursor-pointer',
+                      zeroSavedQty && 'bg-slate-50/90 dark:bg-slate-900/25',
+                    )}
                     onClick={() => navigate(`/products/${r.productId}`)}
                   >
                     {baseColumns.rowIndex && (
@@ -1113,8 +1261,11 @@ export const MonthlyProductionCosts: React.FC = () => {
                     )}
                     {baseColumns.productName && (
                       <td className="py-3 px-4 font-semibold text-[var(--color-text)]">
-                        <span title={productNameMap.get(r.productId) || r.productId}>
+                        <span className="inline-flex flex-wrap items-center gap-1.5" title={productNameMap.get(r.productId) || r.productId}>
                           {shortProductName(productNameMap.get(r.productId) || r.productId)}
+                          {zeroSavedQty && (
+                            <Badge variant="warning">كمية معتمدة 0</Badge>
+                          )}
                         </span>
                       </td>
                     )}
@@ -1232,6 +1383,46 @@ export const MonthlyProductionCosts: React.FC = () => {
                         })()}
                       </td>
                     )}
+                    {extraColumns.unitCostChinese && (
+                      <td className="py-3 px-4 font-mono font-semibold text-[var(--color-text)] tabular-nums">
+                        {(() => {
+                          const bd = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
+                          return bd ? formatCost(bd.chineseUnitCost) : '—';
+                        })()}
+                      </td>
+                    )}
+                    {extraColumns.unitCostRawMaterials && (
+                      <td className="py-3 px-4 font-mono font-semibold text-[var(--color-text)] tabular-nums">
+                        {(() => {
+                          const bd = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
+                          return bd ? formatCost(bd.rawMaterialCost) : '—';
+                        })()}
+                      </td>
+                    )}
+                    {extraColumns.unitCostInnerBox && (
+                      <td className="py-3 px-4 font-mono font-semibold text-[var(--color-text)] tabular-nums">
+                        {(() => {
+                          const bd = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
+                          return bd ? formatCost(bd.innerBoxCost) : '—';
+                        })()}
+                      </td>
+                    )}
+                    {extraColumns.unitCostCartonShare && (
+                      <td className="py-3 px-4 font-mono font-semibold text-[var(--color-text)] tabular-nums">
+                        {(() => {
+                          const bd = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
+                          return bd ? formatCost(bd.cartonShare) : '—';
+                        })()}
+                      </td>
+                    )}
+                    {extraColumns.unitCostProductionOverhead && (
+                      <td className="py-3 px-4 font-mono font-semibold text-[var(--color-text)] tabular-nums">
+                        {(() => {
+                          const bd = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
+                          return bd ? formatCost(bd.productionOverheadShare) : '—';
+                        })()}
+                      </td>
+                    )}
                     {extraColumns.materialsAndPackaging && (
                       <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">
                         {(() => {
@@ -1286,7 +1477,8 @@ export const MonthlyProductionCosts: React.FC = () => {
                       </Button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {/* Totals row */}
                 <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50 font-bold">
                   <td className="py-3 px-4" colSpan={Math.max(1, leadingBaseColumnCount)}>الإجمالي</td>
@@ -1344,6 +1536,31 @@ export const MonthlyProductionCosts: React.FC = () => {
                   )}
                   {baseColumns.prevDeviation && (
                     <td className="py-3 px-4 font-mono text-[var(--color-text-muted)]">—</td>
+                  )}
+                  {extraColumns.unitCostChinese && (
+                    <td className="py-3 px-4 font-mono text-[var(--color-text)]">
+                      {formatCost(unitBreakdownWeightedForDisplay.chinese)}
+                    </td>
+                  )}
+                  {extraColumns.unitCostRawMaterials && (
+                    <td className="py-3 px-4 font-mono text-[var(--color-text)]">
+                      {formatCost(unitBreakdownWeightedForDisplay.rawMaterial)}
+                    </td>
+                  )}
+                  {extraColumns.unitCostInnerBox && (
+                    <td className="py-3 px-4 font-mono text-[var(--color-text)]">
+                      {formatCost(unitBreakdownWeightedForDisplay.inner)}
+                    </td>
+                  )}
+                  {extraColumns.unitCostCartonShare && (
+                    <td className="py-3 px-4 font-mono text-[var(--color-text)]">
+                      {formatCost(unitBreakdownWeightedForDisplay.cartonShare)}
+                    </td>
+                  )}
+                  {extraColumns.unitCostProductionOverhead && (
+                    <td className="py-3 px-4 font-mono text-[var(--color-text)]">
+                      {formatCost(unitBreakdownWeightedForDisplay.overhead)}
+                    </td>
                   )}
                   {extraColumns.materialsAndPackaging && (
                     <td className="py-3 px-4 font-mono text-[var(--color-text)]">
@@ -1617,7 +1834,12 @@ export const MonthlyProductionCosts: React.FC = () => {
                 <p className="text-sm font-bold text-[var(--color-text)] mb-2">أعمدة إضافية</p>
               </div>
               {[
-                { key: 'materialsAndPackaging' as const, label: 'إجمالي تكلفة المواد والتغليف', icon: 'inventory_2' },
+                { key: 'unitCostChinese' as const, label: 'تكلفة الوحدة الصينية (ج.م/وحدة)', icon: 'local_shipping' },
+                { key: 'unitCostRawMaterials' as const, label: 'المواد الخام (ج.م/وحدة)', icon: 'receipt_long' },
+                { key: 'unitCostInnerBox' as const, label: 'العلبة الداخلية (ج.م/وحدة)', icon: 'inventory' },
+                { key: 'unitCostCartonShare' as const, label: 'نصيب الكرتونة الخارجية (ج.م/وحدة)', icon: 'inventory_2' },
+                { key: 'unitCostProductionOverhead' as const, label: 'نصيب مصاريف الإنتاج — متوسط الشهر (ج.م/وحدة)', icon: 'payments' },
+                { key: 'materialsAndPackaging' as const, label: 'إجمالي تكلفة المواد والتغليف (بدون مصاريف الإنتاج)', icon: 'layers' },
                 { key: 'sellingPrice' as const, label: 'سعر البيع', icon: 'sell' },
                 { key: 'profit' as const, label: 'ربح الوحدة', icon: 'trending_up' },
               ].map((opt) => (

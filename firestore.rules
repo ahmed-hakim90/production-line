@@ -48,7 +48,8 @@ service cloud.firestore {
       return hasPermission('onlineDispatch.view')
         || hasPermission('onlineDispatch.manage')
         || hasPermission('onlineDispatch.handoffToWarehouse')
-        || hasPermission('onlineDispatch.handoffToPost');
+        || hasPermission('onlineDispatch.handoffToPost')
+        || hasPermission('onlineDispatch.cancelFromWarehouseQueue');
     }
 
     function customerDepositsReadPerm() {
@@ -663,6 +664,13 @@ service cloud.firestore {
           || (resource.data.status == 'at_warehouse'
             && request.resource.data.status == 'pending'
             && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse')))
+          || (resource.data.status == 'at_warehouse'
+            && request.resource.data.status == 'cancelled'
+            && (hasPermission('onlineDispatch.cancelFromWarehouseQueue') || hasPermission('onlineDispatch.manage'))
+            && request.resource.data.cancelledAt is timestamp
+            && request.resource.data.cancelledByUid == request.auth.uid
+            && request.resource.data.lastStatusByUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledByUid', 'lastStatusByUid']))
         );
       allow delete: if isActiveUser()
         && resource.data.tenantId == currentUserDoc().data.tenantId

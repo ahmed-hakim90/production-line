@@ -255,6 +255,9 @@ export const onlineDispatchService = {
       if (cur.status === 'handed_to_post') {
         throw new Error('تم تسليم هذه الشحنة للبوسطة مسبقًا — لا يمكن تسجيلها للمخزن مجددًا');
       }
+      if (cur.status === 'cancelled') {
+        throw new Error('هذه الشحنة ملغاة من التسليم — لا يمكن تسجيلها للمخزن مجددًا');
+      }
       if (cur.status !== 'pending') {
         throw new Error('حالة الشحنة غير صالحة لمسح المخزن');
       }
@@ -299,6 +302,9 @@ export const onlineDispatchService = {
       if (cur.status === 'handed_to_post') {
         throw new Error('تم تسجيل التسليم للبوسطة مسبقًا لهذا الباركود');
       }
+      if (cur.status === 'cancelled') {
+        throw new Error('هذه الشحنة ملغاة من التسليم — لا يمكن تسليمها للبوسطة');
+      }
       if (cur.status !== 'at_warehouse') {
         throw new Error('حالة الشحنة غير صالحة لتسليم البوسطة');
       }
@@ -334,7 +340,7 @@ export const onlineDispatchService = {
   },
 
   /**
-   * Permanently deletes the shipment document regardless of status (pending / at_warehouse / handed_to_post).
+   * Permanently deletes the shipment document regardless of status (pending / at_warehouse / handed_to_post / cancelled).
    * Requires Firestore rule `onlineDispatch.deletePermanent`, or the same rules as {@link deleteWarehouseShipment}.
    */
   async deleteShipmentDocument(_uid: string, docId: string): Promise<void> {
@@ -369,6 +375,29 @@ export const onlineDispatchService = {
         handedToWarehouseAt: deleteField(),
         handedToWarehouseByUid: deleteField(),
         lastStatusByUid: _uid,
+      });
+    });
+  },
+
+  /**
+   * Marks a shipment cancelled from the warehouse→post handoff flow (still at warehouse scan, no longer expected at post).
+   * Only from `at_warehouse`. Requires Firestore rules: cancelFromWarehouseQueue or manage.
+   */
+  async cancelWarehouseShipment(uid: string, docId: string): Promise<void> {
+    if (!isConfigured) throw new Error('Firebase غير مهيأ');
+    const docRef = doc(db, COLLECTION, docId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) throw new Error('لا يوجد سجل لهذه الشحنة');
+      const cur = snap.data() as OnlineDispatchShipment;
+      if (cur.status !== 'at_warehouse') {
+        throw new Error('يمكن الإلغاء من التسليم فقط لشحنة مسجّلة عند المخزن ولم تُسلَّم للبوسطة بعد');
+      }
+      tx.update(docRef, {
+        status: 'cancelled' as OnlineDispatchStatus,
+        cancelledAt: serverTimestamp(),
+        cancelledByUid: uid,
+        lastStatusByUid: uid,
       });
     });
   },
@@ -447,6 +476,7 @@ export function filterWarehouseButNotPostSameDispatchDay(
 ): Array<OnlineDispatchShipment & { id: string }> {
   const { startMs, endExclusiveMs } = getDispatchDayBoundsForCalendarYmd(calendarYmd);
   return rows.filter((r) => {
+    if (r.status === 'cancelled') return false;
     const hw = onlineDispatchTsToMs(r.handedToWarehouseAt);
     if (!hw || hw < startMs || hw >= endExclusiveMs) return false;
     const hp = onlineDispatchTsToMs(r.handedToPostAt);

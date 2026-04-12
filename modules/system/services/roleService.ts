@@ -196,6 +196,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'onlineDispatch.view',
           'onlineDispatch.manage',
           'onlineDispatch.handoffToWarehouse',
+          'onlineDispatch.cancelFromWarehouseQueue',
           'print',
           'export',
         ]),

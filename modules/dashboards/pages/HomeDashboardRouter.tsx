@@ -23,5 +23,12 @@ export const HomeDashboardRouter: React.FC = () => {
   if (can('onlineDispatch.view') || can('onlineDispatch.manage')) {
     return <Navigate to={withTenantPath(tenantSlug, '/online')} replace />;
   }
+  if (
+    can('onlineDispatch.cancelFromWarehouseQueue') &&
+    !can('onlineDispatch.view') &&
+    !can('onlineDispatch.manage')
+  ) {
+    return <Navigate to={withTenantPath(tenantSlug, '/online/cancel-dispatch-scan')} replace />;
+  }
   return <Dashboard />;
 };

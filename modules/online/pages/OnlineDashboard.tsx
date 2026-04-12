@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from '../../../components/Toast';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { Ban, RotateCcw, Trash2 } from 'lucide-react';
 
 function shipmentTouchesDateRange(
   r: OnlineDispatchShipment & { id: string },
@@ -45,10 +45,12 @@ function shipmentTouchesDateRange(
   const cr = onlineDispatchTsToMs(r.createdAt);
   const hw = onlineDispatchTsToMs(r.handedToWarehouseAt);
   const hp = onlineDispatchTsToMs(r.handedToPostAt);
+  const cx = onlineDispatchTsToMs(r.cancelledAt);
   return (
     isTimestampInRange(cr, startMs, endMs) ||
     isTimestampInRange(hw, startMs, endMs) ||
-    isTimestampInRange(hp, startMs, endMs)
+    isTimestampInRange(hp, startMs, endMs) ||
+    isTimestampInRange(cx, startMs, endMs)
   );
 }
 
@@ -62,6 +64,8 @@ export const OnlineDashboard: React.FC = () => {
   const [revertBusy, setRevertBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; barcode: string } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; barcode: string } | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
   const [shipmentsPage, setShipmentsPage] = useState(1);
   const SHIPMENTS_PAGE_SIZE = 20;
 
@@ -81,7 +85,11 @@ export const OnlineDashboard: React.FC = () => {
   const canPermanentDelete =
     Boolean(uid) && can('onlineDispatch.deletePermanent');
 
-  const showShipmentsActionCol = canRevertWarehouseScan || canPermanentDelete;
+  const canCancelFromWarehouseQueue =
+    Boolean(uid) && can('onlineDispatch.cancelFromWarehouseQueue');
+
+  const showShipmentsActionCol =
+    canRevertWarehouseScan || canPermanentDelete || canCancelFromWarehouseQueue;
 
   React.useEffect(() => {
     const u = onlineDispatchService.subscribeAllForTenant((r) => setRows(r));
@@ -189,6 +197,20 @@ export const OnlineDashboard: React.FC = () => {
     }
   };
 
+  const confirmCancelFromDispatch = async () => {
+    if (!cancelTarget || !uid) return;
+    setCancelBusy(true);
+    try {
+      await onlineDispatchService.cancelWarehouseShipment(uid, cancelTarget.id);
+      toast.success('تم تسجيل الإلغاء من التسليم — لن تُحسب الشحنة في انتظار البوسطة');
+      setCancelTarget(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'فشل الإلغاء');
+    } finally {
+      setCancelBusy(false);
+    }
+  };
+
   return (
     <div className="erp-page space-y-6">
       <PageHeader
@@ -245,6 +267,7 @@ export const OnlineDashboard: React.FC = () => {
                   <SelectItem value="pending">{ONLINE_DISPATCH_STATUS_LABEL.pending}</SelectItem>
                   <SelectItem value="at_warehouse">{ONLINE_DISPATCH_STATUS_LABEL.at_warehouse}</SelectItem>
                   <SelectItem value="handed_to_post">{ONLINE_DISPATCH_STATUS_LABEL.handed_to_post}</SelectItem>
+                  <SelectItem value="cancelled">{ONLINE_DISPATCH_STATUS_LABEL.cancelled}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -276,6 +299,19 @@ export const OnlineDashboard: React.FC = () => {
                           <RotateCcw className="h-4 w-4" aria-hidden />
                         </Button>
                       ) : null}
+                      {canCancelFromWarehouseQueue && r.status === 'at_warehouse' ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-amber-800 border-amber-500/40 hover:bg-amber-500/10 dark:text-amber-200"
+                          title="إلغاء من التسليم"
+                          aria-label="إلغاء من التسليم"
+                          onClick={() => setCancelTarget({ id: r.id, barcode: r.barcode })}
+                        >
+                          <Ban className="h-4 w-4" aria-hidden />
+                        </Button>
+                      ) : null}
                       {canPermanentDelete ? (
                         <Button
                           type="button"
@@ -289,7 +325,11 @@ export const OnlineDashboard: React.FC = () => {
                           <Trash2 className="h-4 w-4" aria-hidden />
                         </Button>
                       ) : null}
-                      {!((canRevertWarehouseScan && r.status === 'at_warehouse') || canPermanentDelete) ? (
+                      {!(
+                        (canRevertWarehouseScan && r.status === 'at_warehouse') ||
+                        (canCancelFromWarehouseQueue && r.status === 'at_warehouse') ||
+                        canPermanentDelete
+                      ) ? (
                         <span className="text-muted-foreground">—</span>
                       ) : null}
                     </div>
@@ -369,8 +409,25 @@ export const OnlineDashboard: React.FC = () => {
                       key={row.id}
                       className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-muted/20"
                     >
-                      <span className="font-mono text-[11px] leading-none text-foreground">{row.barcode}</span>
-                      <OnlineDispatchStatusBadge status={row.status} className="text-[10px] px-1.5 py-0" />
+                      <span className="min-w-0 flex-1 font-mono text-[11px] leading-none text-foreground">
+                        {row.barcode}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <OnlineDispatchStatusBadge status={row.status} className="text-[10px] px-1.5 py-0" />
+                        {canCancelFromWarehouseQueue ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-amber-800 hover:bg-amber-500/15 dark:text-amber-200"
+                            title="إلغاء من التسليم"
+                            aria-label="إلغاء من التسليم"
+                            onClick={() => setCancelTarget({ id: row.id, barcode: row.barcode })}
+                          >
+                            <Ban className="h-3.5 w-3.5" aria-hidden />
+                          </Button>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -404,6 +461,32 @@ export const OnlineDashboard: React.FC = () => {
               {revertBusy ? 'جاري…' : 'تأكيد التراجع'}
             </Button>
             <Button type="button" variant="outline" disabled={revertBusy} onClick={() => setRevertTarget(null)}>
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => !open && !cancelBusy && setCancelTarget(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>إلغاء من التسليم</DialogTitle>
+            <DialogDescription className="text-right">
+              تُسجَّل الشحنة بحالة «تم الإلغاء من التسليم» ولن تُحسب في انتظار تسليم البوسطة (مناسب مثلًا بعد إلغاء
+              الطلب في بوسطة). الباركود:{' '}
+              <span className="font-mono font-semibold">{cancelTarget?.barcode}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse">
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={cancelBusy}
+              onClick={() => void confirmCancelFromDispatch()}
+            >
+              {cancelBusy ? 'جاري…' : 'تأكيد الإلغاء من التسليم'}
+            </Button>
+            <Button type="button" variant="outline" disabled={cancelBusy} onClick={() => setCancelTarget(null)}>
               إلغاء
             </Button>
           </DialogFooter>
