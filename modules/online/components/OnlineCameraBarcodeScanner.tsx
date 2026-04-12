@@ -28,6 +28,14 @@ function disposeHtml5Scanner(html5: Html5Qrcode | null) {
   }
 }
 
+const DEFAULT_FPS = 10;
+
+function defaultQrbox(viewfinderWidth: number, viewfinderHeight: number) {
+  const w = Math.min(280, Math.floor(viewfinderWidth * 0.85));
+  const h = Math.min(200, Math.floor(viewfinderHeight * 0.45));
+  return { width: Math.max(200, w), height: Math.max(120, h) };
+}
+
 export type OnlineCameraBarcodeScannerProps = {
   active: boolean;
   /** Called when a code is read; keep stable or use ref inside parent for scan cooldown */
@@ -37,6 +45,10 @@ export type OnlineCameraBarcodeScannerProps = {
   className?: string;
   /** Shown when camera is active */
   hint?: string;
+  /** Frames per second for html5-qrcode (default 10). */
+  fps?: number;
+  /** Custom scan region; defaults match previous hard-coded qrbox. */
+  qrbox?: (viewfinderWidth: number, viewfinderHeight: number) => { width: number; height: number };
 };
 
 /**
@@ -49,6 +61,8 @@ export const OnlineCameraBarcodeScanner: React.FC<OnlineCameraBarcodeScannerProp
   disabled,
   className,
   hint = 'وجّه الكاميرا نحو الباركود أو رمز QR',
+  fps = DEFAULT_FPS,
+  qrbox,
 }) => {
   const reactId = useId().replace(/:/g, '_');
   const elementId = `hq-scan-${reactId}`;
@@ -57,6 +71,8 @@ export const OnlineCameraBarcodeScanner: React.FC<OnlineCameraBarcodeScannerProp
   onDecodedRef.current = onDecoded;
   const onScannerErrorRef = useRef(onScannerError);
   onScannerErrorRef.current = onScannerError;
+  const qrboxRef = useRef(qrbox ?? defaultQrbox);
+  qrboxRef.current = qrbox ?? defaultQrbox;
 
   useEffect(() => {
     if (!active || disabled) {
@@ -73,17 +89,15 @@ export const OnlineCameraBarcodeScanner: React.FC<OnlineCameraBarcodeScannerProp
     scannerRef.current = html5;
 
     let cancelled = false;
+    const fpsClamped = Math.min(30, Math.max(1, Math.round(fps)));
     void html5
       .start(
         { facingMode: 'environment' },
         {
-          fps: 10,
+          fps: fpsClamped,
           /** Scan box sized for a capped preview (see container max-height). */
-          qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const w = Math.min(280, Math.floor(viewfinderWidth * 0.85));
-            const h = Math.min(200, Math.floor(viewfinderHeight * 0.45));
-            return { width: Math.max(200, w), height: Math.max(120, h) };
-          },
+          qrbox: (viewfinderWidth, viewfinderHeight) =>
+            qrboxRef.current(viewfinderWidth, viewfinderHeight),
         },
         (decodedText) => {
           if (cancelled) return;
@@ -106,7 +120,7 @@ export const OnlineCameraBarcodeScanner: React.FC<OnlineCameraBarcodeScannerProp
       scannerRef.current = null;
       disposeHtml5Scanner(html5);
     };
-  }, [active, disabled, elementId]);
+  }, [active, disabled, elementId, fps]);
 
   /** Keep the host #elementId in the DOM while tearing down so html5-qrcode can stop tracks; hiding avoids `return null` removing the node before useEffect cleanup. */
   return (

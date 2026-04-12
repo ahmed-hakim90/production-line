@@ -20,7 +20,15 @@ import { cn } from '@/lib/utils';
 import { Loader2, ScanLine } from 'lucide-react';
 import type { OnlineDispatchShipment } from '../../../types';
 
-const WEDGE_DEBOUNCE_MS = 400;
+/** قارئ الباركود (wedge): أقصر من شاشة المسح العادية لتقليل انتظار آخر حرف. */
+const WEDGE_DEBOUNCE_MS = 160;
+
+/** نافذة مسح أعلى قليلًا لخطوط 1D على صفحة الإلغاء فقط. */
+function cancelDispatchQrbox(viewfinderWidth: number, viewfinderHeight: number) {
+  const w = Math.min(320, Math.floor(viewfinderWidth * 0.92));
+  const h = Math.min(240, Math.floor(viewfinderHeight * 0.55));
+  return { width: Math.max(220, w), height: Math.max(140, h) };
+}
 
 async function preflightCameraPermission(): Promise<void> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -50,8 +58,8 @@ function cameraPreflightErrorMessage(e: unknown): string {
 type InputMode = 'manual' | 'camera';
 
 /**
- * Dedicated flow: scan or enter a barcode, look up an existing shipment, and cancel from the
- * warehouse handoff queue (at_warehouse → cancelled) so it is no longer counted as awaiting post.
+ * Dedicated flow: scan or enter a barcode; if shipment is at warehouse, cancel is applied immediately
+ * (no second button). Other statuses are shown without destructive action.
  */
 export const OnlineCancelDispatchScan: React.FC = () => {
   const navigate = useTenantNavigate();
@@ -63,7 +71,6 @@ export const OnlineCancelDispatchScan: React.FC = () => {
 
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
-  const [cancelBusy, setCancelBusy] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>('manual');
   const [cameraPriming, setCameraPriming] = useState(false);
   const [lookupRow, setLookupRow] = useState<(OnlineDispatchShipment & { id: string }) | null>(null);
@@ -71,7 +78,8 @@ export const OnlineCancelDispatchScan: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const wedgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lookupGenRef = useRef(0);
-  const cameraScanLockRef = useRef(false);
+  /** يمنع تكرار فك تشفير الكاميرا قبل انتهاء البحث + الإلغاء بالكامل. */
+  const scanPipelineLockRef = useRef(false);
 
   const selectCameraMode = useCallback(async () => {
     if (inputMode === 'camera') return;
@@ -92,8 +100,9 @@ export const OnlineCancelDispatchScan: React.FC = () => {
     }
   }, [inputMode]);
 
-  const runLookup = useCallback(
+  const processBarcodeForCancel = useCallback(
     async (raw: string) => {
+      if (!uid) return;
       const trimmed = raw.trim();
       if (!trimmed) {
         setLookupRow(null);
@@ -111,18 +120,56 @@ export const OnlineCancelDispatchScan: React.FC = () => {
       try {
         const row = await onlineDispatchService.getByBarcode(normalized);
         if (gen !== lookupGenRef.current) return;
-        setLookupRow(row);
-        setLookupMissing(!row);
+
+        if (!row) {
+          setLookupRow(null);
+          setLookupMissing(true);
+          return;
+        }
+
+        setLookupMissing(false);
+
+        if (row.status === 'cancelled') {
+          setLookupRow(row);
+          return;
+        }
+
+        if (row.status === 'pending' || row.status === 'handed_to_post') {
+          setLookupRow(row);
+          return;
+        }
+
+        if (row.status !== 'at_warehouse') {
+          setLookupRow(row);
+          return;
+        }
+
+        await onlineDispatchService.cancelWarehouseShipment(uid, row.id);
+        if (gen !== lookupGenRef.current) return;
+
+        toast.success('تم تسجيل الإلغاء من التسليم — لن تُحسب الشحنة في انتظار البوسطة');
+        const updated = await onlineDispatchService.getByBarcode(row.barcode);
+        if (gen !== lookupGenRef.current) return;
+        setLookupRow(updated ?? { ...row, status: 'cancelled' });
+        setValue('');
       } catch (e) {
         if (gen !== lookupGenRef.current) return;
-        toast.error(e instanceof Error ? e.message : 'تعذر البحث');
+        const msg = e instanceof Error ? e.message : 'فشلت العملية';
+        const refetched = await onlineDispatchService.getByBarcode(normalized).catch(() => null);
+        if (refetched?.status === 'cancelled') {
+          setLookupRow(refetched);
+          setValue('');
+          return;
+        }
+        toast.error(msg);
         setLookupRow(null);
         setLookupMissing(false);
       } finally {
         if (gen === lookupGenRef.current) setBusy(false);
+        inputRef.current?.focus();
       }
     },
-    [],
+    [uid],
   );
 
   useEffect(() => {
@@ -142,7 +189,7 @@ export const OnlineCancelDispatchScan: React.FC = () => {
     if (wedgeTimerRef.current) clearTimeout(wedgeTimerRef.current);
     wedgeTimerRef.current = setTimeout(() => {
       wedgeTimerRef.current = null;
-      void runLookup(value);
+      void processBarcodeForCancel(value);
     }, WEDGE_DEBOUNCE_MS);
     return () => {
       if (wedgeTimerRef.current) {
@@ -150,40 +197,24 @@ export const OnlineCancelDispatchScan: React.FC = () => {
         wedgeTimerRef.current = null;
       }
     };
-  }, [value, inputMode, busy, runLookup]);
+  }, [value, inputMode, busy, processBarcodeForCancel]);
 
   const onCameraDecoded = useCallback(
     (text: string) => {
-      if (cameraScanLockRef.current) return;
-      cameraScanLockRef.current = true;
+      if (scanPipelineLockRef.current) return;
+      scanPipelineLockRef.current = true;
       setValue(text);
-      void runLookup(text).finally(() => {
-        cameraScanLockRef.current = false;
+      void processBarcodeForCancel(text).finally(() => {
+        scanPipelineLockRef.current = false;
       });
     },
-    [runLookup],
+    [processBarcodeForCancel],
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      void runLookup(value);
-    }
-  };
-
-  const confirmCancel = async () => {
-    if (!uid || !lookupRow || lookupRow.status !== 'at_warehouse') return;
-    setCancelBusy(true);
-    try {
-      await onlineDispatchService.cancelWarehouseShipment(uid, lookupRow.id);
-      toast.success('تم تسجيل الإلغاء من التسليم — لن تُحسب الشحنة في انتظار البوسطة');
-      const updated = await onlineDispatchService.getByBarcode(lookupRow.barcode);
-      setLookupRow(updated ?? { ...lookupRow, status: 'cancelled' });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'فشل الإلغاء');
-    } finally {
-      setCancelBusy(false);
-      inputRef.current?.focus();
+      void processBarcodeForCancel(value);
     }
   };
 
@@ -191,13 +222,11 @@ export const OnlineCancelDispatchScan: React.FC = () => {
     return <Navigate to="/online" replace />;
   }
 
-  const showCancelButton = lookupRow?.status === 'at_warehouse';
-
   return (
     <div className="erp-page max-w-lg mx-auto space-y-6 px-2 sm:px-0">
       <PageHeader
         title="إلغاء من التسليم (مسح)"
-        subtitle="ابحث بالباركود عن شحنة مسجّلة عند المخزن ثم سجّل إلغاءها من مسار التسليم للبوسطة إن لزم."
+        subtitle="امسح أو أدخل الباركود: إن كانت الشحنة عند المخزن يُسجَّل الإلغاء من التسليم تلقائيًا دون زر إضافي."
         icon="block"
         secondaryAction={{
           label: can('onlineDispatch.view') || can('onlineDispatch.manage') ? 'لوحة الأونلاين' : 'الرئيسية',
@@ -213,7 +242,7 @@ export const OnlineCancelDispatchScan: React.FC = () => {
         <CardHeader className="border-b bg-muted/30 px-4 py-4 sm:px-6">
           <CardTitle className="text-base font-semibold">الباركود</CardTitle>
           <CardDescription className="text-xs">
-            أدخل الرمز أو امسحه بالكاميرا؛ يُعرض السجل الحالي إن وُجد.
+            الكاميرا أو قارئ USB: بعد قراءة باركود صالح يُنفَّذ البحث ثم الإلغاء فورًا للشحنات المسجّلة عند المخزن فقط.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 p-4 sm:p-6">
@@ -257,15 +286,15 @@ export const OnlineCancelDispatchScan: React.FC = () => {
                 type="button"
                 className="w-full"
                 disabled={busy || !normalizeBostaBarcode(value).trim()}
-                onClick={() => void runLookup(value)}
+                onClick={() => void processBarcodeForCancel(value)}
               >
                 {busy ? (
                   <>
                     <Loader2 className="ms-2 h-4 w-4 animate-spin" aria-hidden />
-                    جاري البحث…
+                    جاري البحث أو تسجيل الإلغاء…
                   </>
                 ) : (
-                  'بحث'
+                  'بحث / تنفيذ'
                 )}
               </Button>
             </div>
@@ -273,11 +302,13 @@ export const OnlineCancelDispatchScan: React.FC = () => {
             <div className="space-y-3">
               <OnlineCameraBarcodeScanner
                 active={inputMode === 'camera'}
+                fps={18}
+                qrbox={cancelDispatchQrbox}
                 onDecoded={onCameraDecoded}
                 onScannerError={(m) => toast.error(m)}
               />
               <p className="text-center text-xs text-muted-foreground">
-                وجّه الكاميرا نحو الباركود؛ بعد القراءة يُعرض النتيجة أدناه.
+                بعد قراءة الباركود يُنفَّذ الإلغاء تلقائيًا إن كانت الشحنة عند المخزن؛ أبقِ الكاميرا ثابتة حتى تظهر النتيجة.
               </p>
             </div>
           )}
@@ -291,11 +322,11 @@ export const OnlineCancelDispatchScan: React.FC = () => {
             aria-live="polite"
           >
             {!value.trim() && !lookupRow && !lookupMissing ? (
-              <p className="text-center text-sm text-muted-foreground">أدخل باركودًا للبحث.</p>
+              <p className="text-center text-sm text-muted-foreground">أدخل باركودًا أو امسح بالكاميرا.</p>
             ) : busy ? (
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                جاري البحث…
+                جاري البحث أو تسجيل الإلغاء…
               </div>
             ) : lookupMissing ? (
               <p className="text-center text-sm font-medium text-destructive">الباركود غير مسجّل في النظام.</p>
@@ -307,7 +338,7 @@ export const OnlineCancelDispatchScan: React.FC = () => {
                 </div>
                 {lookupRow.status === 'pending' ? (
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    الشحنة ما زالت في انتظار أول مسح للمخزن — لا حاجة لإلغاء من التسليم من هذه الشاشة.
+                    الشحنة ما زالت في انتظار أول مسح للمخزن — لا يُسجَّل إلغاء من التسليم من هذه الشاشة.
                   </p>
                 ) : null}
                 {lookupRow.status === 'handed_to_post' ? (
@@ -317,26 +348,9 @@ export const OnlineCancelDispatchScan: React.FC = () => {
                 ) : null}
                 {lookupRow.status === 'cancelled' ? (
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    هذه الشحنة مسجّلة مسبقًا كملغاة من التسليم.
+                    هذه الشحنة ملغاة من التسليم (لا تُحسب في انتظار البوسطة). إن أعدت مسح نفس الباركود ستظهر هذه
+                    الحالة دون رسالة خطأ.
                   </p>
-                ) : null}
-                {showCancelButton ? (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    className="w-full"
-                    disabled={cancelBusy}
-                    onClick={() => void confirmCancel()}
-                  >
-                    {cancelBusy ? (
-                      <>
-                        <Loader2 className="ms-2 h-4 w-4 animate-spin" aria-hidden />
-                        جاري التسجيل…
-                      </>
-                    ) : (
-                      'تسجيل إلغاء من التسليم'
-                    )}
-                  </Button>
                 ) : null}
               </div>
             ) : (
