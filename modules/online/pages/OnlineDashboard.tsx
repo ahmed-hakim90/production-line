@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '../../../components/PageHeader';
+import { PageHeader, type PageHeaderAction } from '../../../components/PageHeader';
 import { usePermission } from '../../../utils/permissions';
 import {
   filterWarehouseButNotPostSameDispatchDay,
@@ -35,7 +35,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from '../../../components/Toast';
-import { Ban, FileDown, RotateCcw, Trash2 } from 'lucide-react';
+import { Ban, ChevronDown, FileDown, RotateCcw, Trash2 } from 'lucide-react';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useFirestoreUserLabels } from '../utils/firestoreUserLabels';
 import {
   collectOnlineDispatchExportUids,
@@ -63,8 +72,10 @@ export const OnlineDashboard: React.FC = () => {
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
   const branding = useAppStore((s) => s.systemSettings.branding);
+  const tenantNav = useTenantNavigate();
 
   const [rows, setRows] = useState<Array<OnlineDispatchShipment & { id: string }>>([]);
+  const [shipmentsDataReady, setShipmentsDataReady] = useState(false);
   const [revertTarget, setRevertTarget] = useState<{ id: string; barcode: string } | null>(null);
   const [revertBusy, setRevertBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; barcode: string } | null>(null);
@@ -104,9 +115,49 @@ export const OnlineDashboard: React.FC = () => {
     Boolean(uid) &&
     (canExportOnlineShipments || canCancelFromWarehouseQueue || canRevertWarehouseScan);
 
+  const pageHeaderScanProps = useMemo(() => {
+    const canWh = Boolean(uid) && (can('onlineDispatch.handoffToWarehouse') || can('onlineDispatch.manage'));
+    const canPost = Boolean(uid) && (can('onlineDispatch.handoffToPost') || can('onlineDispatch.manage'));
+    let primaryAction: { label: string; icon?: string; onClick: () => void } | undefined;
+    let secondaryAction: { label: string; icon?: string; onClick: () => void } | undefined;
+    const moreActions: PageHeaderAction[] = [];
+
+    if (canWh) {
+      primaryAction = {
+        label: 'مسح — للمخزن',
+        icon: 'search',
+        onClick: () => tenantNav('/online/scan/warehouse'),
+      };
+    }
+    if (canPost) {
+      const post = {
+        label: 'مسح — للبوسطة',
+        icon: 'search',
+        onClick: () => tenantNav('/online/scan/post'),
+      };
+      if (primaryAction) secondaryAction = post;
+      else primaryAction = post;
+    }
+    if (canCancelFromWarehouseQueue) {
+      moreActions.push({
+        label: 'مسح إلغاء من التسليم',
+        onClick: () => tenantNav('/online/cancel-dispatch-scan'),
+        group: 'مسح',
+      });
+    }
+    return { primaryAction, secondaryAction, moreActions };
+  }, [uid, can, tenantNav, canCancelFromWarehouseQueue]);
+
   React.useEffect(() => {
-    const u = onlineDispatchService.subscribeAllForTenant((r) => setRows(r));
-    return () => u();
+    setShipmentsDataReady(false);
+    const u = onlineDispatchService.subscribeAllForTenant((r) => {
+      setRows(r);
+      setShipmentsDataReady(true);
+    });
+    return () => {
+      setShipmentsDataReady(false);
+      u();
+    };
   }, []);
 
   const { startMs: rangeStartMs, endMs: rangeEndMs } = useMemo(
@@ -325,10 +376,13 @@ export const OnlineDashboard: React.FC = () => {
         title="لوحة الأونلاين — تسليم بوسطة"
         subtitle={branding?.factoryName ? `الشركة: ${branding.factoryName}` : 'متابعة الباركود والطابور'}
         icon="package"
+        primaryAction={pageHeaderScanProps.primaryAction}
+        secondaryAction={pageHeaderScanProps.secondaryAction}
+        moreActions={pageHeaderScanProps.moreActions.length ? pageHeaderScanProps.moreActions : undefined}
       />
 
       <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-        <div className="order-2 min-w-0 flex-1 space-y-6 xl:order-2">
+        <div className="order-1 min-w-0 flex-1 space-y-6 xl:order-1">
       <OnlineDispatchKpisSection
         tenantShipments={rows}
         dateFrom={rangeFrom}
@@ -339,11 +393,20 @@ export const OnlineDashboard: React.FC = () => {
 
       <Card className="shadow-sm">
         <CardHeader className="space-y-3 border-b bg-muted/30 px-4 py-4 sm:px-6">
-          <div>
-            <CardTitle className="text-base font-semibold">الشحنات</CardTitle>
-            <CardDescription className="text-xs leading-relaxed">
-              يظهر أي سجل له نشاط (إنشاء، تسليم مخزن، أو تسليم بوسطة) ضمن الفترة من «من تاريخ» إلى «إلى تاريخ» أعلاه.
-            </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="min-w-0 space-y-1.5">
+              <CardTitle className="text-base font-semibold">الشحنات</CardTitle>
+              <CardDescription className="text-xs leading-relaxed">
+                السجلات التي لها نشاط (إنشاء، تسليم مخزن، تسليم بوسطة، أو إلغاء من التسليم) ضمن نطاق التاريخ نفسه
+                المستخدم في المؤشرات أعلاه؛ يمكن تصفية النتائج بالباركود والحالة.
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 items-baseline gap-2 rounded-lg border border-border bg-background/80 px-3 py-2 shadow-sm sm:flex-col sm:items-end sm:py-2.5">
+              <span className="text-[11px] font-medium text-muted-foreground">بعد الفلتر</span>
+              <span className="text-2xl font-bold tabular-nums text-primary sm:text-3xl">
+                {filteredShipments.length}
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap items-end gap-4 pt-1">
             <div className="min-w-[200px] flex-1 space-y-2">
@@ -381,37 +444,70 @@ export const OnlineDashboard: React.FC = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="border-b bg-muted/20 px-4 py-4 sm:px-6">
-          <p className="text-xs text-muted-foreground">عدد النتائج بعد الفلتر</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums text-primary">{filteredShipments.length}</p>
-        </CardContent>
+        {showShipmentRowSelection ? (
+          <CardContent className="border-b bg-muted/15 px-4 py-2 sm:px-6">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              يُمسح تحديد الصفوف تلقائيًا عند تغيير نطاق التاريخ أو البحث أو الحالة أو رقم الصفحة.
+            </p>
+          </CardContent>
+        ) : null}
         {showShipmentsToolbar ? (
           <CardContent className="flex flex-col gap-3 border-b bg-muted/10 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-6">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canExportOnlineShipments ? (
                 <>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={handleExportFiltered}
-                    disabled={filteredShipments.length === 0}
-                  >
-                    <FileDown className="h-4 w-4 shrink-0" aria-hidden />
-                    تصدير Excel — كل النتائج المفلترة
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={handleExportSelected}
-                    disabled={selectedIds.size === 0}
-                  >
-                    <FileDown className="h-4 w-4 shrink-0" aria-hidden />
-                    تصدير Excel — المحدد فقط
-                  </Button>
+                  <div className="hidden flex-wrap gap-2 md:flex">
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={handleExportFiltered}
+                      disabled={filteredShipments.length === 0}
+                    >
+                      <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                      تصدير Excel — كل النتائج المفلترة
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={handleExportSelected}
+                      disabled={selectedIds.size === 0}
+                    >
+                      <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                      تصدير Excel — المحدد فقط
+                    </Button>
+                  </div>
+                  <div className="md:hidden">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={filteredShipments.length === 0 && selectedIds.size === 0}
+                        >
+                          <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                          تصدير Excel
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-[14rem]">
+                        <DropdownMenuItem
+                          disabled={filteredShipments.length === 0}
+                          onClick={() => handleExportFiltered()}
+                        >
+                          كل النتائج المفلترة
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={selectedIds.size === 0} onClick={() => handleExportSelected()}>
+                          المحدد فقط ({selectedIds.size})
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </>
               ) : null}
               {selectedIds.size > 0 ? (
@@ -463,6 +559,16 @@ export const OnlineDashboard: React.FC = () => {
           </CardContent>
         ) : null}
         <CardContent className="p-0">
+          <TooltipProvider delayDuration={400}>
+          {!shipmentsDataReady ? (
+            <div className="space-y-3 px-4 py-6 sm:px-6" aria-busy="true" aria-label="جاري تحميل الشحنات">
+              <Skeleton className="h-8 w-full max-w-md" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-4/5" />
+            </div>
+          ) : (
           <OnlineShipmentsDataTable
             rows={paginatedShipments}
             emptyMessage="لا توجد شحنات مطابقة للفلتر"
@@ -481,57 +587,74 @@ export const OnlineDashboard: React.FC = () => {
               showShipmentsActionCol
                 ? (r) => (
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      {canRevertWarehouseScan && r.status === 'at_warehouse' ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          title="تراجع عن مسح المخزن"
-                          aria-label="تراجع عن مسح المخزن"
-                          onClick={() => setRevertTarget({ id: r.id, barcode: r.barcode })}
-                        >
-                          <RotateCcw className="h-4 w-4" aria-hidden />
-                        </Button>
-                      ) : null}
-                      {canCancelFromWarehouseQueue && r.status === 'at_warehouse' ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-amber-800 border-amber-500/40 hover:bg-amber-500/10 dark:text-amber-200"
-                          title="إلغاء من التسليم"
-                          aria-label="إلغاء من التسليم"
-                          onClick={() => setCancelTarget({ id: r.id, barcode: r.barcode })}
-                        >
-                          <Ban className="h-4 w-4" aria-hidden />
-                        </Button>
-                      ) : null}
-                      {canPermanentDelete ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-destructive border-destructive/40 hover:bg-destructive/10"
-                          title="حذف نهائي"
-                          aria-label="حذف نهائي"
-                          onClick={() => setDeleteTarget({ id: r.id, barcode: r.barcode })}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </Button>
-                      ) : null}
-                      {!(
-                        (canRevertWarehouseScan && r.status === 'at_warehouse') ||
-                        (canCancelFromWarehouseQueue && r.status === 'at_warehouse') ||
-                        canPermanentDelete
-                      ) ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : null}
-                    </div>
+                        {canRevertWarehouseScan && r.status === 'at_warehouse' ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                title="تراجع عن مسح المخزن"
+                                aria-label="تراجع عن مسح المخزن"
+                                onClick={() => setRevertTarget({ id: r.id, barcode: r.barcode })}
+                              >
+                                <RotateCcw className="h-4 w-4" aria-hidden />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">تراجع عن مسح المخزن</TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                        {canCancelFromWarehouseQueue && r.status === 'at_warehouse' ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 text-amber-800 border-amber-500/40 hover:bg-amber-500/10 dark:text-amber-200"
+                                title="إلغاء من التسليم"
+                                aria-label="إلغاء من التسليم"
+                                onClick={() => setCancelTarget({ id: r.id, barcode: r.barcode })}
+                              >
+                                <Ban className="h-4 w-4" aria-hidden />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">إلغاء من التسليم</TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                        {canPermanentDelete ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 text-destructive border-destructive/40 hover:bg-destructive/10"
+                                title="حذف نهائي"
+                                aria-label="حذف نهائي"
+                                onClick={() => setDeleteTarget({ id: r.id, barcode: r.barcode })}
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">حذف نهائي من قاعدة البيانات</TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                        {!(
+                          (canRevertWarehouseScan && r.status === 'at_warehouse') ||
+                          (canCancelFromWarehouseQueue && r.status === 'at_warehouse') ||
+                          canPermanentDelete
+                        ) ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : null}
+                      </div>
                   )
                 : undefined
             }
           />
+          )}
+          </TooltipProvider>
         </CardContent>
         <OnlineDataPaginationFooter
           page={shipmentsPage}
@@ -544,7 +667,7 @@ export const OnlineDashboard: React.FC = () => {
         </div>
 
         <aside
-          className="order-1 w-full shrink-0 xl:order-1 xl:sticky xl:top-4 xl:w-[min(22rem,100%)] xl:max-w-sm xl:self-start"
+          className="order-2 w-full shrink-0 xl:order-2 xl:sticky xl:top-4 xl:w-[min(22rem,100%)] xl:max-w-sm xl:self-start"
           aria-label="شحنات لم يُسجَّل لها تسليم بوسطة في نفس يوم المخزن"
         >
       <Card className="shadow-sm">

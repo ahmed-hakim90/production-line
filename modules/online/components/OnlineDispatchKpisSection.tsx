@@ -83,7 +83,7 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
   const numClass = compact ? 'text-2xl font-bold' : 'text-3xl font-bold';
 
   const tileClass =
-    'rounded-lg border border-border bg-card p-3 sm:p-4 shadow-sm';
+    'flex min-h-[5.75rem] flex-col rounded-lg border border-border bg-card p-3 sm:min-h-[6rem] sm:p-4 shadow-sm';
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -125,7 +125,9 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
             </div>
             <div className={tileClass}>
               <p className="text-xs text-muted-foreground">تسجيلات جديدة (ضمن الفترة)</p>
-              <p className={cn(numClass, 'mt-1')}>{summary.createdInPeriod -summary.cancelledInPeriod}</p>
+              <p className={cn(numClass, 'mt-1')}>
+                {summary.createdInPeriod - summary.cancelledInPeriod}
+              </p>
               {!compact && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   أول ظهور للباركود في النظام بحسب تاريخ الإنشاء
