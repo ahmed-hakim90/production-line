@@ -91,7 +91,7 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
         <CardContent className={cn(compact ? 'p-3' : 'p-4 sm:p-6')}>
           <div
             className={cn(
-              'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+              'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5',
               compact ? 'gap-2' : 'gap-3 sm:gap-4',
             )}
           >
@@ -102,6 +102,22 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
             <div className={tileClass}>
               <p className="text-xs text-muted-foreground">تسليم للمخزن (ضمن الفترة)</p>
               <p className={cn(numClass, 'mt-1')}>{summary.toWarehouse}</p>
+              {!compact && (
+                <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                  نشط فقط — بلا إلغاء من التسليم
+                </p>
+              )}
+            </div>
+            <div className={cn(tileClass, 'border-rose-500/25 bg-rose-50/40 dark:bg-rose-950/20')}>
+              <p className="text-xs text-muted-foreground">إلغاء من التسليم (ضمن الفترة)</p>
+              <p className={cn(numClass, 'mt-1 text-rose-800 dark:text-rose-200')}>
+                {summary.cancelledInPeriod}
+              </p>
+              {!compact && (
+                <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                  بحسب وقت تسجيل الإلغاء
+                </p>
+              )}
             </div>
             <div className={tileClass}>
               <p className="text-xs text-muted-foreground">تسليم للبوسطة (ضمن الفترة)</p>
@@ -109,7 +125,7 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
             </div>
             <div className={tileClass}>
               <p className="text-xs text-muted-foreground">تسجيلات جديدة (ضمن الفترة)</p>
-              <p className={cn(numClass, 'mt-1')}>{summary.createdInPeriod}</p>
+              <p className={cn(numClass, 'mt-1')}>{summary.createdInPeriod -summary.cancelledInPeriod}</p>
               {!compact && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   أول ظهور للباركود في النظام بحسب تاريخ الإنشاء

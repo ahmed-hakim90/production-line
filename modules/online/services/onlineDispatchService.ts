@@ -152,6 +152,7 @@ export const onlineDispatchService = {
   /**
    * All shipments whose warehouse handoff timestamp falls in the current dispatch day (from 08:00 local).
    * Newest handoffs first. Includes rows later handed to post if warehouse scan was today.
+   * Excludes `cancelled` (no longer part of the handoff pipeline).
    */
   async listWarehouseHandoffsForDispatchDay(): Promise<Array<OnlineDispatchShipment & { id: string }>> {
     if (!isConfigured) return [];
@@ -162,12 +163,14 @@ export const onlineDispatchService = {
       limit(400),
     );
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OnlineDispatchShipment) }));
+    return snap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as OnlineDispatchShipment) }))
+      .filter((r) => !onlineDispatchRowIsCancelled(r));
   },
 
   /**
    * Shipments handed to post within the current dispatch day (from 08:00 local), by `handedToPostAt`.
-   * Newest first. Status is expected to be `handed_to_post`.
+   * Newest first. Status is expected to be `handed_to_post` (rows marked `cancelled` are filtered out if present).
    */
   async listPostHandoffsForDispatchDay(): Promise<Array<OnlineDispatchShipment & { id: string }>> {
     if (!isConfigured) return [];
@@ -178,7 +181,9 @@ export const onlineDispatchService = {
       limit(400),
     );
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OnlineDispatchShipment) }));
+    return snap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as OnlineDispatchShipment) }))
+      .filter((r) => !onlineDispatchRowIsCancelled(r));
   },
 
   async createShipment(input: { notes?: string; createdByUid?: string } = {}): Promise<{ id: string; barcode: string }> {
@@ -440,6 +445,11 @@ function toMillis(ts: unknown): number {
   return Number.isFinite(p) ? p : 0;
 }
 
+/** Treat as cancelled for KPIs: explicit status or presence of `cancelledAt` (covers incomplete legacy writes). */
+function onlineDispatchRowIsCancelled(r: OnlineDispatchShipment): boolean {
+  return r.status === 'cancelled' || toMillis(r.cancelledAt) > 0;
+}
+
 /** For UI: warehouse handoff / post handoff timestamps from Firestore. */
 export function onlineDispatchTsToMs(ts: unknown): number {
   return toMillis(ts);
@@ -476,7 +486,7 @@ export function filterWarehouseButNotPostSameDispatchDay(
 ): Array<OnlineDispatchShipment & { id: string }> {
   const { startMs, endExclusiveMs } = getDispatchDayBoundsForCalendarYmd(calendarYmd);
   return rows.filter((r) => {
-    if (r.status === 'cancelled') return false;
+    if (onlineDispatchRowIsCancelled(r)) return false;
     const hw = onlineDispatchTsToMs(r.handedToWarehouseAt);
     if (!hw || hw < startMs || hw >= endExclusiveMs) return false;
     const hp = onlineDispatchTsToMs(r.handedToPostAt);
@@ -485,7 +495,11 @@ export function filterWarehouseButNotPostSameDispatchDay(
   });
 }
 
-/** Handoffs in range and creations in range (by timestamps). */
+/**
+ * Handoffs in range and creations in range (by timestamps).
+ * Cancelled rows (by `status` or `cancelledAt`) do not increment `toWarehouse` / `toPost`.
+ * `cancelledInPeriod` counts cancellations whose `cancelledAt` falls in the range (fallback: same range on `handedToWarehouseAt` if `cancelledAt` missing).
+ */
 export function summarizeOnlineDispatchByRange(
   rows: Array<OnlineDispatchShipment & { id: string }>,
   startMs: number,
@@ -494,18 +508,31 @@ export function summarizeOnlineDispatchByRange(
   toWarehouse: number;
   toPost: number;
   createdInPeriod: number;
+  cancelledInPeriod: number;
 } {
   let toWarehouse = 0;
   let toPost = 0;
   let createdInPeriod = 0;
+  let cancelledInPeriod = 0;
   for (const r of rows) {
     const cr = toMillis(r.createdAt);
     if (isTimestampInRange(cr, startMs, endMs)) createdInPeriod += 1;
+
+    if (onlineDispatchRowIsCancelled(r)) {
+      const cx = toMillis(r.cancelledAt);
+      const hw = toMillis(r.handedToWarehouseAt);
+      if (cx && isTimestampInRange(cx, startMs, endMs)) {
+        cancelledInPeriod += 1;
+      } else if (!cx && r.status === 'cancelled' && isTimestampInRange(hw, startMs, endMs)) {
+        cancelledInPeriod += 1;
+      }
+      continue;
+    }
 
     const hw = toMillis(r.handedToWarehouseAt);
     if (isTimestampInRange(hw, startMs, endMs)) toWarehouse += 1;
     const hp = toMillis(r.handedToPostAt);
     if (isTimestampInRange(hp, startMs, endMs)) toPost += 1;
   }
-  return { toWarehouse, toPost, createdInPeriod };
+  return { toWarehouse, toPost, createdInPeriod, cancelledInPeriod };
 }

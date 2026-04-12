@@ -35,7 +35,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from '../../../components/Toast';
-import { Ban, RotateCcw, Trash2 } from 'lucide-react';
+import { Ban, FileDown, RotateCcw, Trash2 } from 'lucide-react';
+import { useFirestoreUserLabels } from '../utils/firestoreUserLabels';
+import {
+  collectOnlineDispatchExportUids,
+  exportOnlineDispatchShipmentsExcel,
+} from '../utils/exportOnlineDispatchShipmentsExcel';
 
 function shipmentTouchesDateRange(
   r: OnlineDispatchShipment & { id: string },
@@ -66,6 +71,9 @@ export const OnlineDashboard: React.FC = () => {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; barcode: string } | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkDialog, setBulkDialog] = useState<null | { kind: 'cancel' | 'revert'; ids: string[] }>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [shipmentsPage, setShipmentsPage] = useState(1);
   const SHIPMENTS_PAGE_SIZE = 20;
 
@@ -91,6 +99,11 @@ export const OnlineDashboard: React.FC = () => {
   const showShipmentsActionCol =
     canRevertWarehouseScan || canPermanentDelete || canCancelFromWarehouseQueue;
 
+  const canExportOnlineShipments = can('onlineDispatch.view') || can('onlineDispatch.manage');
+  const showShipmentRowSelection =
+    Boolean(uid) &&
+    (canExportOnlineShipments || canCancelFromWarehouseQueue || canRevertWarehouseScan);
+
   React.useEffect(() => {
     const u = onlineDispatchService.subscribeAllForTenant((r) => setRows(r));
     return () => u();
@@ -112,6 +125,25 @@ export const OnlineDashboard: React.FC = () => {
       return tb - ta;
     });
   }, [rows, rangeStartMs, rangeEndMs, barcodeQuery, statusFilter]);
+
+  const exportLabelUids = useMemo(
+    () => collectOnlineDispatchExportUids(filteredShipments),
+    [filteredShipments],
+  );
+  const exportUserLabels = useFirestoreUserLabels(exportLabelUids);
+
+  const selectedIdsKey = [...selectedIds].sort().join('\u001e');
+  const selectedRows = useMemo(
+    () => filteredShipments.filter((r) => selectedIds.has(r.id)),
+    [filteredShipments, selectedIdsKey],
+  );
+
+  const allSelectedAtWarehouse =
+    selectedRows.length > 0 && selectedRows.every((r) => r.status === 'at_warehouse');
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [shipmentsPage, rangeFrom, rangeTo, barcodeQuery, statusFilter]);
 
   useEffect(() => {
     setShipmentsPage(1);
@@ -211,6 +243,82 @@ export const OnlineDashboard: React.FC = () => {
     }
   };
 
+  const handleToggleShipmentSelection = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (checked) n.add(id);
+      else n.delete(id);
+      return n;
+    });
+  };
+
+  const handleToggleShipmentPageSelection = (ids: string[], checked: boolean) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      for (const id of ids) {
+        if (checked) n.add(id);
+        else n.delete(id);
+      }
+      return n;
+    });
+  };
+
+  const handleExportFiltered = () => {
+    if (filteredShipments.length === 0) {
+      toast.error('لا توجد نتائج للتصدير');
+      return;
+    }
+    exportOnlineDispatchShipmentsExcel(filteredShipments, exportUserLabels);
+    toast.success(`تم تنزيل Excel (${filteredShipments.length} شحنة)`);
+  };
+
+  const handleExportSelected = () => {
+    const list = filteredShipments.filter((r) => selectedIds.has(r.id));
+    if (list.length === 0) {
+      toast.error('لم يُحدد أي صف للتصدير');
+      return;
+    }
+    exportOnlineDispatchShipmentsExcel(list, exportUserLabels);
+    toast.success(`تم تنزيل Excel (${list.length} شحنة)`);
+  };
+
+  const confirmBulkWarehouseAction = async () => {
+    if (!bulkDialog || !uid) return;
+    setBulkBusy(true);
+    try {
+      let ok = 0;
+      let fail = 0;
+      for (const id of bulkDialog.ids) {
+        try {
+          if (bulkDialog.kind === 'cancel') {
+            await onlineDispatchService.cancelWarehouseShipment(uid, id);
+          } else {
+            await onlineDispatchService.revertWarehouseHandoff(uid, id);
+          }
+          ok++;
+        } catch {
+          fail++;
+        }
+      }
+      if (fail === 0) {
+        toast.success(
+          bulkDialog.kind === 'cancel'
+            ? `تم إلغاء ${ok} شحنة من التسليم`
+            : `تم التراجع عن مسح المخزن لعدد ${ok}`,
+        );
+      } else {
+        toast.error(`نجح ${ok} — فشل ${fail}`);
+      }
+      setBulkDialog(null);
+      setSelectedIds(new Set());
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  /** Toolbar: تصدير للمصرّح لهم، أو أزرار جماعية/مسح عند وجود تحديد. */
+  const showShipmentsToolbar = canExportOnlineShipments || selectedIds.size > 0;
+
   return (
     <div className="erp-page space-y-6">
       <PageHeader
@@ -277,10 +385,97 @@ export const OnlineDashboard: React.FC = () => {
           <p className="text-xs text-muted-foreground">عدد النتائج بعد الفلتر</p>
           <p className="mt-1 text-3xl font-bold tabular-nums text-primary">{filteredShipments.length}</p>
         </CardContent>
+        {showShipmentsToolbar ? (
+          <CardContent className="flex flex-col gap-3 border-b bg-muted/10 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-6">
+            <div className="flex flex-wrap gap-2">
+              {canExportOnlineShipments ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleExportFiltered}
+                    disabled={filteredShipments.length === 0}
+                  >
+                    <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                    تصدير Excel — كل النتائج المفلترة
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleExportSelected}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                    تصدير Excel — المحدد فقط
+                  </Button>
+                </>
+              ) : null}
+              {selectedIds.size > 0 ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  مسح التحديد ({selectedIds.size})
+                </Button>
+              ) : null}
+            </div>
+            {selectedIds.size > 0 ? (
+              <div className="flex flex-wrap gap-2 sm:ms-auto">
+                {canCancelFromWarehouseQueue ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-amber-800 border-amber-500/40 hover:bg-amber-500/10 dark:text-amber-200"
+                    disabled={!allSelectedAtWarehouse}
+                    title={
+                      allSelectedAtWarehouse
+                        ? undefined
+                        : 'يُتاح الإلغاء الجماعي فقط عندما تكون كل الشحنات المحددة «عند المخزن»'
+                    }
+                    onClick={() => setBulkDialog({ kind: 'cancel', ids: [...selectedIds] })}
+                  >
+                    <Ban className="h-4 w-4 shrink-0" aria-hidden />
+                    إلغاء من التسليم (المحدد)
+                  </Button>
+                ) : null}
+                {canRevertWarehouseScan ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={!allSelectedAtWarehouse}
+                    title={
+                      allSelectedAtWarehouse
+                        ? undefined
+                        : 'يُتاح التراجع الجماعي فقط عندما تكون كل الشحنات المحددة «عند المخزن»'
+                    }
+                    onClick={() => setBulkDialog({ kind: 'revert', ids: [...selectedIds] })}
+                  >
+                    <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
+                    تراجع عن مسح المخزن (المحدد)
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        ) : null}
         <CardContent className="p-0">
           <OnlineShipmentsDataTable
             rows={paginatedShipments}
             emptyMessage="لا توجد شحنات مطابقة للفلتر"
+            userLabels={showShipmentRowSelection ? exportUserLabels : undefined}
+            selection={
+              showShipmentRowSelection
+                ? {
+                    selectedIds,
+                    onToggle: handleToggleShipmentSelection,
+                    onTogglePage: handleToggleShipmentPageSelection,
+                  }
+                : undefined
+            }
             showActionColumn={showShipmentsActionCol}
             renderActionCell={
               showShipmentsActionCol
@@ -487,6 +682,44 @@ export const OnlineDashboard: React.FC = () => {
               {cancelBusy ? 'جاري…' : 'تأكيد الإلغاء من التسليم'}
             </Button>
             <Button type="button" variant="outline" disabled={cancelBusy} onClick={() => setCancelTarget(null)}>
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!bulkDialog} onOpenChange={(open) => !open && !bulkBusy && setBulkDialog(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>
+              {bulkDialog?.kind === 'cancel' ? 'إلغاء من التسليم — دفعة' : 'تراجع عن مسح المخزن — دفعة'}
+            </DialogTitle>
+            <DialogDescription className="text-right space-y-2">
+              <span>
+                سيتم تطبيق الإجراء على{' '}
+                <strong className="tabular-nums">{bulkDialog?.ids.length ?? 0}</strong> شحنة محددة.
+              </span>
+              {bulkDialog?.kind === 'cancel' ? (
+                <span className="block text-xs leading-relaxed">
+                  تُسجَّل الشحنات بحالة «تم الإلغاء من التسليم» ولن تُحسب في انتظار تسليم البوسطة.
+                </span>
+              ) : (
+                <span className="block text-xs leading-relaxed">
+                  تعود الشحنات إلى «في انتظار المخزن» كأن أول مسح لم يحدث (قبل تسليم البوسطة).
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse">
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={bulkBusy}
+              onClick={() => void confirmBulkWarehouseAction()}
+            >
+              {bulkBusy ? 'جاري…' : 'تأكيد'}
+            </Button>
+            <Button type="button" variant="outline" disabled={bulkBusy} onClick={() => setBulkDialog(null)}>
               إلغاء
             </Button>
           </DialogFooter>
