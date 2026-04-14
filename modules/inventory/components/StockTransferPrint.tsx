@@ -297,11 +297,6 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
             rows: itemRows.length > 0 ? itemRows : [{ label: 'الأصناف', value: 'لا توجد أصناف في هذه التحويلة.' }],
           },
         ]}
-        signatures={[
-          { title: 'مدير المخزن' },
-          { title: 'المندوب' },
-          { title: 'مراقب الجودة' },
-        ]}
       />
     );
   },

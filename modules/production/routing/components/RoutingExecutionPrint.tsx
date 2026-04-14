@@ -142,7 +142,6 @@ export const RoutingExecutionPrint = React.forwardRef<HTMLDivElement, RoutingExe
             rows: stepRows,
           },
         ]}
-        signatures={[{ title: 'المشرف' }, { title: 'مدير الإنتاج' }]}
       />
     );
   },

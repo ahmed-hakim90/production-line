@@ -464,7 +464,6 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const qtyKpiLabel = rt === 'packaging' ? 'الكمية المغلفة' : 'الكمية المنتجة';
     const hideWasteUi = rt === 'packaging' || rt === 'component_injection';
     const shareOuterCapture = Boolean(report.shareStandardVariance || report.packagingShareImage);
-    const omitPackagingLaborOnShare = rt === 'packaging' && shareOuterCapture;
     const isShareImage = Boolean(report.shareStandardVariance);
     const printMeta = {
       reportNumber: report.reportCode?.trim() || formatReportNumber(report.reportId),
@@ -477,9 +476,9 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const detailSectionRows = [
       { label: 'ساعات العمل', value: `${fmtNum(report.workHours, dp)} ساعات` },
       ...(hideWasteUi ? [] : [{ label: 'نسبة الهالك', value: `${wasteRatio}%` }]),
-      ...(omitPackagingLaborOnShare
+      ...(rt === 'packaging'
         ? []
-        : (isShareImage && (rt === 'packaging' || rt === 'component_injection')
+        : (isShareImage && rt === 'component_injection'
           ? [{ label: 'إجمالي العمالة', value: String(totalWorkersForPrintRow(report)) }]
           : [{ label: 'توزيع العمالة', value: laborDistributionValue }])),
     ];
@@ -495,7 +494,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
       ...(hideWasteUi
         ? []
         : [{ label: 'الهالك', value: Number(report.wasteQuantity || 0), unit: 'وحدة', color: (report.wasteQuantity ?? 0) > 0 ? 'red' as const : 'default' as const }]),
-      ...(omitPackagingLaborOnShare
+      ...(rt === 'packaging'
         ? []
         : [{ label: 'العمال', value: totalWorkersForPrintRow(report), color: 'default' as const }]),
       {
@@ -506,22 +505,21 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
       },
     ];
 
-    const productSectionTitle = rt === 'packaging' && packagingLines && packagingLines.length > 0
-      ? 'المنتجات وأمر الشغل'
+    const productSectionTitle = rt === 'packaging'
+      ? (packagingLines && packagingLines.length > 0 ? 'المنتجات المغلفة' : 'المنتج المغلف')
       : 'المنتج وأمر الشغل';
     const productSectionRows = rt === 'packaging' && packagingLines && packagingLines.length > 0
-      ? [
-        ...packagingLines.map((line) => ({
-          label: shortProductName(line.productName || '—'),
-          value: formatPackagingLineDisplay(line.quantityPieces, line.unitsPerCarton),
-          highlight: true as const,
-        })),
-        { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
-      ]
-      : [
-        { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const },
-        { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
-      ];
+      ? packagingLines.map((line) => ({
+        label: shortProductName(line.productName || '—'),
+        value: formatPackagingLineDisplay(line.quantityPieces, line.unitsPerCarton),
+        highlight: true as const,
+      }))
+      : rt === 'packaging'
+        ? [{ label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const }]
+        : [
+          { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const },
+          { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
+        ];
 
     const layout = (
       <PrintReportLayout
@@ -553,11 +551,6 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
             title: rt === 'packaging' ? 'تفاصيل التغليف' : 'تفاصيل الإنتاج',
             rows: detailSectionRows,
           },
-        ]}
-        signatures={[
-          { title: 'مدير المصنع' },
-          { title: 'مدير الخط' },
-          { title: 'مراقب الجودة' },
         ]}
       />
     );
@@ -675,11 +668,6 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
               ...(data.notes ? [{ label: 'ملاحظات', value: data.notes }] : []),
             ],
           },
-        ]}
-        signatures={[
-          { title: 'مدير المصنع' },
-          { title: 'المشرف' },
-          { title: 'مراقب الجودة' },
         ]}
       />
     );
