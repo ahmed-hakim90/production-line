@@ -199,10 +199,14 @@ export interface LineProductConfig {
   standardAssemblyTime: number;
 }
 
-/** One line in a multi-product packaging report (quantities in pieces). */
+/** One line in a multi-product packaging report. `quantityPieces` is canonical on save. */
 export interface PackagingReportLine {
   productId: string;
   quantityPieces: number;
+  /** When product has `unitsPerCarton`: full cartons (UI / round-trip). */
+  quantityCartons?: number;
+  /** When product has `unitsPerCarton`: pieces below one carton, 0 .. unitsPerCarton-1. */
+  remainderPieces?: number;
 }
 
 export interface ProductionReport {

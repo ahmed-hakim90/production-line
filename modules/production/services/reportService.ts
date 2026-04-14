@@ -444,17 +444,21 @@ export const reportService = {
         const snap = await tx.get(reportRef);
         if (!snap.exists()) return;
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
-        tx.delete(reportRef);
-        if (!isPackagingReportType(current.reportType)) {
-          const uniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
-          tx.delete(uniqueRef);
-        } else {
-          const legacyUniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
-          const legacySnap = await tx.get(legacyUniqueRef);
+        const uniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
+
+        // Firestore: all tx.get() calls must run before any writes.
+        let deleteUniqueDoc = !isPackagingReportType(current.reportType);
+        if (isPackagingReportType(current.reportType)) {
+          const legacySnap = await tx.get(uniqueRef);
           if (legacySnap.exists()) {
             const ownerId = String((legacySnap.data() as { reportId?: string })?.reportId || '');
-            if (ownerId === snap.id) tx.delete(legacyUniqueRef);
+            if (ownerId === snap.id) deleteUniqueDoc = true;
           }
+        }
+
+        tx.delete(reportRef);
+        if (deleteUniqueDoc) {
+          tx.delete(uniqueRef);
         }
       });
     } catch (error) {

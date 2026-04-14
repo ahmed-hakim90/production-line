@@ -81,6 +81,7 @@ import {
   computePrintTotals,
   ReportPrintRow,
   buildPackagingPrintLinesFromReport,
+  formatPackagingLineDisplay,
 } from '../components/ProductionReportPrint';
 import { SelectableTable } from '../components/SelectableTable';
 import type { TableColumn, TableBulkAction } from '../components/SelectableTable';
@@ -91,7 +92,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
-import { isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
+import { effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
 import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -113,6 +114,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
+const newEmptyPackagingLine = (): PackagingReportLine => ({
+  productId: '',
+  quantityPieces: 0,
+  quantityCartons: 0,
+  remainderPieces: 0,
+});
 
 const emptyForm = {
   reportType: 'finished_product' as NonNullable<ProductionReport['reportType']>,
@@ -696,7 +704,7 @@ export const Reports: React.FC = () => {
       ...emptyForm,
       date: getOperationalDateString(8),
       reportType: forcePackagingOnly ? 'packaging' : 'finished_product',
-      packagingLines: forcePackagingOnly ? [{ productId: '', quantityPieces: 0 }] : [],
+      packagingLines: forcePackagingOnly ? [newEmptyPackagingLine()] : [],
     });
     setShowModal(true);
   }, [forcePackagingOnly]);
@@ -1797,12 +1805,35 @@ export const Reports: React.FC = () => {
       notes: report.notes ?? '',
       componentScrapItems: Array.isArray(report.componentScrapItems) ? report.componentScrapItems : [],
       packagingLines: rt === 'packaging' && Array.isArray(report.packagingLines) && report.packagingLines.length > 0
-        ? report.packagingLines.map((l) => ({
-          productId: String(l.productId || '').trim(),
-          quantityPieces: Math.max(0, Number(l.quantityPieces || 0)),
-        }))
+        ? report.packagingLines.map((l) => {
+          const pid = String(l.productId || '').trim();
+          const q = Math.max(0, Number(l.quantityPieces || 0));
+          const upc = Math.floor(Number(_rawProducts.find((p) => p.id === pid)?.unitsPerCarton ?? 0));
+          if (upc > 0) {
+            return {
+              productId: pid,
+              quantityPieces: q,
+              quantityCartons: Math.floor(q / upc),
+              remainderPieces: q % upc,
+            };
+          }
+          return { productId: pid, quantityPieces: q };
+        })
         : rt === 'packaging'
-          ? [{ productId: report.productId, quantityPieces: Number(report.quantityProduced || 0) }]
+          ? (() => {
+            const pid = String(report.productId || '').trim();
+            const q = Number(report.quantityProduced || 0);
+            const upc = Math.floor(Number(_rawProducts.find((p) => p.id === pid)?.unitsPerCarton ?? 0));
+            if (upc > 0) {
+              return [{
+                productId: pid,
+                quantityPieces: q,
+                quantityCartons: Math.floor(q / upc),
+                remainderPieces: q % upc,
+              }];
+            }
+            return [{ productId: pid, quantityPieces: q }];
+          })()
           : [],
     });
     setShowModal(true);
@@ -1913,7 +1944,7 @@ export const Reports: React.FC = () => {
       || (form.reportType === 'finished_product' && isPackagingLineForm);
     const workersRequired = requiresWorkers && effectiveFormWorkersCount <= 0 && !packagingLaborOptional;
     const packagingLinesValid = (form.packagingLines || []).filter(
-      (l) => String(l.productId || '').trim() && Number(l.quantityPieces || 0) > 0,
+      (l) => String(l.productId || '').trim() && effectivePackagingPieces(l, getUnitsPerCarton) > 0,
     );
     const packagingQtyOk = form.reportType !== 'packaging'
       || packagingLinesValid.length > 0;
@@ -1977,7 +2008,10 @@ export const Reports: React.FC = () => {
         ? {
           packagingLines: packagingLinesValid,
           productId: packagingLinesValid[0].productId,
-          quantityProduced: packagingLinesValid.reduce((s, l) => s + Number(l.quantityPieces || 0), 0),
+          quantityProduced: packagingLinesValid.reduce(
+            (s, l) => s + effectivePackagingPieces(l, getUnitsPerCarton),
+            0,
+          ),
         }
         : form.reportType === 'packaging'
           ? { packagingLines: [] as PackagingReportLine[] }
@@ -2031,7 +2065,7 @@ export const Reports: React.FC = () => {
         reportType: resolveReportType(form.reportType),
         date: form.date,
         lineId: form.lineId,
-        packagingLines: form.reportType === 'packaging' ? [{ productId: '', quantityPieces: 0 }] : [],
+        packagingLines: form.reportType === 'packaging' ? [newEmptyPackagingLine()] : [],
       });
       setSaveToastType('success');
       setSaveToast('تم حفظ التقرير بنجاح');
@@ -2957,9 +2991,9 @@ export const Reports: React.FC = () => {
           <button onClick={() => triggerSingleShare(report)} className="p-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all" title="مشاركة عبر واتساب" disabled={exporting}>
             <ReportIcon name="share" className="text-lg" />
           </button>
-          <button onClick={() => triggerSinglePrint(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="طباعة التقرير">
+          {/* <button onClick={() => triggerSinglePrint(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="طباعة التقرير">
             <ReportIcon name="print" className="text-lg" />
-          </button>
+          </button> */}
         </>
       )}
       {can("reports.edit") && (
@@ -3552,6 +3586,15 @@ export const Reports: React.FC = () => {
       {selectedReportDrawer && (() => {
         const row = selectedReportDrawer;
         const linkedWo = row.workOrderId ? woMap.get(row.workOrderId) : null;
+        const packagingDrawerLines = row.reportType === 'packaging' && Array.isArray(row.packagingLines) && row.packagingLines.length > 0
+          ? row.packagingLines
+            .map((l) => ({
+              productId: String(l?.productId || '').trim(),
+              quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
+            }))
+            .filter((l) => l.productId && l.quantityPieces > 0)
+          : [];
+        const isMultiPackaging = packagingDrawerLines.length > 0;
         const reportTypeLabel = row.reportType === 'component_injection'
           ? 'تقرير حقن مكونات'
           : row.reportType === 'packaging'
@@ -3596,10 +3639,33 @@ export const Reports: React.FC = () => {
                     <span className="font-bold">{getEmployeeName(row.employeeId)}</span>
                   </div>
                 </div>
-                <div className="mt-3">
-                  <span className="text-xs text-[var(--color-text-muted)] block mb-1">المنتج</span>
-                  <span className="font-bold text-sm">{getProductName(row.productId, row.reportType)}</span>
-                </div>
+                {row.reportType === 'packaging' && isMultiPackaging ? (
+                  <div className="mt-3">
+                    <span className="text-xs text-[var(--color-text-muted)] block mb-2">المنتجات المغلفة</span>
+                    <ul className="space-y-2">
+                      {packagingDrawerLines.map((line) => {
+                        const upc = Number(_rawProducts.find((p) => p.id === line.productId)?.unitsPerCarton ?? 0);
+                        const unitsPerCarton = upc > 0 ? upc : undefined;
+                        return (
+                          <li
+                            key={`${line.productId}-${line.quantityPieces}`}
+                            className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-2.5 bg-[#f8f9fa]/50"
+                          >
+                            <div className="font-bold text-sm">{getProductName(line.productId, row.reportType)}</div>
+                            <div className="text-xs text-[var(--color-text-muted)] mt-1 font-semibold">
+                              {formatPackagingLineDisplay(line.quantityPieces, unitsPerCarton)}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <span className="text-xs text-[var(--color-text-muted)] block mb-1">المنتج</span>
+                    <span className="font-bold text-sm">{getProductName(row.productId, row.reportType)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="px-4 pt-3">
@@ -3628,19 +3694,30 @@ export const Reports: React.FC = () => {
               <div className="p-4 flex-1">
                 {reportDrawerTab === 'summary' && (
                   <div className="space-y-3 text-sm">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className={`grid gap-3 ${row.reportType === 'packaging' ? 'grid-cols-1' : 'grid-cols-2'}`}>
                       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">الكمية المنتجة</span>
+                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">
+                          {row.reportType === 'packaging' ? 'الكمية المغلفة (قطع)' : 'الكمية المنتجة'}
+                        </span>
                         <span className="font-black text-emerald-600">{formatNumber(row.quantityProduced)}</span>
+                        {row.reportType === 'packaging' && isMultiPackaging ? (
+                          <p className="text-[11px] text-[var(--color-text-muted)] mt-1 font-semibold leading-relaxed">
+                            مجموع القطع عبر المنتجات المسجّلة في التقرير.
+                          </p>
+                        ) : null}
                       </div>
-                      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">هالك</span>
-                        <span className="font-black text-rose-600">{formatNumber(deriveReportWaste(row))}</span>
-                      </div>
+                      {row.reportType !== 'packaging' && (
+                        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                          <span className="text-xs text-[var(--color-text-muted)] block mb-1">هالك</span>
+                          <span className="font-black text-rose-600">{formatNumber(deriveReportWaste(row))}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">عدد العمال</span>
+                        <span className="text-xs text-[var(--color-text-muted)] block mb-1">
+                          {row.reportType === 'packaging' ? 'إجمالي العمالة (اختياري)' : 'عدد العمال'}
+                        </span>
                         <span className="font-bold">{formatNumber(row.workersCount)}</span>
                       </div>
                       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
@@ -3648,9 +3725,11 @@ export const Reports: React.FC = () => {
                         <span className="font-bold">{formatNumber(row.workHours)}</span>
                       </div>
                     </div>
-                    <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-xs font-bold text-[var(--color-text-muted)]">
-                      إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
-                    </div>
+                    {row.reportType !== 'packaging' && (
+                      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-xs font-bold text-[var(--color-text-muted)]">
+                        إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -3778,7 +3857,7 @@ export const Reports: React.FC = () => {
                           ? {
                             packagingLines: form.packagingLines?.length
                               ? form.packagingLines
-                              : [{ productId: '', quantityPieces: 0 }],
+                              : [newEmptyPackagingLine()],
                             productId: '',
                             quantityProduced: 0,
                           }
@@ -3921,66 +4000,140 @@ export const Reports: React.FC = () => {
               </div>
               {form.reportType === 'packaging' && (
                 <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة *</label>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة *</label>
+                      <p className="text-[11px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                        يضيف صفًا جديدًا في الجدول لكل منتج مغلّف إضافي ضمن نفس التقرير. يمكنك استخدام الزر هنا أو أسفل آخر سطر بعد إدخال الصفوف.
+                      </p>
+                    </div>
                     <button
                       type="button"
-                      className="text-xs font-bold text-primary hover:underline"
+                      title="إضافة صف جديد: اختر منتجًا ثم الكمية (كراتين أو قطع). يُسمح بعدة منتجات في تقرير تغليف واحد."
+                      className="shrink-0 inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                       onClick={() => setForm((prev) => ({
                         ...prev,
-                        packagingLines: [...(prev.packagingLines || []), { productId: '', quantityPieces: 0 }],
+                        packagingLines: [...(prev.packagingLines || []), newEmptyPackagingLine()],
                       }))}
                     >
-                      + إضافة منتج
+                      <Plus size={14} aria-hidden />
+                      إضافة منتج
                     </button>
                   </div>
-                  {(form.packagingLines || []).map((row, idx) => (
-                    <div key={idx} className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
-                      <div className="sm:col-span-6 space-y-1">
-                        <span className="text-[11px] font-bold text-[var(--color-text-muted)]">المنتج</span>
-                        <SearchableSelect
-                          placeholder="اختر المنتج"
-                          options={selectableProducts}
-                          value={row.productId}
-                          onChange={(v) => setForm((prev) => {
-                            const next = [...(prev.packagingLines || [])];
-                            next[idx] = { ...next[idx], productId: v };
-                            return { ...prev, packagingLines: next };
-                          })}
-                        />
+                  {(form.packagingLines || []).map((row, idx) => {
+                    const upc = row.productId
+                      ? Math.floor(Number(getUnitsPerCarton(row.productId) ?? 0))
+                      : 0;
+                    const cartonMode = upc > 0;
+                    const productSpan = cartonMode ? (upc > 1 ? 'sm:col-span-5' : 'sm:col-span-6') : 'sm:col-span-6';
+                    const cartonSpan = upc > 1 ? 'sm:col-span-3' : 'sm:col-span-4';
+                    return (
+                      <div key={idx} className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
+                        <div className={cn('space-y-1', productSpan)}>
+                          <span className="text-[11px] font-bold text-[var(--color-text-muted)]">المنتج</span>
+                          <SearchableSelect
+                            placeholder="اختر المنتج"
+                            options={selectableProducts}
+                            value={row.productId}
+                            onChange={(v) => setForm((prev) => {
+                              const next = [...(prev.packagingLines || [])];
+                              next[idx] = { ...newEmptyPackagingLine(), productId: v };
+                              return { ...prev, packagingLines: next };
+                            })}
+                          />
+                        </div>
+                        {cartonMode ? (
+                          <>
+                            <div className={cn('space-y-1', cartonSpan)}>
+                              <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الكراتين *</span>
+                              <input
+                                type="number"
+                                min={0}
+                                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
+                                value={row.quantityCartons ?? 0}
+                                onChange={(e) => setForm((prev) => {
+                                  const next = [...(prev.packagingLines || [])];
+                                  next[idx] = {
+                                    ...next[idx],
+                                    quantityCartons: Math.max(0, Math.floor(Number(e.target.value))),
+                                  };
+                                  return { ...prev, packagingLines: next };
+                                })}
+                                placeholder="0"
+                              />
+                            </div>
+                            {upc > 1 ? (
+                              <div className="sm:col-span-2 space-y-1">
+                                <span className="text-[11px] font-bold text-[var(--color-text-muted)]">
+                                  {`متبقي (قطع، حتى ${upc - 1})`}
+                                </span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={upc - 1}
+                                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
+                                  value={row.remainderPieces ?? 0}
+                                  onChange={(e) => setForm((prev) => {
+                                    const next = [...(prev.packagingLines || [])];
+                                    const raw = Math.floor(Number(e.target.value));
+                                    const rem = Math.max(0, Math.min(upc - 1, Number.isFinite(raw) ? raw : 0));
+                                    next[idx] = { ...next[idx], remainderPieces: rem };
+                                    return { ...prev, packagingLines: next };
+                                  })}
+                                  placeholder="0"
+                                />
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <div className="sm:col-span-4 space-y-1">
+                            <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الكمية (قطعة) *</span>
+                            <input
+                              type="number"
+                              min={0}
+                              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
+                              value={row.quantityPieces || ''}
+                              onChange={(e) => setForm((prev) => {
+                                const next = [...(prev.packagingLines || [])];
+                                next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
+                                return { ...prev, packagingLines: next };
+                              })}
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+                        <div className={cn('flex sm:justify-end', cartonMode && upc > 1 ? 'sm:col-span-2' : 'sm:col-span-2')}>
+                          <button
+                            type="button"
+                            disabled={(form.packagingLines || []).length <= 1}
+                            className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-2"
+                            onClick={() => setForm((prev) => ({
+                              ...prev,
+                              packagingLines: (prev.packagingLines || []).filter((_, i) => i !== idx),
+                            }))}
+                          >
+                            حذف
+                          </button>
+                        </div>
                       </div>
-                      <div className="sm:col-span-4 space-y-1">
-                        <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الكمية (قطعة) *</span>
-                        <input
-                          type="number"
-                          min={0}
-                          className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
-                          value={row.quantityPieces || ''}
-                          onChange={(e) => setForm((prev) => {
-                            const next = [...(prev.packagingLines || [])];
-                            next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
-                            return { ...prev, packagingLines: next };
-                          })}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="sm:col-span-2 flex sm:justify-end">
-                        <button
-                          type="button"
-                          disabled={(form.packagingLines || []).length <= 1}
-                          className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-2"
-                          onClick={() => setForm((prev) => ({
-                            ...prev,
-                            packagingLines: (prev.packagingLines || []).filter((_, i) => i !== idx),
-                          }))}
-                        >
-                          حذف
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                  <div className="flex justify-center border-t border-[var(--color-border)] pt-3 mt-1">
+                    <button
+                      type="button"
+                      title="إضافة صف جديد: اختر منتجًا ثم الكمية (كراتين أو قطع). يُسمح بعدة منتجات في تقرير تغليف واحد."
+                      className="inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
+                      onClick={() => setForm((prev) => ({
+                        ...prev,
+                        packagingLines: [...(prev.packagingLines || []), newEmptyPackagingLine()],
+                      }))}
+                    >
+                      <Plus size={14} aria-hidden />
+                      إضافة منتج
+                    </button>
+                  </div>
                   <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
-                    تقرير تغليف: الكميات للتتبع فقط ولا تُحسب في إنجاز أمر الشغل. يمكن إدخال إجمالي العمالة اختياريًا أدناه. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
+                    تقرير تغليف: الكميات للتتبع فقط ولا تُحسب في إنجاز أمر الشغل. إذا كان للمنتج «قطع لكل كرتونة» يُدخل عدد الكراتين (ومتبقي أقل من كرتونة عند الحاجة) بدل إدخال القطع مباشرة. يمكن إدخال إجمالي العمالة اختياريًا أدناه. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
                   </p>
                 </div>
               )}

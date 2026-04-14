@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ExternalLink, Info, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { ComponentScrapModal } from '../../../modules/production/components/ComponentScrapModal';
@@ -9,6 +9,8 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
 import { resolveReportType, workOrderMatchesReportType } from '../../../modules/production/utils/reportTypes';
+import { canonicalPackagingLine } from '../../../modules/production/utils/packagingLine';
+import { cn } from '@/lib/utils';
 import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
 import { ProductionLineStatus, type PackagingReportLine, type ReportComponentScrapItem } from '../../../types';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +39,13 @@ type FeedbackState = {
   text: string;
   type: 'success' | 'error';
 };
+
+const newEmptyPackagingLine = (): PackagingReportLine => ({
+  productId: '',
+  quantityPieces: 0,
+  quantityCartons: 0,
+  remainderPieces: 0,
+});
 
 const emptyForm = (): ReportFormState => ({
   reportType: 'finished_product',
@@ -210,6 +219,11 @@ export const GlobalCreateReportModal: React.FC = () => {
     ),
     [form.reportType, injectionRawMaterialOptions, products],
   );
+  const getUnitsPerCarton = useCallback((productId: string) => {
+    const n = Math.floor(Number(products.find((p) => p.id === productId)?.unitsPerCarton ?? 0));
+    return n > 0 ? n : undefined;
+  }, [products]);
+
   const productNameById = useMemo(() => {
     const map = new Map<string, string>();
     products.forEach((product) => {
@@ -305,7 +319,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           reportType: initialType,
           workOrderId: '',
           lineId: '',
-          packagingLines: initialType === 'packaging' ? [{ productId: '', quantityPieces: 0 }] : [],
+          packagingLines: initialType === 'packaging' ? [newEmptyPackagingLine()] : [],
         }
     ));
   }, [isOpen, payload?.reportType, availableReportTypes]);
@@ -319,7 +333,7 @@ export const GlobalCreateReportModal: React.FC = () => {
     setForm((prev) => (
       (prev.packagingLines && prev.packagingLines.length > 0)
         ? prev
-        : { ...prev, packagingLines: [{ productId: '', quantityPieces: 0 }] }
+        : { ...prev, packagingLines: [newEmptyPackagingLine()] }
     ));
   }, [isOpen, form.reportType]);
 
@@ -367,10 +381,8 @@ export const GlobalCreateReportModal: React.FC = () => {
     }
     const workersRequired = requiresWorkers && effectiveWorkersCount <= 0 && !packagingLaborOptional;
     const validPackagingLines = (form.packagingLines || [])
-      .map((l) => ({
-        productId: String(l?.productId || '').trim(),
-        quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
-      }))
+      .map((l) => canonicalPackagingLine(l, getUnitsPerCarton))
+      .map(({ productId, quantityPieces }) => ({ productId, quantityPieces }))
       .filter((l) => l.productId && l.quantityPieces > 0);
     const packagingLinesOk = form.reportType !== 'packaging' || validPackagingLines.length > 0;
     const baseFieldsOk = form.reportType === 'packaging'
@@ -495,7 +507,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                     reportType: nextType,
                     workOrderId: '',
                     lineId: '',
-                    packagingLines: nextType === 'packaging' ? [{ productId: '', quantityPieces: 0 }] : [],
+                    packagingLines: nextType === 'packaging' ? [newEmptyPackagingLine()] : [],
                   }));
                 }}
               >
@@ -531,7 +543,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                   productId: wo.productId,
                   employeeId: shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
                   packagingLines: resolveReportType(prev.reportType) === 'packaging'
-                    ? [{ productId: wo.productId, quantityPieces: 0 }]
+                    ? [{ ...newEmptyPackagingLine(), productId: wo.productId }]
                     : prev.packagingLines,
                 }));
               }}
@@ -615,74 +627,151 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           {form.reportType === 'packaging' ? (
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-                  {t('modalManager.createReport.packagingProductsPacked')}
-                </label>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                    {t('modalManager.createReport.packagingProductsPacked')}
+                  </label>
+                  <p className="text-[11px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                    {t('modalManager.createReport.packagingAddRowExplainer')}
+                  </p>
+                </div>
                 <button
                   type="button"
+                  title={t('modalManager.createReport.packagingAddProductButtonTitle')}
                   onClick={() => setForm((prev) => ({
                     ...prev,
-                    packagingLines: [...(prev.packagingLines || []), { productId: '', quantityPieces: 0 }],
+                    packagingLines: [...(prev.packagingLines || []), newEmptyPackagingLine()],
                   }))}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                  className="shrink-0 inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                 >
-                  <Plus size={14} />
+                  <Plus size={14} aria-hidden />
                   {t('modalManager.createReport.packagingAddProduct')}
                 </button>
               </div>
-              {(form.packagingLines || []).map((row, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40"
+              {(form.packagingLines || []).map((row, idx) => {
+                const upc = row.productId
+                  ? Math.floor(Number(getUnitsPerCarton(row.productId) ?? 0))
+                  : 0;
+                const cartonMode = upc > 0;
+                const productSpan = cartonMode ? (upc > 1 ? 'sm:col-span-5' : 'sm:col-span-6') : 'sm:col-span-6';
+                const cartonSpan = upc > 1 ? 'sm:col-span-3' : 'sm:col-span-4';
+                return (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-end rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40"
+                  >
+                    <div className={cn('space-y-2', productSpan)}>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.productRequired')}</label>
+                      <SearchableSelect
+                        placeholder={t('modalManager.createReport.selectProduct')}
+                        options={selectableProducts}
+                        value={row.productId}
+                        onChange={(v) => {
+                          setForm((prev) => {
+                            const next = [...(prev.packagingLines || [])];
+                            next[idx] = { ...newEmptyPackagingLine(), productId: v };
+                            return { ...prev, packagingLines: next };
+                          });
+                        }}
+                      />
+                    </div>
+                    {cartonMode ? (
+                      <>
+                        <div className={cn('space-y-2', cartonSpan)}>
+                          <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingCartons')}</label>
+                          <input
+                            type="number"
+                            min={0}
+                            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                            value={row.quantityCartons ?? 0}
+                            onChange={(e) => {
+                              setForm((prev) => {
+                                const next = [...(prev.packagingLines || [])];
+                                next[idx] = {
+                                  ...next[idx],
+                                  quantityCartons: Math.max(0, Math.floor(Number(e.target.value))),
+                                };
+                                return { ...prev, packagingLines: next };
+                              });
+                            }}
+                            placeholder="0"
+                          />
+                        </div>
+                        {upc > 1 ? (
+                          <div className="sm:col-span-2 space-y-2">
+                            <label className="block text-xs font-bold text-[var(--color-text-muted)]">
+                              {t('modalManager.createReport.packagingRemainderHint', { max: upc - 1 })}
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={upc - 1}
+                              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                              value={row.remainderPieces ?? 0}
+                              onChange={(e) => {
+                                setForm((prev) => {
+                                  const next = [...(prev.packagingLines || [])];
+                                  const raw = Math.floor(Number(e.target.value));
+                                  const rem = Math.max(0, Math.min(upc - 1, Number.isFinite(raw) ? raw : 0));
+                                  next[idx] = { ...next[idx], remainderPieces: rem };
+                                  return { ...prev, packagingLines: next };
+                                });
+                              }}
+                              placeholder="0"
+                            />
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="sm:col-span-4 space-y-2">
+                        <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingPieces')}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                          value={row.quantityPieces || ''}
+                          onChange={(e) => {
+                            setForm((prev) => {
+                              const next = [...(prev.packagingLines || [])];
+                              next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
+                              return { ...prev, packagingLines: next };
+                            });
+                          }}
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+                    <div className="sm:col-span-2 flex sm:justify-end">
+                      <button
+                        type="button"
+                        disabled={(form.packagingLines || []).length <= 1}
+                        className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
+                        onClick={() => setForm((prev) => ({
+                          ...prev,
+                          packagingLines: (prev.packagingLines || []).filter((_, i) => i !== idx),
+                        }))}
+                      >
+                        {t('modalManager.createReport.packagingDeleteRow')}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex justify-center border-t border-[var(--color-border)] pt-3 mt-1">
+                <button
+                  type="button"
+                  title={t('modalManager.createReport.packagingAddProductButtonTitle')}
+                  onClick={() => setForm((prev) => ({
+                    ...prev,
+                    packagingLines: [...(prev.packagingLines || []), newEmptyPackagingLine()],
+                  }))}
+                  className="inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                 >
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.productRequired')}</label>
-                    <SearchableSelect
-                      placeholder={t('modalManager.createReport.selectProduct')}
-                      options={selectableProducts}
-                      value={row.productId}
-                      onChange={(v) => {
-                        setForm((prev) => {
-                          const next = [...(prev.packagingLines || [])];
-                          next[idx] = { ...next[idx], productId: v };
-                          return { ...prev, packagingLines: next };
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingPieces')}</label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                      value={row.quantityPieces || ''}
-                      onChange={(e) => {
-                        setForm((prev) => {
-                          const next = [...(prev.packagingLines || [])];
-                          next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
-                          return { ...prev, packagingLines: next };
-                        });
-                      }}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="sm:col-span-2 flex sm:justify-end">
-                    <button
-                      type="button"
-                      disabled={(form.packagingLines || []).length <= 1}
-                      className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
-                      onClick={() => setForm((prev) => ({
-                        ...prev,
-                        packagingLines: (prev.packagingLines || []).filter((_, i) => i !== idx),
-                      }))}
-                    >
-                      {t('modalManager.createReport.packagingDeleteRow')}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                  <Plus size={14} aria-hidden />
+                  {t('modalManager.createReport.packagingAddProduct')}
+                </button>
+              </div>
               <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
                 {t('modalManager.createReport.packagingLinesHint')}
               </p>

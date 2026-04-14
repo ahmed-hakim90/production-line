@@ -1,4 +1,4 @@
-import type { FirestoreProductionLine, ProductionReport } from '../../../types';
+import type { FirestoreProductionLine, PackagingReportLine, ProductionReport } from '../../../types';
 import { resolveReportType } from './reportTypes';
 
 /**
@@ -46,16 +46,41 @@ export function sumQuantityProducedForWorkOrderExcludingPackaging(
   );
 }
 
+/**
+ * Effective pieces for one packaging line: if product has units/carton, uses cartons + remainder;
+ * otherwise uses quantityPieces only.
+ */
+export function canonicalPackagingLine(
+  line: PackagingReportLine,
+  getUnitsPerCarton?: (productId: string) => number | undefined,
+): PackagingReportLine {
+  const productId = String(line?.productId || '').trim();
+  if (!productId) return { productId: '', quantityPieces: 0 };
+  const u = Math.floor(Number(getUnitsPerCarton?.(productId) ?? 0));
+  if (u > 0) {
+    const full = Math.max(0, Math.floor(Number(line.quantityCartons ?? 0)));
+    const rem = Math.max(0, Math.min(u - 1, Math.floor(Number(line.remainderPieces ?? 0))));
+    return { productId, quantityPieces: full * u + rem };
+  }
+  return { productId, quantityPieces: Math.max(0, Number(line.quantityPieces || 0)) };
+}
+
+export function effectivePackagingPieces(
+  line: PackagingReportLine,
+  getUnitsPerCarton?: (productId: string) => number | undefined,
+): number {
+  return canonicalPackagingLine(line, getUnitsPerCarton).quantityPieces;
+}
+
 /** Normalize packaging multi-line payload: derive productId + quantityProduced from packagingLines when non-empty. */
 export function normalizePackagingLinesForSave(
   data: Omit<ProductionReport, 'id' | 'createdAt'>,
+  getUnitsPerCarton?: (productId: string) => number | undefined,
 ): Omit<ProductionReport, 'id' | 'createdAt'> {
   if (resolveReportType(data.reportType) !== 'packaging') return data;
   const lines = (data.packagingLines ?? [])
-    .map((l) => ({
-      productId: String(l?.productId || '').trim(),
-      quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
-    }))
+    .map((l) => canonicalPackagingLine(l as PackagingReportLine, getUnitsPerCarton))
+    .map(({ productId, quantityPieces }) => ({ productId, quantityPieces }))
     .filter((l) => l.productId && l.quantityPieces > 0);
   if (lines.length === 0) {
     return { ...data, packagingLines: [] };

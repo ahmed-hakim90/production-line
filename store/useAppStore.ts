@@ -2790,7 +2790,14 @@ export const useAppStore = create<AppState>((set, get) => ({
           }))
           .filter((item: { materialId: string; quantity: number }) => item.materialId && item.quantity > 0);
 
-      const savePayload = normalizePackagingLinesForSave({ ...data, componentScrapItems } as Omit<ProductionReport, 'id' | 'createdAt'>);
+      const getUnitsPerCarton = (productId: string) => {
+        const n = Math.floor(Number(get()._rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0));
+        return n > 0 ? n : undefined;
+      };
+      const savePayload = normalizePackagingLinesForSave(
+        { ...data, componentScrapItems } as Omit<ProductionReport, 'id' | 'createdAt'>,
+        getUnitsPerCarton,
+      );
 
       if (Number(savePayload.quantityProduced || 0) <= 0 || Number(savePayload.workHours || 0) <= 0) {
         const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة وساعات عمل.';
@@ -3361,7 +3368,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           reportType: nextReportType,
           componentScrapItems: [],
         } as Omit<ProductionReport, 'id' | 'createdAt'>;
-        const normalized = normalizePackagingLinesForSave(mergedForNorm);
+        const getUnitsPerCarton = (productId: string) => {
+          const n = Math.floor(Number(get()._rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0));
+          return n > 0 ? n : undefined;
+        };
+        const normalized = normalizePackagingLinesForSave(mergedForNorm, getUnitsPerCarton);
         updatePayload = {
           ...updatePayload,
           ...normalized,

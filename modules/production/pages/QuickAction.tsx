@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { Plus } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
@@ -13,7 +14,7 @@ import {
 } from '../../../utils/productionReportStandardVariance';
 import type { LineWorkerAssignment, PackagingReportLine, ProductionReport, ReportComponentScrapItem } from '../../../types';
 import { resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
-import { isPackagingLineId } from '../utils/packagingLine';
+import { canonicalPackagingLine, effectivePackagingPieces, isPackagingLineId } from '../utils/packagingLine';
 import { ProductionLineStatus } from '../../../types';
 import {
   SingleReportPrint,
@@ -30,6 +31,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+
+const newEmptyPackagingLine = (): PackagingReportLine => ({
+  productId: '',
+  quantityPieces: 0,
+  quantityCartons: 0,
+  remainderPieces: 0,
+});
 
 const normalizeArabic = (value: string) =>
   String(value || '')
@@ -150,7 +159,7 @@ export const QuickAction: React.FC = () => {
     setLineId('');
     setProductId('');
     setPackagingWorkersCount('');
-    setPackagingLines([{ productId: '', quantityPieces: 0 }]);
+    setPackagingLines([newEmptyPackagingLine()]);
   }, [forcePackagingOnly, reportType]);
 
   useEffect(() => {
@@ -158,7 +167,7 @@ export const QuickAction: React.FC = () => {
       setPackagingLines([]);
       return;
     }
-    setPackagingLines((prev) => (prev.length > 0 ? prev : [{ productId: '', quantityPieces: 0 }]));
+    setPackagingLines((prev) => (prev.length > 0 ? prev : [newEmptyPackagingLine()]));
   }, [reportType]);
 
   useEffect(() => {
@@ -258,12 +267,16 @@ export const QuickAction: React.FC = () => {
     () => reportType === 'packaging' || (reportType === 'finished_product' && isPackagingLineId(lineId, _rawLines)),
     [reportType, lineId, _rawLines],
   );
+  const getUnitsPerCarton = useCallback((productId: string) => {
+    const n = Number(_rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0);
+    return n > 0 ? n : undefined;
+  }, [_rawProducts]);
   const packagingFormValid = useMemo(() => {
     if (reportType !== 'packaging') return true;
     return (packagingLines || []).some(
-      (l) => String(l?.productId || '').trim() && Number(l?.quantityPieces || 0) > 0,
+      (l) => String(l?.productId || '').trim() && effectivePackagingPieces(l, getUnitsPerCarton) > 0,
     );
-  }, [reportType, packagingLines]);
+  }, [reportType, packagingLines, getUnitsPerCarton]);
 
   const getLineName = useCallback(
     (id: string) => _rawLines.find((l) => l.id === id)?.name ?? '—',
@@ -283,10 +296,6 @@ export const QuickAction: React.FC = () => {
     },
     [_rawProducts, rawMaterialOptions],
   );
-  const getUnitsPerCarton = useCallback((productId: string) => {
-    const n = Number(_rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0);
-    return n > 0 ? n : undefined;
-  }, [_rawProducts]);
   const getEmployeeName = useCallback(
     (id: string) => employees.find((s) => s.id === id)?.name ?? '—',
     [employees]
@@ -447,10 +456,8 @@ export const QuickAction: React.FC = () => {
         : canCreateFinishedReports;
     if (!canSaveCurrentType) return;
     const validPackagingLines = (packagingLines || [])
-      .map((l) => ({
-        productId: String(l?.productId || '').trim(),
-        quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
-      }))
+      .map((l) => canonicalPackagingLine(l, getUnitsPerCarton))
+      .map(({ productId, quantityPieces }) => ({ productId, quantityPieces }))
       .filter((l) => l.productId && l.quantityPieces > 0);
     if (!lineId || !employeeId) {
       setSaveError('أكمل بيانات الخط والمشرف أولاً.');
@@ -458,7 +465,7 @@ export const QuickAction: React.FC = () => {
     }
     if (reportType === 'packaging') {
       if (validPackagingLines.length === 0) {
-        setSaveError('أضف سطر منتج واحد على الأقل بكمية قطع أكبر من صفر.');
+        setSaveError('أضف سطر منتج واحد على الأقل بكمية أكبر من صفر (كراتين أو قطع).');
         return;
       }
     } else if (!productId) {
@@ -568,7 +575,7 @@ export const QuickAction: React.FC = () => {
     setWorkersExternal('');
     setInjectionWorkersCount('');
     setPackagingWorkersCount('');
-    setPackagingLines(forcePackagingOnly ? [{ productId: '', quantityPieces: 0 }] : []);
+    setPackagingLines(forcePackagingOnly ? [newEmptyPackagingLine()] : []);
     setHours('');
     setNotes('');
     setComponentScrapItems([]);
@@ -687,7 +694,7 @@ export const QuickAction: React.FC = () => {
     setLineId(wo.lineId);
     setProductId(wo.productId);
     if (reportType === 'packaging') {
-      setPackagingLines([{ productId: wo.productId, quantityPieces: 0 }]);
+      setPackagingLines([{ ...newEmptyPackagingLine(), productId: wo.productId }]);
     }
     setEmployeeId(shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
   }, [
@@ -819,7 +826,7 @@ export const QuickAction: React.FC = () => {
                       setPackagingWorkersCount('');
                       setPackagingLines([]);
                     } else {
-                      setPackagingLines([{ productId: '', quantityPieces: 0 }]);
+                      setPackagingLines([newEmptyPackagingLine()]);
                     }
                   }}
                 >
@@ -867,67 +874,142 @@ export const QuickAction: React.FC = () => {
             </div>
             {reportType === 'packaging' ? (
               <div className="sm:col-span-2 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة</label>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <label className="text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة</label>
+                    <p className="text-[11px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                      يضيف صفًا جديدًا في الجدول لكل منتج مغلّف إضافي ضمن نفس التقرير. يمكنك استخدام الزر هنا أو أسفل آخر سطر بعد إدخال الصفوف.
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setPackagingLines((prev) => [...prev, { productId: '', quantityPieces: 0 }])}
-                    className="text-xs font-bold text-primary hover:underline"
+                    title="إضافة صف جديد: اختر منتجًا ثم الكمية (كراتين أو قطع). يُسمح بعدة منتجات في تقرير تغليف واحد."
+                    onClick={() => setPackagingLines((prev) => [...prev, newEmptyPackagingLine()])}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                   >
-                    + إضافة منتج
+                    <Plus size={14} aria-hidden />
+                    إضافة منتج
                   </button>
                 </div>
-                {(packagingLines || []).map((row, idx) => (
-                  <div
-                    key={idx}
-                    className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40"
+                {(packagingLines || []).map((row, idx) => {
+                  const upc = row.productId
+                    ? Math.floor(Number(getUnitsPerCarton(row.productId) ?? 0))
+                    : 0;
+                  const cartonMode = upc > 0;
+                  const productSpan = cartonMode ? (upc > 1 ? 'sm:col-span-5' : 'sm:col-span-6') : 'sm:col-span-6';
+                  const cartonSpan = upc > 1 ? 'sm:col-span-3' : 'sm:col-span-4';
+                  return (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-end rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40"
+                    >
+                      <div className={cn('space-y-2', productSpan)}>
+                        <label className="text-xs font-bold text-[var(--color-text-muted)]">المنتج *</label>
+                        <SearchableSelect
+                          placeholder="اختر المنتج"
+                          options={selectableProducts}
+                          value={row.productId}
+                          onChange={(v) => {
+                            setPackagingLines((prev) => {
+                              const next = [...prev];
+                              next[idx] = { ...newEmptyPackagingLine(), productId: v };
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                      {cartonMode ? (
+                        <>
+                          <div className={cn('space-y-2', cartonSpan)}>
+                            <label className="text-xs font-bold text-[var(--color-text-muted)]">الكراتين *</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={row.quantityCartons ?? 0}
+                              onChange={(e) => {
+                                setPackagingLines((prev) => {
+                                  const next = [...prev];
+                                  next[idx] = {
+                                    ...next[idx],
+                                    quantityCartons: Math.max(0, Math.floor(Number(e.target.value))),
+                                  };
+                                  return next;
+                                });
+                              }}
+                              className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                              placeholder="0"
+                            />
+                          </div>
+                          {upc > 1 ? (
+                            <div className="sm:col-span-2 space-y-2">
+                              <label className="text-xs font-bold text-[var(--color-text-muted)]">
+                                {`متبقي (حتى ${upc - 1})`}
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={upc - 1}
+                                value={row.remainderPieces ?? 0}
+                                onChange={(e) => {
+                                  setPackagingLines((prev) => {
+                                    const next = [...prev];
+                                    const raw = Math.floor(Number(e.target.value));
+                                    const rem = Math.max(0, Math.min(upc - 1, Number.isFinite(raw) ? raw : 0));
+                                    next[idx] = { ...next[idx], remainderPieces: rem };
+                                    return next;
+                                  });
+                                }}
+                                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                                placeholder="0"
+                              />
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <div className="sm:col-span-4 space-y-2">
+                          <label className="text-xs font-bold text-[var(--color-text-muted)]">القطع *</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={row.quantityPieces || ''}
+                            onChange={(e) => {
+                              setPackagingLines((prev) => {
+                                const next = [...prev];
+                                next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
+                                return next;
+                              });
+                            }}
+                            className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                            placeholder="0"
+                          />
+                        </div>
+                      )}
+                      <div className="sm:col-span-2 flex sm:justify-end">
+                        <button
+                          type="button"
+                          disabled={(packagingLines || []).length <= 1}
+                          className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
+                          onClick={() => setPackagingLines((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex justify-center border-t border-[var(--color-border)] pt-3 mt-1">
+                  <button
+                    type="button"
+                    title="إضافة صف جديد: اختر منتجًا ثم الكمية (كراتين أو قطع). يُسمح بعدة منتجات في تقرير تغليف واحد."
+                    onClick={() => setPackagingLines((prev) => [...prev, newEmptyPackagingLine()])}
+                    className="inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                   >
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-[var(--color-text-muted)]">المنتج *</label>
-                      <SearchableSelect
-                        placeholder="اختر المنتج"
-                        options={selectableProducts}
-                        value={row.productId}
-                        onChange={(v) => {
-                          setPackagingLines((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], productId: v };
-                            return next;
-                          });
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-[var(--color-text-muted)]">القطع *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={row.quantityPieces || ''}
-                        onChange={(e) => {
-                          setPackagingLines((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
-                            return next;
-                          });
-                        }}
-                        className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div className="sm:col-span-2 flex sm:justify-end">
-                      <button
-                        type="button"
-                        disabled={(packagingLines || []).length <= 1}
-                        className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
-                        onClick={() => setPackagingLines((prev) => prev.filter((_, i) => i !== idx))}
-                      >
-                        حذف
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                    <Plus size={14} aria-hidden />
+                    إضافة منتج
+                  </button>
+                </div>
                 <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
-                  سطر واحد على الأقل بكمية قطع أكبر من صفر. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
+                  سطر واحد على الأقل بكمية أكبر من صفر (كراتين إن وُجدت «قطع لكل كرتونة» للمنتج، وإلا قطع). يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
                 </p>
               </div>
             ) : (
