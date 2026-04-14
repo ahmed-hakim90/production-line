@@ -4004,12 +4004,12 @@ export const Reports: React.FC = () => {
                     <div className="min-w-0 flex-1 space-y-1">
                       <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة *</label>
                       <p className="text-[11px] font-medium leading-relaxed text-[var(--color-text-muted)]">
-                        يضيف صفًا جديدًا في الجدول لكل منتج مغلّف إضافي ضمن نفس التقرير. يمكنك استخدام الزر هنا أو أسفل آخر سطر بعد إدخال الصفوف.
+                        نوع خانة الكمية يُحدَّد تلقائيًا من بطاقة المنتج وليس اختيارًا يدويًا: إن وُجد «قطع لكل كرتونة» يظهر إدخال الكراتين فقط؛ وإلا يظهر إدخال القطع فقط — دون خلط الاثنين في خانة واحدة.
                       </p>
                     </div>
                     <button
                       type="button"
-                      title="إضافة صف جديد: اختر منتجًا ثم الكمية (كراتين أو قطع). يُسمح بعدة منتجات في تقرير تغليف واحد."
+                      title="إضافة صف منتج جديد. بعد اختيار المنتج تظهر خانة الكمية المناسبة تلقائيًا حسب بطاقة المنتج."
                       className="shrink-0 inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                       onClick={() => setForm((prev) => ({
                         ...prev,
@@ -4021,11 +4021,16 @@ export const Reports: React.FC = () => {
                     </button>
                   </div>
                   {(form.packagingLines || []).map((row, idx) => {
-                    const upc = row.productId
+                    const hasProduct = Boolean(String(row.productId || '').trim());
+                    const upc = hasProduct
                       ? Math.floor(Number(getUnitsPerCarton(row.productId) ?? 0))
                       : 0;
                     const cartonMode = upc > 0;
-                    const productSpan = cartonMode ? (upc > 1 ? 'sm:col-span-5' : 'sm:col-span-6') : 'sm:col-span-6';
+                    const productSpan = !hasProduct
+                      ? 'sm:col-span-6'
+                      : cartonMode
+                        ? (upc > 1 ? 'sm:col-span-5' : 'sm:col-span-6')
+                        : 'sm:col-span-6';
                     const cartonSpan = upc > 1 ? 'sm:col-span-3' : 'sm:col-span-4';
                     return (
                       <div key={idx} className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
@@ -4042,10 +4047,20 @@ export const Reports: React.FC = () => {
                             })}
                           />
                         </div>
-                        {cartonMode ? (
+                        {!hasProduct ? (
+                          <div className="sm:col-span-4 space-y-1">
+                            <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الكمية</span>
+                            <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                              اختر المنتج أولًا. بعدها يظهر إما حقل كراتين فقط (إن وُجد «قطع لكل كرتونة» في بطاقة المنتج) أو حقل قطع فقط — لا يُدخل الاثنان معًا في خانة واحدة.
+                            </p>
+                          </div>
+                        ) : cartonMode ? (
                           <>
                             <div className={cn('space-y-1', cartonSpan)}>
                               <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الكراتين *</span>
+                              <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                                {`كل كرتونة = ${upc} قطعة — أدخل عدد الكراتين الكاملة هنا فقط (وليس إجمالي القطع).`}
+                              </p>
                               <input
                                 type="number"
                                 min={0}
@@ -4067,6 +4082,9 @@ export const Reports: React.FC = () => {
                                 <span className="text-[11px] font-bold text-[var(--color-text-muted)]">
                                   {`متبقي (قطع، حتى ${upc - 1})`}
                                 </span>
+                                <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                                  قطع أقل من كرتونة كاملة؛ تُحسب مع الكراتين لإجمالي القطع.
+                                </p>
                                 <input
                                   type="number"
                                   min={0}
@@ -4088,6 +4106,9 @@ export const Reports: React.FC = () => {
                         ) : (
                           <div className="sm:col-span-4 space-y-1">
                             <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الكمية (قطعة) *</span>
+                            <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                              لا يوجد في بطاقة هذا المنتج «قطع لكل كرتونة» — أدخل إجمالي القطع فقط (وليس عدد الكراتين).
+                            </p>
                             <input
                               type="number"
                               min={0}
@@ -4121,7 +4142,7 @@ export const Reports: React.FC = () => {
                   <div className="flex justify-center border-t border-[var(--color-border)] pt-3 mt-1">
                     <button
                       type="button"
-                      title="إضافة صف جديد: اختر منتجًا ثم الكمية (كراتين أو قطع). يُسمح بعدة منتجات في تقرير تغليف واحد."
+                      title="إضافة صف منتج جديد. بعد اختيار المنتج تظهر خانة الكمية المناسبة تلقائيًا حسب بطاقة المنتج."
                       className="inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                       onClick={() => setForm((prev) => ({
                         ...prev,
@@ -4133,7 +4154,7 @@ export const Reports: React.FC = () => {
                     </button>
                   </div>
                   <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
-                    تقرير تغليف: الكميات للتتبع فقط ولا تُحسب في إنجاز أمر الشغل. إذا كان للمنتج «قطع لكل كرتونة» يُدخل عدد الكراتين (ومتبقي أقل من كرتونة عند الحاجة) بدل إدخال القطع مباشرة. يمكن إدخال إجمالي العمالة اختياريًا أدناه. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
+                    تقرير تغليف: الكميات للتتبع فقط ولا تُحسب في إنجاز أمر الشغل. إن وُجد «قطع لكل كرتونة» للمنتج يُدخل الكراتين والمتبقي حسب الحقول؛ وإلا القطع فقط. يمكن إدخال إجمالي العمالة اختياريًا أدناه. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
                   </p>
                 </div>
               )}

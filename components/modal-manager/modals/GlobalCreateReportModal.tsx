@@ -635,6 +635,9 @@ export const GlobalCreateReportModal: React.FC = () => {
                   <p className="text-[11px] font-medium leading-relaxed text-[var(--color-text-muted)]">
                     {t('modalManager.createReport.packagingAddRowExplainer')}
                   </p>
+                  <p className="text-[11px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                    {t('modalManager.createReport.packagingQuantityModeRule')}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -650,11 +653,16 @@ export const GlobalCreateReportModal: React.FC = () => {
                 </button>
               </div>
               {(form.packagingLines || []).map((row, idx) => {
-                const upc = row.productId
+                const hasProduct = Boolean(String(row.productId || '').trim());
+                const upc = hasProduct
                   ? Math.floor(Number(getUnitsPerCarton(row.productId) ?? 0))
                   : 0;
                 const cartonMode = upc > 0;
-                const productSpan = cartonMode ? (upc > 1 ? 'sm:col-span-5' : 'sm:col-span-6') : 'sm:col-span-6';
+                const productSpan = !hasProduct
+                  ? 'sm:col-span-6'
+                  : cartonMode
+                    ? (upc > 1 ? 'sm:col-span-5' : 'sm:col-span-6')
+                    : 'sm:col-span-6';
                 const cartonSpan = upc > 1 ? 'sm:col-span-3' : 'sm:col-span-4';
                 return (
                   <div
@@ -676,10 +684,20 @@ export const GlobalCreateReportModal: React.FC = () => {
                         }}
                       />
                     </div>
-                    {cartonMode ? (
+                    {!hasProduct ? (
+                      <div className="sm:col-span-4 space-y-2">
+                        <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingQuantityLabel')}</label>
+                        <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                          {t('modalManager.createReport.packagingSelectProductFirstHint')}
+                        </p>
+                      </div>
+                    ) : cartonMode ? (
                       <>
                         <div className={cn('space-y-2', cartonSpan)}>
                           <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingCartons')}</label>
+                          <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                            {t('modalManager.createReport.packagingCartonRowHint', { units: upc })}
+                          </p>
                           <input
                             type="number"
                             min={0}
@@ -703,6 +721,9 @@ export const GlobalCreateReportModal: React.FC = () => {
                             <label className="block text-xs font-bold text-[var(--color-text-muted)]">
                               {t('modalManager.createReport.packagingRemainderHint', { max: upc - 1 })}
                             </label>
+                            <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                              {t('modalManager.createReport.packagingRemainderRowHint')}
+                            </p>
                             <input
                               type="number"
                               min={0}
@@ -725,7 +746,10 @@ export const GlobalCreateReportModal: React.FC = () => {
                       </>
                     ) : (
                       <div className="sm:col-span-4 space-y-2">
-                        <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingPieces')}</label>
+                        <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.packagingPiecesRowLabel')} *</label>
+                        <p className="text-[10px] font-medium leading-relaxed text-[var(--color-text-muted)]">
+                          {t('modalManager.createReport.packagingPiecesOnlyRowHint')}
+                        </p>
                         <input
                           type="number"
                           min={0}
