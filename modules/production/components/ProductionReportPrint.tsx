@@ -13,12 +13,15 @@ import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
 import { cn } from '@/lib/utils';
 import type { ShareStandardVarianceTone } from '../../../utils/productionReportStandardVariance';
 import { shareVarianceTailwindToneClass } from '../../../utils/productionReportStandardVariance';
+import { resolveReportType } from '../utils/reportTypes';
 
 export type { ShareStandardVarianceTone };
 
 export interface ReportPrintRow {
   reportId?: string;
   reportCode?: string;
+  /** When set, drives print headings (production / injection / packaging). */
+  sourceReportType?: ProductionReport['reportType'];
   date: string;
   lineName: string;
   productName: string;
@@ -41,6 +44,14 @@ export interface ReportPrintRow {
     lines: string[];
     tone: ShareStandardVarianceTone;
   };
+  /** Packaging share capture: outer ref + labor hiding without variance banner. */
+  packagingShareImage?: boolean;
+  /** Multi-line packaging quantities for print/share table. */
+  packagingPrintLines?: Array<{
+    productName: string;
+    quantityPieces: number;
+    unitsPerCarton?: number;
+  }>;
 }
 
 export interface ReportPrintProps {
@@ -63,13 +74,47 @@ export interface ReportPrintProps {
  * Convert raw ProductionReport[] to ReportPrintRow[] using lookup fns.
  * Call this from the parent page - keeps logic out of the print component.
  */
+export function buildPackagingPrintLinesFromReport(
+  r: ProductionReport,
+  lookups: {
+    getProductName: (id: string, reportType?: ProductionReport['reportType']) => string;
+    getUnitsPerCarton?: (productId: string) => number | undefined;
+  },
+): ReportPrintRow['packagingPrintLines'] | undefined {
+  if (resolveReportType(r.reportType) !== 'packaging') return undefined;
+  const upc = lookups.getUnitsPerCarton;
+  const trimmed = (r.packagingLines ?? [])
+    .map((l) => ({
+      productId: String(l?.productId || '').trim(),
+      quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
+    }))
+    .filter((l) => l.productId && l.quantityPieces > 0);
+  if (trimmed.length > 0) {
+    return trimmed.map((l) => ({
+      productName: lookups.getProductName(l.productId, r.reportType),
+      quantityPieces: l.quantityPieces,
+      unitsPerCarton: upc?.(l.productId),
+    }));
+  }
+  const q = Number(r.quantityProduced || 0);
+  if (r.productId && q > 0) {
+    return [{
+      productName: lookups.getProductName(r.productId, r.reportType),
+      quantityPieces: q,
+      unitsPerCarton: upc?.(r.productId),
+    }];
+  }
+  return undefined;
+}
+
 export const mapReportsToPrintRows = (
   reports: ProductionReport[],
   lookups: {
     getLineName: (id: string) => string;
-    getProductName: (id: string) => string;
+    getProductName: (id: string, reportType?: ProductionReport['reportType']) => string;
     getEmployeeName: (id: string) => string;
     getWorkOrder?: (id: string) => { workOrderNumber: string } | undefined;
+    getUnitsPerCarton?: (productId: string) => number | undefined;
   },
   costMap?: Map<string, number>,
 ): ReportPrintRow[] =>
@@ -79,8 +124,9 @@ export const mapReportsToPrintRows = (
       date: r.date,
       reportId: r.id,
       reportCode: r.reportCode,
+      sourceReportType: r.reportType,
       lineName: lookups.getLineName(r.lineId),
-      productName: lookups.getProductName(r.productId),
+      productName: lookups.getProductName(r.productId, r.reportType),
       employeeName: lookups.getEmployeeName(r.employeeId),
       quantityProduced: r.quantityProduced || 0,
       wasteQuantity: getReportWaste(r),
@@ -94,6 +140,7 @@ export const mapReportsToPrintRows = (
       notes: r.notes,
       costPerUnit: r.id && costMap ? costMap.get(r.id) : undefined,
       workOrderNumber: wo?.workOrderNumber,
+      packagingPrintLines: buildPackagingPrintLinesFromReport(r, lookups),
     };
   });
 
@@ -150,10 +197,35 @@ function shortProductName(name: string): string {
   return `${parts[0]} ${parts[1]}`;
 }
 
+/** Human-readable packaging quantity: pieces, or cartons + remainder when units/carton is set. */
+export function formatPackagingLineDisplay(quantityPieces: number, unitsPerCarton?: number): string {
+  const q = Math.max(0, Number(quantityPieces || 0));
+  const u = Number(unitsPerCarton || 0);
+  if (!u || u <= 0) return `${q.toLocaleString('ar-EG')} قطعة`;
+  const cartons = Math.floor(q / u);
+  const rem = q % u;
+  const parts: string[] = [];
+  if (cartons > 0) parts.push(`${cartons.toLocaleString('ar-EG')} كرتون`);
+  if (rem > 0) parts.push(`${rem.toLocaleString('ar-EG')} قطعة متبقية`);
+  if (parts.length === 0) return `${q.toLocaleString('ar-EG')} قطعة`;
+  return parts.join(' و ');
+}
+
 function formatReportNumber(reportId?: string): string {
   if (!reportId) return 'RPT-NA'
   const shortId = reportId.slice(-6).toUpperCase()
   return `RPT-${shortId}`
+}
+
+/** Headcount for print/share: prefer sum of role breakdown when present, else stored workersCount. */
+export function totalWorkersForPrintRow(row: ReportPrintRow): number {
+  const sum =
+    (row.workersProductionCount ?? 0)
+    + (row.workersPackagingCount ?? 0)
+    + (row.workersQualityCount ?? 0)
+    + (row.workersMaintenanceCount ?? 0)
+    + (row.workersExternalCount ?? 0);
+  return sum > 0 ? sum : Number(row.workersCount || 0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -383,55 +455,103 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const now = new Date().toLocaleString('ar-EG');
     const total = Number(report.quantityProduced || 0) + Number(report.wasteQuantity || 0);
     const wasteRatio = total > 0 ? ((Number(report.wasteQuantity || 0) / total) * 100).toFixed(dp) : '0';
+    const rt = report.sourceReportType;
+    const reportTypeHeading = rt === 'component_injection'
+      ? 'تقرير مكون حقن'
+      : rt === 'packaging'
+        ? 'تقرير تغليف'
+        : 'تقرير إنتاج';
+    const qtyKpiLabel = rt === 'packaging' ? 'الكمية المغلفة' : 'الكمية المنتجة';
+    const hideWasteUi = rt === 'packaging' || rt === 'component_injection';
+    const shareOuterCapture = Boolean(report.shareStandardVariance || report.packagingShareImage);
+    const omitPackagingLaborOnShare = rt === 'packaging' && shareOuterCapture;
+    const isShareImage = Boolean(report.shareStandardVariance);
+    const printMeta = {
+      reportNumber: report.reportCode?.trim() || formatReportNumber(report.reportId),
+      reportDate: report.date || '—',
+      lineName: report.lineName || '—',
+      supervisorName: report.employeeName || '—',
+    };
+
+    const laborDistributionValue = `إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`;
+    const detailSectionRows = [
+      { label: 'ساعات العمل', value: `${fmtNum(report.workHours, dp)} ساعات` },
+      ...(hideWasteUi ? [] : [{ label: 'نسبة الهالك', value: `${wasteRatio}%` }]),
+      ...(omitPackagingLaborOnShare
+        ? []
+        : (isShareImage && (rt === 'packaging' || rt === 'component_injection')
+          ? [{ label: 'إجمالي العمالة', value: String(totalWorkersForPrintRow(report)) }]
+          : [{ label: 'توزيع العمالة', value: laborDistributionValue }])),
+    ];
+
+    const packagingLines = report.packagingPrintLines;
+    const packagingPiecesTotal = packagingLines?.reduce((s, l) => s + Number(l.quantityPieces || 0), 0);
+    const qtyKpiValue = rt === 'packaging' && packagingLines && packagingLines.length > 0 && packagingPiecesTotal != null
+      ? packagingPiecesTotal
+      : Number(report.quantityProduced || 0);
+
+    const kpiItems = [
+      { label: qtyKpiLabel, value: qtyKpiValue, unit: 'وحدة', color: 'indigo' as const },
+      ...(hideWasteUi
+        ? []
+        : [{ label: 'الهالك', value: Number(report.wasteQuantity || 0), unit: 'وحدة', color: (report.wasteQuantity ?? 0) > 0 ? 'red' as const : 'default' as const }]),
+      ...(omitPackagingLaborOnShare
+        ? []
+        : [{ label: 'العمال', value: totalWorkersForPrintRow(report), color: 'default' as const }]),
+      {
+        label: 'تكلفة الوحدة',
+        value: report.costPerUnit != null && report.costPerUnit > 0 ? report.costPerUnit.toFixed(2) : '—',
+        unit: 'ج.م',
+        color: 'green' as const,
+      },
+    ];
+
+    const productSectionTitle = rt === 'packaging' && packagingLines && packagingLines.length > 0
+      ? 'المنتجات وأمر الشغل'
+      : 'المنتج وأمر الشغل';
+    const productSectionRows = rt === 'packaging' && packagingLines && packagingLines.length > 0
+      ? [
+        ...packagingLines.map((line) => ({
+          label: shortProductName(line.productName || '—'),
+          value: formatPackagingLineDisplay(line.quantityPieces, line.unitsPerCarton),
+          highlight: true as const,
+        })),
+        { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
+      ]
+      : [
+        { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const },
+        { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
+      ];
 
     const layout = (
       <PrintReportLayout
-        ref={report.shareStandardVariance ? undefined : ref}
+        ref={shareOuterCapture ? undefined : ref}
         exportRootId={exportRootId}
         companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
-        reportType="تقرير إنتاج"
+        reportType={reportTypeHeading}
         printDate={now}
         logoUrl={ps.logoUrl}
         brandAccent={ps.primaryColor}
         footerTagline={ps.footerText?.trim() || undefined}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
-        meta={{
-          reportNumber: report.reportCode?.trim() || formatReportNumber(report.reportId),
-          reportDate: report.date || '—',
-          lineName: report.lineName || '—',
-          supervisorName: report.employeeName || '—',
-        }}
-        kpis={[
-          { label: 'الكمية المنتجة', value: Number(report.quantityProduced || 0), unit: 'وحدة', color: 'indigo' },
-          { label: 'الهالك', value: Number(report.wasteQuantity || 0), unit: 'وحدة', color: report.wasteQuantity > 0 ? 'red' : 'default' },
-          { label: 'العمال', value: report.workersCount || 0, color: 'default' },
-          {
-            label: 'تكلفة الوحدة',
-            value: report.costPerUnit != null && report.costPerUnit > 0 ? report.costPerUnit.toFixed(2) : '—',
-            unit: 'ج.م',
-            color: 'green',
-          },
-        ]}
+        meta={printMeta}
+        metaCards={rt === 'packaging' ? [
+          { label: 'رقم التقرير', value: printMeta.reportNumber },
+          { label: 'تاريخ التقرير', value: printMeta.reportDate },
+          { label: 'خط التغليف', value: printMeta.lineName },
+          { label: 'مشرف التغليف', value: printMeta.supervisorName },
+        ] : undefined}
+        kpis={kpiItems}
         sections={[
           {
-            title: 'المنتج وأمر الشغل',
-            rows: [
-              { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true },
-              { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
-            ],
+            title: productSectionTitle,
+            rows: productSectionRows,
             progress: undefined,
           },
           {
-            title: 'تفاصيل الإنتاج',
-            rows: [
-              { label: 'ساعات العمل', value: `${fmtNum(report.workHours, dp)} ساعات` },
-              { label: 'نسبة الهالك', value: `${wasteRatio}%` },
-              {
-                label: 'توزيع العمالة',
-                value: `إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`,
-              },
-            ],
+            title: rt === 'packaging' ? 'تفاصيل التغليف' : 'تفاصيل الإنتاج',
+            rows: detailSectionRows,
           },
         ]}
         signatures={[
@@ -443,26 +563,28 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     );
 
     const v = report.shareStandardVariance;
-    if (!v) {
+    if (!shareOuterCapture) {
       return layout;
     }
 
     return (
       <div ref={ref} className="bg-white w-[640px] mx-auto">
-        <div
-          className={cn(
-            'mx-auto w-full max-w-[640px] border-2 rounded-lg px-4 py-3 mb-3',
-            shareVarianceTailwindToneClass[v.tone],
-          )}
-          style={{ letterSpacing: 'normal' }}
-        >
-          <p className="text-[13px] font-bold leading-snug mb-1.5">{v.headline}</p>
-          {v.lines.map((line, i) => (
-            <p key={i} className="text-[11px] font-semibold leading-relaxed opacity-95">
-              {line}
-            </p>
-          ))}
-        </div>
+        {v ? (
+          <div
+            className={cn(
+              'mx-auto w-full max-w-[640px] border-2 rounded-lg px-4 py-3 mb-3',
+              shareVarianceTailwindToneClass[v.tone],
+            )}
+            style={{ letterSpacing: 'normal' }}
+          >
+            <p className="text-[13px] font-bold leading-snug mb-1.5">{v.headline}</p>
+            {v.lines.map((line, i) => (
+              <p key={i} className="text-[11px] font-semibold leading-relaxed opacity-95">
+                {line}
+              </p>
+            ))}
+          </div>
+        ) : null}
         {layout}
       </div>
     );

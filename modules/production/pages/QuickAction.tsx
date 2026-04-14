@@ -11,11 +11,14 @@ import {
   buildShareStandardVarianceBanner,
   computeProductionReportStandardQtyVariance,
 } from '../../../utils/productionReportStandardVariance';
-import type { LineWorkerAssignment, ReportComponentScrapItem } from '../../../types';
+import type { LineWorkerAssignment, PackagingReportLine, ProductionReport, ReportComponentScrapItem } from '../../../types';
+import { resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
+import { isPackagingLineId } from '../utils/packagingLine';
 import { ProductionLineStatus } from '../../../types';
 import {
   SingleReportPrint,
   ReportPrintRow,
+  buildPackagingPrintLinesFromReport,
 } from '../components/ProductionReportPrint';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
@@ -72,7 +75,7 @@ export const QuickAction: React.FC = () => {
   const [employeeId, setEmployeeId] = useState('');
   const [lineId, setLineId] = useState('');
   const [productId, setProductId] = useState('');
-  const [reportType, setReportType] = useState<'finished_product' | 'component_injection'>('finished_product');
+  const [reportType, setReportType] = useState<NonNullable<ProductionReport['reportType']>>('finished_product');
   const [quantity, setQuantity] = useState('');
   const [workersProduction, setWorkersProduction] = useState('');
   const [workersPackaging, setWorkersPackaging] = useState('');
@@ -80,6 +83,8 @@ export const QuickAction: React.FC = () => {
   const [workersMaintenance, setWorkersMaintenance] = useState('');
   const [workersExternal, setWorkersExternal] = useState('');
   const [injectionWorkersCount, setInjectionWorkersCount] = useState('');
+  const [packagingWorkersCount, setPackagingWorkersCount] = useState('');
+  const [packagingLines, setPackagingLines] = useState<PackagingReportLine[]>([]);
   const [hours, setHours] = useState('');
   const [notes, setNotes] = useState('');
   const [componentScrapItems, setComponentScrapItems] = useState<ReportComponentScrapItem[]>([]);
@@ -104,6 +109,8 @@ export const QuickAction: React.FC = () => {
 
   const [today, setToday] = useState(() => getOperationalDateString(8));
   const canCreateFinishedReportsBase = can('reports.create');
+  const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
+  const forcePackagingOnly = can('reports.packaging.only');
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || can('reports.componentInjection.only');
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
@@ -112,12 +119,14 @@ export const QuickAction: React.FC = () => {
     [injectionCategoryKeywords],
   );
 
-  const availableReportTypes = useMemo<Array<'finished_product' | 'component_injection'>>(() => {
-    const list: Array<'finished_product' | 'component_injection'> = [];
+  const availableReportTypes = useMemo((): NonNullable<ProductionReport['reportType']>[] => {
+    if (forcePackagingOnly) return ['packaging'];
+    const list: NonNullable<ProductionReport['reportType']>[] = [];
     if (canCreateFinishedReports) list.push('finished_product');
     if (canManageComponentInjectionReports) list.push('component_injection');
+    if (canCreatePackagingReports) list.push('packaging');
     return list;
-  }, [canCreateFinishedReports, canManageComponentInjectionReports]);
+  }, [forcePackagingOnly, canCreateFinishedReports, canManageComponentInjectionReports, canCreatePackagingReports]);
   const canChooseReportType = availableReportTypes.length > 1;
 
   useEffect(() => {
@@ -132,6 +141,25 @@ export const QuickAction: React.FC = () => {
     setReportType('component_injection');
     setSelectedWorkOrderId('');
   }, [forceInjectionOnly, reportType]);
+
+  useEffect(() => {
+    if (!forcePackagingOnly) return;
+    if (reportType === 'packaging') return;
+    setReportType('packaging');
+    setSelectedWorkOrderId('');
+    setLineId('');
+    setProductId('');
+    setPackagingWorkersCount('');
+    setPackagingLines([{ productId: '', quantityPieces: 0 }]);
+  }, [forcePackagingOnly, reportType]);
+
+  useEffect(() => {
+    if (reportType !== 'packaging') {
+      setPackagingLines([]);
+      return;
+    }
+    setPackagingLines((prev) => (prev.length > 0 ? prev : [{ productId: '', quantityPieces: 0 }]));
+  }, [reportType]);
 
   useEffect(() => {
     let mounted = true;
@@ -226,6 +254,17 @@ export const QuickAction: React.FC = () => {
     + (Number(workersExternal) || 0)
   ), [workersProduction, workersPackaging, workersQuality, workersMaintenance, workersExternal]);
 
+  const packagingLaborOptionalQuick = useMemo(
+    () => reportType === 'packaging' || (reportType === 'finished_product' && isPackagingLineId(lineId, _rawLines)),
+    [reportType, lineId, _rawLines],
+  );
+  const packagingFormValid = useMemo(() => {
+    if (reportType !== 'packaging') return true;
+    return (packagingLines || []).some(
+      (l) => String(l?.productId || '').trim() && Number(l?.quantityPieces || 0) > 0,
+    );
+  }, [reportType, packagingLines]);
+
   const getLineName = useCallback(
     (id: string) => _rawLines.find((l) => l.id === id)?.name ?? '—',
     [_rawLines]
@@ -237,6 +276,17 @@ export const QuickAction: React.FC = () => {
     },
     [_rawProducts, rawMaterialOptions, reportType]
   );
+  const getProductNameForPrint = useCallback(
+    (id: string, rt?: ProductionReport['reportType']) => {
+      if (rt === 'component_injection') return rawMaterialOptions.find((m) => m.id === id)?.name ?? '—';
+      return _rawProducts.find((p) => p.id === id)?.name ?? '—';
+    },
+    [_rawProducts, rawMaterialOptions],
+  );
+  const getUnitsPerCarton = useCallback((productId: string) => {
+    const n = Number(_rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0);
+    return n > 0 ? n : undefined;
+  }, [_rawProducts]);
   const getEmployeeName = useCallback(
     (id: string) => employees.find((s) => s.id === id)?.name ?? '—',
     [employees]
@@ -261,7 +311,8 @@ export const QuickAction: React.FC = () => {
     [_rawEmployees, uid],
   );
   const isSupervisorReporter = currentEmployee?.level === 2;
-  const shouldLockEmployeeToCurrent = Boolean(currentEmployee?.id) && (isSupervisorReporter || forceInjectionOnly);
+  const shouldLockEmployeeToCurrent = Boolean(currentEmployee?.id)
+    && (isSupervisorReporter || forceInjectionOnly || forcePackagingOnly);
 
   useEffect(() => {
     let mounted = true;
@@ -296,16 +347,38 @@ export const QuickAction: React.FC = () => {
     [_rawLines, isSupervisorReporter, assignedLineIds],
   );
 
-  const selectableLines = useMemo(() => (
-    reportType === 'component_injection'
-      ? allowedLinesForUser.filter((line) => line.id && injectionLineIds.has(line.id))
-      : allowedLinesForUser
-  ), [reportType, allowedLinesForUser, injectionLineIds]);
+  const selectableLines = useMemo(() => {
+    if (reportType === 'component_injection') {
+      return allowedLinesForUser.filter((line) => line.id && injectionLineIds.has(line.id));
+    }
+    if (reportType === 'packaging') {
+      return allowedLinesForUser.filter((line) => line.id && line.isPackagingLine);
+    }
+    return allowedLinesForUser;
+  }, [reportType, allowedLinesForUser, injectionLineIds]);
+
+  useEffect(() => {
+    if (reportType !== 'packaging') return;
+    if (lineId && !isPackagingLineId(lineId, _rawLines)) {
+      setLineId('');
+      setSelectedWorkOrderId('');
+    }
+  }, [reportType, lineId, _rawLines]);
+
+  useEffect(() => {
+    if (reportType !== 'packaging') return;
+    const valid = Boolean(lineId) && selectableLines.some((l) => l.id === lineId);
+    if (valid) return;
+    if (selectableLines.length !== 1) return;
+    const only = selectableLines[0];
+    if (!only?.id) return;
+    setLineId(only.id);
+  }, [reportType, lineId, selectableLines]);
 
   useEffect(() => {
     if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return;
     setEmployeeId((prev) => (prev === currentEmployee.id ? prev : currentEmployee.id));
-  }, [shouldLockEmployeeToCurrent, currentEmployee?.id]);
+  }, [shouldLockEmployeeToCurrent, currentEmployee?.id, reportType]);
 
   useEffect(() => {
     if (!lineId) return;
@@ -367,13 +440,40 @@ export const QuickAction: React.FC = () => {
 
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
-    const canSaveCurrentType = reportType === 'component_injection' ? canManageComponentInjectionReports : canCreateFinishedReports;
+    const canSaveCurrentType = reportType === 'component_injection'
+      ? canManageComponentInjectionReports
+      : reportType === 'packaging'
+        ? canCreatePackagingReports
+        : canCreateFinishedReports;
     if (!canSaveCurrentType) return;
-    if (!lineId || !productId || !employeeId) {
+    const validPackagingLines = (packagingLines || [])
+      .map((l) => ({
+        productId: String(l?.productId || '').trim(),
+        quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
+      }))
+      .filter((l) => l.productId && l.quantityPieces > 0);
+    if (!lineId || !employeeId) {
+      setSaveError('أكمل بيانات الخط والمشرف أولاً.');
+      return;
+    }
+    if (reportType === 'packaging') {
+      if (validPackagingLines.length === 0) {
+        setSaveError('أضف سطر منتج واحد على الأقل بكمية قطع أكبر من صفر.');
+        return;
+      }
+    } else if (!productId) {
       setSaveError('أكمل بيانات الخط والمنتج والمشرف أولاً.');
       return;
     }
-    if (Number(quantity || 0) <= 0 || Number(hours || 0) <= 0 || (requiresWorkers && workersTotal <= 0)) {
+    if (Number(hours || 0) <= 0) {
+      setSaveError('أكمل ساعات العمل.');
+      return;
+    }
+    if (reportType !== 'packaging' && Number(quantity || 0) <= 0) {
+      setSaveError('أكمل الحقول الإلزامية أولاً (الكمية وساعات العمل).');
+      return;
+    }
+    if (requiresWorkers && workersTotal <= 0 && !packagingLaborOptionalQuick) {
       setSaveError('أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
       return;
     }
@@ -383,28 +483,50 @@ export const QuickAction: React.FC = () => {
     const data = {
       employeeId,
       lineId,
-      productId,
+      productId: reportType === 'packaging' ? validPackagingLines[0].productId : productId,
       reportType,
       date: today,
-      quantityProduced: Number(quantity),
-      workersCount: requiresWorkers ? workersTotal : (Number(injectionWorkersCount) || 0),
-      workersProductionCount: requiresWorkers ? (Number(workersProduction) || 0) : 0,
-      workersPackagingCount: requiresWorkers ? (Number(workersPackaging) || 0) : 0,
-      workersQualityCount: requiresWorkers ? (Number(workersQuality) || 0) : 0,
-      workersMaintenanceCount: requiresWorkers ? (Number(workersMaintenance) || 0) : 0,
-      workersExternalCount: requiresWorkers ? (Number(workersExternal) || 0) : 0,
+      quantityProduced: reportType === 'packaging'
+        ? validPackagingLines.reduce((s, l) => s + l.quantityPieces, 0)
+        : Number(quantity),
+      ...(reportType === 'packaging' ? { packagingLines: validPackagingLines } : {}),
+      workersCount:
+        reportType === 'component_injection'
+          ? (Number(injectionWorkersCount) || 0)
+          : reportType === 'packaging'
+            ? (Number(packagingWorkersCount) || 0)
+            : workersTotal,
+      workersProductionCount: reportType === 'finished_product' ? (Number(workersProduction) || 0) : 0,
+      workersPackagingCount: reportType === 'finished_product' ? (Number(workersPackaging) || 0) : 0,
+      workersQualityCount: reportType === 'finished_product' ? (Number(workersQuality) || 0) : 0,
+      workersMaintenanceCount: reportType === 'finished_product' ? (Number(workersMaintenance) || 0) : 0,
+      workersExternalCount: reportType === 'finished_product' ? (Number(workersExternal) || 0) : 0,
       workHours: Number(hours),
       notes: notes.trim(),
-      componentScrapItems,
+      componentScrapItems: reportType === 'packaging' ? [] : componentScrapItems,
     };
 
     const id = await createReport(data);
 
     if (id) {
+      if (reportType === 'packaging') {
+        setProductId(validPackagingLines[0].productId);
+      }
+      const packagingPrintLines = reportType === 'packaging'
+        ? buildPackagingPrintLinesFromReport(
+          {
+            ...data,
+            id: typeof id === 'string' ? id : undefined,
+            reportType: 'packaging',
+          } as ProductionReport,
+          { getProductName: getProductNameForPrint, getUnitsPerCarton },
+        )
+        : undefined;
       const row: ReportPrintRow = {
         date: today,
+        sourceReportType: resolveReportType(reportType),
         lineName: getLineName(lineId),
-        productName: getProductName(productId),
+        productName: getProductName(reportType === 'packaging' ? validPackagingLines[0].productId : productId),
         employeeName: getEmployeeName(employeeId),
         quantityProduced: data.quantityProduced,
         wasteQuantity: totalComponentScrapQty,
@@ -416,6 +538,7 @@ export const QuickAction: React.FC = () => {
         workersExternalCount: data.workersExternalCount,
         workHours: data.workHours,
         notes: data.notes,
+        packagingPrintLines,
       };
       setPrintReport(row);
       setSaved(true);
@@ -431,9 +554,11 @@ export const QuickAction: React.FC = () => {
     setLineId('');
     setProductId('');
     setReportType(
-      availableReportTypes.includes('finished_product')
-        ? 'finished_product'
-        : (availableReportTypes[0] ?? 'finished_product')
+      forcePackagingOnly
+        ? 'packaging'
+        : (availableReportTypes.includes('finished_product')
+          ? 'finished_product'
+          : (availableReportTypes[0] ?? 'finished_product'))
     );
     setQuantity('');
     setWorkersProduction('');
@@ -442,6 +567,8 @@ export const QuickAction: React.FC = () => {
     setWorkersMaintenance('');
     setWorkersExternal('');
     setInjectionWorkersCount('');
+    setPackagingWorkersCount('');
+    setPackagingLines(forcePackagingOnly ? [{ productId: '', quantityPieces: 0 }] : []);
     setHours('');
     setNotes('');
     setComponentScrapItems([]);
@@ -485,6 +612,8 @@ export const QuickAction: React.FC = () => {
 
   const handleShareWhatsApp = async () => {
     if (!printRef.current || !printReport) return;
+    const packagingShareMulti = printReport.sourceReportType === 'packaging'
+      && (printReport.packagingPrintLines?.length ?? 0) > 1;
     const variance = computeProductionReportStandardQtyVariance({
       productId,
       lineId,
@@ -498,7 +627,10 @@ export const QuickAction: React.FC = () => {
     });
     setPrintReport({
       ...printReport,
-      shareStandardVariance: buildShareStandardVarianceBanner(variance),
+      ...(printReport.sourceReportType === 'packaging' ? { packagingShareImage: true } : {}),
+      ...(!packagingShareMulti
+        ? { shareStandardVariance: buildShareStandardVarianceBanner(variance) }
+        : {}),
     });
     await waitForExportPaint(150);
     setExporting(true);
@@ -510,7 +642,9 @@ export const QuickAction: React.FC = () => {
       showShareFeedback(result);
     } finally {
       setExporting(false);
-      setPrintReport((prev) => (prev ? { ...prev, shareStandardVariance: undefined } : null));
+      setPrintReport((prev) => (prev
+        ? { ...prev, shareStandardVariance: undefined, packagingShareImage: undefined }
+        : null));
     }
   };
 
@@ -532,23 +666,29 @@ export const QuickAction: React.FC = () => {
 
   const scopedActiveWOs = useMemo(() => {
     const selectedSupervisorId = shouldLockEmployeeToCurrent ? currentEmployee?.id : employeeId;
-    if (!selectedSupervisorId) return activeWOs;
-    const normalizedSelected = String(selectedSupervisorId).trim().toLowerCase();
-    return activeWOs.filter((wo) => String(wo.supervisorId || '').trim().toLowerCase() === normalizedSelected);
-  }, [activeWOs, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId]);
+    const bySupervisor = !selectedSupervisorId
+      ? activeWOs
+      : activeWOs.filter(
+        (wo) => String(wo.supervisorId || '').trim().toLowerCase() === String(selectedSupervisorId).trim().toLowerCase(),
+      );
+    return bySupervisor.filter((wo) => workOrderMatchesReportType(wo, resolveReportType(reportType)));
+  }, [activeWOs, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId, reportType]);
 
   const handleSelectWO = useCallback((woId: string) => {
     const wo = scopedActiveWOs.find((w) => w.id === woId);
     if (!wo) return;
-    const nextType = wo.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
-    if (
-      (nextType === 'component_injection' && canManageComponentInjectionReports)
-      || (nextType === 'finished_product' && canCreateFinishedReports)
-    ) {
-      setReportType(nextType);
+    if (wo.workOrderType === 'component_injection') {
+      if (canManageComponentInjectionReports) setReportType('component_injection');
+    } else if (reportType === 'packaging') {
+      setReportType('packaging');
+    } else if (canCreateFinishedReports) {
+      setReportType('finished_product');
     }
     setLineId(wo.lineId);
     setProductId(wo.productId);
+    if (reportType === 'packaging') {
+      setPackagingLines([{ productId: wo.productId, quantityPieces: 0 }]);
+    }
     setEmployeeId(shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
   }, [
     scopedActiveWOs,
@@ -556,6 +696,7 @@ export const QuickAction: React.FC = () => {
     currentEmployee?.id,
     canManageComponentInjectionReports,
     canCreateFinishedReports,
+    reportType,
   ]);
 
   useEffect(() => {
@@ -602,6 +743,14 @@ export const QuickAction: React.FC = () => {
           <span className="material-icons-round text-amber-500">warning</span>
           <p className="text-sm font-bold text-amber-700">
             هذا المستخدم مخصص لتقارير الحقن فقط.
+          </p>
+        </div>
+      )}
+      {forcePackagingOnly && (
+        <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+          <span className="material-icons-round text-amber-500">warning</span>
+          <p className="text-sm font-bold text-amber-700">
+            هذا المستخدم مخصص لتقارير التغليف فقط.
           </p>
         </div>
       )}
@@ -657,13 +806,21 @@ export const QuickAction: React.FC = () => {
                 <Select
                   value={reportType}
                   onValueChange={(value) => {
-                    const nextType = value === 'component_injection' ? 'component_injection' : 'finished_product';
+                    const nextType = resolveReportType(value as ProductionReport['reportType']);
+                    if (!availableReportTypes.includes(nextType)) return;
                     if (nextType === 'component_injection' && !canManageComponentInjectionReports) return;
                     if (nextType === 'finished_product' && !canCreateFinishedReports) return;
+                    if (nextType === 'packaging' && !canCreatePackagingReports) return;
                     setReportType(nextType);
                     setLineId('');
                     setProductId('');
                     setSelectedWorkOrderId('');
+                    if (nextType !== 'packaging') {
+                      setPackagingWorkersCount('');
+                      setPackagingLines([]);
+                    } else {
+                      setPackagingLines([{ productId: '', quantityPieces: 0 }]);
+                    }
                   }}
                 >
                   <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
@@ -672,12 +829,15 @@ export const QuickAction: React.FC = () => {
                   <SelectContent>
                     {canCreateFinishedReports && <SelectItem value="finished_product">تقرير إنتاج</SelectItem>}
                     {canManageComponentInjectionReports && <SelectItem value="component_injection">تقرير مكون حقن</SelectItem>}
+                    {canCreatePackagingReports && <SelectItem value="packaging">تقرير تغليف</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
             )}
             <div>
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">المشرف *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">
+                {reportType === 'packaging' ? 'مشرف التغليف *' : 'المشرف *'}
+              </label>
               {shouldLockEmployeeToCurrent && currentEmployee ? (
                 <input
                   type="text"
@@ -695,7 +855,9 @@ export const QuickAction: React.FC = () => {
               )}
             </div>
             <div>
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">{reportType === 'component_injection' ? 'الخط *' : 'خط الإنتاج *'}</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">
+                {reportType === 'component_injection' ? 'الخط *' : (reportType === 'packaging' ? 'خط التغليف *' : 'خط الإنتاج *')}
+              </label>
               <SearchableSelect
                 placeholder="اختر الخط"
                 options={selectableLines.map((l) => ({ value: l.id!, label: l.name }))}
@@ -703,26 +865,96 @@ export const QuickAction: React.FC = () => {
                 onChange={setLineId}
               />
             </div>
-            <div>
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">{reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}</label>
-              <SearchableSelect
-                placeholder={reportType === 'component_injection' ? 'اختر المكون' : 'اختر المنتج'}
-                options={selectableProducts}
-                value={productId}
-                onChange={setProductId}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الكمية المنتجة *</label>
-              <input
-                type="number"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
-                placeholder="0"
-                min="0"
-              />
-            </div>
+            {reportType === 'packaging' ? (
+              <div className="sm:col-span-2 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة</label>
+                  <button
+                    type="button"
+                    onClick={() => setPackagingLines((prev) => [...prev, { productId: '', quantityPieces: 0 }])}
+                    className="text-xs font-bold text-primary hover:underline"
+                  >
+                    + إضافة منتج
+                  </button>
+                </div>
+                {(packagingLines || []).map((row, idx) => (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40"
+                  >
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-[var(--color-text-muted)]">المنتج *</label>
+                      <SearchableSelect
+                        placeholder="اختر المنتج"
+                        options={selectableProducts}
+                        value={row.productId}
+                        onChange={(v) => {
+                          setPackagingLines((prev) => {
+                            const next = [...prev];
+                            next[idx] = { ...next[idx], productId: v };
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-[var(--color-text-muted)]">القطع *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={row.quantityPieces || ''}
+                        onChange={(e) => {
+                          setPackagingLines((prev) => {
+                            const next = [...prev];
+                            next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
+                            return next;
+                          });
+                        }}
+                        className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="sm:col-span-2 flex sm:justify-end">
+                      <button
+                        type="button"
+                        disabled={(packagingLines || []).length <= 1}
+                        className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
+                        onClick={() => setPackagingLines((prev) => prev.filter((_, i) => i !== idx))}
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
+                  سطر واحد على الأقل بكمية قطع أكبر من صفر. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">{reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}</label>
+                  <SearchableSelect
+                    placeholder={reportType === 'component_injection' ? 'اختر المكون' : 'اختر المنتج'}
+                    options={selectableProducts}
+                    value={productId}
+                    onChange={setProductId}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الكمية المنتجة *</label>
+                  <input
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              </>
+            )}
+            {reportType !== 'packaging' && (
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">هالك المكونات</label>
               {reportType === 'component_injection' ? (
@@ -760,6 +992,7 @@ export const QuickAction: React.FC = () => {
                 </button>
               )}
             </div>
+            )}
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ساعات العمل *</label>
               <input
@@ -780,6 +1013,18 @@ export const QuickAction: React.FC = () => {
                 min="0"
                 value={injectionWorkersCount}
                 onChange={(e) => setInjectionWorkersCount(e.target.value)}
+                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                placeholder="0"
+              />
+            </div>
+            ) : reportType === 'packaging' ? (
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">إجمالي العمالة (اختياري)</label>
+              <input
+                type="number"
+                min="0"
+                value={packagingWorkersCount}
+                onChange={(e) => setPackagingWorkersCount(e.target.value)}
                 className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
               />
@@ -897,7 +1142,21 @@ export const QuickAction: React.FC = () => {
           <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-3 mt-6 pt-4 border-t border-[var(--color-border)]">
             <Button
               onClick={handleSave}
-              disabled={saving || !lineId || !productId || !employeeId || !quantity || (reportType !== 'component_injection' && workersTotal <= 0) || !hours || (reportType === 'component_injection' ? !canManageComponentInjectionReports : !canCreateFinishedReports)}
+              disabled={
+                saving
+                || !lineId
+                || (reportType !== 'packaging' && !productId)
+                || !employeeId
+                || (reportType !== 'packaging' && !quantity)
+                || (reportType === 'packaging' && !packagingFormValid)
+                || (reportType !== 'component_injection' && !packagingLaborOptionalQuick && workersTotal <= 0)
+                || !hours
+                || (reportType === 'component_injection'
+                  ? !canManageComponentInjectionReports
+                  : reportType === 'packaging'
+                    ? !canCreatePackagingReports
+                    : !canCreateFinishedReports)
+              }
               className="w-full sm:w-auto"
             >
               {saving ? (
@@ -915,10 +1174,10 @@ export const QuickAction: React.FC = () => {
                 </>
               )}
             </Button>
-            <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
+            {/* <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">refresh</span>
               مسح
-            </Button>
+            </Button> */}
           </div>
         </Card>
       ) : (
@@ -934,14 +1193,14 @@ export const QuickAction: React.FC = () => {
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
-            <Button variant="secondary" disabled={exporting} onClick={handleExportPDF} className="w-full sm:w-auto">
+            {/* <Button variant="secondary" disabled={exporting} onClick={handleExportPDF} className="w-full sm:w-auto">
               {exporting ? (
                 <span className="material-icons-round animate-spin text-sm">refresh</span>
               ) : (
                 <span className="material-icons-round text-lg">picture_as_pdf</span>
               )}
               تصدير PDF
-            </Button>
+            </Button> */}
             <Button variant="secondary" disabled={exporting} onClick={handleExportImage} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">image</span>
               تصدير كصورة

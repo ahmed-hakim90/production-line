@@ -14,6 +14,7 @@ import { exportWorkOrders, type WorkOrderExportRow } from '../../../../utils/exp
 import { useManagedPrint } from '../../../../utils/printManager';
 import { usePermission } from '../../../../utils/permissions';
 import { reportService } from '../../services/reportService';
+import { sumQuantityProducedForWorkOrderExcludingPackaging } from '../../utils/packagingLine';
 import { WorkOrderPrint } from '../../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../components/ProductionReportPrint';
 import { WorkOrderDrawer } from './WorkOrderDrawer';
@@ -167,7 +168,7 @@ export const WorkOrders: React.FC = () => {
               if (!minDate || date < minDate) return date;
               return minDate;
             }, null);
-            const producedQuantity = reports.reduce((sum, report) => sum + Number(report.quantityProduced || 0), 0);
+            const producedQuantity = sumQuantityProducedForWorkOrderExcludingPackaging(reports, _rawLines);
             return [id, { count: reports.length, firstReportDate, producedQuantity }] as const;
           } catch (error) {
             console.error('work order report meta error', error);
@@ -183,7 +184,7 @@ export const WorkOrders: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [orderIds, orderIdsKey]);
+  }, [orderIds, orderIdsKey, _rawLines]);
 
   const searchedOrders = useMemo(() => {
     const search = filters.search.trim().toLowerCase();

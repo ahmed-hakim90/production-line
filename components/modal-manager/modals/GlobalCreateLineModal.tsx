@@ -22,6 +22,7 @@ const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
   dailyWorkingHours: 8,
   maxWorkers: 20,
   status: ProductionLineStatus.IDLE,
+  isPackagingLine: false,
 };
 
 export const GlobalCreateLineModal: React.FC = () => {
@@ -122,6 +123,20 @@ export const GlobalCreateLineModal: React.FC = () => {
               ))}
             </select>
           </div>
+          <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-muted/30 px-4 py-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 rounded border-[var(--color-border)]"
+              checked={Boolean(form.isPackagingLine)}
+              onChange={(e) => setForm({ ...form, isPackagingLine: e.target.checked })}
+            />
+            <span className="text-sm font-bold text-[var(--color-text)] leading-relaxed">
+              {t('modalManager.createLine.packagingLine')}
+              <span className="block text-[11px] font-semibold text-[var(--color-text-muted)] mt-1">
+                {t('modalManager.createLine.packagingLineHint')}
+              </span>
+            </span>
+          </label>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>

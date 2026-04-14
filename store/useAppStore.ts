@@ -53,6 +53,17 @@ import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
 import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 import { reportService } from '../modules/production/services/reportService';
+import {
+  excludePackagingLineReportsForWorkOrderProduction,
+  isPackagingLineId,
+  isPackagingThroughputReport,
+  normalizePackagingLinesForSave,
+} from '../modules/production/utils/packagingLine';
+import {
+  effectivePlanReportType,
+  resolveReportType,
+  workOrderMatchesReportType,
+} from '../modules/production/utils/reportTypes';
 import { supplyCycleService } from '../modules/production/services/supplyCycleService';
 import { lineStatusService } from '../modules/production/services/lineStatusService';
 import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
@@ -332,18 +343,6 @@ async function persistProductionReportCostSnapshot(
   if (patch) await reportService.update(reportId, patch);
 }
 
-function resolveReportType(
-  reportType?: ProductionReport['reportType'],
-): NonNullable<ProductionReport['reportType']> {
-  return reportType === 'component_injection' ? 'component_injection' : 'finished_product';
-}
-
-function resolveWorkOrderReportType(
-  workOrderType?: WorkOrder['workOrderType'],
-): NonNullable<ProductionReport['reportType']> {
-  return workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
-}
-
 function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
   return status === 'pending' || status === 'in_progress';
 }
@@ -373,7 +372,7 @@ function pickBestAutoLinkedWorkOrder(
     Boolean(wo?.id)
     && allowedStatuses.has(wo.status)
     && wo.productId === criteria.productId
-    && resolveWorkOrderReportType(wo.workOrderType) === criteria.reportType
+    && workOrderMatchesReportType(wo, criteria.reportType)
   ));
   if (filtered.length === 0) return null;
 
@@ -2359,7 +2358,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (data.status === 'completed' && updatedWorkOrder) {
         const existingReports = await reportService.getByWorkOrderId(id);
-        if (existingReports.length === 0) {
+        const reportsForAutoClose = excludePackagingLineReportsForWorkOrderProduction(
+          existingReports,
+          get()._rawLines,
+        );
+        if (reportsForAutoClose.length === 0) {
           const toLocalDateString = (value: any): string => {
             if (!value) return getOperationalDateString(8);
             if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -2735,10 +2738,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       const reportType = resolveReportType(data.reportType);
       const permissions = get().userPermissions;
       const canCreateFinishedReports = hasPermission(permissions, 'reports.create');
+      const canCreatePackagingReports =
+        hasPermission(permissions, 'reports.create')
+        || hasPermission(permissions, 'reports.packaging.create');
+      const forcePackagingOnly = hasPermission(permissions, 'reports.packaging.only');
       const forceInjectionOnly =
         hasPermission(permissions, 'reports.componentInjection.only') && !canCreateFinishedReports;
       const canManageComponentInjection =
         hasPermission(permissions, 'reports.componentInjection.manage') || forceInjectionOnly;
+      if (forcePackagingOnly && reportType !== 'packaging') {
+        const msg = 'هذا المستخدم مخصص لتقارير التغليف فقط.';
+        set({ error: msg });
+        return null;
+      }
       if (reportType === 'finished_product' && (forceInjectionOnly || !canCreateFinishedReports)) {
         const msg = 'غير مصرح بإنشاء تقرير إنتاج.';
         set({ error: msg });
@@ -2749,18 +2761,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         return null;
       }
-      if (Number(data.quantityProduced || 0) <= 0 || Number(data.workHours || 0) <= 0) {
-        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة وساعات عمل.';
+      if (reportType === 'packaging' && !canCreatePackagingReports) {
+        const msg = 'غير مصرح بإنشاء تقرير تغليف.';
         set({ error: msg });
         return null;
       }
-      const detailedWorkersTotal = Number(data.workersProductionCount || 0)
-        + Number(data.workersPackagingCount || 0)
-        + Number(data.workersQualityCount || 0)
-        + Number(data.workersMaintenanceCount || 0)
-        + Number(data.workersExternalCount || 0);
-      if (reportType === 'finished_product' && Number(data.workersCount || 0) <= 0 && detailedWorkersTotal <= 0) {
-        const msg = 'لا يمكن حفظ تقرير بدون عمالة.';
+      if (reportType === 'packaging' && !isPackagingLineId(data.lineId, get()._rawLines)) {
+        const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
         set({ error: msg });
         return null;
       }
@@ -2773,31 +2780,62 @@ export const useAppStore = create<AppState>((set, get) => ({
         _rawEmployees,
       } = get();
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
-      const componentScrapItems = (Array.isArray((data as any).componentScrapItems) ? (data as any).componentScrapItems : [])
-        .map((item: ReportComponentScrapItem) => ({
-          materialId: String(item?.materialId || '').trim(),
-          materialName: String(item?.materialName || '').trim(),
-          quantity: Number(item?.quantity || 0),
-        }))
-        .filter((item: { materialId: string; quantity: number }) => item.materialId && item.quantity > 0);
+      const componentScrapItems = reportType === 'packaging'
+        ? []
+        : (Array.isArray((data as any).componentScrapItems) ? (data as any).componentScrapItems : [])
+          .map((item: ReportComponentScrapItem) => ({
+            materialId: String(item?.materialId || '').trim(),
+            materialName: String(item?.materialName || '').trim(),
+            quantity: Number(item?.quantity || 0),
+          }))
+          .filter((item: { materialId: string; quantity: number }) => item.materialId && item.quantity > 0);
 
-      const sameDayReports = await reportService.getByDateRange(data.date, data.date);
-      const hasDuplicate = sameDayReports.some(
-        (r) =>
-          r.lineId === data.lineId &&
-          r.employeeId === data.employeeId &&
-          r.productId === data.productId &&
-          resolveReportType(r.reportType) === reportType,
-      );
-      if (hasDuplicate) {
-        set({ error: REPORT_DUPLICATE_MESSAGE });
+      const savePayload = normalizePackagingLinesForSave({ ...data, componentScrapItems } as Omit<ProductionReport, 'id' | 'createdAt'>);
+
+      if (Number(savePayload.quantityProduced || 0) <= 0 || Number(savePayload.workHours || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة وساعات عمل.';
+        set({ error: msg });
+        return null;
+      }
+      const detailedWorkersTotal = Number(savePayload.workersProductionCount || 0)
+        + Number(savePayload.workersPackagingCount || 0)
+        + Number(savePayload.workersQualityCount || 0)
+        + Number(savePayload.workersMaintenanceCount || 0)
+        + Number(savePayload.workersExternalCount || 0);
+      const packagingLaborOptional =
+        (reportType === 'finished_product' && isPackagingLineId(savePayload.lineId, get()._rawLines))
+        || reportType === 'packaging';
+      if (
+        reportType === 'finished_product'
+        && !packagingLaborOptional
+        && Number(savePayload.workersCount || 0) <= 0
+        && detailedWorkersTotal <= 0
+      ) {
+        const msg = 'لا يمكن حفظ تقرير بدون عمالة.';
+        set({ error: msg });
         return null;
       }
 
-      const activePlans = await productionPlanService.getActiveByLineAndProduct(data.lineId, data.productId);
+      if (reportType !== 'packaging') {
+        const sameDayReports = await reportService.getByDateRange(savePayload.date, savePayload.date);
+        const hasDuplicate = sameDayReports.some(
+          (r) =>
+            r.lineId === savePayload.lineId &&
+            r.employeeId === savePayload.employeeId &&
+            r.productId === savePayload.productId &&
+            resolveReportType(r.reportType) === reportType,
+        );
+        if (hasDuplicate) {
+          set({ error: REPORT_DUPLICATE_MESSAGE });
+          return null;
+        }
+      }
+
+      const activePlans = await productionPlanService.getActiveByLineAndProduct(savePayload.lineId, savePayload.productId);
+      const planMatchType = effectivePlanReportType(reportType);
       const activePlan = activePlans.find((plan) => {
         const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
-        return planType === reportType;
+        return planType === planMatchType;
       }) ?? activePlans[0] ?? null;
 
       if (!planSettings.allowReportWithoutPlan && !activePlan) {
@@ -2813,12 +2851,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       let activeWO: WorkOrder | null = null;
-      if (data.workOrderId) {
-        const selectedWO = await workOrderService.getById(data.workOrderId);
+      if (savePayload.workOrderId) {
+        const selectedWO = await workOrderService.getById(savePayload.workOrderId);
         if (
           selectedWO
           && isActiveWorkOrderStatus(selectedWO.status)
-          && resolveWorkOrderReportType(selectedWO.workOrderType) === reportType
+          && workOrderMatchesReportType(selectedWO, reportType)
         ) {
           activeWO = selectedWO;
         }
@@ -2831,14 +2869,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
 
         try {
-          const activeWOs = await workOrderService.getActiveByLineAndProduct(data.lineId, data.productId);
+          const activeWOs = await workOrderService.getActiveByLineAndProduct(savePayload.lineId, savePayload.productId);
           activeWOs.forEach(upsertCandidate);
         } catch {
           // fallback to cached/all work orders when index/query fails.
         }
 
         const cachedActiveWOs = get().workOrders.filter((wo) => (
-          isActiveWorkOrderStatus(wo.status) && wo.productId === data.productId
+          isActiveWorkOrderStatus(wo.status) && wo.productId === savePayload.productId
         ));
         cachedActiveWOs.forEach(upsertCandidate);
 
@@ -2848,28 +2886,29 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
 
         activeWO = pickBestAutoLinkedWorkOrder(Array.from(candidateMap.values()), {
-          lineId: data.lineId,
-          productId: data.productId,
-          supervisorId: data.employeeId,
+          lineId: savePayload.lineId,
+          productId: savePayload.productId,
+          supervisorId: savePayload.employeeId,
           reportType,
         });
       }
 
       let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
-        ...data,
+        ...savePayload,
         reportType,
-        workOrderId: activeWO?.id || data.workOrderId || '',
+        componentScrapItems,
+        workOrderId: activeWO?.id || savePayload.workOrderId || '',
       };
       const rawCycleId =
-        typeof (data as ProductionReport & { supplyCycleId?: string }).supplyCycleId === 'string'
-          ? (data as ProductionReport & { supplyCycleId?: string }).supplyCycleId!.trim()
+        typeof (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId === 'string'
+          ? (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId!.trim()
           : '';
       if (!rawCycleId) {
         try {
           const linkedCycleId = await supplyCycleService.findAutoLinkForReport({
-            productId: String(data.productId || '').trim(),
-            date: String(data.date || '').trim(),
-            reportType: reportType === 'component_injection' ? 'component_injection' : 'finished_product',
+            productId: String(savePayload.productId || '').trim(),
+            date: String(savePayload.date || '').trim(),
+            reportType: effectivePlanReportType(reportType),
           });
           if (linkedCycleId) {
             reportData = { ...reportData, supplyCycleId: linkedCycleId };
@@ -2892,11 +2931,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           userName: userDisplayName ?? userEmail ?? undefined,
         },
         metadata: {
-          lineId: data.lineId,
-          productId: data.productId,
-          quantityProduced: data.quantityProduced,
+          lineId: savePayload.lineId,
+          productId: savePayload.productId,
+          quantityProduced: savePayload.quantityProduced,
           reportType,
-          workOrderId: activeWO?.id ?? data.workOrderId ?? '',
+          workOrderId: activeWO?.id ?? savePayload.workOrderId ?? '',
           productionPlanId: activePlan?.id ?? '',
         },
         description: 'Create production report',
@@ -2918,12 +2957,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       let postSaveWarning: string | null = null;
       const reportIndustrialCost = calculateIndustrialReportTotalCost({
-        workersCount: Number(data.workersCount || 0),
-        workHours: Number(data.workHours || 0),
-        quantityProduced: Number(data.quantityProduced || 0),
-        lineId: data.lineId,
-        reportDate: data.date,
-        employeeId: data.employeeId,
+        workersCount: Number(savePayload.workersCount || 0),
+        workHours: Number(savePayload.workHours || 0),
+        quantityProduced: Number(savePayload.quantityProduced || 0),
+        lineId: savePayload.lineId,
+        reportDate: savePayload.date,
+        employeeId: savePayload.employeeId,
         laborSettings,
         costCenters,
         costCenterValues,
@@ -2932,12 +2971,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
 
       try {
-        await syncProductAvgDailyProduction(data.productId);
+        const productIdsToSync = new Set<string>();
+        productIdsToSync.add(savePayload.productId);
+        (savePayload.packagingLines || []).forEach((l) => {
+          if (l.productId) productIdsToSync.add(l.productId);
+        });
+        await Promise.all(Array.from(productIdsToSync).map((pid) => syncProductAvgDailyProduction(pid)));
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث متوسط الإنتاج اليومي';
       }
 
+      const skipInventoryAuto = reportType === 'packaging';
       try {
+        if (skipInventoryAuto) {
+          // Packaging throughput is tracked for KPI only — no automatic finished-goods / BOM stock flows.
+        } else {
         const routing = await resolveInventoryRouting(systemSettings);
         const product = get()._rawProducts.find((p) => p.id === data.productId);
         const actorName = get().userDisplayName || get().userEmail || 'System';
@@ -3114,14 +3162,19 @@ export const useAppStore = create<AppState>((set, get) => ({
             }
           }
         }
+        }
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
       }
 
+      const skipWoPlanProgress = isPackagingThroughputReport(
+        { lineId: reportData.lineId, reportType },
+        get()._rawLines,
+      );
       try {
-        if (activeWO?.id) {
-          await workOrderService.incrementProduced(activeWO.id, data.quantityProduced, reportIndustrialCost);
-          const newProduced = (activeWO.producedQuantity ?? 0) + data.quantityProduced;
+        if (activeWO?.id && !skipWoPlanProgress) {
+          await workOrderService.incrementProduced(activeWO.id, reportData.quantityProduced, reportIndustrialCost);
+          const newProduced = (activeWO.producedQuantity ?? 0) + reportData.quantityProduced;
           if (newProduced >= activeWO.quantity) {
             await workOrderService.update(activeWO.id, { status: 'completed', completedAt: new Date().toISOString() });
           } else if (activeWO.status === 'pending') {
@@ -3129,19 +3182,19 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         }
 
-        if (activePlan?.id) {
+        if (activePlan?.id && !skipWoPlanProgress) {
           if (activePlan.status === 'planned') {
             await productionPlanService.update(activePlan.id, {
               status: 'in_progress',
-              startDate: data.date,
-              plannedStartDate: data.date,
+              startDate: reportData.date,
+              plannedStartDate: reportData.date,
             });
             activePlan.status = 'in_progress';
-            activePlan.startDate = data.date;
-            activePlan.plannedStartDate = data.date;
+            activePlan.startDate = reportData.date;
+            activePlan.plannedStartDate = reportData.date;
           }
-          await productionPlanService.incrementProduced(activePlan.id, data.quantityProduced, reportIndustrialCost);
-          const newProduced = (activePlan.producedQuantity ?? 0) + data.quantityProduced;
+          await productionPlanService.incrementProduced(activePlan.id, reportData.quantityProduced, reportIndustrialCost);
+          const newProduced = (activePlan.producedQuantity ?? 0) + reportData.quantityProduced;
           if (newProduced >= activePlan.plannedQuantity) {
             await productionPlanService.update(activePlan.id, { status: 'completed' });
           }
@@ -3158,7 +3211,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           reportService.getByDateRange(monthStart, monthEnd),
           workOrderService.getAll(),
         ]);
-        invalidateProductionReportsRangeCacheForDates([data.date], get, set);
+        invalidateProductionReportsRangeCacheForDates([reportData.date], get, set);
         const rangeCacheNow = Date.now();
         const rkToday = getProductionReportsRangeCacheKey(today, today);
         const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
@@ -3262,10 +3315,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       const nextReportType = resolveReportType(data.reportType ?? existingReport?.reportType);
       const permissions = get().userPermissions;
       const canEditFinishedReports = hasPermission(permissions, 'reports.edit');
+      const canEditPackagingReports =
+        hasPermission(permissions, 'reports.edit')
+        || hasPermission(permissions, 'reports.packaging.create');
+      const forcePackagingOnly = hasPermission(permissions, 'reports.packaging.only');
       const forceInjectionOnly =
         hasPermission(permissions, 'reports.componentInjection.only') && !canEditFinishedReports;
       const canManageComponentInjection =
         hasPermission(permissions, 'reports.componentInjection.manage') || forceInjectionOnly;
+      const lines = get()._rawLines;
+      const nextLineId = String(data.lineId ?? existingReport?.lineId ?? '').trim();
+
+      if (forcePackagingOnly && nextReportType !== 'packaging') {
+        const msg = 'غير مصرح بتعديل نوع التقرير إلى غير التغليف.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      if (nextReportType === 'packaging' && !isPackagingLineId(nextLineId, lines)) {
+        const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      if (nextReportType === 'packaging' && !canEditPackagingReports) {
+        const msg = 'غير مصرح بتعديل تقارير التغليف.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
       if (nextReportType === 'finished_product' && (forceInjectionOnly || !canEditFinishedReports)) {
         const msg = 'غير مصرح بتعديل تقارير الإنتاج.';
         set({ error: msg });
@@ -3276,10 +3351,31 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         throw new Error(msg);
       }
-      await reportService.update(id, data);
+      let updatePayload: Partial<ProductionReport> = { ...data };
+      if (nextReportType === 'packaging') {
+        updatePayload.componentScrapItems = [];
+        const { id: _rid, createdAt: _rca, ...existingBody } = (existingReport || {}) as ProductionReport;
+        const mergedForNorm = {
+          ...existingBody,
+          ...updatePayload,
+          reportType: nextReportType,
+          componentScrapItems: [],
+        } as Omit<ProductionReport, 'id' | 'createdAt'>;
+        const normalized = normalizePackagingLinesForSave(mergedForNorm);
+        updatePayload = {
+          ...updatePayload,
+          ...normalized,
+          reportType: nextReportType,
+          componentScrapItems: [],
+        };
+      }
+      await reportService.update(id, updatePayload);
       const affectedProductIds = new Set<string>();
       if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
-      if (data.productId) affectedProductIds.add(data.productId);
+      if (updatePayload.productId) affectedProductIds.add(updatePayload.productId);
+      (updatePayload.packagingLines || []).forEach((l) => {
+        if (l.productId) affectedProductIds.add(l.productId);
+      });
       await Promise.all(
         Array.from(affectedProductIds).map((productId) =>
           syncProductAvgDailyProduction(productId)
@@ -3414,7 +3510,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      if (reportToDelete?.workOrderId) {
+      if (
+        reportToDelete?.workOrderId
+        && !isPackagingThroughputReport(reportToDelete, get()._rawLines)
+      ) {
         const linkedWorkOrder = await workOrderService.getById(reportToDelete.workOrderId);
         if (linkedWorkOrder?.id) {
           const removedProduced = Math.max(0, Number(reportToDelete.quantityProduced) || 0);
@@ -3534,6 +3633,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       for (const report of reports) {
         if (!report.id) continue;
         if (Number(report.quantityProduced || 0) <= 0) continue;
+        if (isPackagingThroughputReport(report, get()._rawLines)) {
+          skipped += 1;
+          continue;
+        }
         processed += 1;
 
         try {
@@ -3636,7 +3739,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           const workers = Number(report.workersCount || 0);
           const hours = Number(report.workHours || 0);
           const laborCost = laborRate * hours * workers;
-          if (qty > 0) {
+          if (qty > 0 && !isPackagingThroughputReport(report, get()._rawLines)) {
             await workOrderService.incrementProduced(target.id, qty, laborCost);
           }
 

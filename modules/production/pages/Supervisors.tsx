@@ -278,6 +278,10 @@ export const Supervisors: React.FC = () => {
     getLineName: (id: string) => productionLines.find((l) => l.id === id)?.name ?? '—',
     getProductName: (id: string) => products.find((p) => p.id === id)?.name ?? '—',
     getEmployeeName: (id: string) => employees.find((e) => e.id === id)?.name ?? '—',
+    getUnitsPerCarton: (id: string) => {
+      const n = Number((products.find((p) => p.id === id) as { unitsPerCarton?: number } | undefined)?.unitsPerCarton ?? 0);
+      return n > 0 ? n : undefined;
+    },
   }), [productionLines, products, employees]);
 
   const printRows = useMemo(

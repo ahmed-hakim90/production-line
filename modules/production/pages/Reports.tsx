@@ -59,6 +59,7 @@ import {
   QualityStatus,
   ReportComponentScrapItem,
   ProductionLineStatus,
+  type PackagingReportLine,
 } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import type { ShareResult } from '../../../utils/reportExport';
@@ -79,6 +80,7 @@ import {
   mapReportsToPrintRows,
   computePrintTotals,
   ReportPrintRow,
+  buildPackagingPrintLinesFromReport,
 } from '../components/ProductionReportPrint';
 import { SelectableTable } from '../components/SelectableTable';
 import type { TableColumn, TableBulkAction } from '../components/SelectableTable';
@@ -89,6 +91,8 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
+import { isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
+import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
@@ -111,7 +115,7 @@ import {
 } from '@/components/ui/dialog';
 
 const emptyForm = {
-  reportType: 'finished_product' as 'finished_product' | 'component_injection',
+  reportType: 'finished_product' as NonNullable<ProductionReport['reportType']>,
   employeeId: '',
   productId: '',
   lineId: '',
@@ -127,6 +131,7 @@ const emptyForm = {
   workHours: 0,
   notes: '',
   componentScrapItems: [] as ReportComponentScrapItem[],
+  packagingLines: [] as PackagingReportLine[],
 };
 
 const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>): number =>
@@ -482,10 +487,20 @@ export const Reports: React.FC = () => {
   const { can } = usePermission();
   const canViewCosts = can('reports.viewCost');
   const canCreateFinishedReportsBase = can('reports.create');
+  const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
+  const forcePackagingOnly = can('reports.packaging.only');
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = can('reports.create') && !forceInjectionOnly;
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || forceInjectionOnly;
-  const canChooseReportType = canCreateFinishedReports && canManageComponentInjectionReports;
+  const availableReportTypes = useMemo((): NonNullable<ProductionReport['reportType']>[] => {
+    if (forcePackagingOnly) return ['packaging'];
+    const types: NonNullable<ProductionReport['reportType']>[] = [];
+    if (canCreateFinishedReports) types.push('finished_product');
+    if (canManageComponentInjectionReports) types.push('component_injection');
+    if (canCreatePackagingReports) types.push('packaging');
+    return types;
+  }, [forcePackagingOnly, canCreateFinishedReports, canManageComponentInjectionReports, canCreatePackagingReports]);
+  const canChooseReportType = availableReportTypes.length > 1;
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'reports'),
     [exportImportSettings]
@@ -512,7 +527,14 @@ export const Reports: React.FC = () => {
   ]);
   const effectiveFormWorkersCount = form.reportType === 'component_injection'
     ? Number(form.workersCount || 0)
-    : formWorkersTotal;
+    : form.reportType === 'packaging'
+      ? Number(form.workersCount || 0)
+      : formWorkersTotal;
+
+  const isPackagingLineForm = useMemo(
+    () => _rawLines.some((l) => l.id === form.lineId && l.isPackagingLine),
+    [_rawLines, form.lineId],
+  );
 
   const formStandardVariancePreview = useMemo(() => {
     if (!showModal) return null;
@@ -651,6 +673,7 @@ export const Reports: React.FC = () => {
 
   // Line & supervisor filters
   const [filterLineId, setFilterLineId] = useState('');
+  const [filterLineScope, setFilterLineScope] = useState<'all' | 'packaging_only' | 'exclude_packaging'>('all');
   const [filterProductCategory, setFilterProductCategory] = useState('');
   const [filterEmployeeId, setFilterEmployeeId] = useState('');
   const [reportGroupBy, setReportGroupBy] = useState<ReportGroupBy>('none');
@@ -662,6 +685,8 @@ export const Reports: React.FC = () => {
     [_rawEmployees, uid],
   );
   const isSupervisorReporter = currentEmployee?.level === 2;
+  const shouldLockEmployeeToCurrent = Boolean(currentEmployee?.id)
+    && (isSupervisorReporter || forceInjectionOnly || forcePackagingOnly);
   const shouldRestrictSupervisorLines = isSupervisorReporter && !editId;
 
   const openCreate = useCallback(() => {
@@ -670,9 +695,11 @@ export const Reports: React.FC = () => {
     setForm({
       ...emptyForm,
       date: getOperationalDateString(8),
+      reportType: forcePackagingOnly ? 'packaging' : 'finished_product',
+      packagingLines: forcePackagingOnly ? [{ productId: '', quantityPieces: 0 }] : [],
     });
     setShowModal(true);
-  }, []);
+  }, [forcePackagingOnly]);
 
   const openCreateComponent = useCallback(() => {
     openModal(MODAL_KEYS.REPORTS_CREATE, { source: 'reports.page', reportType: 'component_injection' });
@@ -701,13 +728,13 @@ export const Reports: React.FC = () => {
   }, [showModal, form.lineId, form.date, editId]);
 
   useEffect(() => {
-    if (!showModal || !isSupervisorReporter || !currentEmployee?.id) return;
+    if (!showModal || !shouldLockEmployeeToCurrent || !currentEmployee?.id) return;
     setForm((prev) => (
       prev.employeeId === currentEmployee.id
         ? prev
         : { ...prev, employeeId: currentEmployee.id }
     ));
-  }, [showModal, isSupervisorReporter, currentEmployee?.id]);
+  }, [showModal, shouldLockEmployeeToCurrent, currentEmployee?.id, form.reportType]);
 
   useEffect(() => {
     let mounted = true;
@@ -824,12 +851,17 @@ export const Reports: React.FC = () => {
       ? source.filter((r) => r.employeeId === myEmployeeId)
       : source;
     if (filterLineId) list = list.filter((r) => r.lineId === filterLineId);
+    if (filterLineScope === 'packaging_only') {
+      list = list.filter((r) => isPackagingThroughputReport(r, _rawLines));
+    } else if (filterLineScope === 'exclude_packaging') {
+      list = list.filter((r) => !isPackagingThroughputReport(r, _rawLines));
+    }
     if (filterProductCategory) {
       list = list.filter((r) => (productCategoryByProductId.get(r.productId) || '') === filterProductCategory);
     }
     if (filterEmployeeId) list = list.filter((r) => r.employeeId === filterEmployeeId);
     return list;
-  }, [myEmployeeId, filterLineId, filterProductCategory, filterEmployeeId, productCategoryByProductId]);
+  }, [myEmployeeId, filterLineId, filterLineScope, filterProductCategory, filterEmployeeId, productCategoryByProductId, _rawLines]);
 
   const sortReports = useCallback((source: ProductionReport[]) => {
     const getRegisteredAtMs = (report: ProductionReport): number => {
@@ -893,6 +925,7 @@ export const Reports: React.FC = () => {
       setStartDate(linkedReport.date);
       setEndDate(linkedReport.date);
       setFilterLineId('');
+      setFilterLineScope('all');
       setFilterEmployeeId('');
       await fetchReports(linkedReport.date, linkedReport.date);
       if (cancelled) return;
@@ -1064,7 +1097,7 @@ export const Reports: React.FC = () => {
       }
       return _rawProducts.find((p) => p.id === pid)?.name ?? '—';
     },
-    [_rawProducts, rawMaterialOptions]
+    [_rawProducts, rawMaterialOptions],
   );
   const getLineName = useCallback(
     (lid: string) => _rawLines.find((l) => l.id === lid)?.name ?? '—',
@@ -1074,6 +1107,11 @@ export const Reports: React.FC = () => {
     (sid: string) => employees.find((s) => s.id === sid)?.name ?? '—',
     [employees]
   );
+
+  const getUnitsPerCarton = useCallback((productId: string) => {
+    const n = Number(_rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0);
+    return n > 0 ? n : undefined;
+  }, [_rawProducts]);
 
   const normalizeSearchText = useCallback((s: string) => {
     return String(s || '')
@@ -1188,7 +1226,7 @@ export const Reports: React.FC = () => {
       const lineId = String(report.lineId || '');
       const supervisorId = String(report.employeeId || '');
       const productId = String(report.productId || '');
-      const reportType = report.reportType === 'component_injection' ? 'component_injection' : 'finished_product';
+      const reportType = resolveReportType(report.reportType);
       const key = `${lineId}__${supervisorId}__${productId}__${reportType}`;
       const current = grouped.get(key) || {
         lineId,
@@ -1328,8 +1366,8 @@ export const Reports: React.FC = () => {
   }, []);
 
   const lookups = useMemo(
-    () => ({ getLineName, getProductName, getEmployeeName, getWorkOrder }),
-    [getLineName, getProductName, getEmployeeName, getWorkOrder]
+    () => ({ getLineName, getProductName, getEmployeeName, getWorkOrder, getUnitsPerCarton }),
+    [getLineName, getProductName, getEmployeeName, getWorkOrder, getUnitsPerCarton]
   );
 
   // â”€â”€ Bulk print data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1350,15 +1388,17 @@ export const Reports: React.FC = () => {
       const woId = (report as ProductionReport).workOrderId;
       const wo = woId ? woMap.get(woId) : undefined;
       const rid = (report as ProductionReport).id;
+      const asSaved = report as ProductionReport;
       return {
         reportId: rid,
-        reportCode: (report as ProductionReport).reportCode,
+        reportCode: asSaved.reportCode,
+        sourceReportType: resolveReportType(asSaved.reportType),
         date: report.date,
         lineName: getLineName(report.lineId),
         productName: getProductName(report.productId, report.reportType),
         employeeName: getEmployeeName(report.employeeId),
         quantityProduced: report.quantityProduced || 0,
-        wasteQuantity: deriveReportWaste(report as ProductionReport),
+        wasteQuantity: deriveReportWaste(asSaved),
         workersCount: report.workersCount || 0,
         workersProductionCount: report.workersProductionCount || 0,
         workersPackagingCount: report.workersPackagingCount || 0,
@@ -1369,9 +1409,10 @@ export const Reports: React.FC = () => {
         notes: report.notes,
         costPerUnit: rid && canViewCosts ? reportCosts.get(rid) : undefined,
         workOrderNumber: wo?.workOrderNumber,
+        packagingPrintLines: buildPackagingPrintLinesFromReport(asSaved, { getProductName, getUnitsPerCarton }),
       };
     },
-    [getLineName, getProductName, getEmployeeName, woMap, canViewCosts, reportCosts]
+    [getLineName, getProductName, getEmployeeName, getUnitsPerCarton, woMap, canViewCosts, reportCosts]
   );
 
   const triggerSinglePrint = useCallback(
@@ -1431,6 +1472,13 @@ export const Reports: React.FC = () => {
   const triggerSingleShare = useCallback(
     async (report: ProductionReport) => {
       const base = buildReportRow(report);
+      const validPackagingLines = (report.packagingLines ?? [])
+        .map((l) => ({
+          productId: String(l?.productId || '').trim(),
+          quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
+        }))
+        .filter((l) => l.productId && l.quantityPieces > 0);
+      const packagingMultiProduct = report.reportType === 'packaging' && validPackagingLines.length > 1;
       const variance = computeProductionReportStandardQtyVariance({
         productId: report.productId,
         lineId: report.lineId,
@@ -1442,9 +1490,12 @@ export const Reports: React.FC = () => {
         routingPlanTargetUnitSecondsByProduct,
         routingProductTargetUnitSecondsByProduct,
       });
-      const row = {
+      const row: ReportPrintRow = {
         ...base,
-        shareStandardVariance: buildShareStandardVarianceBanner(variance),
+        ...(report.reportType === 'packaging' ? { packagingShareImage: true } : {}),
+        ...(!packagingMultiProduct
+          ? { shareStandardVariance: buildShareStandardVarianceBanner(variance) }
+          : {}),
       };
       setSharePrintRow(row);
       const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
@@ -1494,6 +1545,7 @@ export const Reports: React.FC = () => {
     setStartDate(getOperationalDateString(8));
     setEndDate(getOperationalDateString(8));
     setFilterLineId('');
+    setFilterLineScope('all');
     setFilterEmployeeId('');
     setRangeError(null);
     setRangeHasMore(false);
@@ -1550,6 +1602,7 @@ export const Reports: React.FC = () => {
         return;
       }
       setFilterLineId('');
+      setFilterLineScope('all');
       setFilterProductCategory('');
       setFilterEmployeeId('');
       setStartDate(range.startStr);
@@ -1574,7 +1627,7 @@ export const Reports: React.FC = () => {
     setViewMode('range');
   };
 
-  const activeFilterCount = (filterLineId ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
+  const activeFilterCount = (filterLineId ? 1 : 0) + (filterLineScope !== 'all' ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
   const reportPeriod = useMemo(() => {
     const todayValue = getOperationalDateString(8);
     if (viewMode === 'today') return 'today';
@@ -1619,12 +1672,32 @@ export const Reports: React.FC = () => {
         {
           key: 'lineId',
           placeholder: 'كل الخطوط',
-          options: _rawLines.map((line) => ({ value: line.id || '', label: line.name })),
-          width: 'w-[140px]',
+          options: _rawLines.map((line) => ({
+            value: line.id || '',
+            label: line.isPackagingLine ? `${line.name} (تغليف)` : line.name,
+          })),
+          width: 'w-[160px]',
+        },
+        {
+          key: 'lineScope',
+          placeholder: 'كل التقارير',
+          options: [
+            { value: 'all', label: 'كل التقارير' },
+            { value: 'packaging_only', label: 'تغليف فقط' },
+            { value: 'exclude_packaging', label: 'بدون تغليف' },
+          ],
+          width: 'w-[150px]',
         },
       ]}
-      quickFilterValues={{ lineId: filterLineId || 'all' }}
-      onQuickFilterChange={(_, value) => setFilterLineId(value === 'all' ? '' : value)}
+      quickFilterValues={{ lineId: filterLineId || 'all', lineScope: filterLineScope }}
+      onQuickFilterChange={(key, value) => {
+        if (key === 'lineId') setFilterLineId(value === 'all' ? '' : value);
+        if (key === 'lineScope') {
+          if (value === 'packaging_only') setFilterLineScope('packaging_only');
+          else if (value === 'exclude_packaging') setFilterLineScope('exclude_packaging');
+          else setFilterLineScope('all');
+        }
+      }}
       advancedFilters={[
         {
           key: 'category',
@@ -1683,6 +1756,7 @@ export const Reports: React.FC = () => {
           className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
           onClick={() => {
             setFilterLineId('');
+            setFilterLineScope('all');
             setFilterProductCategory('');
             setFilterEmployeeId('');
           }}
@@ -1695,7 +1769,9 @@ export const Reports: React.FC = () => {
   );
 
   const openEdit = (report: ProductionReport) => {
-    if (!can('reports.edit')) {
+    const rt = resolveReportType(report.reportType);
+    const canOpenEdit = can('reports.edit') || (rt === 'packaging' && can('reports.packaging.create'));
+    if (!canOpenEdit) {
       setSaveToastType('error');
       setSaveToast('غير مصرح لك بتعديل التقارير');
       setTimeout(() => setSaveToast(null), 3000);
@@ -1704,7 +1780,7 @@ export const Reports: React.FC = () => {
     setEditId(report.id!);
     setSaveToast(null);
     setForm({
-      reportType: report.reportType === 'component_injection' ? 'component_injection' : 'finished_product',
+      reportType: rt,
       employeeId: report.employeeId,
       productId: report.productId,
       lineId: report.lineId,
@@ -1720,6 +1796,14 @@ export const Reports: React.FC = () => {
       workHours: report.workHours,
       notes: report.notes ?? '',
       componentScrapItems: Array.isArray(report.componentScrapItems) ? report.componentScrapItems : [],
+      packagingLines: rt === 'packaging' && Array.isArray(report.packagingLines) && report.packagingLines.length > 0
+        ? report.packagingLines.map((l) => ({
+          productId: String(l.productId || '').trim(),
+          quantityPieces: Math.max(0, Number(l.quantityPieces || 0)),
+        }))
+        : rt === 'packaging'
+          ? [{ productId: report.productId, quantityPieces: Number(report.quantityProduced || 0) }]
+          : [],
     });
     setShowModal(true);
   };
@@ -1743,19 +1827,18 @@ export const Reports: React.FC = () => {
     [_rawLines, lineStatuses],
   );
 
-  const selectableLines = useMemo(
-    () => (
-      form.reportType === 'component_injection'
-        ? (shouldRestrictSupervisorLines
-            ? _rawLines.filter((line) => line.id && assignedLineIds.has(String(line.id)))
-            : _rawLines
-          ).filter((line) => line.id && injectionLineIds.has(line.id))
-        : (shouldRestrictSupervisorLines
-            ? _rawLines.filter((line) => line.id && assignedLineIds.has(String(line.id)))
-            : _rawLines)
-    ),
-    [form.reportType, _rawLines, injectionLineIds, shouldRestrictSupervisorLines, assignedLineIds],
-  );
+  const selectableLines = useMemo(() => {
+    const base = shouldRestrictSupervisorLines
+      ? _rawLines.filter((line) => line.id && assignedLineIds.has(String(line.id)))
+      : _rawLines;
+    if (form.reportType === 'component_injection') {
+      return base.filter((line) => line.id && injectionLineIds.has(line.id));
+    }
+    if (form.reportType === 'packaging') {
+      return base.filter((line) => line.id && line.isPackagingLine);
+    }
+    return base;
+  }, [form.reportType, _rawLines, injectionLineIds, shouldRestrictSupervisorLines, assignedLineIds]);
 
   const selectableProducts = useMemo(
     () => (
@@ -1772,6 +1855,23 @@ export const Reports: React.FC = () => {
       setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
     }
   }, [form.reportType, form.lineId, injectionLineIds]);
+
+  useEffect(() => {
+    if (form.reportType !== 'packaging') return;
+    if (form.lineId && !_rawLines.some((l) => l.id === form.lineId && l.isPackagingLine)) {
+      setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
+    }
+  }, [form.reportType, form.lineId, _rawLines]);
+
+  useEffect(() => {
+    if (!showModal || form.reportType !== 'packaging') return;
+    const valid = Boolean(form.lineId) && selectableLines.some((l) => l.id === form.lineId);
+    if (valid) return;
+    if (selectableLines.length !== 1) return;
+    const only = selectableLines[0];
+    if (!only?.id) return;
+    setForm((prev) => ({ ...prev, lineId: only.id! }));
+  }, [showModal, form.reportType, form.lineId, selectableLines]);
 
   useEffect(() => {
     if (form.reportType !== 'component_injection' || !form.productId) return;
@@ -1792,13 +1892,14 @@ export const Reports: React.FC = () => {
       payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType'>,
       excludeReportId?: string | null,
     ) => {
+      if (resolveReportType(payload.reportType) === 'packaging') return false;
       const sameDayReports = await reportService.getByDateRange(payload.date, payload.date);
       return sameDayReports.some(
         (r) =>
           r.lineId === payload.lineId &&
           r.employeeId === payload.employeeId &&
           r.productId === payload.productId &&
-          (r.reportType === 'component_injection' ? 'component_injection' : 'finished_product') === payload.reportType &&
+          resolveReportType(r.reportType) === resolveReportType(payload.reportType) &&
           r.id !== excludeReportId,
       );
     },
@@ -1807,11 +1908,37 @@ export const Reports: React.FC = () => {
 
   const handleSave = async (printAfterSave = false) => {
     const requiresWorkers = form.reportType !== 'component_injection';
-    if (!form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workHours || (requiresWorkers && effectiveFormWorkersCount <= 0)) {
+    const packagingLaborOptional =
+      form.reportType === 'packaging'
+      || (form.reportType === 'finished_product' && isPackagingLineForm);
+    const workersRequired = requiresWorkers && effectiveFormWorkersCount <= 0 && !packagingLaborOptional;
+    const packagingLinesValid = (form.packagingLines || []).filter(
+      (l) => String(l.productId || '').trim() && Number(l.quantityPieces || 0) > 0,
+    );
+    const packagingQtyOk = form.reportType !== 'packaging'
+      || packagingLinesValid.length > 0;
+    const productQtyOk = form.reportType === 'packaging'
+      ? packagingQtyOk
+      : Boolean(form.productId && form.quantityProduced);
+    if (!form.lineId || !form.employeeId || !productQtyOk || !form.workHours || workersRequired) {
       setSaveToastType('error');
       setSaveToast(requiresWorkers
-        ? 'أكمل الحقول المطلوبة أولاً (الكمية، تفاصيل العمالة، وساعات العمل)'
+        ? (packagingLaborOptional
+          ? 'أكمل الحقول المطلوبة أولاً (الكمية وساعات العمل)'
+          : 'أكمل الحقول المطلوبة أولاً (الكمية، تفاصيل العمالة، وساعات العمل)')
         : 'أكمل الحقول المطلوبة أولاً (الكمية وساعات العمل)');
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+    if (forcePackagingOnly && form.reportType !== 'packaging') {
+      setSaveToastType('error');
+      setSaveToast('هذا المستخدم مخصص لتقارير التغليف فقط');
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+    if (form.reportType === 'packaging' && !canCreatePackagingReports) {
+      setSaveToastType('error');
+      setSaveToast('غير مصرح بإنشاء أو تعديل تقرير تغليف');
       setTimeout(() => setSaveToast(null), 3500);
       return;
     }
@@ -1829,12 +1956,15 @@ export const Reports: React.FC = () => {
     }
     /** ربط التوريد التلقائي عند الإنشاء يُنفَّذ داخل createReport؛ هنا فقط عند تعديل تقرير لتحديث/إزالة الربط */
     let autoSupplyCycleId: string | null = null;
+    const linkProductIdForSupply = form.reportType === 'packaging' && packagingLinesValid[0]
+      ? packagingLinesValid[0].productId
+      : form.productId;
     if (editId) {
       try {
         autoSupplyCycleId = await supplyCycleService.findAutoLinkForReport({
-          productId: form.productId,
+          productId: linkProductIdForSupply,
           date: form.date,
-          reportType: form.reportType,
+          reportType: effectivePlanReportType(resolveReportType(form.reportType)),
         });
       } catch {
         autoSupplyCycleId = null;
@@ -1843,6 +1973,15 @@ export const Reports: React.FC = () => {
 
     const payload = {
       ...form,
+      ...(form.reportType === 'packaging' && packagingLinesValid.length > 0
+        ? {
+          packagingLines: packagingLinesValid,
+          productId: packagingLinesValid[0].productId,
+          quantityProduced: packagingLinesValid.reduce((s, l) => s + Number(l.quantityPieces || 0), 0),
+        }
+        : form.reportType === 'packaging'
+          ? { packagingLines: [] as PackagingReportLine[] }
+          : {}),
       workersCount: effectiveFormWorkersCount,
     } as typeof form & { workersCount: number; supplyCycleId?: string };
     if (editId) {
@@ -1854,7 +1993,7 @@ export const Reports: React.FC = () => {
         lineId: payload.lineId,
         employeeId: payload.employeeId,
         productId: payload.productId,
-        reportType: payload.reportType === 'component_injection' ? 'component_injection' : 'finished_product',
+        reportType: resolveReportType(payload.reportType),
       },
       editId,
     );
@@ -1889,9 +2028,10 @@ export const Reports: React.FC = () => {
       setSaving(false);
       setForm({
         ...emptyForm,
-        reportType: form.reportType === 'component_injection' ? 'component_injection' : 'finished_product',
+        reportType: resolveReportType(form.reportType),
         date: form.date,
         lineId: form.lineId,
+        packagingLines: form.reportType === 'packaging' ? [{ productId: '', quantityPieces: 0 }] : [],
       });
       setSaveToastType('success');
       setSaveToast('تم حفظ التقرير بنجاح');
@@ -2900,7 +3040,22 @@ export const Reports: React.FC = () => {
       </span>
       {searchFilteredReports.length > 0 && (
         <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
-          <span className="text-emerald-600">إنتاج: {formatNumber(searchFilteredReports.reduce((s, r) => s + r.quantityProduced, 0))}</span>
+          <span className="text-emerald-600">
+            إنتاج (بدون تغليف):{' '}
+            {formatNumber(
+              searchFilteredReports
+                .filter((r) => !isPackagingThroughputReport(r, _rawLines))
+                .reduce((s, r) => s + r.quantityProduced, 0),
+            )}
+          </span>
+          <span className="text-violet-700">
+            تغليف:{' '}
+            {formatNumber(
+              searchFilteredReports
+                .filter((r) => isPackagingThroughputReport(r, _rawLines))
+                .reduce((s, r) => s + r.quantityProduced, 0),
+            )}
+          </span>
           <span className="text-rose-500">هالك: {formatNumber(searchFilteredReports.reduce((s, r) => s + deriveReportWaste(r), 0))}</span>
         </div>
       )}
@@ -2974,7 +3129,7 @@ export const Reports: React.FC = () => {
           onClick: () => { openGeneralMonthlyDialog(); },
           disabled: rangeLoading,
         } : undefined}
-        primaryAction={canCreateFinishedReports ? {
+        primaryAction={(canCreateFinishedReports || can('reports.packaging.create')) ? {
           label: 'إنشاء تقرير',
           icon: 'add',
           onClick: openCreate,
@@ -3397,7 +3552,11 @@ export const Reports: React.FC = () => {
       {selectedReportDrawer && (() => {
         const row = selectedReportDrawer;
         const linkedWo = row.workOrderId ? woMap.get(row.workOrderId) : null;
-        const reportTypeLabel = row.reportType === 'component_injection' ? 'تقرير حقن مكونات' : 'تقرير منتج نهائي';
+        const reportTypeLabel = row.reportType === 'component_injection'
+          ? 'تقرير حقن مكونات'
+          : row.reportType === 'packaging'
+            ? 'تقرير تغليف'
+            : 'تقرير منتج نهائي';
         return (
           <>
             <div
@@ -3431,7 +3590,9 @@ export const Reports: React.FC = () => {
                     <span className="font-bold">{getLineName(row.lineId)}</span>
                   </div>
                   <div>
-                    <span className="text-xs text-[var(--color-text-muted)] block mb-1">المشرف</span>
+                    <span className="text-xs text-[var(--color-text-muted)] block mb-1">
+                      {row.reportType === 'packaging' ? 'مشرف التغليف' : 'المشرف'}
+                    </span>
                     <span className="font-bold">{getEmployeeName(row.employeeId)}</span>
                   </div>
                 </div>
@@ -3528,7 +3689,9 @@ export const Reports: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!can('reports.edit')) {
+                    const rt = resolveReportType(row.reportType);
+                    const canEditHere = can('reports.edit') || (rt === 'packaging' && can('reports.packaging.create'));
+                    if (!canEditHere) {
                       setSaveToastType('error');
                       setSaveToast('غير مصرح لك بتعديل التقارير');
                       setTimeout(() => setSaveToast(null), 3000);
@@ -3537,7 +3700,7 @@ export const Reports: React.FC = () => {
                     openEdit(row);
                     setSelectedReportDrawer(null);
                   }}
-                  disabled={!can('reports.edit')}
+                  disabled={!can('reports.edit') && !(resolveReportType(row.reportType) === 'packaging' && can('reports.packaging.create'))}
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
                 >
                   تعديل
@@ -3562,7 +3725,7 @@ export const Reports: React.FC = () => {
       })()}
 
       {/* Create / Edit Report Modal */}
-      {showModal && (canCreateFinishedReports || can("reports.edit") || canManageComponentInjectionReports) && (
+      {showModal && (canCreateFinishedReports || can('reports.packaging.create') || can('reports.edit') || canManageComponentInjectionReports) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div
             className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
@@ -3571,8 +3734,16 @@ export const Reports: React.FC = () => {
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <h3 className="text-lg font-bold">
                 {editId
-                  ? (form.reportType === 'component_injection' ? 'تعديل تقرير مكون حقن' : 'تعديل تقرير إنتاج')
-                  : (form.reportType === 'component_injection' ? 'إنشاء تقرير مكون حقن' : 'إنشاء تقرير إنتاج')}
+                  ? (form.reportType === 'component_injection'
+                    ? 'تعديل تقرير مكون حقن'
+                    : form.reportType === 'packaging'
+                      ? 'تعديل تقرير تغليف'
+                      : 'تعديل تقرير إنتاج')
+                  : (form.reportType === 'component_injection'
+                    ? 'إنشاء تقرير مكون حقن'
+                    : form.reportType === 'packaging'
+                      ? 'إنشاء تقرير تغليف'
+                      : 'إنشاء تقرير إنتاج')}
               </h3>
               <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <ReportIcon name="close" />
@@ -3594,18 +3765,40 @@ export const Reports: React.FC = () => {
                   <Select
                     value={form.reportType}
                     onValueChange={(value) => {
-                      const nextType = value === 'component_injection' ? 'component_injection' : 'finished_product';
+                      const nextType = resolveReportType(value as ProductionReport['reportType']);
+                      if (!availableReportTypes.includes(nextType)) return;
                       if (nextType === 'component_injection' && !canManageComponentInjectionReports) return;
                       if (nextType === 'finished_product' && forceInjectionOnly) return;
-                      setForm({ ...form, reportType: nextType, workOrderId: '' });
+                      setForm({
+                        ...form,
+                        reportType: nextType,
+                        workOrderId: '',
+                        lineId: '',
+                        ...(nextType === 'packaging'
+                          ? {
+                            packagingLines: form.packagingLines?.length
+                              ? form.packagingLines
+                              : [{ productId: '', quantityPieces: 0 }],
+                            productId: '',
+                            quantityProduced: 0,
+                          }
+                          : { packagingLines: [] }),
+                      });
                     }}
                   >
                     <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="finished_product">تقرير إنتاج عادي</SelectItem>
-                      <SelectItem value="component_injection">تقرير مكون حقن</SelectItem>
+                      {availableReportTypes.includes('finished_product') && (
+                        <SelectItem value="finished_product">تقرير إنتاج عادي</SelectItem>
+                      )}
+                      {availableReportTypes.includes('component_injection') && (
+                        <SelectItem value="component_injection">تقرير مكون حقن</SelectItem>
+                      )}
+                      {availableReportTypes.includes('packaging') && (
+                        <SelectItem value="packaging">تقرير تغليف</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -3614,10 +3807,8 @@ export const Reports: React.FC = () => {
               {!editId && can('workOrders.view') && (() => {
                 const activeWOs = workOrders.filter((w) => {
                   if (w.status !== 'pending' && w.status !== 'in_progress') return false;
-                  const woType = w.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
-                  const formType = form.reportType === 'component_injection' ? 'component_injection' : 'finished_product';
-                  if (woType !== formType) return false;
-                  if (!isSupervisorReporter || !currentEmployee?.id) return true;
+                  if (!workOrderMatchesReportType(w, resolveReportType(form.reportType))) return false;
+                  if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return true;
                   return w.supervisorId === currentEmployee.id;
                 });
                 if (activeWOs.length === 0) return null;
@@ -3641,8 +3832,8 @@ export const Reports: React.FC = () => {
                           workOrderId: wo.id ?? '',
                           lineId: wo.lineId,
                           productId: wo.productId,
-                          reportType: wo.workOrderType === 'component_injection' ? 'component_injection' : form.reportType,
-                          employeeId: isSupervisorReporter && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
+                          reportType: wo.workOrderType === 'component_injection' ? 'component_injection' : resolveReportType(form.reportType),
+                          employeeId: shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
                         });
                       }}
                     >
@@ -3677,8 +3868,10 @@ export const Reports: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">المشرف *</label>
-                  {isSupervisorReporter && currentEmployee ? (
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                    {form.reportType === 'packaging' ? 'مشرف التغليف *' : 'المشرف *'}
+                  </label>
+                  {shouldLockEmployeeToCurrent && currentEmployee ? (
                     <input
                       type="text"
                       readOnly
@@ -3695,18 +3888,24 @@ export const Reports: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className={`grid gap-4 ${form.reportType === 'packaging' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-                    {form.reportType === 'component_injection' ? 'الخط *' : 'خط الإنتاج *'}
+                    {form.reportType === 'component_injection'
+                      ? 'الخط *'
+                      : (form.reportType === 'packaging' || isPackagingLineForm ? 'خط التغليف *' : 'خط الإنتاج *')}
                   </label>
                   <SearchableSelect
                     placeholder="اختر الخط"
-                    options={selectableLines.map((l) => ({ value: l.id!, label: l.name }))}
+                    options={selectableLines.map((l) => ({
+                      value: l.id!,
+                      label: l.isPackagingLine ? `${l.name} (تغليف)` : l.name,
+                    }))}
                     value={form.lineId}
                     onChange={(v) => setForm({ ...form, lineId: v, workOrderId: '' })}
                   />
                 </div>
+                {form.reportType !== 'packaging' && (
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                     {form.reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}
@@ -3718,10 +3917,79 @@ export const Reports: React.FC = () => {
                     onChange={(v) => setForm({ ...form, productId: v, workOrderId: '' })}
                   />
                 </div>
+                )}
               </div>
+              {form.reportType === 'packaging' && (
+                <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة *</label>
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-primary hover:underline"
+                      onClick={() => setForm((prev) => ({
+                        ...prev,
+                        packagingLines: [...(prev.packagingLines || []), { productId: '', quantityPieces: 0 }],
+                      }))}
+                    >
+                      + إضافة منتج
+                    </button>
+                  </div>
+                  {(form.packagingLines || []).map((row, idx) => (
+                    <div key={idx} className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
+                      <div className="sm:col-span-6 space-y-1">
+                        <span className="text-[11px] font-bold text-[var(--color-text-muted)]">المنتج</span>
+                        <SearchableSelect
+                          placeholder="اختر المنتج"
+                          options={selectableProducts}
+                          value={row.productId}
+                          onChange={(v) => setForm((prev) => {
+                            const next = [...(prev.packagingLines || [])];
+                            next[idx] = { ...next[idx], productId: v };
+                            return { ...prev, packagingLines: next };
+                          })}
+                        />
+                      </div>
+                      <div className="sm:col-span-4 space-y-1">
+                        <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الكمية (قطعة) *</span>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
+                          value={row.quantityPieces || ''}
+                          onChange={(e) => setForm((prev) => {
+                            const next = [...(prev.packagingLines || [])];
+                            next[idx] = { ...next[idx], quantityPieces: Number(e.target.value) };
+                            return { ...prev, packagingLines: next };
+                          })}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="sm:col-span-2 flex sm:justify-end">
+                        <button
+                          type="button"
+                          disabled={(form.packagingLines || []).length <= 1}
+                          className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-2"
+                          onClick={() => setForm((prev) => ({
+                            ...prev,
+                            packagingLines: (prev.packagingLines || []).filter((_, i) => i !== idx),
+                          }))}
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
+                    تقرير تغليف: الكميات للتتبع فقط ولا تُحسب في إنجاز أمر الشغل. يمكن إدخال إجمالي العمالة اختياريًا أدناه. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {form.reportType !== 'packaging' && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المنتجة *</label>
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                    {isPackagingLineForm ? 'الكمية المغلفة *' : 'الكمية المنتجة *'}
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -3730,10 +3998,14 @@ export const Reports: React.FC = () => {
                     onChange={(e) => setForm({ ...form, quantityProduced: Number(e.target.value) })}
                     placeholder="0"
                   />
+                  {isPackagingLineForm && form.reportType === 'finished_product' ? (
+                    <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
+                      خط تغليف: الكمية للتتبع فقط ولا تُحسب في إنجاز أمر الشغل عند الربط. لا يلزم إدخال تفاصيل العمالة.
+                    </p>
+                  ) : null}
                 </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {form.reportType === 'component_injection' ? (
+                )}
+                {form.reportType !== 'packaging' && (form.reportType === 'component_injection' ? (
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
                     <input
@@ -3775,7 +4047,7 @@ export const Reports: React.FC = () => {
                       <ReportIcon name="open_in_new" className="text-base" />
                     </button>
                   </div>
-                )}
+                ))}
               </div>
               {form.reportType === 'component_injection' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3791,6 +4063,34 @@ export const Reports: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-2">
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                      value={form.workHours || ''}
+                      onChange={(e) => setForm({ ...form, workHours: Number(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              ) : (isPackagingLineForm || form.reportType === 'packaging') ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {form.reportType === 'packaging' && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">إجمالي العمالة (اختياري)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                        value={form.workersCount || ''}
+                        onChange={(e) => setForm({ ...form, workersCount: Number(e.target.value) })}
+                        placeholder="0"
+                      />
+                    </div>
+                  )}
+                  <div className={`space-y-2 ${form.reportType === 'packaging' ? '' : 'sm:col-span-2'}`}>
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
                     <input
                       type="number"
@@ -4009,7 +4309,19 @@ export const Reports: React.FC = () => {
               <Button
                 variant="primary"
                 onClick={() => handleSave(false)}
-                disabled={saving || !form.lineId || !form.productId || !form.employeeId || !form.quantityProduced || !form.workHours || (form.reportType !== 'component_injection' && formWorkersTotal <= 0)}
+                disabled={
+                  saving
+                  || !form.lineId
+                  || !form.productId
+                  || !form.employeeId
+                  || !form.quantityProduced
+                  || !form.workHours
+                  || (
+                    form.reportType !== 'component_injection'
+                    && formWorkersTotal <= 0
+                    && !(form.reportType === 'packaging' || (form.reportType === 'finished_product' && isPackagingLineForm))
+                  )
+                }
               >
                 {saving && <ReportIcon name="refresh" className="animate-spin text-sm" />}
                 <ReportIcon name={editId ? 'save' : 'add'} className="text-sm" />

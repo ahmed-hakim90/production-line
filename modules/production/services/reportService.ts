@@ -22,6 +22,7 @@ import { ProductionReport } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { createReportDuplicateError } from '../utils/reportDuplicateError';
+import { resolveReportType } from '../utils/reportTypes';
 
 const COLLECTION = 'production_reports';
 const UNIQUE_COLLECTION = 'production_report_uniques';
@@ -42,9 +43,6 @@ function isMissingIndexError(error: unknown): boolean {
 const normalizeKeyPart = (value: string) =>
   encodeURIComponent(String(value || '').trim().toLowerCase());
 
-const resolveReportType = (value?: ProductionReport['reportType']): NonNullable<ProductionReport['reportType']> =>
-  value === 'component_injection' ? 'component_injection' : 'finished_product';
-
 const buildReportUniqueKey = (data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType'>): string =>
   [
     normalizeKeyPart(data.date),
@@ -53,6 +51,9 @@ const buildReportUniqueKey = (data: Pick<ProductionReport, 'date' | 'lineId' | '
     normalizeKeyPart(data.productId),
     normalizeKeyPart(resolveReportType(data.reportType)),
   ].join('__');
+
+const isPackagingReportType = (rt: ProductionReport['reportType'] | undefined) =>
+  resolveReportType(rt) === 'packaging';
 
 export type FirestoreCursor = QueryDocumentSnapshot | null;
 export interface FirestorePageResult<T> {
@@ -260,9 +261,12 @@ export const reportService = {
       const uniqueRef = doc(db, UNIQUE_COLLECTION, uniqueKey);
 
       await runTransaction(db, async (tx) => {
-        const uniqueSnap = await tx.get(uniqueRef);
-        if (uniqueSnap.exists()) {
-          throw createReportDuplicateError();
+        const skipUnique = isPackagingReportType(data.reportType);
+        if (!skipUnique) {
+          const uniqueSnap = await tx.get(uniqueRef);
+          if (uniqueSnap.exists()) {
+            throw createReportDuplicateError();
+          }
         }
 
         const supplyCycleId =
@@ -283,17 +287,19 @@ export const reportService = {
           workersExternalCount: data.workersExternalCount ?? 0,
           createdAt: serverTimestamp(),
         });
-        tx.set(uniqueRef, {
-          tenantId: getCurrentTenantId(),
-          reportId: reportRef.id,
-          date: data.date,
-          lineId: data.lineId,
-          employeeId: data.employeeId,
-          productId: data.productId,
-          reportType: resolveReportType(data.reportType),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        if (!skipUnique) {
+          tx.set(uniqueRef, {
+            tenantId: getCurrentTenantId(),
+            reportId: reportRef.id,
+            date: data.date,
+            lineId: data.lineId,
+            employeeId: data.employeeId,
+            productId: data.productId,
+            reportType: resolveReportType(data.reportType),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
       });
       return reportRef.id;
     } catch (error) {
@@ -313,6 +319,10 @@ export const reportService = {
       }
       if (Object.keys(fields).length === 0) return;
 
+      if (Object.prototype.hasOwnProperty.call(fields, 'reportType')) {
+        fields.reportType = resolveReportType(fields.reportType);
+      }
+
       const reportRef = doc(db, COLLECTION, id);
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(reportRef);
@@ -322,10 +332,50 @@ export const reportService = {
 
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
         const next = { ...current, ...fields } as ProductionReport;
-        const oldKey = buildReportUniqueKey(current);
-        const nextKey = buildReportUniqueKey(next);
+        const oldPackaging = isPackagingReportType(current.reportType);
+        const nextPackaging = isPackagingReportType(next.reportType);
 
-        if (oldKey !== nextKey) {
+        if (!oldPackaging && !nextPackaging) {
+          const oldKey = buildReportUniqueKey(current);
+          const nextKey = buildReportUniqueKey(next);
+
+          if (oldKey !== nextKey) {
+            const nextUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
+            const nextUniqueSnap = await tx.get(nextUniqueRef);
+            if (nextUniqueSnap.exists()) {
+              const ownerId = String((nextUniqueSnap.data() as { reportId?: string })?.reportId || '');
+              if (!ownerId || ownerId !== id) {
+                throw createReportDuplicateError();
+              }
+            }
+            const oldUniqueRef = doc(db, UNIQUE_COLLECTION, oldKey);
+            tx.delete(oldUniqueRef);
+            tx.set(
+              nextUniqueRef,
+              {
+                tenantId: getCurrentTenantId(),
+                reportId: id,
+                date: next.date,
+                lineId: next.lineId,
+                employeeId: next.employeeId,
+                productId: next.productId,
+                reportType: resolveReportType(next.reportType),
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true },
+            );
+          } else {
+            const sameUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
+            tx.set(sameUniqueRef, { reportId: id, updatedAt: serverTimestamp() }, { merge: true });
+          }
+        } else if (oldPackaging && !nextPackaging) {
+          const legacyUniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
+          const legacySnap = await tx.get(legacyUniqueRef);
+          if (legacySnap.exists()) {
+            const ownerId = String((legacySnap.data() as { reportId?: string })?.reportId || '');
+            if (ownerId === id) tx.delete(legacyUniqueRef);
+          }
+          const nextKey = buildReportUniqueKey(next);
           const nextUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
           const nextUniqueSnap = await tx.get(nextUniqueRef);
           if (nextUniqueSnap.exists()) {
@@ -334,8 +384,6 @@ export const reportService = {
               throw createReportDuplicateError();
             }
           }
-          const oldUniqueRef = doc(db, UNIQUE_COLLECTION, oldKey);
-          tx.delete(oldUniqueRef);
           tx.set(
             nextUniqueRef,
             {
@@ -350,9 +398,13 @@ export const reportService = {
             },
             { merge: true },
           );
-        } else {
-          const sameUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
-          tx.set(sameUniqueRef, { reportId: id, updatedAt: serverTimestamp() }, { merge: true });
+        } else if (!oldPackaging && nextPackaging) {
+          const oldUniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
+          const oldSnap = await tx.get(oldUniqueRef);
+          if (oldSnap.exists()) {
+            const ownerId = String((oldSnap.data() as { reportId?: string })?.reportId || '');
+            if (ownerId === id) tx.delete(oldUniqueRef);
+          }
         }
 
         tx.update(reportRef, fields);
@@ -393,8 +445,17 @@ export const reportService = {
         if (!snap.exists()) return;
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
         tx.delete(reportRef);
-        const uniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
-        tx.delete(uniqueRef);
+        if (!isPackagingReportType(current.reportType)) {
+          const uniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
+          tx.delete(uniqueRef);
+        } else {
+          const legacyUniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
+          const legacySnap = await tx.get(legacyUniqueRef);
+          if (legacySnap.exists()) {
+            const ownerId = String((legacySnap.data() as { reportId?: string })?.reportId || '');
+            if (ownerId === snap.id) tx.delete(legacyUniqueRef);
+          }
+        }
       });
     } catch (error) {
       console.error('reportService.delete error:', error);

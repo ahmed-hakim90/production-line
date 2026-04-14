@@ -111,6 +111,8 @@ export interface FirestoreProductionLine {
   dailyWorkingHours: number;
   maxWorkers: number;
   status: ProductionLineStatus;
+  /** When true, reports on this line represent packaging throughput only (not work-order manufacturing progress). */
+  isPackagingLine?: boolean;
 }
 
 export interface FirestoreEmployee {
@@ -197,6 +199,12 @@ export interface LineProductConfig {
   standardAssemblyTime: number;
 }
 
+/** One line in a multi-product packaging report (quantities in pieces). */
+export interface PackagingReportLine {
+  productId: string;
+  quantityPieces: number;
+}
+
 export interface ProductionReport {
   id?: string;
   reportCode?: string;
@@ -227,7 +235,9 @@ export interface ProductionReport {
   workOrderId?: string;
   /** اختياري: ربط التقرير بدورة توريد (باتش) لاحتساب الهالك والتتبع */
   supplyCycleId?: string;
-  reportType?: 'finished_product' | 'component_injection';
+  reportType?: 'finished_product' | 'component_injection' | 'packaging';
+  /** When set for packaging reports, quantities come from lines; productId/quantityProduced are derived for legacy fields. */
+  packagingLines?: PackagingReportLine[];
   componentScrapItems?: ReportComponentScrapItem[];
   createdAt?: any;
 }

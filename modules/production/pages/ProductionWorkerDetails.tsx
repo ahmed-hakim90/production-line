@@ -131,6 +131,10 @@ export const ProductionWorkerDetails: React.FC = () => {
     getLineName: (lid: string) => productionLines.find((l) => l.id === lid)?.name ?? '—',
     getProductName: (pid: string) => products.find((p) => p.id === pid)?.name ?? '—',
     getEmployeeName: (eid: string) => employees.find((e) => e.id === eid)?.name ?? '—',
+    getUnitsPerCarton: (pid: string) => {
+      const n = Number((products.find((p) => p.id === pid) as { unitsPerCarton?: number } | undefined)?.unitsPerCarton ?? 0);
+      return n > 0 ? n : undefined;
+    },
   }), [productionLines, products, employees]);
 
   const printRows = useMemo(() => mapReportsToPrintRows(reports, lookups), [reports, lookups]);

@@ -36,6 +36,7 @@ const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
   dailyWorkingHours: 8,
   maxWorkers: 20,
   status: ProductionLineStatus.IDLE,
+  isPackagingLine: false,
 };
 
 export const Lines: React.FC = () => {
@@ -186,6 +187,7 @@ export const Lines: React.FC = () => {
       dailyWorkingHours: raw.dailyWorkingHours,
       maxWorkers: raw.maxWorkers,
       status: raw.status,
+      isPackagingLine: Boolean(raw.isPackagingLine),
     });
     setSaveMsg(null);
     setShowModal(true);
@@ -333,7 +335,14 @@ export const Lines: React.FC = () => {
                   return (
                     <tr key={line.id}>
                       <td>
-                        <div className="font-bold text-[var(--color-text)]">{line.name}</div>
+                        <div className="font-bold text-[var(--color-text)] flex flex-wrap items-center gap-2">
+                          {line.name}
+                          {raw?.isPackagingLine ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 border border-violet-200">
+                              تغليف
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
                           {line.code || raw?.code || '—'}
                         </div>
@@ -480,6 +489,20 @@ export const Lines: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
+              <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/80 px-4 py-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 rounded border-[var(--color-border)]"
+                  checked={Boolean(form.isPackagingLine)}
+                  onChange={(e) => setForm({ ...form, isPackagingLine: e.target.checked })}
+                />
+                <span className="text-sm font-bold text-[var(--color-text)] leading-relaxed">
+                  خط تغليف
+                  <span className="block text-[11px] font-semibold text-[var(--color-text-muted)] mt-1">
+                    تقارير هذا الخط تُسجّل كميات التغليف فقط ولا تُضاف إلى «الكمية المنجزة» في أمر الشغل عند الربط.
+                  </span>
+                </span>
+              </label>
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>

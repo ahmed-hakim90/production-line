@@ -24,7 +24,7 @@ export type Permission =
   | 'productionWorkers.view'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only'
+  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create'
   | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
@@ -144,6 +144,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.viewCost', label: 'عرض عمود التكلفة' },
       { key: 'reports.componentInjection.manage', label: 'إدارة تقارير مكونات الحقن' },
       { key: 'reports.componentInjection.only', label: 'وضع حقن فقط (قفل تقرير المنتج العادي)' },
+      { key: 'reports.packaging.only', label: 'تقارير تغليف فقط (إخفاء إنتاج/حقن وقفل النوع على التغليف)' },
+      { key: 'reports.packaging.create', label: 'إنشاء تقرير تغليف (بدون صلاحة إنشاء تقارير الإنتاج العامة)' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
@@ -430,7 +432,11 @@ export function checkPermission(
     return permissions['plans.edit'] === true;
   }
   if (permission === 'routing.execute') {
-    return permissions['reports.create'] === true || permissions['quickAction.view'] === true;
+    return (
+      permissions['reports.create'] === true
+      || permissions['reports.packaging.create'] === true
+      || permissions['quickAction.view'] === true
+    );
   }
   if (
     (permission === 'customerDeposits.view' ||
@@ -475,7 +481,7 @@ export function usePermission(): PermissionGuards {
     const can = (permission: Permission) => checkPermission(permissions, permission);
     return {
       can,
-      canCreateReport: can('reports.create'),
+      canCreateReport: can('reports.create') || can('reports.packaging.create'),
       canEditReport: can('reports.edit'),
       canDeleteReport: can('reports.delete'),
       canManageUsers: can('users.manage') || can('employees.create') || can('employees.edit'),
