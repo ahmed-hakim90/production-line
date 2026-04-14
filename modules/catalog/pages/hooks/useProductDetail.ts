@@ -26,6 +26,7 @@ import {
 import { calculateProductCostBreakdown } from "@/utils/productCostBreakdown";
 import { effectiveStandardAssemblyMinutes } from "@/utils/routingStandardAssembly";
 import type { ProductionReport } from "@/types";
+import { countsTowardProductManufacturingVolume } from "@/modules/production/utils/reportTypes";
 
 const toMonthLabel = (month: string) => month;
 
@@ -202,12 +203,16 @@ export const useProductDetail = (id?: string) => {
       const wasteBalance = getWarehouseBalance(systemSettings.planSettings?.wasteReceiveWarehouseId, id);
       const finalBalance = getWarehouseBalance(systemSettings.planSettings?.finalProductWarehouseId, id);
 
-      const totalProduced = reports.reduce((sum, row) => sum + Number(row.quantityProduced || 0), 0);
+      const manufacturingReports = reports.filter(countsTowardProductManufacturingVolume);
+      const totalProduced = manufacturingReports.reduce(
+        (sum, row) => sum + Number(row.quantityProduced || 0),
+        0,
+      );
       const totalWaste = reports.reduce((sum, row) => sum + getReportWaste(row), 0);
-      const uniqueDays = countUniqueDays(reports);
+      const uniqueDays = countUniqueDays(manufacturingReports);
       const avgDailyProduction = uniqueDays > 0 ? Math.round(totalProduced / uniqueDays) : 0;
-      const avgAssemblyTime = calculateAvgAssemblyTime(reports);
-      const bestLine = findBestLine(reports, rawLines);
+      const avgAssemblyTime = calculateAvgAssemblyTime(manufacturingReports);
+      const bestLine = findBestLine(manufacturingReports, rawLines);
       const { lineProductConfigs: lpc, routingTotalTimeSecondsByProduct: routingByProduct } =
         useAppStore.getState();
       const config = lpc.find((row) => row.productId === id);

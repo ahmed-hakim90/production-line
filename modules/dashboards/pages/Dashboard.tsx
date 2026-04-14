@@ -41,6 +41,10 @@ import {
   computeLiveProductCosts,
   buildSupervisorHourlyRatesMap,
 } from '../../../utils/costCalculations';
+import {
+  buildManufacturingItemNameMap,
+  resolveManufacturingItemName,
+} from '../../../utils/manufacturingItemLabels';
 import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
 import { ProductionLineStatus, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -147,6 +151,8 @@ export const Dashboard: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+  const reportsUiReferenceCache = useAppStore((s) => s.reportsUiReferenceCache);
+  const ensureReportsUiReferenceData = useAppStore((s) => s.ensureReportsUiReferenceData);
   const navigate = useTenantNavigate();
 
   const { can } = usePermission();
@@ -155,6 +161,16 @@ export const Dashboard: React.FC = () => {
   const linkedEmployee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
     [_rawEmployees, uid]
+  );
+
+  useEffect(() => {
+    void ensureReportsUiReferenceData();
+  }, [ensureReportsUiReferenceData]);
+
+  const rawMaterialOptions = reportsUiReferenceCache?.rawMaterialOptions;
+  const manufacturingNameMap = useMemo(
+    () => buildManufacturingItemNameMap(_rawProducts, products, rawMaterialOptions ?? []),
+    [_rawProducts, products, rawMaterialOptions],
   );
 
   const deskTodayLabel = useMemo(
@@ -687,7 +703,7 @@ export const Dashboard: React.FC = () => {
                 const p = products.find((pr) => pr.id === pid);
                 return (
                   <span key={pid} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 text-xs font-bold border border-violet-200 dark:border-violet-800">
-                    {p?.name || pid}
+                    {p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}
                     <button
                       onClick={() => setCostProductIds(costProductIds.filter((id) => id !== pid))}
                       className="hover:text-rose-500 transition-colors"
@@ -709,14 +725,14 @@ export const Dashboard: React.FC = () => {
                   if (!data) {
                     return (
                       <div key={pid} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-xs text-[var(--color-text-muted)]">
-                        <p className="font-bold text-[var(--color-text)] mb-1.5">{p?.name || '—'}</p>
+                        <p className="font-bold text-[var(--color-text)] mb-1.5">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</p>
                         لا توجد بيانات
                       </div>
                     );
                   }
                   return (
                     <div key={pid} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
-                      <p className="text-sm font-bold text-primary">{p?.name || '—'}</p>
+                      <p className="text-sm font-bold text-primary">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</p>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
                           <p className="text-[var(--color-text-muted)] mb-0.5">تكلفة الوحدة</p>
@@ -754,13 +770,13 @@ export const Dashboard: React.FC = () => {
                       const p = products.find((pr) => pr.id === pid);
                       if (!data) return (
                         <tr key={pid} className="text-[var(--color-text-muted)]">
-                          <td className="px-4 py-3 text-sm font-bold">{p?.name || '—'}</td>
+                          <td className="px-4 py-3 text-sm font-bold">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</td>
                           <td colSpan={5} className="px-4 py-3 text-center text-xs">لا توجد بيانات</td>
                         </tr>
                       );
                       return (
                         <tr key={pid} onClick={() => navigate(`/products/${pid}`)} className="hover:bg-[#f8f9fa]/50 transition-colors cursor-pointer">
-                          <td className="px-4 py-3 text-sm font-bold text-primary">{p?.name || '—'}</td>
+                          <td className="px-4 py-3 text-sm font-bold text-primary">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</td>
                           <td className="px-4 py-3 text-center">
                             <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-violet-50 dark:bg-violet-900/20 text-violet-600 text-sm font-bold ring-1 ring-violet-500/20">
                               {formatCost(data.costPerUnit)} ج.م
@@ -1217,7 +1233,7 @@ export const Dashboard: React.FC = () => {
                   <DashboardIcon name="info" className="text-primary text-lg" />
                   <p className="text-xs font-medium text-[var(--color-text-muted)]">
                     سيتم تعيين هدف <span className="font-bold text-primary">{formatNumber(targetForm.targetTodayQty)}</span> وحدة
-                    من <span className="font-bold text-[var(--color-text)]">{_rawProducts.find(p => p.id === targetForm.currentProductId)?.name}</span> لهذا الخط
+                    من <span className="font-bold text-[var(--color-text)]">{resolveManufacturingItemName(targetForm.currentProductId, manufacturingNameMap)}</span> لهذا الخط
                   </p>
                 </div>
               )}

@@ -8,6 +8,16 @@ export function resolveReportType(
   return 'finished_product';
 }
 
+/**
+ * Packaging reports track wrapped quantities for KPI/trace only — they must not inflate
+ * product manufacturing volume, avg daily production, or cost allocation denominators.
+ */
+export function countsTowardProductManufacturingVolume(
+  report: Pick<ProductionReport, 'reportType'>,
+): boolean {
+  return resolveReportType(report.reportType) !== 'packaging';
+}
+
 export function resolveWorkOrderReportType(
   workOrderType?: WorkOrder['workOrderType'],
 ): 'finished_product' | 'component_injection' {

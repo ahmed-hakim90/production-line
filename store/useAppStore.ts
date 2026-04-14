@@ -60,6 +60,7 @@ import {
   normalizePackagingLinesForSave,
 } from '../modules/production/utils/packagingLine';
 import {
+  countsTowardProductManufacturingVolume,
   effectivePlanReportType,
   resolveReportType,
   workOrderMatchesReportType,
@@ -492,7 +493,10 @@ async function syncProductAvgDailyProduction(productId: string): Promise<void> {
 
   const reports = await reportService.getByProduct(productId);
   const productiveReports = reports.filter(
-    (report) => Number(report.quantityProduced || 0) > 0 && Boolean(report.date)
+    (report) =>
+      countsTowardProductManufacturingVolume(report)
+      && Number(report.quantityProduced || 0) > 0
+      && Boolean(report.date),
   );
   const uniqueDays = new Set(productiveReports.map((report) => report.date)).size;
   const totalProduced = productiveReports.reduce(
@@ -3546,7 +3550,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       await reportService.delete(id);
-      await syncProductAvgDailyProduction(reportToDelete.productId);
+      const productIdsToResync = new Set<string>();
+      if (reportToDelete.productId) productIdsToResync.add(String(reportToDelete.productId));
+      (reportToDelete.packagingLines || []).forEach((l) => {
+        if (l.productId) productIdsToResync.add(String(l.productId));
+      });
+      await Promise.all(
+        Array.from(productIdsToResync).map((pid) => syncProductAvgDailyProduction(pid)),
+      );
       const today = getOperationalDateString(8);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, workOrders] = await Promise.all([

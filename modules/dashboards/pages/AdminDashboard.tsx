@@ -49,6 +49,11 @@ import { useDashboardSlice } from '../../../store/selectors';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
+import {
+  buildManufacturingItemCodeMap,
+  buildManufacturingItemNameMap,
+  resolveManufacturingItemName,
+} from '../../../utils/manufacturingItemLabels';
 import { Card, KPIBox, Badge } from '../components/UI';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
@@ -380,6 +385,7 @@ export const AdminDashboard: React.FC = () => {
 
   const {
     _rawProducts,
+    products,
     _rawLines,
     _rawEmployees,
     workOrders,
@@ -395,12 +401,28 @@ export const AdminDashboard: React.FC = () => {
     lineProductConfigs,
     routingTotalTimeSecondsByProduct,
     systemSettings,
+    reportsUiReferenceCache,
+    ensureReportsUiReferenceData,
   } = useDashboardSlice();
   const productionPlanFollowUps = useAppStore((s) => s.productionPlanFollowUps);
   const appLoading = useAppStore((s) => s.loading);
   const productsLoading = useAppStore((s) => s.productsLoading);
   const linesLoading = useAppStore((s) => s.linesLoading);
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+
+  useEffect(() => {
+    void ensureReportsUiReferenceData();
+  }, [ensureReportsUiReferenceData]);
+
+  const rawMaterialOptions = reportsUiReferenceCache?.rawMaterialOptions;
+  const manufacturingNameMap = useMemo(
+    () => buildManufacturingItemNameMap(_rawProducts, products, rawMaterialOptions ?? []),
+    [_rawProducts, products, rawMaterialOptions],
+  );
+  const manufacturingCodeMap = useMemo(
+    () => buildManufacturingItemCodeMap(_rawProducts, products, rawMaterialOptions ?? []),
+    [_rawProducts, products, rawMaterialOptions],
+  );
   const pageControl = useMemo(
     () => getExportImportPageControl(systemSettings.exportImport, 'adminDashboard'),
     [systemSettings.exportImport]
@@ -847,12 +869,12 @@ export const AdminDashboard: React.FC = () => {
     return Array.from(prodMap.entries())
       .map(([productId, qty]) => ({
         id: productId,
-        name: _rawProducts.find((p) => p.id === productId)?.name || productId,
+        name: resolveManufacturingItemName(productId, manufacturingNameMap),
         production: qty,
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawProducts]);
+  }, [reports, manufacturingNameMap]);
 
   const topSupervisors = useMemo(() => {
     const map = new Map<string, { production: number; reports: number }>();
@@ -967,7 +989,7 @@ export const AdminDashboard: React.FC = () => {
         const wo = workOrders.find((w) => w.id === woId);
         if (!wo) return null;
         const line = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
-        const product = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '—';
+        const product = resolveManufacturingItemName(wo.productId, manufacturingNameMap);
         return { woId, produced: s.completedUnits || 0, line, product };
       })
       .filter((x): x is { woId: string; produced: number; line: string; product: string } => !!x)
@@ -981,7 +1003,7 @@ export const AdminDashboard: React.FC = () => {
         return {
           produced: producedNow,
           line: _rawLines.find((l) => l.id === w.lineId)?.name ?? '—',
-          product: _rawProducts.find((p) => p.id === w.productId)?.name ?? '—',
+          product: resolveManufacturingItemName(w.productId, manufacturingNameMap),
         };
       })
       .sort((a, b) => b.produced - a.produced)[0];
@@ -993,7 +1015,7 @@ export const AdminDashboard: React.FC = () => {
       avgCycleSeconds,
       hotLineProduct: hottest ? `${hottest.line} — ${hottest.product}` : '—',
     };
-  }, [liveProduction, workOrders, _rawLines, _rawProducts]);
+  }, [liveProduction, workOrders, _rawLines, manufacturingNameMap]);
 
   const supervisorExecutionDiscipline = useMemo(() => {
     const today = getTodayDateString();
@@ -1098,8 +1120,8 @@ export const AdminDashboard: React.FC = () => {
           : Number((d as { quantityProduced: number }).quantityProduced || 0);
         return {
           id: productId,
-          name: product?.name || productId,
-          code: product?.code || '',
+          name: resolveManufacturingItemName(productId, manufacturingNameMap),
+          code: product?.code || manufacturingCodeMap.get(productId) || '',
           category: product?.model || 'غير مصنفة',
           qty,
           avgCost: monthlyCostMode ? Number((d as { averageUnitCost: number }).averageUnitCost || 0) : Number((d as { costPerUnit: number }).costPerUnit || 0),
@@ -1107,7 +1129,7 @@ export const AdminDashboard: React.FC = () => {
       })
       .filter((row) => row.qty > 0)
       .sort((a, b) => b.qty - a.qty);
-  }, [monthlyCostMode, monthlyCostSummary, liveCostComputation.byProduct, _rawProducts]);
+  }, [monthlyCostMode, monthlyCostSummary, liveCostComputation.byProduct, _rawProducts, manufacturingNameMap, manufacturingCodeMap]);
 
   const productSummaryCategories = useMemo(() => {
     const categories = productSummary
@@ -1185,12 +1207,12 @@ export const AdminDashboard: React.FC = () => {
       })
       .map((row) => ({
         id: row.id || `${row.planId}-${row.componentId}`,
-        productName: _rawProducts.find((p) => p.id === row.productId)?.name || '—',
+        productName: resolveManufacturingItemName(row.productId, manufacturingNameMap),
         componentName: row.componentName || '—',
         shortageQty: Number(row.shortageQty || 0),
         note: row.note || '',
       }));
-  }, [productionPlanFollowUps, _rawProducts]);
+  }, [productionPlanFollowUps, manufacturingNameMap]);
 
   const runQuickAction = useCallback((action: QuickActionItem) => {
     if (action.actionType === 'navigate' && action.target) {
@@ -2020,7 +2042,7 @@ export const AdminDashboard: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                       {renderDashboardIcon('inventory_2', 'text-[var(--color-text-muted)] text-base')}
-                      <p className="text-sm font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
+                      <p className="text-sm font-bold text-[var(--color-text)] truncate">{resolveManufacturingItemName(wo.productId, manufacturingNameMap)}</p>
                     </div>
 
                     <div className="flex items-center justify-between gap-2">

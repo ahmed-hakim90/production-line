@@ -18,6 +18,11 @@ import {
 import { productMaterialService } from '../../production/services/productMaterialService';
 import type { MonthlyProductionCost, ProductMaterial } from '../../../types';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
+import {
+  buildManufacturingItemCodeMap,
+  buildManufacturingItemNameMap,
+  resolveManufacturingItemName,
+} from '../../../utils/manufacturingItemLabels';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -180,6 +185,8 @@ export const MonthlyProductionCosts: React.FC = () => {
     assets,
     assetDepreciations,
     fetchDepreciationReport,
+    reportsUiReferenceCache,
+    ensureReportsUiReferenceData,
   } = useShallowStore((s) => ({
     products: s.products,
     _rawProducts: s._rawProducts,
@@ -192,7 +199,13 @@ export const MonthlyProductionCosts: React.FC = () => {
     assets: s.assets,
     assetDepreciations: s.assetDepreciations,
     fetchDepreciationReport: s.fetchDepreciationReport,
+    reportsUiReferenceCache: s.reportsUiReferenceCache,
+    ensureReportsUiReferenceData: s.ensureReportsUiReferenceData,
   }));
+
+  useEffect(() => {
+    void ensureReportsUiReferenceData();
+  }, [ensureReportsUiReferenceData]);
 
   const supervisorHourlyRates = useMemo(
     () => buildSupervisorHourlyRatesMap(_rawEmployees),
@@ -496,13 +509,14 @@ export const MonthlyProductionCosts: React.FC = () => {
     void fetchDepreciationReport(month);
   }, [month, fetchDepreciationReport]);
 
+  const rawMaterialOptions = reportsUiReferenceCache?.rawMaterialOptions;
   const productNameMap = useMemo(
-    () => new Map(products.map((p) => [p.id, p.name])),
-    [products],
+    () => buildManufacturingItemNameMap(_rawProducts, products, rawMaterialOptions ?? []),
+    [_rawProducts, products, rawMaterialOptions],
   );
   const productCodeMap = useMemo(
-    () => new Map(products.map((p) => [p.id, p.code || ''])),
-    [products],
+    () => buildManufacturingItemCodeMap(_rawProducts, products, rawMaterialOptions ?? []),
+    [_rawProducts, products, rawMaterialOptions],
   );
   const productCategoryMap = useMemo(
     () => new Map(products.map((p) => [p.id, p.category || ''])),
@@ -790,7 +804,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         return {
           productId: r.productId,
           productCode: productCodeMap.get(r.productId) || '',
-          productName: productNameMap.get(r.productId) || r.productId,
+          productName: resolveManufacturingItemName(r.productId, productNameMap),
           delta: liveComputedTotal - (r.totalProductionCost || 0),
         };
       })
@@ -829,7 +843,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     ? Math.min(100, Math.round((calculateProgress.done / calculateProgress.total) * 100))
     : 0;
   const currentCalculatingProductName = calculateProgress.productId
-    ? (productNameMap.get(calculateProgress.productId) || calculateProgress.productId)
+    ? resolveManufacturingItemName(calculateProgress.productId, productNameMap)
     : '';
   const calculateEtaText = useMemo(() => {
     if (!calculating || !calculateStartedAt || calculateProgress.done <= 0 || calculateProgress.total <= 0) return '';
@@ -887,7 +901,7 @@ export const MonthlyProductionCosts: React.FC = () => {
       const row: Record<string, unknown> = {};
       if (baseColumns.rowIndex) row['#'] = rowIdx + 1;
       if (baseColumns.productCode) row['كود المنتج'] = productCodeMap.get(r.productId) || '';
-      if (baseColumns.productName) row['اسم المنتج'] = productNameMap.get(r.productId) || r.productId;
+      if (baseColumns.productName) row['اسم المنتج'] = resolveManufacturingItemName(r.productId, productNameMap);
       if (baseColumns.month) row['الشهر'] = r.month;
       if (baseColumns.qty) row['الكمية المنتجة'] = qty;
       if (baseColumns.producedCartons) {
@@ -1261,8 +1275,8 @@ export const MonthlyProductionCosts: React.FC = () => {
                     )}
                     {baseColumns.productName && (
                       <td className="py-3 px-4 font-semibold text-[var(--color-text)]">
-                        <span className="inline-flex flex-wrap items-center gap-1.5" title={productNameMap.get(r.productId) || r.productId}>
-                          {shortProductName(productNameMap.get(r.productId) || r.productId)}
+                        <span className="inline-flex flex-wrap items-center gap-1.5" title={resolveManufacturingItemName(r.productId, productNameMap)}>
+                          {shortProductName(resolveManufacturingItemName(r.productId, productNameMap))}
                           {zeroSavedQty && (
                             <Badge variant="warning">كمية معتمدة 0</Badge>
                           )}
@@ -1647,7 +1661,7 @@ export const MonthlyProductionCosts: React.FC = () => {
           <DialogHeader className="px-6 py-5 border-b border-slate-200/80 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
             <DialogTitle className="text-right text-lg sm:text-xl font-black text-slate-800 tracking-tight">
               {analysisRecord
-                ? `تحليل التكلفة — ${shortProductName(productNameMap.get(analysisRecord.productId) || analysisRecord.productId)}`
+                ? `تحليل التكلفة — ${shortProductName(resolveManufacturingItemName(analysisRecord.productId, productNameMap))}`
                 : 'تحليل التكلفة'}
             </DialogTitle>
             <DialogDescription className="text-right text-slate-500">

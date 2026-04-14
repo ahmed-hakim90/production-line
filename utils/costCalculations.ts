@@ -8,6 +8,7 @@ import type {
   Asset,
   AssetDepreciation,
 } from '../types';
+import { countsTowardProductManufacturingVolume } from '../modules/production/utils/reportTypes';
 
 export interface LineCostData {
   laborCost: number;
@@ -140,7 +141,11 @@ export const buildByQtyAllocationRulesForMonth = (
     if (reportMonth !== month) return;
     const date = String(report.date || '');
     if (date) monthDates.add(date);
-    if ((report.quantityProduced || 0) > 0 && report.productId) {
+    if (
+      countsTowardProductManufacturingVolume(report)
+      && (report.quantityProduced || 0) > 0
+      && report.productId
+    ) {
       const pid = String(report.productId);
       monthTotals.set(pid, (monthTotals.get(pid) || 0) + Number(report.quantityProduced || 0));
     }
@@ -377,9 +382,9 @@ export const buildLineCosts = (
       lineId, month, costCenters, costCenterValues, costAllocations
     );
     const totalCost = laborCost + indirectCost;
-    const totalProduced = lineReports.reduce(
-      (sum, r) => sum + (r.quantityProduced || 0), 0
-    );
+    const totalProduced = lineReports
+      .filter(countsTowardProductManufacturingVolume)
+      .reduce((sum, r) => sum + (r.quantityProduced || 0), 0);
     const costPerUnit = totalProduced > 0 ? totalCost / totalProduced : 0;
 
     result[lineId] = { laborCost, indirectCost, totalCost, costPerUnit };
@@ -499,17 +504,20 @@ export const computeLiveProductCosts = (
   const lineMonthDates = new Map<string, Set<string>>();
   reports.forEach((report) => {
     const key = `${report.lineId}_${report.date}`;
-    lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + Number(report.quantityProduced || 0));
+    if (countsTowardProductManufacturingVolume(report)) {
+      lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + Number(report.quantityProduced || 0));
+      const month = String(report.date?.slice(0, 7) || getCurrentMonth());
+      if (!monthProductQtyTotals.has(month)) monthProductQtyTotals.set(month, new Map<string, number>());
+      const monthMap = monthProductQtyTotals.get(month)!;
+      if ((report.quantityProduced || 0) > 0 && report.productId) {
+        monthMap.set(report.productId, (monthMap.get(report.productId) || 0) + Number(report.quantityProduced || 0));
+      }
+    }
     lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, Number(report.workHours || 0)));
     const month = String(report.date?.slice(0, 7) || getCurrentMonth());
     const lineMonthKey = `${report.lineId}_${month}`;
     if (!lineMonthDates.has(lineMonthKey)) lineMonthDates.set(lineMonthKey, new Set<string>());
     lineMonthDates.get(lineMonthKey)!.add(String(report.date || ''));
-    if (!monthProductQtyTotals.has(month)) monthProductQtyTotals.set(month, new Map<string, number>());
-    const monthMap = monthProductQtyTotals.get(month)!;
-    if ((report.quantityProduced || 0) > 0 && report.productId) {
-      monthMap.set(report.productId, (monthMap.get(report.productId) || 0) + Number(report.quantityProduced || 0));
-    }
   });
 
   const lineMonthDailyCache = new Map<string, { totalDaily: number; centerDaily: Map<string, number> }>();
@@ -551,6 +559,7 @@ export const computeLiveProductCosts = (
   monthProductQtyTotals.forEach((_, month) => {
     const dates = new Set<string>();
     reports.forEach((report) => {
+      if (!countsTowardProductManufacturingVolume(report)) return;
       const reportMonth = String(report.date?.slice(0, 7) || getCurrentMonth());
       if (reportMonth !== month) return;
       const date = String(report.date || '');
@@ -600,11 +609,12 @@ export const computeLiveProductCosts = (
     return rules;
   };
 
+  const manufacturingReports = reports.filter(countsTowardProductManufacturingVolume);
   const supervisorShareMap = options.supervisorHourlyRates
-    ? buildSupervisorIndirectShareMap(reports, options.supervisorHourlyRates, hourlyRate)
+    ? buildSupervisorIndirectShareMap(manufacturingReports, options.supervisorHourlyRates, hourlyRate)
     : new Map<string, number>();
 
-  reports.forEach((report) => {
+  manufacturingReports.forEach((report) => {
     const qty = Number(report.quantityProduced || 0);
     if (qty <= 0 || !report.productId) return;
     const laborCost = Number(report.workersCount || 0) * Number(report.workHours || 0) * hourlyRate;
@@ -690,7 +700,8 @@ export const buildSupervisorIndirectShareMap = (
   fallbackHourlyRate = 0
 ): Map<string, number> => {
   const result = new Map<string, number>();
-  if (reports.length === 0) return result;
+  const manufacturing = reports.filter(countsTowardProductManufacturingVolume);
+  if (manufacturing.length === 0) return result;
 
   type GroupData = {
     reportIds: string[];
@@ -702,7 +713,7 @@ export const buildSupervisorIndirectShareMap = (
 
   const groups = new Map<string, GroupData>();
 
-  for (const report of reports) {
+  for (const report of manufacturing) {
     if (!report.id || !report.employeeId || (report.quantityProduced || 0) <= 0) continue;
     const groupKey = `${report.lineId}__${report.date}__${report.employeeId}`;
     const current = groups.get(groupKey) ?? {
@@ -721,7 +732,7 @@ export const buildSupervisorIndirectShareMap = (
 
   // Fast lookup for qty by report id.
   const qtyById = new Map<string, number>();
-  for (const report of reports) {
+  for (const report of manufacturing) {
     if (!report.id) continue;
     qtyById.set(report.id, Math.max(0, report.quantityProduced || 0));
   }
@@ -765,6 +776,7 @@ export const buildProductCosts = (
 
   const lineTotals = new Map<string, number>();
   todayReports.forEach((r) => {
+    if (!countsTowardProductManufacturingVolume(r)) return;
     lineTotals.set(r.lineId, (lineTotals.get(r.lineId) || 0) + (r.quantityProduced || 0));
   });
 
@@ -777,7 +789,9 @@ export const buildProductCosts = (
   }
 
   for (const productId of productIds) {
-    const productReports = todayReports.filter((r) => r.productId === productId);
+    const productReports = todayReports.filter(
+      (r) => r.productId === productId && countsTowardProductManufacturingVolume(r),
+    );
     if (productReports.length === 0) {
       result[productId] = { laborCost: 0, indirectCost: 0, totalCost: 0, quantityProduced: 0, costPerUnit: 0 };
       continue;
@@ -999,10 +1013,12 @@ export const getProductionReportCostBreakdown = (
   productCategoryById?: Map<string, string>,
 ): ProductionReportCostBreakdown | null => {
   if (hourlyRate <= 0 && costCenters.length === 0) return null;
+  if (!countsTowardProductManufacturingVolume(report)) return null;
 
-  const activeReportDaysByLineMonth = buildActiveReportDaysByLineMonthMap(reports);
+  const manufacturingContext = reports.filter(countsTowardProductManufacturingVolume);
+  const activeReportDaysByLineMonth = buildActiveReportDaysByLineMonthMap(manufacturingContext);
   const byQtyRulesByMonth = buildByQtyRulesByMonthFromReports(
-    reports,
+    manufacturingContext,
     costCenters,
     costCenterValues,
     costAllocations,
@@ -1011,14 +1027,14 @@ export const getProductionReportCostBreakdown = (
   );
 
   const lineDateTotals = new Map<string, number>();
-  reports.forEach((r) => {
+  manufacturingContext.forEach((r) => {
     const key = `${r.lineId}_${r.date}`;
     lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
   });
 
   const indirectCache = new Map<string, number>();
   const supervisorShareMap = buildSupervisorIndirectShareMap(
-    reports,
+    manufacturingContext,
     supervisorHourlyRates,
     hourlyRate
   );
@@ -1117,9 +1133,10 @@ export const buildReportsCosts = (
   const result = new Map<string, number>();
   if (hourlyRate <= 0 && costCenters.length === 0) return result;
 
-  const activeReportDaysByLineMonth = buildActiveReportDaysByLineMonthMap(reports);
+  const manufacturingContext = reports.filter(countsTowardProductManufacturingVolume);
+  const activeReportDaysByLineMonth = buildActiveReportDaysByLineMonthMap(manufacturingContext);
   const byQtyRulesByMonth = buildByQtyRulesByMonthFromReports(
-    reports,
+    manufacturingContext,
     costCenters,
     costCenterValues,
     costAllocations,
@@ -1128,7 +1145,7 @@ export const buildReportsCosts = (
   );
 
   const lineDateTotals = new Map<string, number>();
-  reports.forEach((r) => {
+  manufacturingContext.forEach((r) => {
     const key = `${r.lineId}_${r.date}`;
     lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
   });
@@ -1136,12 +1153,12 @@ export const buildReportsCosts = (
   const indirectCache = new Map<string, number>();
 
   const supervisorShareMap = buildSupervisorIndirectShareMap(
-    reports,
+    manufacturingContext,
     supervisorHourlyRates,
     hourlyRate
   );
 
-  for (const r of reports) {
+  for (const r of manufacturingContext) {
     const parts = computeReportCostParts(
       r,
       lineDateTotals,
@@ -1179,13 +1196,16 @@ export const buildProductAvgCost = (
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[]
 ): ProductCostData => {
-  const productReports = reports.filter((r) => r.productId === productId);
+  const productReports = reports.filter(
+    (r) => r.productId === productId && countsTowardProductManufacturingVolume(r),
+  );
   if (productReports.length === 0) {
     return { laborCost: 0, indirectCost: 0, totalCost: 0, quantityProduced: 0, costPerUnit: 0 };
   }
 
   const lineDateTotals = new Map<string, number>();
   reports.forEach((r) => {
+    if (!countsTowardProductManufacturingVolume(r)) return;
     const key = `${r.lineId}_${r.date}`;
     lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
   });
@@ -1244,11 +1264,14 @@ export const buildProductCostByLine = (
   costAllocations: CostAllocation[],
   getLineName: (id: string) => string
 ): ProductLineCost[] => {
-  const productReports = reports.filter((r) => r.productId === productId);
+  const productReports = reports.filter(
+    (r) => r.productId === productId && countsTowardProductManufacturingVolume(r),
+  );
   if (productReports.length === 0) return [];
 
   const lineDateTotals = new Map<string, number>();
   reports.forEach((r) => {
+    if (!countsTowardProductManufacturingVolume(r)) return;
     const key = `${r.lineId}_${r.date}`;
     lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
   });
@@ -1303,7 +1326,12 @@ export const buildProductCostHistory = (
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[]
 ): DailyCostPoint[] => {
-  const productReports = reports.filter((r) => r.productId === productId && r.quantityProduced > 0);
+  const productReports = reports.filter(
+    (r) =>
+      r.productId === productId
+      && r.quantityProduced > 0
+      && countsTowardProductManufacturingVolume(r),
+  );
   if (productReports.length === 0) return [];
 
   const allReportsByDate = new Map<string, ProductionReport[]>();
@@ -1325,7 +1353,9 @@ export const buildProductCostHistory = (
     }
     const lineIndirect = indirectCache.get(cacheKey) || 0;
     const dayReports = allReportsByDate.get(r.date) || [];
-    const lineDayTotal = dayReports.filter((dr) => dr.lineId === r.lineId).reduce((s, dr) => s + (dr.quantityProduced || 0), 0);
+    const lineDayTotal = dayReports
+      .filter((dr) => dr.lineId === r.lineId && countsTowardProductManufacturingVolume(dr))
+      .reduce((s, dr) => s + (dr.quantityProduced || 0), 0);
     const indirectShare = lineDayTotal > 0 ? lineIndirect * (r.quantityProduced / lineDayTotal) : 0;
 
     const prev = dailyData.get(r.date) || { totalCost: 0, totalQty: 0 };
@@ -1459,7 +1489,7 @@ export const buildDailyProductionCostChart = (
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[]
 ): DailyProductionCostPoint[] => {
-  let filtered = reports;
+  let filtered = reports.filter(countsTowardProductManufacturingVolume);
   if (productId) filtered = filtered.filter((r) => r.productId === productId);
   if (lineId) filtered = filtered.filter((r) => r.lineId === lineId);
   if (filtered.length === 0) return [];
@@ -1473,6 +1503,7 @@ export const buildDailyProductionCostChart = (
 
   const allByDateLine = new Map<string, number>();
   reports.forEach((r) => {
+    if (!countsTowardProductManufacturingVolume(r)) return;
     const key = `${r.date}_${r.lineId}`;
     allByDateLine.set(key, (allByDateLine.get(key) || 0) + (r.quantityProduced || 0));
   });

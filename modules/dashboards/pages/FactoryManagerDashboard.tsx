@@ -29,6 +29,10 @@ import {
   buildSupervisorHourlyRatesMap,
   computeLiveProductCosts,
 } from '../../../utils/costCalculations';
+import {
+  buildManufacturingItemNameMap,
+  resolveManufacturingItemName,
+} from '../../../utils/manufacturingItemLabels';
 import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
 import {
   emptyWorkOrderCardMetricsData,
@@ -114,6 +118,9 @@ export const FactoryManagerDashboard: React.FC = () => {
   const canExport = can('export');
 
   const _rawProducts = useAppStore((s) => s._rawProducts);
+  const products = useAppStore((s) => s.products);
+  const reportsUiReferenceCache = useAppStore((s) => s.reportsUiReferenceCache);
+  const ensureReportsUiReferenceData = useAppStore((s) => s.ensureReportsUiReferenceData);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const productionLines = useAppStore((s) => s.productionLines);
@@ -131,6 +138,16 @@ export const FactoryManagerDashboard: React.FC = () => {
   const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+
+  useEffect(() => {
+    void ensureReportsUiReferenceData();
+  }, [ensureReportsUiReferenceData]);
+
+  const rawMaterialOptions = reportsUiReferenceCache?.rawMaterialOptions;
+  const manufacturingNameMap = useMemo(
+    () => buildManufacturingItemNameMap(_rawProducts, products, rawMaterialOptions ?? []),
+    [_rawProducts, products, rawMaterialOptions],
+  );
 
   const alertCfg = useMemo(() => getAlertSettings(systemSettings), [systemSettings]);
 
@@ -476,12 +493,12 @@ export const FactoryManagerDashboard: React.FC = () => {
     return Array.from(prodMap.entries())
       .map(([productId, qty]) => ({
         id: productId,
-        name: _rawProducts.find((p) => p.id === productId)?.name || productId,
+        name: resolveManufacturingItemName(productId, manufacturingNameMap),
         production: qty,
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawProducts]);
+  }, [reports, manufacturingNameMap]);
 
   // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -616,12 +633,12 @@ export const FactoryManagerDashboard: React.FC = () => {
       })
       .map((row) => ({
         id: row.id || `${row.planId}-${row.componentId}`,
-        productName: _rawProducts.find((p) => p.id === row.productId)?.name || '—',
+        productName: resolveManufacturingItemName(row.productId, manufacturingNameMap),
         componentName: row.componentName || '—',
         shortageQty: Number(row.shortageQty || 0),
         note: row.note || '',
       }));
-  }, [productionPlanFollowUps, _rawProducts]);
+  }, [productionPlanFollowUps, manufacturingNameMap]);
 
   const complianceRows = useMemo(
     () => [

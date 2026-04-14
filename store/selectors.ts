@@ -5,6 +5,7 @@ import { useAuthStore } from './useAuthStore';
 export const useDashboardSlice = () =>
   useAppStore(useShallow((s) => ({
     _rawProducts: s._rawProducts,
+    products: s.products,
     _rawLines: s._rawLines,
     _rawEmployees: s._rawEmployees,
     workOrders: s.workOrders,
@@ -20,6 +21,8 @@ export const useDashboardSlice = () =>
     lineProductConfigs: s.lineProductConfigs,
     routingTotalTimeSecondsByProduct: s.routingTotalTimeSecondsByProduct,
     systemSettings: s.systemSettings,
+    reportsUiReferenceCache: s.reportsUiReferenceCache,
+    ensureReportsUiReferenceData: s.ensureReportsUiReferenceData,
   })));
 
 export const useAuthUiSlice = () =>
