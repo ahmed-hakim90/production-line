@@ -1,10 +1,10 @@
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
   orderBy,
+  runTransaction,
   updateDoc,
   where,
   limit,
@@ -21,12 +21,15 @@ import type {
   TransferRequestType,
 } from '../types';
 import { stockService } from './stockService';
+import {
+  allocateInvReferenceInTransaction,
+  formatInvReference,
+  peekNextInvReferenceNo,
+} from './inventoryInvSequence';
 
 const COLLECTION = 'inventory_transfer_requests';
 const toIsoNow = () => new Date().toISOString();
 const MAX_PAGE_SIZE = 100;
-const INV_REF_REGEX = /^INV-(\d+)$/i;
-const formatInvReference = (seq: number) => `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
 
 type FirestoreCursor = QueryDocumentSnapshot | null;
 type TransferRequestPageResult = {
@@ -62,17 +65,10 @@ type ApproveRequestOptions = {
 const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
 
 export const transferApprovalService = {
+  /** Display-only; allocation for new requests is atomic in `createRequest`. */
   async getNextInvReferenceNo(): Promise<string> {
     if (!isConfigured) return formatInvReference(1);
-    const q = tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc'), limit(500));
-    const snap = await getDocs(q);
-    const maxInv = snap.docs.reduce((max, d) => {
-      const ref = String((d.data() as any)?.referenceNo || '').trim();
-      const match = ref.match(INV_REF_REGEX);
-      if (!match) return max;
-      return Math.max(max, Number(match[1] || 0));
-    }, 0);
-    return formatInvReference(maxInv + 1);
+    return peekNextInvReferenceNo();
   },
 
   async listPaged(params?: {
@@ -178,32 +174,39 @@ export const transferApprovalService = {
     if (!lines.length) {
       throw new Error('لا توجد أصناف صالحة في طلب التحويل.');
     }
-    const resolvedReferenceNo = input.referenceNo?.trim() || await this.getNextInvReferenceNo();
-    const payload: InventoryTransferRequest = {
-      requestType,
-      fromWarehouseId: input.fromWarehouseId,
-      toWarehouseId: input.toWarehouseId,
-      referenceNo: resolvedReferenceNo,
-      lines,
-      status: 'pending',
-      createdBy: input.createdBy,
-      createdAt: toIsoNow(),
-    };
-    const fromWarehouseName = String(input.fromWarehouseName || '').trim();
-    if (fromWarehouseName) payload.fromWarehouseName = fromWarehouseName;
-    const toWarehouseName = String(input.toWarehouseName || '').trim();
-    if (toWarehouseName) payload.toWarehouseName = toWarehouseName;
-    const note = String(input.note || '').trim();
-    if (note) payload.note = note;
-    const sourceReportId = String(input.sourceReportId || '').trim();
-    if (sourceReportId) payload.sourceReportId = sourceReportId;
-    const createdByUserId = String(input.createdByUserId || '').trim();
-    if (createdByUserId) payload.createdByUserId = createdByUserId;
-    const ref = await addDoc(collection(db, COLLECTION), {
-      ...payload,
-      tenantId: getCurrentTenantId(),
+
+    return runTransaction(db, async (t) => {
+      const resolvedReferenceNo =
+        input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
+      const now = toIsoNow();
+      const payload: InventoryTransferRequest = {
+        requestType,
+        fromWarehouseId: input.fromWarehouseId,
+        toWarehouseId: input.toWarehouseId,
+        referenceNo: resolvedReferenceNo,
+        lines,
+        status: 'pending',
+        createdBy: input.createdBy,
+        createdAt: now,
+      };
+      const fromWarehouseName = String(input.fromWarehouseName || '').trim();
+      if (fromWarehouseName) payload.fromWarehouseName = fromWarehouseName;
+      const toWarehouseName = String(input.toWarehouseName || '').trim();
+      if (toWarehouseName) payload.toWarehouseName = toWarehouseName;
+      const note = String(input.note || '').trim();
+      if (note) payload.note = note;
+      const sourceReportId = String(input.sourceReportId || '').trim();
+      if (sourceReportId) payload.sourceReportId = sourceReportId;
+      const createdByUserId = String(input.createdByUserId || '').trim();
+      if (createdByUserId) payload.createdByUserId = createdByUserId;
+
+      const ref = doc(collection(db, COLLECTION));
+      t.set(ref, {
+        ...payload,
+        tenantId: getCurrentTenantId(),
+      });
+      return ref.id;
     });
-    return ref.id;
   },
 
   async approveRequest(id: string, approvedBy: string, options?: ApproveRequestOptions): Promise<void> {

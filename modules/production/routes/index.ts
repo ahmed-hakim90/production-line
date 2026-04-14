@@ -46,5 +46,5 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
     component: PlanBuilderPage,
   },
   { path: '/production/routing', permission: 'routing.view', component: RoutingPlansPage },
-  { path: '/users', redirectTo: '/employees' },
+  { path: '/users', redirectTo: '/hr/employees' },
 ];

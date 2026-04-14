@@ -65,8 +65,8 @@ import type {
 } from '../types';
 import { captureConfigVersionSnapshot } from '../config/configService';
 import { getConfigModule } from '../config';
-import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
-import type { AttendanceRecord } from '@/modules/attendance/types';
+import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
+import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import type { LeaveConfig, LeaveTypeDefinition } from '../config/types';
 
 const DEFAULT_BATCH_SIZE = 50;

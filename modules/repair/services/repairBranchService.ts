@@ -19,7 +19,7 @@ const nowIso = () => new Date().toISOString();
 const WAREHOUSE_CODE_PREFIX = 'RWH-';
 
 const resolveNextWarehouseCode = async (): Promise<string> => {
-  const warehouses = await warehouseService.getAll();
+  const warehouses = await warehouseService.getAllWarehouses();
   const maxSerial = warehouses.reduce((max, warehouse) => {
     const code = String(warehouse.code || '').trim().toUpperCase();
     const match = code.match(/^RWH-(\d{3})$/);

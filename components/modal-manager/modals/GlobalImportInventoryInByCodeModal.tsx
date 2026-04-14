@@ -54,10 +54,10 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     setMessage(null);
     void (async () => {
       const [warehouseRows, rawRows] = await Promise.all([
-        warehouseService.getAll(),
+        warehouseService.getActiveWarehouses(),
         rawMaterialService.getAll(),
       ]);
-      setWarehouses(warehouseRows.filter((w) => w.isActive !== false));
+      setWarehouses(warehouseRows);
       setRawMaterials(rawRows.filter((m) => m.isActive !== false));
     })();
   }, [isOpen, parsedPayload.warehouseId, parsedPayload.itemType]);

@@ -115,7 +115,7 @@ export const TransferApprovals: React.FC = () => {
       if (fetchWarehouses) {
         const [rows, whs] = await Promise.all([
           transferApprovalService.getAll(),
-          warehouseService.getAll(),
+          warehouseService.getWarehousesForReportingFilters(),
         ]);
         setRequests(rows);
         setWarehouses(whs);

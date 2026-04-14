@@ -27,7 +27,6 @@ import { HR_ROUTES } from './modules/hr/routes';
 import { COST_ROUTES } from './modules/costs/routes';
 import { SYSTEM_ROUTES } from './modules/system/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
-import { ATTENDANCE_ROUTES } from './modules/attendance/routes';
 import { REPAIR_ROUTES } from './modules/repair/routes';
 import type { AppRouteDef } from './modules/shared/routes';
 import type { PublicRouteDef } from './modules/shared/routes/types';
@@ -193,7 +192,6 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...COST_ROUTES,
   ...SYSTEM_ROUTES,
   ...INVENTORY_ROUTES,
-  ...ATTENDANCE_ROUTES,
   ...REPAIR_ROUTES,
   ...ONLINE_ROUTES,
   ...CUSTOMER_DEPOSIT_ROUTES,

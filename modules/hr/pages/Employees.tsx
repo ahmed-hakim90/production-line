@@ -665,7 +665,7 @@ export const Employees: React.FC = () => {
     <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
       {can('employees.viewDetails') && (
         <button
-          onClick={() => navigate(`/employees/${emp.id}`)}
+          onClick={() => navigate(`/hr/employees/${emp.id}`)}
           className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/10 rounded-[var(--border-radius-base)] transition-all"
           title="عرض الملف"
         >
@@ -826,7 +826,7 @@ export const Employees: React.FC = () => {
             icon: 'upload_file',
             group: 'استيراد',
             hidden: !canImportFromPage,
-            onClick: () => navigate('/employees/import'),
+            onClick: () => navigate('/hr/employees/import'),
           },
         ]}
       />

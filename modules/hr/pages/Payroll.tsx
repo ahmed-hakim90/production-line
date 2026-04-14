@@ -538,7 +538,7 @@ export const Payroll: React.FC = () => {
             type: 'payroll_ready',
             title: `كشف راتب ${month} جاهز`,
             body: `صافي الراتب: ${formatCurrency(record.netSalary)} ج.م`,
-            actionUrl: '/self-service',
+            actionUrl: '/hr/self-service',
           });
           return true;
         }),

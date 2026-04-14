@@ -1459,7 +1459,9 @@ html.dark [class*="text-slate-500"] {
   margin-top: -50px!important;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.45);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -1468,11 +1470,16 @@ html.dark [class*="text-slate-500"] {
   animation: erp-fade-in 150ms ease;
 }
 
-/* Modal dialog panel */
-.erp-modal-panel,
+/* Modal dialog panel — solid surface (overlay behind stays rgba; panel must not be transparent). */
+.erp-modal-panel {
+  background: var(--color-card) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--border-radius-xl) !important;
+  box-shadow: var(--shadow-modal) !important;
+}
+
 [class*="fixed"][class*="inset-0"] > [class*="bg-[var(--color-card)]"],
 [class*="fixed"][class*="inset-0"] > [class*="rounded-"][class*="border"] {
-  /* background: var(--color-card) !important; */
   border: 1px solid var(--color-border) !important;
   border-radius: var(--border-radius-xl) !important;
   box-shadow: var(--shadow-modal) !important;

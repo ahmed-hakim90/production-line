@@ -877,6 +877,20 @@
       ]
     },
     {
+      "collectionGroup": "warehouses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "code",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "work_orders",
       "queryScope": "COLLECTION",
       "fields": [

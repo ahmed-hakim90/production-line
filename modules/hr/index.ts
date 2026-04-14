@@ -96,17 +96,6 @@ export {
 // Loan service (Firestore CRUD)
 export { loanService } from './loanService';
 
-// Legacy approval engine (kept for backward compatibility with leave/loan pages)
-export {
-  generateApprovalChain,
-  processApprovalAction,
-  deriveFinalStatus,
-  canApproverAct,
-  filterActionableForApprover,
-} from './approvalEngine';
-
-export type { EmployeeHierarchyInfo, ApprovalChainResult, ApprovalActionResult } from './approvalEngine';
-
 // Enterprise Approval Engine (Phase 6 — dynamic + snapshot + hierarchy)
 export {
   // Types

@@ -468,7 +468,7 @@ export async function approveRequest(
           title: `طلب ${REQUEST_TYPE_LABELS[request.requestType]} يحتاج موافقتك`,
           body: `${request.employeeName} — ${getRequestSummary(request)}`,
           requestId: request.id,
-          actionUrl: '/approval-center',
+          actionUrl: '/hr/approval-center',
         });
       }
     }
@@ -482,7 +482,7 @@ export async function approveRequest(
         title: '✓ تمت الموافقة على طلبك',
         body: `طلب ${REQUEST_TYPE_LABELS[request.requestType]} — تمت الموافقة`,
         requestId: request.id,
-        actionUrl: '/self-service',
+        actionUrl: '/hr/self-service',
       });
     }
   }
@@ -561,7 +561,7 @@ export async function rejectRequest(
       title: '✗ تم رفض طلبك',
       body: `طلب ${REQUEST_TYPE_LABELS[request.requestType]} — تم الرفض`,
       requestId: request.id,
-      actionUrl: '/self-service',
+      actionUrl: '/hr/self-service',
     });
   }
 

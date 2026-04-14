@@ -593,7 +593,7 @@ export const HRTransactions: React.FC = () => {
                           const emp = employees.find(
                             (e) => e.id === txn.employeeId || e.userId === txn.employeeId,
                           );
-                          if (emp?.id) navigate(`/employees/${emp.id}`);
+                          if (emp?.id) navigate(`/hr/employees/${emp.id}`);
                         }}
                       >
                         <div className="font-bold text-[var(--color-text)] text-sm">

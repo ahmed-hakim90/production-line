@@ -1042,7 +1042,7 @@ export const Supervisors: React.FC = () => {
         <span className="material-icons-round text-lg">visibility</span>
       </button>
       <button
-        onClick={() => navigate(`/employees/${sup.id}`)}
+        onClick={() => navigate(`/hr/employees/${sup.id}`)}
         className="p-2 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-[var(--border-radius-base)] transition-all"
         title="الملف الشخصي"
       >
@@ -1393,7 +1393,7 @@ export const Supervisors: React.FC = () => {
                     onClick={() => {
                       const id = sup.id!;
                       setDetailDrawerSupervisorId(null);
-                      navigate(`/employees/${id}`);
+                      navigate(`/hr/employees/${id}`);
                     }}
                   >
                     الملف الشخصي

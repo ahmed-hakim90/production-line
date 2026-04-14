@@ -467,7 +467,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   <div className="p-1">
                     {can('selfService.view') && (
                       <NavLink
-                        to={withTenantPath(tenantSlug, '/self-service')}
+                        to={withTenantPath(tenantSlug, '/hr/self-service')}
                         className="flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors"
                       >
                         <UserCircle2 size={16} className="text-[var(--color-text-muted)]" />

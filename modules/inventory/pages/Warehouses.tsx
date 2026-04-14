@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
@@ -34,7 +34,7 @@ export const Warehouses: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await warehouseService.getAll();
+      const list = await warehouseService.getAllWarehouses();
       setRows(list);
     } catch {
       setMessage({ type: 'error', text: 'تعذر تحميل المخازن.' });
@@ -47,11 +47,6 @@ export const Warehouses: React.FC = () => {
     if (!canView) return;
     void load();
   }, [canView, load]);
-
-  const sorted = useMemo(
-    () => [...rows].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar')),
-    [rows],
-  );
 
   const startEdit = (w: Warehouse) => {
     if (!w.id || !canManage) return;
@@ -83,8 +78,11 @@ export const Warehouses: React.FC = () => {
       setMessage({ type: 'success', text: 'تم حفظ التعديلات.' });
       cancelEdit();
       await load();
-    } catch {
-      setMessage({ type: 'error', text: 'تعذر حفظ التعديلات.' });
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'تعذر حفظ التعديلات.',
+      });
     } finally {
       setSaving(false);
     }
@@ -160,7 +158,7 @@ export const Warehouses: React.FC = () => {
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
-        ) : sorted.length === 0 ? (
+        ) : rows.length === 0 ? (
           <p className="text-sm text-[var(--color-text-muted)] p-4">لا توجد مخازن مسجّلة بعد.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -174,7 +172,7 @@ export const Warehouses: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((w) => (
+                {rows.map((w) => (
                   <tr key={w.id || w.code} className="border-b border-[var(--color-border)]/60 hover:bg-[var(--color-surface-hover)]">
                     <td className="py-2.5 px-3 font-medium text-[var(--color-text)]">{w.name}</td>
                     <td className="py-2.5 px-3 font-mono text-xs">{w.code}</td>

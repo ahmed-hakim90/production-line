@@ -11,8 +11,8 @@ import {
 } from '../utils/performanceCalculator';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
-import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
-import type { AttendanceRecord } from '@/modules/attendance/types';
+import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
+import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import type { FirestoreEmployee } from '@/types';
 import type { FirestoreEmployeePerformance } from '../types';
 

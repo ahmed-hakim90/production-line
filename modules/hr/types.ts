@@ -159,7 +159,7 @@ export type {
   AttendanceRecord,
   AttendanceSyncPayload,
   ZKTecoRawRecord,
-} from '@/modules/attendance/types';
+} from '@/modules/hr/attendance/types';
 
 export type AttendanceSource = 'zk_csv' | 'manual';
 

@@ -49,8 +49,13 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
       setName('');
       setCode('');
       whPayload.onSaved?.();
-    } catch {
-      setMessage({ type: 'error', text: t('modalManager.createWarehouse.createError') });
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: err instanceof Error && err.message
+          ? err.message
+          : t('modalManager.createWarehouse.createError'),
+      });
     } finally {
       setSaving(false);
     }

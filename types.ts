@@ -775,7 +775,13 @@ export interface MonthlyProductionCost {
 
 // â”€â”€â”€ Online dispatch (BOSTA barcodes: admin â†’ warehouse â†’ post) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export type OnlineDispatchStatus = 'pending' | 'at_warehouse' | 'handed_to_post' | 'cancelled';
+export type OnlineDispatchStatus =
+  | 'pending'
+  | 'at_warehouse'
+  | 'handed_to_post'
+  | 'cancelled'
+  /** Post scan for unknown barcode: saved for manager review before counting as full handoff. */
+  | 'pending_reconciliation';
 
 export interface OnlineDispatchShipment {
   id?: string;
@@ -787,6 +793,10 @@ export interface OnlineDispatchShipment {
   createdByUid?: string;
   /** Last user who moved the shipment to the current `status` (warehouse / post / revert / cancel). */
   lastStatusByUid?: string;
+  /** First appearance from post scan when barcode had no prior shipment (v1 reconciliation flow). */
+  firstCapturePhase?: 'post';
+  firstCaptureAt?: unknown;
+  firstCaptureByUid?: string;
   handedToWarehouseAt?: unknown;
   handedToWarehouseByUid?: string;
   handedToPostAt?: unknown;

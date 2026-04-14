@@ -19,15 +19,16 @@ export const InventoryDashboard: React.FC = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
 
+  /** KPIs use a single balances page (newest first) instead of a full tenant scan via `getBalances`. */
   const loadData = async () => {
     setLoading(true);
     try {
-      const [bals, txs, whs] = await Promise.all([
-        stockService.getBalances(),
+      const [balPage, txs, whs] = await Promise.all([
+        stockService.getBalancesPaged({ limit: 500, cursor: null }),
         stockService.getTransactions(),
-        warehouseService.getAll(),
+        warehouseService.getAllWarehouses(),
       ]);
-      setBalances(bals);
+      setBalances(balPage.items);
       setTransactions(txs.slice(0, 8));
       setWarehouses(whs);
     } finally {
@@ -52,7 +53,7 @@ export const InventoryDashboard: React.FC = () => {
     <div className="erp-ds-clean erp-dashboard-theme space-y-6">
       <PageHeader
         title="لوحة المخازن"
-        subtitle="متابعة فورية للأرصدة والحركات والجرد."
+        subtitle="متابعة فورية للأرصدة والحركات والجرد. مؤشرات الأرصدة أدناه مبنية على أحدث ٥٠٠ سطر رصيد لتسريع التحميل."
         actions={(
           <div className="flex flex-wrap gap-2">
             <Link to={withTenantPath(tenantSlug, '/inventory/movements')}>

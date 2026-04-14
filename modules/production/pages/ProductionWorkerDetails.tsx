@@ -328,7 +328,7 @@ export const ProductionWorkerDetails: React.FC = () => {
           subtitle={`${getDepartmentName(employee.departmentId)} — ${getJobPositionTitle(employee.jobPositionId)} · ${lineStats.length} خط إنتاج`}
           icon="user"
           backAction={{ to: '/production-workers', label: 'رجوع' }}
-          secondaryAction={{ label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/employees/${id}`) }}
+          secondaryAction={{ label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/hr/employees/${id}`) }}
           moreActions={can('print') ? [{ label: 'طباعة', icon: 'print', onClick: () => { handlePrint(); }, group: 'تصدير' }] : undefined}
           extra={(
             <div className="flex flex-wrap items-center gap-2">

@@ -215,6 +215,18 @@ export const repairSalesInvoiceService = {
       });
     }
 
+    if (total > 0) {
+      await repairTreasuryService.addEntry({
+        branchId: input.branchId,
+        entryType: 'INCOME',
+        amount: total,
+        note: `تحصيل فاتورة بيع قطع غيار ${invoiceNo}`,
+        referenceId: ref.id,
+        createdBy: input.createdBy,
+        createdByName: input.createdByName || '',
+      });
+    }
+
     return ref.id;
   },
 

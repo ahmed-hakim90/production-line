@@ -40,7 +40,7 @@ export const LineWorkerAssignment: React.FC = () => {
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout>>();
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { FileDown } from 'lucide-react';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -30,6 +31,7 @@ import { toast } from '../../../components/Toast';
 import type { FirestoreUserWithRepair, RepairBranch, RepairJob } from '../types';
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { downloadUtf8Csv } from '../utils/csvExport';
 
 const calcDiffDays = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / (1000 * 60 * 60 * 24);
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
@@ -151,18 +153,36 @@ export const RepairTechnicianKPIs: React.FC = () => {
   }, {}), [filtered]);
   const technicianBreakdown = useMemo(
     () =>
-      filtered.reduce<Record<string, { total: number; delivered: number; revenue: number }>>((acc, job) => {
+      filtered.reduce<Record<string, { total: number; delivered: number; unrepairable: number; revenue: number }>>((acc, job) => {
         const key = job.technicianId || 'غير مسند';
-        if (!acc[key]) acc[key] = { total: 0, delivered: 0, revenue: 0 };
+        if (!acc[key]) acc[key] = { total: 0, delivered: 0, unrepairable: 0, revenue: 0 };
         acc[key].total += 1;
         if (job.status === 'delivered') {
           acc[key].delivered += 1;
           acc[key].revenue += Number(job.finalCost || 0);
+        } else if (job.status === 'unrepairable') {
+          acc[key].unrepairable += 1;
         }
         return acc;
       }, {}),
     [filtered],
   );
+
+  const technicianRows = useMemo(() => {
+    const entries = Object.entries(technicianBreakdown).map(([id, row]) => {
+      const deliveryRate = row.total > 0 ? (row.delivered / row.total) * 100 : 0;
+      const terminal = row.delivered + row.unrepairable;
+      const successRate = terminal > 0 ? (row.delivered / terminal) * 100 : null;
+      return { id, row, deliveryRate, successRate };
+    });
+    entries.sort((a, b) => {
+      const sa = a.successRate ?? -1;
+      const sb = b.successRate ?? -1;
+      if (sb !== sa) return sb - sa;
+      return b.row.revenue - a.row.revenue;
+    });
+    return entries;
+  }, [technicianBreakdown]);
   const resolveUnassignBranchIds = (technicianId: string): string[] => {
     const normalizedTechnicianId = String(technicianId || '').trim();
     if (!normalizedTechnicianId) return [];
@@ -213,7 +233,21 @@ export const RepairTechnicianKPIs: React.FC = () => {
       </Card>
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">إجمالي الأجهزة</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{fmt(totals.totalJobs)}</p></CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">نسبة النجاح</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{totals.successRate.toFixed(1)}%</p></CardContent></Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">نسبة النجاح</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-3xl font-bold">{totals.successRate.toFixed(1)}%</p>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              من الطلبات المنتهية (تم التسليم أو غير قابل للإصلاح)
+            </p>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-2 rounded-full transition-[width] ${totals.successRate >= 80 ? 'bg-emerald-500' : totals.successRate >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                style={{ width: `${Math.max(0, Math.min(100, totals.successRate))}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط وقت الإصلاح</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{totals.avgRepair.toFixed(1)}</p><span className="text-xs text-muted-foreground">يوم</span></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">إيرادات الفني</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-emerald-600">{fmt(Number(totals.revenue.toFixed(0)))}</p></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">الأجهزة الجارية</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{fmt(totals.open)}</p></CardContent></Card>
@@ -230,43 +264,106 @@ export const RepairTechnicianKPIs: React.FC = () => {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>ملخص الفنيين</CardTitle></CardHeader>
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between space-y-0">
+          <CardTitle>ملخص الفنيين</CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={technicianRows.length === 0}
+            className="gap-1.5"
+            onClick={() => {
+              const day = new Date().toISOString().slice(0, 10);
+              downloadUtf8Csv(
+                `repair-technician-kpis-${day}.csv`,
+                [
+                  'الفني',
+                  'معرف الفني',
+                  'إجمالي الطلبات',
+                  'تم التسليم',
+                  'غير قابل للإصلاح',
+                  'نسبة النجاح %',
+                  'معدل التسليم %',
+                  'الإيراد',
+                ],
+                technicianRows.map(({ id, row, deliveryRate, successRate }) => {
+                  const label =
+                    id === 'غير مسند' ? id : technicianNameById.get(String(id || '').trim()) || `ID: ${id}`;
+                  return [
+                    label,
+                    id === 'غير مسند' ? '' : id,
+                    row.total,
+                    row.delivered,
+                    row.unrepairable,
+                    successRate == null ? '' : Number(successRate.toFixed(2)),
+                    Number(deliveryRate.toFixed(2)),
+                    Number(row.revenue.toFixed(2)),
+                  ];
+                }),
+              );
+            }}
+          >
+            <FileDown className="h-4 w-4" aria-hidden />
+            تصدير CSV
+          </Button>
+        </CardHeader>
         <CardContent className="text-sm">
           <div className="rounded border overflow-x-auto">
-            <table className="w-full min-w-[760px]">
+            <table className="w-full min-w-[920px]">
               <thead className="bg-muted">
                 <tr>
                   <th className="p-2 text-right">الفني</th>
                   <th className="p-2 text-right">إجمالي الطلبات</th>
-                  <th className="p-2 text-right">المنجزة</th>
-                  <th className="p-2 text-right">نسبة الإنجاز</th>
+                  <th className="p-2 text-right">تم التسليم</th>
+                  <th className="p-2 text-right">غير قابل للإصلاح</th>
+                  <th className="p-2 text-right">نسبة النجاح</th>
+                  <th className="p-2 text-right">معدل التسليم</th>
                   <th className="p-2 text-right">الإيراد</th>
                   <th className="p-2 text-right">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(technicianBreakdown).map(([id, row]) => {
-                  const rate = row.total > 0 ? (row.delivered / row.total) * 100 : 0;
+                {technicianRows.map(({ id, row, deliveryRate, successRate }) => {
                   const technicianLabel =
                     id === 'غير مسند' ? id : technicianNameById.get(String(id || '').trim()) || `ID: ${id}`;
                   const isUnassigned = id === 'غير مسند';
                   const selectedBranch = branchFilter !== 'all'
                     ? selectableBranches.find((branch) => (branch.id || '') === branchFilter)
                     : undefined;
+                  const successPct = successRate ?? 0;
+                  const successBarWidth = successRate == null ? 0 : Math.max(0, Math.min(100, successPct));
                   return (
                     <tr key={id} className="border-t">
                       <td className="p-2">{technicianLabel}</td>
                       <td className="p-2 font-mono">{fmt(row.total)}</td>
                       <td className="p-2 font-mono">{fmt(row.delivered)}</td>
+                      <td className="p-2 font-mono">{fmt(row.unrepairable)}</td>
                       <td className="p-2">
-                        <div className="space-y-1">
-                          <div>{rate.toFixed(1)}%</div>
-                          <div className="h-2 rounded bg-muted overflow-hidden">
+                        <div className="space-y-1 min-w-[7rem]">
+                          <div>{successRate == null ? '—' : `${successPct.toFixed(1)}%`}</div>
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
                             <div
-                              className={`h-2 ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                              style={{ width: `${Math.max(0, Math.min(100, rate))}%` }}
+                              className={`h-2 rounded-full ${successRate == null ? 'bg-muted-foreground/30' : successPct >= 80 ? 'bg-emerald-500' : successPct >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                              style={{ width: `${successBarWidth}%` }}
                             />
                           </div>
+                          {successRate != null && (
+                            <div className="text-[10px] text-muted-foreground tabular-nums">
+                              {fmt(row.delivered)} / {fmt(row.delivered + row.unrepairable)} منتهية
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <div className="space-y-1 min-w-[6rem]">
+                          <div>{deliveryRate.toFixed(1)}%</div>
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-2 rounded-full ${deliveryRate >= 80 ? 'bg-sky-500' : deliveryRate >= 50 ? 'bg-sky-400' : 'bg-sky-300'}`}
+                              style={{ width: `${Math.max(0, Math.min(100, deliveryRate))}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] text-muted-foreground tabular-nums">من إجمالي المسند</div>
                         </div>
                       </td>
                       <td className="p-2 font-mono">{fmt(Number(row.revenue.toFixed(0)))}</td>
@@ -306,9 +403,9 @@ export const RepairTechnicianKPIs: React.FC = () => {
                     </tr>
                   );
                 })}
-                {Object.keys(technicianBreakdown).length === 0 && (
+                {technicianRows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-3 text-center text-muted-foreground">لا توجد بيانات للفلاتر الحالية.</td>
+                    <td colSpan={8} className="p-3 text-center text-muted-foreground">لا توجد بيانات للفلاتر الحالية.</td>
                   </tr>
                 )}
               </tbody>

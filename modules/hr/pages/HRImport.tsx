@@ -424,7 +424,7 @@ export const HRImport: React.FC = () => {
             استيراد الأقسام والمناصب والموظفين من ملف Excel
           </p>
         </div>
-        <Button variant="outline" onClick={() => navigate('/employees')} className="self-start sm:self-auto shrink-0">
+        <Button variant="outline" onClick={() => navigate('/hr/employees')} className="self-start sm:self-auto shrink-0">
           <span className="material-icons-round text-sm">arrow_forward</span>
           العودة للموظفين
         </Button>
@@ -959,7 +959,7 @@ export const HRImport: React.FC = () => {
               <span className="material-icons-round text-sm">refresh</span>
               استيراد جديد
             </Button>
-            <Button variant="primary" onClick={() => navigate('/employees')}>
+            <Button variant="primary" onClick={() => navigate('/hr/employees')}>
               <span className="material-icons-round text-sm">groups</span>
               الذهاب للموظفين
             </Button>

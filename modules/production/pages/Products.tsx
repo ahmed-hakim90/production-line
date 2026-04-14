@@ -620,9 +620,9 @@ export const Products: React.FC = () => {
     let cancelled = false;
     const loadWarehouses = async () => {
       try {
-        const rows = await warehouseService.getAll();
+        const rows = await warehouseService.getActiveWarehouses();
         if (cancelled) return;
-        setWarehouses(rows.filter((w) => w.isActive !== false));
+        setWarehouses(rows);
       } catch {
         if (cancelled) return;
         setWarehouses([]);

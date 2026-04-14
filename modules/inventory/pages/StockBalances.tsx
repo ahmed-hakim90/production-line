@@ -33,7 +33,7 @@ export const StockBalances: React.FC = () => {
       setLoading(true);
       const [bals, whs] = await Promise.all([
         stockService.getBalances(),
-        warehouseService.getAll(),
+        warehouseService.getWarehousesForReportingFilters(),
       ]);
       setBalances(bals);
       setWarehouses(whs);

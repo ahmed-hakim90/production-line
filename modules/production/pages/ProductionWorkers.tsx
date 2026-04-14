@@ -582,7 +582,7 @@ export const ProductionWorkers: React.FC = () => {
         <span className="material-icons-round text-lg">visibility</span>
       </button>
       <button
-        onClick={() => navigate(`/employees/${w.id}`)}
+        onClick={() => navigate(`/hr/employees/${w.id}`)}
         className="p-2 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-[var(--border-radius-base)] transition-all"
         title="الملف الشخصي"
       >

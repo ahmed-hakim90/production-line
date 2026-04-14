@@ -27,6 +27,9 @@ function labelFor(uid: string | undefined, userLabels: Record<string, string>): 
 export type OnlineDispatchExportExcelRow = {
   الباركود: string;
   الحالة: string;
+  'مصدر أول ظهور': string;
+  'أول مسح بوسطة — الوقت': string;
+  'أول مسح بوسطة — المستخدم': string;
   'تاريخ الإنشاء': string;
   المنشئ: string;
   'تسليم المخزن — الوقت': string;
@@ -38,10 +41,18 @@ export type OnlineDispatchExportExcelRow = {
   ملاحظات: string;
 };
 
+function firstCaptureSourceLabel(r: ExportRow): string {
+  if (r.firstCapturePhase === 'post') return 'مسح بوسطة بدون سجل سابق';
+  return '—';
+}
+
 function toSheetRows(rows: ExportRow[], userLabels: Record<string, string>): OnlineDispatchExportExcelRow[] {
   return rows.map((r) => ({
     الباركود: r.barcode,
     الحالة: ONLINE_DISPATCH_STATUS_LABEL[r.status] ?? r.status,
+    'مصدر أول ظهور': firstCaptureSourceLabel(r),
+    'أول مسح بوسطة — الوقت': formatTs(r.firstCaptureAt),
+    'أول مسح بوسطة — المستخدم': labelFor(r.firstCaptureByUid, userLabels),
     'تاريخ الإنشاء': formatTs(r.createdAt),
     المنشئ: labelFor(onlineDispatchCreatorUid(r), userLabels),
     'تسليم المخزن — الوقت': formatTs(r.handedToWarehouseAt),
@@ -85,6 +96,7 @@ export function collectOnlineDispatchExportUids(rows: ExportRow[]): string[] {
   for (const r of rows) {
     const c = onlineDispatchCreatorUid(r);
     if (c) s.add(c);
+    if (r.firstCaptureByUid) s.add(r.firstCaptureByUid);
     if (r.handedToWarehouseByUid) s.add(r.handedToWarehouseByUid);
     if (r.handedToPostByUid) s.add(r.handedToPostByUid);
     if (r.cancelledByUid) s.add(r.cancelledByUid);

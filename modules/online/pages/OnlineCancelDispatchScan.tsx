@@ -302,7 +302,6 @@ export const OnlineCancelDispatchScan: React.FC = () => {
             <div className="space-y-3">
               <OnlineCameraBarcodeScanner
                 active={inputMode === 'camera'}
-                fps={18}
                 qrbox={cancelDispatchQrbox}
                 onDecoded={onCameraDecoded}
                 onScannerError={(m) => toast.error(m)}

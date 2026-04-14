@@ -29,7 +29,7 @@ export const StockCounts: React.FC = () => {
   const loadData = async () => {
     const [ses, whs, bals] = await Promise.all([
       stockService.getCountSessions(),
-      warehouseService.getAll(),
+      warehouseService.getWarehousesForReportingFilters(),
       stockService.getBalances(),
     ]);
     setSessions(ses);

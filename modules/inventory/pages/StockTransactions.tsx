@@ -74,7 +74,7 @@ export const StockTransactions: React.FC = () => {
     try {
       const [txs, whs] = await Promise.all([
         stockService.getTransactions(),
-        warehouseService.getAll(),
+        warehouseService.getWarehousesForReportingFilters(),
       ]);
       const pending = (await transferApprovalService.getAll()).filter((row) => row.status === 'pending');
       setTransactions(txs);

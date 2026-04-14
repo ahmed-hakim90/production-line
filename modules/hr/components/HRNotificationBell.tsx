@@ -74,7 +74,7 @@ export const HRNotificationBell: React.FC<HRNotificationBellProps> = ({ employee
                   onClick={async () => {
                     if (n.id) await hrNotificationService.markRead(n.id);
                     setOpen(false);
-                    navigate(n.actionUrl || '/approval-center');
+                    navigate(n.actionUrl || '/hr/approval-center');
                   }}
                 >
                   <div className="text-xs font-bold">{n.title}</div>

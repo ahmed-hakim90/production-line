@@ -48,6 +48,7 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
     () =>
       rows.flatMap((row) => [
         onlineDispatchCreatorUid(row),
+        row.firstCaptureByUid,
         row.handedToWarehouseByUid,
         row.handedToPostByUid,
         row.cancelledByUid,
@@ -71,7 +72,7 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
+      <table className="w-full min-w-[960px] table-fixed border-collapse text-sm">
         <colgroup>
           {hasSelectCol && <col className="w-[44px]" />}
           <col className="w-[11%]" />
@@ -138,6 +139,16 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
                     </p>
                     <p className="tabular-nums text-foreground">
                       الوقت: {formatDispatchTimestamp(r.handedToWarehouseAt)}
+                    </p>
+                  </div>
+                ) : r.status === 'pending_reconciliation' && onlineDispatchTsToMs(r.firstCaptureAt) ? (
+                  <div className="min-w-0 space-y-0.5 text-[11px] leading-tight text-violet-900/90 dark:text-violet-100/90">
+                    <p className="break-words text-muted-foreground">
+                      أول مسح بوسطة:{' '}
+                      {r.firstCaptureByUid ? userLabels[r.firstCaptureByUid] ?? '…' : '—'}
+                    </p>
+                    <p className="tabular-nums text-foreground">
+                      {formatDispatchTimestamp(r.firstCaptureAt)}
                     </p>
                   </div>
                 ) : (

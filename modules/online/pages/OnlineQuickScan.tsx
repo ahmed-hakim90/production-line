@@ -256,9 +256,13 @@ export const OnlineQuickScan: React.FC = () => {
           toast.success('تم تسجيل التسليم للمخزن');
           await loadWarehouseDispatchDayList();
         } else {
-          await onlineDispatchService.applyPostScan(uid, trimmed);
-          toast.success('تم تسجيل التسليم للبوسطة');
-          await loadPostDispatchDayList();
+          const postResult = await onlineDispatchService.applyPostScan(uid, trimmed);
+          if (postResult.status === 'pending_reconciliation') {
+            toast.success('تم حفظ الباركود قيد المراجعة — راجع لوحة الأونلاين للموافقة');
+          } else {
+            toast.success('تم تسجيل التسليم للبوسطة');
+            await loadPostDispatchDayList();
+          }
         }
         playFeedbackTone('success');
         setValue('');
@@ -356,7 +360,7 @@ export const OnlineQuickScan: React.FC = () => {
         subtitle={
           scanMode === 'warehouse'
             ? 'أول مسح لهذا الباركود يُنشئ السجل ويُسجّل التسليم للمخزن — أو امسح رمز QR'
-            : 'يُعرض أدناه هل الباركود مسجّل؛ ثم سجّل التسليم للبوسطة عند جاهزية الشحنة'
+            : 'إن لم يكن الباركود مسجّلًا مسبقًا يُحفظ تلقائيًا «قيد المراجعة» من لوحة الأونلاين؛ وإلا يُسجَّل التسليم للبوسطة عند جاهزية الشحنة'
         }
         icon="search"
         secondaryAction={{

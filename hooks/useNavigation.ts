@@ -6,7 +6,7 @@ import { useLocation } from 'react-router-dom';
 import { MENU_CONFIG, ALL_MENU_ITEMS, type MenuItem } from '../config/menu.config';
 import { logicalPathnameFromLocation } from '../lib/tenantPaths';
 
-// ─── Badge Counts (approval-center + payroll, refreshed every 60s) ──────────
+// ─── Badge Counts (HR approvals + payroll, refreshed every 60s) ───────────────
 
 const BADGE_INTERVAL = 60_000;
 
@@ -40,7 +40,7 @@ export function useBadgeCounts() {
   return counts;
 }
 
-// ─── Active Route (supports nested routes like /employees/123) ──────────────
+// ─── Active Route (supports nested routes like /hr/employees/123) ───────────
 
 export function useActiveRoute() {
   const { pathname } = useLocation();

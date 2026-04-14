@@ -7,7 +7,7 @@ import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { employeeService } from '../employeeService';
-import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
+import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
 import { loanService } from '../loanService';
 import {
@@ -31,7 +31,7 @@ import type {
   FirestoreAllowanceType,
   DeductionCategory,
 } from '../types';
-import type { AttendanceRecord } from '@/modules/attendance/types';
+import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import { vehicleService } from '../vehicleService';
 import { LEAVE_TYPE_LABELS } from '../types';
 import { formatNumber } from '../../../utils/calculations';
@@ -880,7 +880,7 @@ export const EmployeeProfile: React.FC = () => {
           <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-slate-600">person_off</span>
           <h2 className="text-xl font-bold mt-4">موظف غير موجود</h2>
           <p className="text-[var(--color-text-muted)] mt-2">لم يتم العثور على الموظف المطلوب.</p>
-          <Button className="mt-6" onClick={() => navigate('/employees')}>
+          <Button className="mt-6" onClick={() => navigate('/hr/employees')}>
             <span className="material-icons-round text-lg">arrow_back</span>
             العودة للقائمة
           </Button>
@@ -897,7 +897,7 @@ export const EmployeeProfile: React.FC = () => {
       <div className="mb-6">
         <button
           type="button"
-          onClick={() => navigate('/employees')}
+          onClick={() => navigate('/hr/employees')}
           className="flex items-center gap-2 text-[var(--color-text-muted)] hover:text-primary font-medium mb-4"
         >
           <span className="material-icons-round">arrow_back</span>
@@ -923,7 +923,7 @@ export const EmployeeProfile: React.FC = () => {
               <>
                 <Button
                   variant="outline"
-                  onClick={() => navigate('/employees', { state: { editId: employee.id } })}
+                  onClick={() => navigate('/hr/employees', { state: { editId: employee.id } })}
                 >
                   <span className="material-icons-round text-lg">edit</span>
                   تعديل
@@ -1034,7 +1034,7 @@ export const EmployeeProfile: React.FC = () => {
             {[...managerChain].reverse().map((m) => (
               <div key={m.id} className="flex items-center gap-3 py-2 border-r-2 border-[var(--color-border)] pr-4 ml-4">
                 <span className="material-icons-round text-slate-400">person</span>
-                <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/employees/${m.id}`)}>{m.name}</span>
+                <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/hr/employees/${m.id}`)}>{m.name}</span>
                 <Badge variant="neutral">{getDepartmentName(m.departmentId)}</Badge>
               </div>
             ))}
@@ -1046,7 +1046,7 @@ export const EmployeeProfile: React.FC = () => {
             {directReports.map((r) => (
               <div key={r.id} className="flex items-center gap-3 py-2 border-r-2 border-[var(--color-border)] pr-4 ml-4">
                 <span className="material-icons-round text-slate-400">person</span>
-                <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/employees/${r.id}`)}>{r.name}</span>
+                <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/hr/employees/${r.id}`)}>{r.name}</span>
                 <Badge variant="neutral">{getDepartmentName(r.departmentId)}</Badge>
               </div>
             ))}
@@ -1173,7 +1173,7 @@ export const EmployeeProfile: React.FC = () => {
           <p className="text-[var(--color-text-muted)] mb-2">
             يمكنك مراجعة كشف الرواتب التفصيلي من صفحة الرواتب.
           </p>
-          <Button variant="outline" onClick={() => navigate('/payroll')}>
+          <Button variant="outline" onClick={() => navigate('/hr/payroll')}>
             <span className="material-icons-round text-lg">receipt_long</span>
             صفحة الرواتب
           </Button>

@@ -23,14 +23,17 @@ import type {
   StockItemBalance,
   StockTransaction,
 } from '../types';
+import {
+  allocateInvReferenceInTransaction,
+  formatInvReference,
+  peekNextInvReferenceNo,
+} from './inventoryInvSequence';
 
 const BALANCES_COLLECTION = 'stock_items';
 const TRANSACTIONS_COLLECTION = 'stock_transactions';
 const COUNTS_COLLECTION = 'stock_counts';
 const TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
 const DELETE_BATCH = 500;
-const INV_REF_REGEX = /^INV-(\d+)$/i;
-const formatInvReference = (seq: number) => `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
 const MAX_PAGE_SIZE = 100;
 
 type FirestoreCursor = QueryDocumentSnapshot | null;
@@ -95,19 +98,16 @@ export const stockService = {
     return { items, nextCursor, hasMore: snap.docs.length === pageSize };
   },
 
+  /** Display-only hint; actual allocation happens atomically in `createMovement`. */
   async getNextInvReferenceNo(): Promise<string> {
     if (!isConfigured) return formatInvReference(1);
-    const q = tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500));
-    const snap = await getDocs(q);
-    const maxInv = snap.docs.reduce((max, d) => {
-      const ref = String((d.data() as any)?.referenceNo || '').trim();
-      const match = ref.match(INV_REF_REGEX);
-      if (!match) return max;
-      return Math.max(max, Number(match[1] || 0));
-    }, 0);
-    return formatInvReference(maxInv + 1);
+    return peekNextInvReferenceNo();
   },
 
+  /**
+   * Loads balances in pages of up to `MAX_PAGE_SIZE` each, at most 10 pages (1000 rows max per tenant scope).
+   * Heavy for very large catalogs; callers that only need KPIs should use `getBalancesPaged` instead.
+   */
   async getBalances(warehouseId?: string): Promise<StockItemBalance[]> {
     if (!isConfigured) return [];
     const rows: StockItemBalance[] = [];
@@ -198,7 +198,6 @@ export const stockService = {
 
     const tenantId = getCurrentTenantId();
     const txRef = doc(collection(db, TRANSACTIONS_COLLECTION));
-    const resolvedReferenceNo = input.referenceNo?.trim() || await this.getNextInvReferenceNo();
 
     if (input.movementType === 'TRANSFER') {
       if (!input.toWarehouseId || input.toWarehouseId === input.warehouseId) {
@@ -207,6 +206,8 @@ export const stockService = {
 
       const linkedRef = doc(collection(db, TRANSACTIONS_COLLECTION));
       await runTransaction(db, async (t) => {
+        const resolvedReferenceNo =
+          input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
         const sourceBalanceRef = doc(
           db,
           BALANCES_COLLECTION,
@@ -288,6 +289,8 @@ export const stockService = {
     }
 
     await runTransaction(db, async (t) => {
+      const resolvedReferenceNo =
+        input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
       const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(input.warehouseId, input.itemType, input.itemId));
       const balSnap = await t.get(balRef);
       const currentQty = balSnap.exists() ? Number(balSnap.data().quantity || 0) : 0;

@@ -4,7 +4,7 @@ import { Button, SearchableSelect } from '@/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useAppStore } from '@/store/useAppStore';
-import type { AttendanceRecord } from '@/modules/attendance/types';
+import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import { useTranslation } from 'react-i18next';
 
 type RowDraft = { checkIn: string; checkOut: string };

@@ -16,7 +16,6 @@ import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { repairBranchService } from '../services/repairBranchService';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
-import { repairTreasuryService } from '../services/repairTreasuryService';
 import { exportHRData } from '../../../utils/exportExcel';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
@@ -281,7 +280,6 @@ export const RepairSalesInvoicePage: React.FC = () => {
         toast.success('تم تعديل الفاتورة وتحديث المخزون والخزينة.');
         setLastSavedInvoiceId(editingInvoiceId);
       } else {
-        await repairTreasuryService.ensureOpenSession(branchId);
         const invoiceId = await repairSalesInvoiceService.create({
           branchId,
           warehouseId: activeBranch?.warehouseId,
@@ -293,16 +291,11 @@ export const RepairSalesInvoicePage: React.FC = () => {
           createdBy: user?.id || '',
           createdByName: user?.displayName || user?.email || 'system',
         });
-        await repairTreasuryService.addEntry({
-          branchId,
-          entryType: 'INCOME',
-          amount: total,
-          note: 'تحصيل فاتورة بيع قطع غيار',
-          referenceId: invoiceId || '',
-          createdBy: user?.id || '',
-          createdByName: user?.displayName || user?.email || 'system',
-        });
-        toast.success('تم حفظ الفاتورة وخصم المخزون وتسجيل حركة الخزينة.');
+        toast.success(
+          total > 0
+            ? 'تم حفظ الفاتورة وخصم المخزون وتسجيل التحصيل في الخزينة.'
+            : 'تم حفظ الفاتورة وخصم المخزون (إجمالي صفر — بدون حركة خزينة).',
+        );
         setLastSavedInvoiceId(invoiceId || null);
       }
       resetDraft();

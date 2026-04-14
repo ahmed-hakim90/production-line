@@ -367,8 +367,8 @@ export const Settings: React.FC = () => {
     if (!isAdmin) return;
     void (async () => {
       try {
-        const whs = await warehouseService.getAll();
-        setInventoryWarehouses(whs.filter((w) => w.isActive !== false));
+        const whs = await warehouseService.getActiveWarehouses();
+        setInventoryWarehouses(whs);
       } catch {
         setInventoryWarehouses([]);
       }

@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from '../../../components/Toast';
-import { Ban, ChevronDown, FileDown, RotateCcw, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle2, ChevronDown, FileDown, Trash2 } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import {
   DropdownMenu,
@@ -68,6 +68,34 @@ function shipmentTouchesDateRange(
   );
 }
 
+function playOnlineDispatchSuccessTone(): void {
+  const AudioCtx =
+    window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return;
+  const ctx = new AudioCtx();
+  const oscillator = ctx.createOscillator();
+  const gainNode = ctx.createGain();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = 880;
+  gainNode.gain.value = 0.0001;
+  oscillator.connect(gainNode);
+  gainNode.connect(ctx.destination);
+  const now = ctx.currentTime;
+  gainNode.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+  oscillator.start(now);
+  oscillator.stop(now + 0.12);
+  oscillator.onended = () => {
+    void ctx.close().catch(() => {});
+  };
+}
+
+/** نغمتان متتابعتان بعد الموافقة على تسوية باركود غير مسجّل (مخزن ثم بوسطة). */
+function playDualSuccessToneAfterReconciliationApprove(): void {
+  playOnlineDispatchSuccessTone();
+  window.setTimeout(() => playOnlineDispatchSuccessTone(), 180);
+}
+
 export const OnlineDashboard: React.FC = () => {
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
@@ -76,15 +104,14 @@ export const OnlineDashboard: React.FC = () => {
 
   const [rows, setRows] = useState<Array<OnlineDispatchShipment & { id: string }>>([]);
   const [shipmentsDataReady, setShipmentsDataReady] = useState(false);
-  const [revertTarget, setRevertTarget] = useState<{ id: string; barcode: string } | null>(null);
-  const [revertBusy, setRevertBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; barcode: string } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; barcode: string } | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [bulkDialog, setBulkDialog] = useState<null | { kind: 'cancel' | 'revert'; ids: string[] }>(null);
+  const [bulkCancelIds, setBulkCancelIds] = useState<string[] | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [reconcileBusyId, setReconcileBusyId] = useState<string | null>(null);
   const [shipmentsPage, setShipmentsPage] = useState(1);
   const SHIPMENTS_PAGE_SIZE = 20;
 
@@ -97,9 +124,7 @@ export const OnlineDashboard: React.FC = () => {
   const [lagPage, setLagPage] = useState(1);
   const LAG_PAGE_SIZE = 20;
   const [lagTableVisible, setLagTableVisible] = useState(false);
-
-  const canRevertWarehouseScan =
-    Boolean(uid) && (can('onlineDispatch.manage') || can('onlineDispatch.handoffToWarehouse'));
+  const [lagPanelVisible, setLagPanelVisible] = useState(true);
 
   const canPermanentDelete =
     Boolean(uid) && can('onlineDispatch.deletePermanent');
@@ -107,13 +132,13 @@ export const OnlineDashboard: React.FC = () => {
   const canCancelFromWarehouseQueue =
     Boolean(uid) && can('onlineDispatch.cancelFromWarehouseQueue');
 
-  const showShipmentsActionCol =
-    canRevertWarehouseScan || canPermanentDelete || canCancelFromWarehouseQueue;
+  const canReconcile = Boolean(uid) && can('onlineDispatch.manage');
+
+  const showShipmentsActionCol = canPermanentDelete || canCancelFromWarehouseQueue || canReconcile;
 
   const canExportOnlineShipments = can('onlineDispatch.view') || can('onlineDispatch.manage');
   const showShipmentRowSelection =
-    Boolean(uid) &&
-    (canExportOnlineShipments || canCancelFromWarehouseQueue || canRevertWarehouseScan);
+    Boolean(uid) && (canExportOnlineShipments || canCancelFromWarehouseQueue);
 
   const pageHeaderScanProps = useMemo(() => {
     const canWh = Boolean(uid) && (can('onlineDispatch.handoffToWarehouse') || can('onlineDispatch.manage'));
@@ -176,6 +201,24 @@ export const OnlineDashboard: React.FC = () => {
       return tb - ta;
     });
   }, [rows, rangeStartMs, rangeEndMs, barcodeQuery, statusFilter]);
+
+  const reconciliationRows = useMemo(
+    () =>
+      rows
+        .filter((r) => r.status === 'pending_reconciliation')
+        .sort((a, b) => {
+          const ta = onlineDispatchTsToMs(a.firstCaptureAt) || onlineDispatchTsToMs(a.createdAt);
+          const tb = onlineDispatchTsToMs(b.firstCaptureAt) || onlineDispatchTsToMs(b.createdAt);
+          return tb - ta;
+        }),
+    [rows],
+  );
+
+  const reconciliationExportUids = useMemo(
+    () => collectOnlineDispatchExportUids(reconciliationRows),
+    [reconciliationRows],
+  );
+  const reconciliationUserLabels = useFirestoreUserLabels(reconciliationExportUids);
 
   const exportLabelUids = useMemo(
     () => collectOnlineDispatchExportUids(filteredShipments),
@@ -252,20 +295,6 @@ export const OnlineDashboard: React.FC = () => {
     return `${a} → ${b}`;
   }, [lagDayYmd]);
 
-  const confirmRevert = async () => {
-    if (!revertTarget || !uid) return;
-    setRevertBusy(true);
-    try {
-      await onlineDispatchService.revertWarehouseHandoff(uid, revertTarget.id);
-      toast.success('تم التراجع — الباركود عاد لانتظار أول مسح (تسليم للمخزن)');
-      setRevertTarget(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'فشل التراجع');
-    } finally {
-      setRevertBusy(false);
-    }
-  };
-
   const confirmPermanentDelete = async () => {
     if (!deleteTarget || !uid) return;
     setDeleteBusy(true);
@@ -333,34 +362,49 @@ export const OnlineDashboard: React.FC = () => {
     toast.success(`تم تنزيل Excel (${list.length} شحنة)`);
   };
 
-  const confirmBulkWarehouseAction = async () => {
-    if (!bulkDialog || !uid) return;
+  const handleExportReconciliationQueue = () => {
+    if (reconciliationRows.length === 0) {
+      toast.error('لا توجد عناصر قيد المراجعة للتصدير');
+      return;
+    }
+    exportOnlineDispatchShipmentsExcel(reconciliationRows, reconciliationUserLabels);
+    toast.success(`تم تنزيل Excel (${reconciliationRows.length} عنصر قيد المراجعة)`);
+  };
+
+  const runApproveReconciliation = async (docId: string) => {
+    if (!uid) return;
+    setReconcileBusyId(docId);
+    try {
+      await onlineDispatchService.approveReconciliation(uid, docId);
+      toast.success('تم تسجيل التسليم للمخزن وللبوسطة بعد المراجعة');
+      playDualSuccessToneAfterReconciliationApprove();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'فشل الموافقة');
+    } finally {
+      setReconcileBusyId(null);
+    }
+  };
+
+  const confirmBulkCancelFromDispatch = async () => {
+    if (!bulkCancelIds || !uid) return;
     setBulkBusy(true);
     try {
       let ok = 0;
       let fail = 0;
-      for (const id of bulkDialog.ids) {
+      for (const id of bulkCancelIds) {
         try {
-          if (bulkDialog.kind === 'cancel') {
-            await onlineDispatchService.cancelWarehouseShipment(uid, id);
-          } else {
-            await onlineDispatchService.revertWarehouseHandoff(uid, id);
-          }
+          await onlineDispatchService.cancelWarehouseShipment(uid, id);
           ok++;
         } catch {
           fail++;
         }
       }
       if (fail === 0) {
-        toast.success(
-          bulkDialog.kind === 'cancel'
-            ? `تم إلغاء ${ok} شحنة من التسليم`
-            : `تم التراجع عن مسح المخزن لعدد ${ok}`,
-        );
+        toast.success(`تم إلغاء ${ok} شحنة من التسليم`);
       } else {
         toast.error(`نجح ${ok} — فشل ${fail}`);
       }
-      setBulkDialog(null);
+      setBulkCancelIds(null);
       setSelectedIds(new Set());
     } finally {
       setBulkBusy(false);
@@ -391,11 +435,79 @@ export const OnlineDashboard: React.FC = () => {
         onDateToChange={setRangeTo}
       />
 
+      <Card className="shadow-sm border-violet-500/20">
+        <CardHeader className="space-y-2 border-b bg-violet-500/5 px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="min-w-0 flex-1 space-y-1">
+              <CardTitle className="text-base font-semibold">قائمة المراجعة — مسح بوسطة بدون سجل سابق</CardTitle>
+              <CardDescription className="text-xs leading-relaxed">
+                باركود وُجد عند مسح التسليم للبوسطة دون أن يكون مسجّلًا مسبقًا. يمكن لمن لديه صلاحية الإدارة الموافقة
+                لتسجيل التسليم للمخزن وللبوسطة دفعة واحدة للمراجعة والتقارير.
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <span className="rounded-md border border-violet-500/30 bg-background px-3 py-1.5 text-sm font-bold tabular-nums text-violet-900 dark:text-violet-100">
+                {reconciliationRows.length}
+              </span>
+              {canExportOnlineShipments && reconciliationRows.length > 0 ? (
+                <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleExportReconciliationQueue}>
+                  <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                  تصدير Excel
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <OnlineShipmentsDataTable
+            rows={reconciliationRows}
+            emptyMessage="لا توجد باركودات قيد المراجعة حاليًا"
+            userLabels={reconciliationUserLabels}
+            showActionColumn={canReconcile}
+            renderActionCell={
+              canReconcile
+                ? (r) => (
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="gap-1 bg-violet-700 hover:bg-violet-800 dark:bg-violet-600"
+                      disabled={reconcileBusyId === r.id}
+                      onClick={() => void runApproveReconciliation(r.id)}
+                    >
+                      <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                      {reconcileBusyId === r.id ? 'جاري…' : 'موافقة'}
+                    </Button>
+                  )
+                : undefined
+            }
+          />
+        </CardContent>
+      </Card>
+
       <Card className="shadow-sm">
         <CardHeader className="space-y-3 border-b bg-muted/30 px-4 py-4 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-            <div className="min-w-0 space-y-1.5">
-              <CardTitle className="text-base font-semibold">الشحنات</CardTitle>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <CardTitle className="text-base font-semibold">الشحنات</CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  aria-expanded={lagPanelVisible}
+                  onClick={() => {
+                    setLagPanelVisible((v) => {
+                      const next = !v;
+                      if (!next) setLagTableVisible(false);
+                      return next;
+                    });
+                  }}
+                >
+                  {lagPanelVisible ? 'إخفاء بطاقة التأخر' : 'إظهار بطاقة التأخر'}
+                </Button>
+              </div>
               <CardDescription className="text-xs leading-relaxed">
                 السجلات التي لها نشاط (إنشاء، تسليم مخزن، تسليم بوسطة، أو إلغاء من التسليم) ضمن نطاق التاريخ نفسه
                 المستخدم في المؤشرات أعلاه؛ يمكن تصفية النتائج بالباركود والحالة.
@@ -439,6 +551,9 @@ export const OnlineDashboard: React.FC = () => {
                   <SelectItem value="at_warehouse">{ONLINE_DISPATCH_STATUS_LABEL.at_warehouse}</SelectItem>
                   <SelectItem value="handed_to_post">{ONLINE_DISPATCH_STATUS_LABEL.handed_to_post}</SelectItem>
                   <SelectItem value="cancelled">{ONLINE_DISPATCH_STATUS_LABEL.cancelled}</SelectItem>
+                  <SelectItem value="pending_reconciliation">
+                    {ONLINE_DISPATCH_STATUS_LABEL.pending_reconciliation}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -530,28 +645,10 @@ export const OnlineDashboard: React.FC = () => {
                         ? undefined
                         : 'يُتاح الإلغاء الجماعي فقط عندما تكون كل الشحنات المحددة «عند المخزن»'
                     }
-                    onClick={() => setBulkDialog({ kind: 'cancel', ids: [...selectedIds] })}
+                    onClick={() => setBulkCancelIds([...selectedIds])}
                   >
                     <Ban className="h-4 w-4 shrink-0" aria-hidden />
                     إلغاء من التسليم (المحدد)
-                  </Button>
-                ) : null}
-                {canRevertWarehouseScan ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    disabled={!allSelectedAtWarehouse}
-                    title={
-                      allSelectedAtWarehouse
-                        ? undefined
-                        : 'يُتاح التراجع الجماعي فقط عندما تكون كل الشحنات المحددة «عند المخزن»'
-                    }
-                    onClick={() => setBulkDialog({ kind: 'revert', ids: [...selectedIds] })}
-                  >
-                    <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
-                    تراجع عن مسح المخزن (المحدد)
                   </Button>
                 ) : null}
               </div>
@@ -587,22 +684,23 @@ export const OnlineDashboard: React.FC = () => {
               showShipmentsActionCol
                 ? (r) => (
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
-                        {canRevertWarehouseScan && r.status === 'at_warehouse' ? (
+                        {canReconcile && r.status === 'pending_reconciliation' ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="default"
                                 size="icon"
-                                className="h-8 w-8 shrink-0"
-                                title="تراجع عن مسح المخزن"
-                                aria-label="تراجع عن مسح المخزن"
-                                onClick={() => setRevertTarget({ id: r.id, barcode: r.barcode })}
+                                className="h-8 w-8 shrink-0 bg-violet-700 hover:bg-violet-800 dark:bg-violet-600"
+                                title="موافقة — تسجيل المخزن والبوسطة"
+                                aria-label="موافقة على المراجعة"
+                                disabled={reconcileBusyId === r.id}
+                                onClick={() => void runApproveReconciliation(r.id)}
                               >
-                                <RotateCcw className="h-4 w-4" aria-hidden />
+                                <CheckCircle2 className="h-4 w-4" aria-hidden />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent side="top">تراجع عن مسح المخزن</TooltipContent>
+                            <TooltipContent side="top">موافقة — تسجيل المخزن والبوسطة</TooltipContent>
                           </Tooltip>
                         ) : null}
                         {canCancelFromWarehouseQueue && r.status === 'at_warehouse' ? (
@@ -642,7 +740,7 @@ export const OnlineDashboard: React.FC = () => {
                           </Tooltip>
                         ) : null}
                         {!(
-                          (canRevertWarehouseScan && r.status === 'at_warehouse') ||
+                          (canReconcile && r.status === 'pending_reconciliation') ||
                           (canCancelFromWarehouseQueue && r.status === 'at_warehouse') ||
                           canPermanentDelete
                         ) ? (
@@ -666,6 +764,7 @@ export const OnlineDashboard: React.FC = () => {
       </Card>
         </div>
 
+        {lagPanelVisible ? (
         <aside
           className="order-2 w-full shrink-0 xl:order-2 xl:sticky xl:top-4 xl:w-[min(22rem,100%)] xl:max-w-sm xl:self-start"
           aria-label="شحنات لم يُسجَّل لها تسليم بوسطة في نفس يوم المخزن"
@@ -762,28 +861,8 @@ export const OnlineDashboard: React.FC = () => {
         ) : null}
       </Card>
         </aside>
+        ) : null}
       </div>
-
-      <Dialog open={!!revertTarget} onOpenChange={(open) => !open && !revertBusy && setRevertTarget(null)}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>تراجع عن مسح المخزن</DialogTitle>
-            <DialogDescription className="text-right">
-              سيعود الباركود{' '}
-              <span className="font-mono font-semibold">{revertTarget?.barcode}</span> إلى حالة «في انتظار المخزن»
-              (كأن أول مسح لم يحدث). استخدم ذلك لتصحيح مسح خاطئ قبل تسليم البوسطة.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse">
-            <Button type="button" variant="destructive" disabled={revertBusy} onClick={() => void confirmRevert()}>
-              {revertBusy ? 'جاري…' : 'تأكيد التراجع'}
-            </Button>
-            <Button type="button" variant="outline" disabled={revertBusy} onClick={() => setRevertTarget(null)}>
-              إلغاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!cancelTarget} onOpenChange={(open) => !open && !cancelBusy && setCancelTarget(null)}>
         <DialogContent className="sm:max-w-md" dir="rtl">
@@ -811,26 +890,18 @@ export const OnlineDashboard: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!bulkDialog} onOpenChange={(open) => !open && !bulkBusy && setBulkDialog(null)}>
+      <Dialog open={!!bulkCancelIds} onOpenChange={(open) => !open && !bulkBusy && setBulkCancelIds(null)}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
-            <DialogTitle>
-              {bulkDialog?.kind === 'cancel' ? 'إلغاء من التسليم — دفعة' : 'تراجع عن مسح المخزن — دفعة'}
-            </DialogTitle>
+            <DialogTitle>إلغاء من التسليم — دفعة</DialogTitle>
             <DialogDescription className="text-right space-y-2">
               <span>
                 سيتم تطبيق الإجراء على{' '}
-                <strong className="tabular-nums">{bulkDialog?.ids.length ?? 0}</strong> شحنة محددة.
+                <strong className="tabular-nums">{bulkCancelIds?.length ?? 0}</strong> شحنة محددة.
               </span>
-              {bulkDialog?.kind === 'cancel' ? (
-                <span className="block text-xs leading-relaxed">
-                  تُسجَّل الشحنات بحالة «تم الإلغاء من التسليم» ولن تُحسب في انتظار تسليم البوسطة.
-                </span>
-              ) : (
-                <span className="block text-xs leading-relaxed">
-                  تعود الشحنات إلى «في انتظار المخزن» كأن أول مسح لم يحدث (قبل تسليم البوسطة).
-                </span>
-              )}
+              <span className="block text-xs leading-relaxed">
+                تُسجَّل الشحنات بحالة «تم الإلغاء من التسليم» ولن تُحسب في انتظار تسليم البوسطة.
+              </span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse">
@@ -838,11 +909,11 @@ export const OnlineDashboard: React.FC = () => {
               type="button"
               variant="destructive"
               disabled={bulkBusy}
-              onClick={() => void confirmBulkWarehouseAction()}
+              onClick={() => void confirmBulkCancelFromDispatch()}
             >
               {bulkBusy ? 'جاري…' : 'تأكيد'}
             </Button>
-            <Button type="button" variant="outline" disabled={bulkBusy} onClick={() => setBulkDialog(null)}>
+            <Button type="button" variant="outline" disabled={bulkBusy} onClick={() => setBulkCancelIds(null)}>
               إلغاء
             </Button>
           </DialogFooter>

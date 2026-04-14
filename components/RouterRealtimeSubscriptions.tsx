@@ -15,20 +15,8 @@ function tenantRelativePathFromLocation(pathname: string): string | null {
  * Firestore reads when users stay on those routes.
  */
 const DEFER_PRODUCTION_REALTIME_PREFIXES = [
-  'employees',
-  'hr-dashboard',
-  'organization',
-  'self-service',
-  'leave-requests',
-  'loan-requests',
-  'approval-center',
-  'delegations',
-  'payroll',
-  'hr-settings',
-  'hr-transactions',
-  'employee-financials',
-  'employee-financial-overview',
-  'vehicles',
+  /** Legacy attendance URLs (redirect to `/hr/attendance/*`). */
+  'attendance',
   'system/users',
   'roles',
   'activity-log',

@@ -28,10 +28,15 @@ export async function getApprovedLeaves(
   employeeId: string,
   month: string,
 ): Promise<FirestoreLeaveRequest[]> {
-  const startDate = `${month}-01`;
-  const [year, mon] = month.split('-').map(Number);
+  const trimmed = month.trim();
+  const ym = trimmed.match(/^(\d{4})-(\d{1,2})$/);
+  if (!ym) return [];
+  const year = Number(ym[1]);
+  const mon = Number(ym[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(mon) || mon < 1 || mon > 12) return [];
+  const startDate = `${year}-${String(mon).padStart(2, '0')}-01`;
   const lastDay = new Date(year, mon, 0).getDate();
-  const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+  const endDate = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
   return leaveRequestService.getApprovedByEmployeeAndRange(
     employeeId,

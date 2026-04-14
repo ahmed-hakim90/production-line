@@ -28,7 +28,8 @@ function disposeHtml5Scanner(html5: Html5Qrcode | null) {
   }
 }
 
-const DEFAULT_FPS = 10;
+/** Unified default for all camera scan screens (warehouse/post/cancel); clamped 1–30 in start(). */
+const DEFAULT_FPS = 18;
 
 function defaultQrbox(viewfinderWidth: number, viewfinderHeight: number) {
   const w = Math.min(280, Math.floor(viewfinderWidth * 0.85));
@@ -45,7 +46,7 @@ export type OnlineCameraBarcodeScannerProps = {
   className?: string;
   /** Shown when camera is active */
   hint?: string;
-  /** Frames per second for html5-qrcode (default 10). */
+  /** Frames per second for html5-qrcode (default 18). */
   fps?: number;
   /** Custom scan region; defaults match previous hard-coded qrbox. */
   qrbox?: (viewfinderWidth: number, viewfinderHeight: number) => { width: number; height: number };

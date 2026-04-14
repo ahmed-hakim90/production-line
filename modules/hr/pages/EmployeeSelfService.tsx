@@ -3,7 +3,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
-import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
+import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
 import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import { loanService } from '../loanService';
@@ -19,7 +19,7 @@ import type {
   ApprovalChainItem,
   JobLevel,
 } from '../types';
-import type { AttendanceRecord } from '@/modules/attendance/types';
+import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import { LEAVE_TYPE_LABELS } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import type { FirestoreEmployee } from '../../../types';
@@ -557,7 +557,7 @@ export const EmployeeSelfService: React.FC = () => {
                   عرض مختصر هنا — المتابعة الكاملة داخل مركز الموافقات
                 </p>
               </div>
-              <Button onClick={() => navigate('/approval-center')}>
+              <Button onClick={() => navigate('/hr/approval-center')}>
                 <span className="material-icons-round text-sm">open_in_new</span>
                 فتح مركز الموافقات
               </Button>
@@ -891,7 +891,7 @@ export const EmployeeSelfService: React.FC = () => {
                 لعرض كشف الراتب والتفاصيل الكاملة،{' '}
                 <button
                   type="button"
-                  onClick={() => navigate('/payroll')}
+                  onClick={() => navigate('/hr/payroll')}
                   className="text-primary font-bold underline hover:no-underline"
                 >
                   انتقل إلى صفحة الرواتب

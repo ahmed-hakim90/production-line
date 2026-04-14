@@ -9,6 +9,7 @@ export const ONLINE_DISPATCH_STATUS_LABEL: Record<OnlineDispatchStatus, string> 
   at_warehouse: 'تم التسليم للمخزن',
   handed_to_post: 'تم التسليم للبوسطة',
   cancelled: 'تم الإلغاء من التسليم',
+  pending_reconciliation: 'قيد المراجعة (مسح بوسطة بدون سجل)',
 };
 
 /** عناوين مختصرة (شاشة المسح) */
@@ -17,6 +18,7 @@ export const ONLINE_DISPATCH_STATUS_LABEL_SHORT: Record<OnlineDispatchStatus, st
   at_warehouse: 'عند المخزن',
   handed_to_post: 'تم للبوسطة',
   cancelled: 'ملغاة من التسليم',
+  pending_reconciliation: 'قيد المراجعة',
 };
 
 const statusClass: Record<OnlineDispatchStatus, string> = {
@@ -24,6 +26,8 @@ const statusClass: Record<OnlineDispatchStatus, string> = {
   at_warehouse: 'border-sky-500/40 bg-sky-100 text-sky-900 dark:bg-sky-900/30 dark:text-sky-100',
   handed_to_post: 'border-emerald-500/40 bg-emerald-100 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100',
   cancelled: 'border-rose-500/40 bg-rose-100 text-rose-900 dark:bg-rose-900/30 dark:text-rose-100',
+  pending_reconciliation:
+    'border-violet-500/40 bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-100',
 };
 
 export type OnlineDispatchStatusBadgeProps = {

@@ -15,6 +15,7 @@ import type { FirestoreUserWithRepair } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { downloadUtf8Csv } from '../utils/csvExport';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -23,6 +24,7 @@ type BranchKpi = {
   totalJobs: number;
   openJobs: number;
   deliveredJobs: number;
+  unrepairableJobs: number;
   readyJobs: number;
   successRate: number;
   revenue: number;
@@ -132,8 +134,10 @@ export const RepairAdminDashboard: React.FC = () => {
       const totalJobs = branchJobs.length;
       const openJobs = branchJobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
       const deliveredJobs = branchJobs.filter((j) => j.status === 'delivered').length;
+      const unrepairableJobs = branchJobs.filter((j) => j.status === 'unrepairable').length;
       const readyJobs = branchJobs.filter((j) => j.status === 'ready').length;
-      const successRate = totalJobs > 0 ? (deliveredJobs / totalJobs) * 100 : 0;
+      const terminal = deliveredJobs + unrepairableJobs;
+      const successRate = terminal > 0 ? (deliveredJobs / terminal) * 100 : 0;
       const revenue = branchJobs
         .filter((j) => j.status === 'delivered')
         .reduce((sum, j) => sum + Number(j.finalCost || 0), 0);
@@ -152,6 +156,7 @@ export const RepairAdminDashboard: React.FC = () => {
         totalJobs,
         openJobs,
         deliveredJobs,
+        unrepairableJobs,
         readyJobs,
         successRate,
         revenue,
@@ -167,12 +172,25 @@ export const RepairAdminDashboard: React.FC = () => {
     const openJobs = cards.reduce((sum, card) => sum + card.openJobs, 0);
     const readyJobs = cards.reduce((sum, card) => sum + card.readyJobs, 0);
     const deliveredJobs = cards.reduce((sum, card) => sum + card.deliveredJobs, 0);
+    const unrepairableJobs = cards.reduce((sum, card) => sum + card.unrepairableJobs, 0);
     const revenue = cards.reduce((sum, card) => sum + card.revenue, 0);
     const partsRevenue = cards.reduce((sum, card) => sum + card.partsRevenue, 0);
     const totalRevenue = cards.reduce((sum, card) => sum + card.totalRevenue, 0);
     const lowStockCount = cards.reduce((sum, card) => sum + card.lowStockCount, 0);
-    const successRate = totalJobs > 0 ? (deliveredJobs / totalJobs) * 100 : 0;
-    return { totalJobs, openJobs, readyJobs, deliveredJobs, revenue, partsRevenue, totalRevenue, lowStockCount, successRate };
+    const terminal = deliveredJobs + unrepairableJobs;
+    const successRate = terminal > 0 ? (deliveredJobs / terminal) * 100 : 0;
+    return {
+      totalJobs,
+      openJobs,
+      readyJobs,
+      deliveredJobs,
+      unrepairableJobs,
+      revenue,
+      partsRevenue,
+      totalRevenue,
+      lowStockCount,
+      successRate,
+    };
   }, [cards]);
 
   const rankedCards = useMemo(
@@ -241,10 +259,12 @@ export const RepairAdminDashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
             <div className="rounded-lg border bg-background p-3">
               <p className="text-xs text-muted-foreground mb-1">نسبة النجاح العامة</p>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                 <span className="font-semibold">{overview.successRate.toFixed(1)}%</span>
-                <span className="text-xs text-muted-foreground">
-                  {fmt(overview.deliveredJobs)} من {fmt(overview.totalJobs)}
+                <span className="text-xs text-muted-foreground text-left">
+                  {fmt(overview.deliveredJobs)} تسليم، {fmt(overview.unrepairableJobs)} غير قابلة للإصلاح
+                  {' '}
+                  (منتهية: {fmt(overview.deliveredJobs + overview.unrepairableJobs)})
                 </span>
               </div>
               <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
@@ -329,7 +349,7 @@ export const RepairAdminDashboard: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                  <span>معدل الإنجاز</span>
+                  <span>نسبة النجاح (من الطلبات المنتهية)</span>
                   <span>{card.successRate.toFixed(1)}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
@@ -345,8 +365,42 @@ export const RepairAdminDashboard: React.FC = () => {
       </div>
 
       <Card className="shadow-sm">
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between space-y-0">
           <CardTitle className="text-base">ترتيب الفروع حسب الأداء</CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={rankedCards.length === 0}
+            onClick={() => {
+              const day = new Date().toISOString().slice(0, 10);
+              downloadUtf8Csv(
+                `repair-branches-ranking-${day}.csv`,
+                [
+                  'الفرع',
+                  'إجمالي الطلبات',
+                  'تم التسليم',
+                  'غير قابل للإصلاح',
+                  'نسبة النجاح %',
+                  'إيراد الصيانة',
+                  'مبيعات قطع الغيار',
+                  'الإجمالي التشغيلي',
+                ],
+                rankedCards.map((card) => [
+                  card.branch.name || '',
+                  card.totalJobs,
+                  card.deliveredJobs,
+                  card.unrepairableJobs,
+                  Number(card.successRate.toFixed(2)),
+                  Number(card.revenue.toFixed(2)),
+                  Number(card.partsRevenue.toFixed(2)),
+                  Number(card.totalRevenue.toFixed(2)),
+                ]),
+              );
+            }}
+          >
+            تصدير CSV
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -355,7 +409,8 @@ export const RepairAdminDashboard: React.FC = () => {
                 <tr>
                   <th className="text-right py-2 px-2 font-medium">الفرع</th>
                   <th className="text-right py-2 px-2 font-medium">الطلبات</th>
-                  <th className="text-right py-2 px-2 font-medium">المنجز</th>
+                  <th className="text-right py-2 px-2 font-medium">تم التسليم</th>
+                  <th className="text-right py-2 px-2 font-medium">غير قابل للإصلاح</th>
                   <th className="text-right py-2 px-2 font-medium">نسبة النجاح</th>
                   <th className="text-right py-2 px-2 font-medium">إيراد الصيانة</th>
                   <th className="text-right py-2 px-2 font-medium">مبيعات قطع الغيار</th>
@@ -368,6 +423,7 @@ export const RepairAdminDashboard: React.FC = () => {
                     <td className="py-2 px-2 font-medium">{card.branch.name}</td>
                     <td className="py-2 px-2">{fmt(card.totalJobs)}</td>
                     <td className="py-2 px-2">{fmt(card.deliveredJobs)}</td>
+                    <td className="py-2 px-2">{fmt(card.unrepairableJobs)}</td>
                     <td className="py-2 px-2">{card.successRate.toFixed(1)}%</td>
                     <td className="py-2 px-2 text-emerald-600">{fmt(card.revenue)}</td>
                     <td className="py-2 px-2 text-sky-600">{fmt(card.partsRevenue)}</td>

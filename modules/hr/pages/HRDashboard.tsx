@@ -5,7 +5,7 @@ import { getDocs } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
-import { attendanceProcessingService } from '@/modules/attendance/services/attendanceProcessingService';
+import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService } from '../leaveService';
 import { loanService } from '../loanService';
 import { createRequest, type ApprovalEmployeeInfo } from '../approval';
@@ -25,7 +25,7 @@ import type {
   FirestoreAllowanceType,
   FirestoreEmployeePerformance,
 } from '../types';
-import type { AttendanceRecord } from '@/modules/attendance/types';
+import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../types';
 import { HRNotificationBell } from '../components/HRNotificationBell';
 
@@ -833,7 +833,7 @@ export const HRDashboard: React.FC = () => {
         icon: 'pending_actions',
         text: `${leaveKpis.pending} طلب إجازة بانتظار الموافقة`,
         color: 'amber',
-        path: '/leave-requests',
+        path: '/hr/leave-requests',
       });
     }
     if (loanKpis.pending > 0) {
@@ -841,7 +841,7 @@ export const HRDashboard: React.FC = () => {
         icon: 'hourglass_top',
         text: `${loanKpis.pending} سلفة بانتظار الموافقة`,
         color: 'amber',
-        path: '/loan-requests',
+        path: '/hr/loan-requests',
       });
     }
     if (loanKpis.notDisbursed > 0) {
@@ -849,7 +849,7 @@ export const HRDashboard: React.FC = () => {
         icon: 'payments',
         text: `${loanKpis.notDisbursed} سلفة لم تُصرف بعد`,
         color: 'rose',
-        path: '/loan-requests',
+        path: '/hr/loan-requests',
       });
     }
     if (payrollStatus === 'draft') {
@@ -857,7 +857,7 @@ export const HRDashboard: React.FC = () => {
         icon: 'receipt_long',
         text: 'كشف الرواتب مسودة — لم يُعتمد بعد',
         color: 'orange',
-        path: '/payroll',
+        path: '/hr/payroll',
       });
     }
     if (payrollStatus === null) {
@@ -865,7 +865,7 @@ export const HRDashboard: React.FC = () => {
         icon: 'warning',
         text: `لم يتم إعداد كشف رواتب ${getMonthKey()}`,
         color: 'slate',
-        path: '/payroll',
+        path: '/hr/payroll',
       });
     }
     return items;
@@ -952,7 +952,7 @@ export const HRDashboard: React.FC = () => {
               <SearchableSelect
                 options={empOptions}
                 value=""
-                onChange={(val) => { if (val) navigate(`/employees/${val}`); }}
+                onChange={(val) => { if (val) navigate(`/hr/employees/${val}`); }}
                 placeholder="بحث بالاسم أو الكود..."
               />
             </div>
@@ -1637,7 +1637,7 @@ export const HRDashboard: React.FC = () => {
       â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <button
-          onClick={() => navigate('/approval-center')}
+          onClick={() => navigate('/hr/approval-center')}
           className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
         >
           <div className="w-10 h-10 mx-auto mb-2 bg-amber-100 rounded-[var(--border-radius-base)] flex items-center justify-center">
@@ -1647,7 +1647,7 @@ export const HRDashboard: React.FC = () => {
           <p className="text-[11px] text-[var(--color-text-muted)] font-medium">موافقات معلقة</p>
         </button>
         <button
-          onClick={() => navigate('/attendance')}
+          onClick={() => navigate('/hr/attendance/logs')}
           className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
         >
           <div className="w-10 h-10 mx-auto mb-2 bg-rose-100 rounded-[var(--border-radius-base)] flex items-center justify-center">
@@ -1657,7 +1657,7 @@ export const HRDashboard: React.FC = () => {
           <p className="text-[11px] text-[var(--color-text-muted)] font-medium">غياب اليوم</p>
         </button>
         <button
-          onClick={() => navigate('/attendance')}
+          onClick={() => navigate('/hr/attendance/logs')}
           className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
         >
           <div className="w-10 h-10 mx-auto mb-2 bg-orange-100 dark:bg-orange-900/30 rounded-[var(--border-radius-base)] flex items-center justify-center">
@@ -1667,7 +1667,7 @@ export const HRDashboard: React.FC = () => {
           <p className="text-[11px] text-[var(--color-text-muted)] font-medium">تأخير اليوم</p>
         </button>
         <button
-          onClick={() => navigate('/payroll')}
+          onClick={() => navigate('/hr/payroll')}
           className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
         >
           <div className={`w-10 h-10 mx-auto mb-2 rounded-[var(--border-radius-base)] flex items-center justify-center ${
@@ -1799,7 +1799,7 @@ export const HRDashboard: React.FC = () => {
                 </table>
               </div>
             )}
-            <button onClick={() => navigate('/leave-requests')} className="w-full text-xs text-primary font-bold hover:underline mt-4 flex items-center justify-center gap-1">
+            <button onClick={() => navigate('/hr/leave-requests')} className="w-full text-xs text-primary font-bold hover:underline mt-4 flex items-center justify-center gap-1">
               عرض كل الإجازات
               <span className="material-icons-round text-xs">arrow_forward</span>
             </button>
@@ -1834,7 +1834,7 @@ export const HRDashboard: React.FC = () => {
                 </table>
               </div>
             )}
-            <button onClick={() => navigate('/loan-requests')} className="w-full text-xs text-primary font-bold hover:underline mt-4 flex items-center justify-center gap-1">
+            <button onClick={() => navigate('/hr/loan-requests')} className="w-full text-xs text-primary font-bold hover:underline mt-4 flex items-center justify-center gap-1">
               عرض كل السُلف
               <span className="material-icons-round text-xs">arrow_forward</span>
             </button>
@@ -1850,7 +1850,7 @@ export const HRDashboard: React.FC = () => {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
-            onClick={() => navigate('/approval-center')}
+            onClick={() => navigate('/hr/approval-center')}
             className="flex items-center gap-3 bg-[var(--color-card)] border border-amber-200 rounded-[var(--border-radius-lg)] p-4 hover:border-amber-400 transition-colors text-right w-full"
           >
             <div className="w-10 h-10 bg-amber-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
@@ -1863,7 +1863,7 @@ export const HRDashboard: React.FC = () => {
           </button>
 
           <button
-            onClick={() => navigate('/attendance')}
+            onClick={() => navigate('/hr/attendance/logs')}
             className="flex items-center gap-3 bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-lg)] p-4 hover:border-rose-400 transition-colors text-right w-full"
           >
             <div className="w-10 h-10 bg-rose-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
@@ -1876,7 +1876,7 @@ export const HRDashboard: React.FC = () => {
           </button>
 
           <button
-            onClick={() => navigate('/payroll')}
+            onClick={() => navigate('/hr/payroll')}
             className="flex items-center gap-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 hover:border-primary/40 transition-colors text-right w-full"
           >
             <div className="w-10 h-10 bg-indigo-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">

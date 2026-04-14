@@ -239,7 +239,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
             <p className="text-sm font-bold text-[var(--color-text-muted)] mb-4">
               لا توجد بيانات رواتب للشهر المحدد. قم بإنشاء/تحميل كشف الرواتب أولاظ‹.
             </p>
-            <Button variant="outline" onClick={() => navigate('/payroll')}>
+            <Button variant="outline" onClick={() => navigate('/hr/payroll')}>
               الانتقال إلى كشف الرواتب
             </Button>
           </div>

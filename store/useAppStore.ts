@@ -114,8 +114,8 @@ import {
   buildSupervisorHourlyRatesMap,
   estimateReportCost,
 } from '../utils/costCalculations';
-import { zktecoSyncService } from '../modules/attendance/services/zktecoSyncService';
-import { attendanceProcessingService } from '../modules/attendance/services/attendanceProcessingService';
+import { zktecoSyncService } from '../modules/hr/attendance/services/zktecoSyncService';
+import { attendanceProcessingService } from '../modules/hr/attendance/services/attendanceProcessingService';
 import type {
   AttendanceImportResult,
   AttendanceLog,
@@ -123,7 +123,7 @@ import type {
   AttendanceRecord,
   AttendanceSource,
   NormalizedAttendanceLogInput,
-} from '../modules/attendance/types';
+} from '../modules/hr/attendance/types';
 
 // ─── Helper: build full admin permissions map (fallback) ─────────────────────
 
@@ -204,7 +204,7 @@ async function resolveProductionWarehouseId(systemSettings: SystemSettings): Pro
   if (_cachedProductionWarehouseId) return _cachedProductionWarehouseId;
 
   try {
-    const warehouses = await warehouseService.getAll();
+    const warehouses = await warehouseService.getAllWarehouses();
     const finishedWarehouse = warehouses.find((w) => {
       const name = (w.name || '').trim().toLowerCase();
       return name === 'تم الصنع' || name.includes('تم الصنع');
@@ -1939,7 +1939,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const [balances, warehousesRows] = await Promise.all([
           stockService.getBalances(),
-          warehouseService.getAll(),
+          warehouseService.getAllWarehouses(),
         ]);
         const rawRows = await rawMaterialService.getAll();
         await categoryService.seedFromProductsModel();

@@ -293,7 +293,28 @@ export const onlineDispatchService = {
     const candidates = rawT === barcode ? [barcode] : [barcode, rawT];
     const found = await findFirstShipmentDocByBarcodes(candidates);
     if (!found) {
-      throw new Error('هذا الباركود غير مسجّل — امسح من «تسليم للمخزن» أولًا لتسجيله');
+      const recheck = await findFirstShipmentDocByBarcodes(candidates);
+      if (recheck) {
+        const existing = recheck.data() as OnlineDispatchShipment;
+        if (existing.status === 'pending_reconciliation') {
+          throw new Error('هذا الباركود قيد المراجعة بالفعل — راجع لوحة الأونلاين');
+        }
+        throw new Error('هذا الباركود مسجّل مسبقًا');
+      }
+      const tenantId = getCurrentTenantId();
+      const ref = await addDoc(collection(db, COLLECTION), {
+        tenantId,
+        barcode,
+        status: 'pending_reconciliation' as OnlineDispatchStatus,
+        createdAt: serverTimestamp(),
+        firstCapturePhase: 'post' as const,
+        firstCaptureAt: serverTimestamp(),
+        firstCaptureByUid: uid,
+        createdByUid: uid,
+        lastStatusByUid: uid,
+      });
+      cooldown.set(ck, Date.now());
+      return { id: ref.id, barcode, status: 'pending_reconciliation' };
     }
     const docRef = found.ref;
     const rowBefore = found.data() as OnlineDispatchShipment;
@@ -303,6 +324,9 @@ export const onlineDispatchService = {
       const cur = snap.data() as OnlineDispatchShipment;
       if (cur.status === 'pending') {
         throw new Error('الشحنة لم تُسجَّل للمخزن بعد — اطلب من المخزن مسح هذا الباركود أولًا');
+      }
+      if (cur.status === 'pending_reconciliation') {
+        throw new Error('هذا الباركود قيد المراجعة — راجع لوحة الأونلاين للموافقة على التسليم');
       }
       if (cur.status === 'handed_to_post') {
         throw new Error('تم تسجيل التسليم للبوسطة مسبقًا لهذا الباركود');
@@ -322,6 +346,33 @@ export const onlineDispatchService = {
     });
     cooldown.set(ck, Date.now());
     return { id: docRef.id, barcode: rowBefore.barcode, status: 'handed_to_post' };
+  },
+
+  /**
+   * Confirms a post-scan orphan (`pending_reconciliation`): sets warehouse + post handoff timestamps in one step.
+   * Requires `onlineDispatch.manage` in Firestore rules.
+   */
+  async approveReconciliation(uid: string, docId: string): Promise<void> {
+    if (!isConfigured) throw new Error('Firebase غير مهيأ');
+    const tenantId = getCurrentTenantId();
+    const docRef = doc(db, COLLECTION, docId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) throw new Error('لا يوجد سجل لهذه الشحنة');
+      const cur = snap.data() as OnlineDispatchShipment;
+      if (cur.tenantId !== tenantId) throw new Error('لا يمكن تعديل شحنة من مستأجر آخر');
+      if (cur.status !== 'pending_reconciliation') {
+        throw new Error('يمكن الموافقة فقط على شحنات قيد المراجعة');
+      }
+      tx.update(docRef, {
+        status: 'handed_to_post' as OnlineDispatchStatus,
+        handedToWarehouseAt: serverTimestamp(),
+        handedToWarehouseByUid: uid,
+        handedToPostAt: serverTimestamp(),
+        handedToPostByUid: uid,
+        lastStatusByUid: uid,
+      });
+    });
   },
 
   /**

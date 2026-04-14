@@ -649,6 +649,17 @@ service cloud.firestore {
             && request.resource.data.lastStatusByUid == request.auth.uid
             && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'handedToWarehouseAt', 'handedToWarehouseByUid', 'createdByUid', 'lastStatusByUid'])
           )
+          || (
+            onlineDispatchCanPostHandoff()
+            && request.resource.data.status == 'pending_reconciliation'
+            && request.resource.data.firstCapturePhase == 'post'
+            && request.resource.data.firstCaptureAt is timestamp
+            && request.resource.data.firstCaptureByUid == request.auth.uid
+            && request.resource.data.createdAt is timestamp
+            && request.resource.data.createdByUid == request.auth.uid
+            && request.resource.data.lastStatusByUid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'firstCapturePhase', 'firstCaptureAt', 'firstCaptureByUid', 'createdByUid', 'lastStatusByUid'])
+          )
         );
       allow update: if isActiveUser()
         && resource.data.tenantId == currentUserDoc().data.tenantId
@@ -671,6 +682,15 @@ service cloud.firestore {
             && request.resource.data.cancelledByUid == request.auth.uid
             && request.resource.data.lastStatusByUid == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledByUid', 'lastStatusByUid']))
+          || (resource.data.status == 'pending_reconciliation'
+            && request.resource.data.status == 'handed_to_post'
+            && hasPermission('onlineDispatch.manage')
+            && request.resource.data.handedToWarehouseAt is timestamp
+            && request.resource.data.handedToWarehouseByUid == request.auth.uid
+            && request.resource.data.handedToPostAt is timestamp
+            && request.resource.data.handedToPostByUid == request.auth.uid
+            && request.resource.data.lastStatusByUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'handedToWarehouseAt', 'handedToWarehouseByUid', 'handedToPostAt', 'handedToPostByUid', 'lastStatusByUid']))
         );
       allow delete: if isActiveUser()
         && resource.data.tenantId == currentUserDoc().data.tenantId

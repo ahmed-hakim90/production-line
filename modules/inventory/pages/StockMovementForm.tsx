@@ -84,22 +84,17 @@ export const StockMovementForm: React.FC = () => {
   });
 
   const loadData = useCallback(async () => {
-    const [whs, rms, txs, bals] = await Promise.all([
-      warehouseService.getAll(),
+    const [whs, rms, peekRef, bals] = await Promise.all([
+      warehouseService.getActiveWarehouses(),
       rawMaterialService.getAll(),
-      stockService.getTransactions(),
+      stockService.getNextInvReferenceNo(),
       stockService.getBalances(),
     ]);
-    setWarehouses(whs.filter((w) => w.isActive !== false));
+    setWarehouses(whs);
     setRawMaterials(rms.filter((m) => m.isActive !== false));
     setBalances(bals);
-    const maxExisting = txs.reduce((max, tx) => {
-      const ref = (tx.referenceNo || '').trim();
-      const match = ref.match(INV_REF_REGEX);
-      if (!match) return max;
-      return Math.max(max, Number(match[1] || 0));
-    }, 0);
-    setNextReferenceSeq(maxExisting + 1);
+    const match = peekRef.trim().match(INV_REF_REGEX);
+    setNextReferenceSeq(match ? Number(match[1] || 0) : 1);
   }, []);
 
   useEffect(() => {
