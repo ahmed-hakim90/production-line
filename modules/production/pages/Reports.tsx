@@ -59,6 +59,7 @@ import {
   QualityStatus,
   ReportComponentScrapItem,
   ProductionLineStatus,
+  type FirestoreProductionLine,
   type PackagingReportLine,
 } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -114,6 +115,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
+type ReportKindFilter = 'production' | 'packaging' | 'injection' | 'all';
+
+function matchesReportKindFilter(
+  report: ProductionReport,
+  kind: ReportKindFilter,
+  lines: Pick<FirestoreProductionLine, 'id' | 'isPackagingLine'>[],
+): boolean {
+  if (kind === 'all') return true;
+  if (kind === 'packaging') return isPackagingThroughputReport(report, lines);
+  if (kind === 'injection') return resolveReportType(report.reportType) === 'component_injection';
+  if (isPackagingThroughputReport(report, lines)) return false;
+  if (resolveReportType(report.reportType) === 'component_injection') return false;
+  return true;
+}
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
   productId: '',
@@ -681,7 +697,7 @@ export const Reports: React.FC = () => {
 
   // Line & supervisor filters
   const [filterLineId, setFilterLineId] = useState('');
-  const [filterLineScope, setFilterLineScope] = useState<'all' | 'packaging_only' | 'exclude_packaging'>('all');
+  const [filterReportKind, setFilterReportKind] = useState<ReportKindFilter>('production');
   const [filterProductCategory, setFilterProductCategory] = useState('');
   const [filterEmployeeId, setFilterEmployeeId] = useState('');
   const [reportGroupBy, setReportGroupBy] = useState<ReportGroupBy>('none');
@@ -859,17 +875,13 @@ export const Reports: React.FC = () => {
       ? source.filter((r) => r.employeeId === myEmployeeId)
       : source;
     if (filterLineId) list = list.filter((r) => r.lineId === filterLineId);
-    if (filterLineScope === 'packaging_only') {
-      list = list.filter((r) => isPackagingThroughputReport(r, _rawLines));
-    } else if (filterLineScope === 'exclude_packaging') {
-      list = list.filter((r) => !isPackagingThroughputReport(r, _rawLines));
-    }
+    list = list.filter((r) => matchesReportKindFilter(r, filterReportKind, _rawLines));
     if (filterProductCategory) {
       list = list.filter((r) => (productCategoryByProductId.get(r.productId) || '') === filterProductCategory);
     }
     if (filterEmployeeId) list = list.filter((r) => r.employeeId === filterEmployeeId);
     return list;
-  }, [myEmployeeId, filterLineId, filterLineScope, filterProductCategory, filterEmployeeId, productCategoryByProductId, _rawLines]);
+  }, [myEmployeeId, filterLineId, filterReportKind, filterProductCategory, filterEmployeeId, productCategoryByProductId, _rawLines]);
 
   const sortReports = useCallback((source: ProductionReport[]) => {
     const getRegisteredAtMs = (report: ProductionReport): number => {
@@ -904,6 +916,7 @@ export const Reports: React.FC = () => {
     const filteredByLineAndEmployee = scoped.filter((r) => {
       if (filterLineId && r.lineId !== filterLineId) return false;
       if (filterEmployeeId && r.employeeId !== filterEmployeeId) return false;
+      if (!matchesReportKindFilter(r, filterReportKind, _rawLines)) return false;
       return true;
     });
     filteredByLineAndEmployee.forEach((report) => {
@@ -912,7 +925,7 @@ export const Reports: React.FC = () => {
       counts.set(category, (counts.get(category) || 0) + 1);
     });
     return counts;
-  }, [allReports, myEmployeeId, filterLineId, filterEmployeeId, productCategoryByProductId]);
+  }, [allReports, myEmployeeId, filterLineId, filterEmployeeId, filterReportKind, productCategoryByProductId, _rawLines]);
 
   const linkedReportId = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -933,7 +946,7 @@ export const Reports: React.FC = () => {
       setStartDate(linkedReport.date);
       setEndDate(linkedReport.date);
       setFilterLineId('');
-      setFilterLineScope('all');
+      setFilterReportKind('all');
       setFilterEmployeeId('');
       await fetchReports(linkedReport.date, linkedReport.date);
       if (cancelled) return;
@@ -1553,7 +1566,7 @@ export const Reports: React.FC = () => {
     setStartDate(getOperationalDateString(8));
     setEndDate(getOperationalDateString(8));
     setFilterLineId('');
-    setFilterLineScope('all');
+    setFilterReportKind('all');
     setFilterEmployeeId('');
     setRangeError(null);
     setRangeHasMore(false);
@@ -1610,7 +1623,7 @@ export const Reports: React.FC = () => {
         return;
       }
       setFilterLineId('');
-      setFilterLineScope('all');
+      setFilterReportKind('all');
       setFilterProductCategory('');
       setFilterEmployeeId('');
       setStartDate(range.startStr);
@@ -1635,7 +1648,11 @@ export const Reports: React.FC = () => {
     setViewMode('range');
   };
 
-  const activeFilterCount = (filterLineId ? 1 : 0) + (filterLineScope !== 'all' ? 1 : 0) + (filterProductCategory ? 1 : 0) + (filterEmployeeId ? 1 : 0);
+  const activeFilterCount =
+    (filterLineId ? 1 : 0)
+    + (filterReportKind !== 'production' ? 1 : 0)
+    + (filterProductCategory ? 1 : 0)
+    + (filterEmployeeId ? 1 : 0);
   const reportPeriod = useMemo(() => {
     const todayValue = getOperationalDateString(8);
     if (viewMode === 'today') return 'today';
@@ -1687,23 +1704,27 @@ export const Reports: React.FC = () => {
           width: 'w-[160px]',
         },
         {
-          key: 'lineScope',
-          placeholder: 'كل التقارير',
+          key: 'reportKind',
+          placeholder: 'إنتاج',
           options: [
-            { value: 'all', label: 'كل التقارير' },
-            { value: 'packaging_only', label: 'تغليف فقط' },
-            { value: 'exclude_packaging', label: 'بدون تغليف' },
+            { value: 'packaging', label: 'تغليف' },
+            { value: 'injection', label: 'حقن' },
+            { value: 'every', label: 'كله' },
           ],
           width: 'w-[150px]',
         },
       ]}
-      quickFilterValues={{ lineId: filterLineId || 'all', lineScope: filterLineScope }}
+      quickFilterValues={{
+        lineId: filterLineId || 'all',
+        reportKind: filterReportKind === 'production' ? 'all' : filterReportKind === 'all' ? 'every' : filterReportKind,
+      }}
       onQuickFilterChange={(key, value) => {
         if (key === 'lineId') setFilterLineId(value === 'all' ? '' : value);
-        if (key === 'lineScope') {
-          if (value === 'packaging_only') setFilterLineScope('packaging_only');
-          else if (value === 'exclude_packaging') setFilterLineScope('exclude_packaging');
-          else setFilterLineScope('all');
+        if (key === 'reportKind') {
+          if (value === 'all') setFilterReportKind('production');
+          else if (value === 'every') setFilterReportKind('all');
+          else if (value === 'packaging') setFilterReportKind('packaging');
+          else if (value === 'injection') setFilterReportKind('injection');
         }
       }}
       advancedFilters={[
@@ -1764,7 +1785,7 @@ export const Reports: React.FC = () => {
           className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
           onClick={() => {
             setFilterLineId('');
-            setFilterLineScope('all');
+            setFilterReportKind('production');
             setFilterProductCategory('');
             setFilterEmployeeId('');
           }}

@@ -15,6 +15,7 @@ interface WorkOrderDrawerProps {
   onEdit: (order: WorkOrder) => void;
   onCloseOrder: (order: WorkOrder) => void;
   onPrint: (order: WorkOrder) => void;
+  onOpenScanner?: (order: WorkOrder) => void;
   canReopenCompleted?: boolean;
   onReopenCompleted?: (order: WorkOrder) => void;
 }
@@ -46,12 +47,14 @@ export function WorkOrderDrawer({
   onEdit,
   onCloseOrder,
   onPrint,
+  onOpenScanner,
   canReopenCompleted,
   onReopenCompleted,
 }: WorkOrderDrawerProps) {
   if (!order) return null;
   const effectiveStatus = rowView?.effectiveStatus ?? order.status;
   const storedStatus = rowView?.storedStatus ?? order.status;
+  const scannerHidden = order.status === 'cancelled' || !order.id;
   const showReopenCompleted =
     Boolean(canReopenCompleted && onReopenCompleted && storedStatus === 'completed');
 
@@ -104,6 +107,7 @@ export function WorkOrderDrawer({
         }
       }}
       onPrint={() => onPrint(order)}
+      onOpenScanner={onOpenScanner && !scannerHidden ? () => onOpenScanner(order) : undefined}
       showReopenCompleted={showReopenCompleted}
       onReopenCompleted={showReopenCompleted ? () => onReopenCompleted!(order) : undefined}
       storedCompleted={storedStatus === 'completed'}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 import { PageHeader } from '../../../../components/PageHeader';
@@ -61,6 +62,7 @@ const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
 };
 
 export const WorkOrders: React.FC = () => {
+  const navigate = useTenantNavigate();
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
@@ -454,6 +456,15 @@ export const WorkOrders: React.FC = () => {
     });
   };
 
+  const handleOpenScanner = useCallback(
+    (order: WorkOrder) => {
+      if (!order.id || order.status === 'cancelled') return;
+      setSelectedOrder(null);
+      navigate(`/work-orders/${order.id}/scanner`);
+    },
+    [navigate, setSelectedOrder],
+  );
+
   const handlePrintOrder = (order: WorkOrder) => {
     setPrintData({
       workOrderNumber: order.workOrderNumber,
@@ -592,6 +603,7 @@ export const WorkOrders: React.FC = () => {
         onEdit={handleEditOrder}
         onCloseOrder={(order) => void handleCloseOrder(order)}
         onReopenCompleted={can('workOrders.edit') ? handleReopenCompletedOrder : undefined}
+        onOpenScanner={handleOpenScanner}
         onLoadMore={() => void loadMore()}
       />
 
@@ -606,6 +618,7 @@ export const WorkOrders: React.FC = () => {
         onEdit={handleEditOrder}
         onCloseOrder={handleCloseOrder}
         onPrint={handlePrintOrder}
+        onOpenScanner={handleOpenScanner}
         canReopenCompleted={can('workOrders.edit')}
         onReopenCompleted={handleReopenCompletedOrder}
       />

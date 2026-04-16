@@ -206,6 +206,7 @@
       "noNotes": "لا توجد ملاحظات",
       "actions": {
         "print": "طباعة",
+        "openScanner": "فتح الماسح",
         "closeOrder": "إغلاق الأمر",
         "reopen": "إعادة فتح",
         "edit": "تعديل"

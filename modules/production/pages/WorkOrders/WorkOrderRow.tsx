@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit2, Eye, RotateCcw, X } from 'lucide-react';
+import { Edit2, Eye, RotateCcw, ScanLine, X } from 'lucide-react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { formatNumber } from '../../../../utils/calculations';
@@ -34,6 +34,7 @@ interface WorkOrderRowProps {
   onEdit: (order: WorkOrder) => void;
   onCloseOrder: (order: WorkOrder) => void;
   onReopenCompleted?: (order: WorkOrder) => void;
+  onOpenScanner?: (order: WorkOrder) => void;
 }
 
 const progressColorClass = (progress: number): string => {
@@ -42,13 +43,14 @@ const progressColorClass = (progress: number): string => {
   return styles.progressPrimary;
 };
 
-function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onCloseOrder, onReopenCompleted }: WorkOrderRowProps) {
+function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onCloseOrder, onReopenCompleted, onOpenScanner }: WorkOrderRowProps) {
   const { order } = row;
   const produced = Number(order.producedQuantity || 0);
   const target = Number(order.quantity || 0);
   const progress = target > 0 ? Math.min(100, Math.round((produced / target) * 100)) : 0;
   const isDeviationUp = row.deviationPct > 0;
   const canClose = order.status === 'in_progress';
+  const canOpenScanner = Boolean(onOpenScanner && order.id && order.status !== 'cancelled');
 
   const actions: RowActionMenuEntry[] = [
     {
@@ -56,6 +58,15 @@ function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onClos
       icon: <Eye size={14} />,
       onClick: () => onRowClick(order),
     },
+    ...(canOpenScanner
+      ? [
+          {
+            label: 'فتح الماسح',
+            icon: <ScanLine size={14} />,
+            onClick: () => onOpenScanner!(order),
+          } as RowActionMenuEntry,
+        ]
+      : []),
     {
       label: 'تعديل',
       icon: <Edit2 size={14} />,
@@ -137,6 +148,7 @@ export const WorkOrderRow = React.memo(
     prev.onStatusChange === next.onStatusChange &&
     prev.onEdit === next.onEdit &&
     prev.onCloseOrder === next.onCloseOrder &&
+    prev.onOpenScanner === next.onOpenScanner &&
     prev.onReopenCompleted === next.onReopenCompleted &&
     prev.row.storedStatus === next.row.storedStatus &&
     prev.row.order.id === next.row.order.id &&

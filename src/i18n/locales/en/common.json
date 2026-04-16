@@ -206,6 +206,7 @@
       "noNotes": "No notes",
       "actions": {
         "print": "Print",
+        "openScanner": "Open scanner",
         "closeOrder": "Close order",
         "reopen": "Reopen",
         "edit": "Edit"

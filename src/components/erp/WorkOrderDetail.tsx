@@ -39,6 +39,8 @@ interface WorkOrderDetailProps {
   onEdit: () => void
   onClose_order: () => void
   onPrint: () => void
+  /** فتح شاشة مسح الباركود لأمر الشغل (مسار /work-orders/:id/scanner) */
+  onOpenScanner?: () => void
   /** عند أمر مكتمل: إظهار زر إعادة الفتح (صلاحية التعديل من الصفحة الأم) */
   showReopenCompleted?: boolean
   onReopenCompleted?: () => void
@@ -59,6 +61,7 @@ export function WorkOrderDetail({
   onEdit,
   onClose_order,
   onPrint,
+  onOpenScanner,
   showReopenCompleted,
   onReopenCompleted,
   storedCompleted,
@@ -279,10 +282,20 @@ export function WorkOrderDetail({
           </section>
         </div>
 
-        <footer className="grid grid-cols-3 gap-2 border-t border-[var(--color-border-ui)] px-4 py-3">
+        <footer className="flex flex-wrap gap-2 border-t border-[var(--color-border-ui)] px-4 py-3">
           <Button type="button" variant="outline" onClick={onPrint} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">
             {t("erpComponents.workOrderDetail.actions.print")}
           </Button>
+          {onOpenScanner ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onOpenScanner}
+              className="border-[var(--color-border-ui)] text-[var(--color-text-1)]"
+            >
+              {t("erpComponents.workOrderDetail.actions.openScanner")}
+            </Button>
+          ) : null}
           {!isCompletedFooter ? (
             <Button
               type="button"
