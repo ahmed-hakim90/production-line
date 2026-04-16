@@ -41,6 +41,7 @@ import {
 import { useDeviationAnalysis } from '../hooks/useDeviationAnalysis';
 import { analyzeDeviation } from '../analysis/deviationEngine';
 import { cn } from '@/lib/utils';
+import { countsTowardProductManufacturingVolume } from '../../production/utils/reportTypes';
 
 type ExtraColumnKey =
   | 'unitCostChinese'
@@ -294,9 +295,10 @@ export const MonthlyProductionCosts: React.FC = () => {
         reportService.getByDateRange(startDate, endDate),
       ]);
       if (!mountedRef.current || requestId !== fetchRequestRef.current) return;
+      const manufacturingReports = allReports.filter((report) => countsTowardProductManufacturingVolume(report));
       const monthProductQtyTotals = new Map<string, number>();
       const monthActiveDates = new Set<string>();
-      allReports.forEach((report) => {
+      manufacturingReports.forEach((report) => {
         if ((report.quantityProduced || 0) <= 0 || !report.productId) return;
         monthProductQtyTotals.set(
           report.productId,
@@ -369,7 +371,7 @@ export const MonthlyProductionCosts: React.FC = () => {
       const lineDateHoursTotals = new Map<string, number>();
       const lineMonthDates = new Map<string, Set<string>>();
       const lineCenterSummaryCache = new Map<string, ReturnType<typeof buildLineAllocatedCostSummary>>();
-      allReports.forEach((r) => {
+      manufacturingReports.forEach((r) => {
         const key = `${r.lineId}_${r.date}`;
         lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + (r.quantityProduced || 0));
         lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, r.workHours || 0));
@@ -383,7 +385,7 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       const indirectCache = new Map<string, number>();
       const supervisorShareMap = buildSupervisorIndirectShareMap(
-        allReports,
+        manufacturingReports,
         supervisorHourlyRates,
         hourlyRate,
       );
@@ -394,7 +396,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         if (!nextCenterBreakdown[productId]) nextCenterBreakdown[productId] = {};
         nextCenterBreakdown[productId][centerId] = (nextCenterBreakdown[productId][centerId] || 0) + amount;
       };
-      allReports.forEach((r) => {
+      manufacturingReports.forEach((r) => {
         if (!r.quantityProduced || r.quantityProduced <= 0) return;
         const current = nextBreakdown[r.productId] || { directCost: 0, indirectCost: 0 };
         current.directCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
@@ -487,8 +489,10 @@ export const MonthlyProductionCosts: React.FC = () => {
         setBreakdownMap(Object.keys(persistedBreakdown).length > 0 ? persistedBreakdown : nextBreakdown);
         setCenterBreakdownMap(nextCenterBreakdown);
       }
-    } catch {
-      // silently fail
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تحميل بيانات التكلفة الشهرية.';
+      console.error('MonthlyProductionCosts.fetchRecords', error);
+      toast.error(message);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -628,20 +632,25 @@ export const MonthlyProductionCosts: React.FC = () => {
     const [y, m] = month.split('-').map(Number);
     const lastDay = new Date(y, m, 0).getDate();
     const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
-    const monthReports = await reportService.getByDateRange(startDate, endDate);
-    const productIds = Array.from(
-      new Set(
-        monthReports
-          .filter((r) => (r.quantityProduced || 0) > 0)
-          .map((r) => String(r.productId || '').trim())
-          .filter((pid) => pid.length > 0)
-      )
-    );
-    if (productIds.length === 0) return;
-    setCalculateProgress({ done: 0, total: productIds.length, productId: '' });
+    setCalculateProgress({ done: 0, total: 0, productId: '' });
     setCalculateStartedAt(Date.now());
     setCalculating(true);
     try {
+      const monthReports = await reportService.getByDateRange(startDate, endDate);
+      const manufacturingMonth = monthReports.filter((r) => countsTowardProductManufacturingVolume(r));
+      const productIds = Array.from(
+        new Set(
+          manufacturingMonth
+            .filter((r) => (r.quantityProduced || 0) > 0)
+            .map((r) => String(r.productId || '').trim())
+            .filter((pid) => pid.length > 0)
+        )
+      );
+      if (productIds.length === 0) {
+        toast.error('لا توجد تقارير إنتاج (تصنيع) بكمية أكبر من صفر في هذا الشهر.');
+        return;
+      }
+      setCalculateProgress({ done: 0, total: productIds.length, productId: '' });
       await monthlyProductionCostService.calculateAll(
         productIds,
         month,
@@ -659,8 +668,10 @@ export const MonthlyProductionCosts: React.FC = () => {
         },
       );
       await fetchRecords();
-    } catch {
-      // error handled silently
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر إكمال حساب التكاليف الشهرية.';
+      console.error('MonthlyProductionCosts.handleCalculateAll', error);
+      toast.error(message);
     } finally {
       if (mountedRef.current) {
         setCalculating(false);
@@ -675,8 +686,10 @@ export const MonthlyProductionCosts: React.FC = () => {
       const productIds = records.map((r) => r.productId);
       await monthlyProductionCostService.closeMonthForAll(productIds, month);
       await fetchRecords();
-    } catch {
-      // error handled silently
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر إغلاق الشهر.';
+      console.error('MonthlyProductionCosts.handleCloseMonth', error);
+      toast.error(message);
     } finally {
       if (mountedRef.current) {
         setClosingMonth(false);

@@ -420,15 +420,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Same tenant isolation as isBusinessCollection writes, but NOT listed there so
+    // generic delete (open on many collections) does not apply to financial snapshots.
     match /monthly_production_costs/{docId} {
       allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow write: if false;
+      allow create: if isActiveUser() && sameTenantOrLegacyWrite();
+      allow update: if isActiveUser() && sameTenantOrLegacyUpdate();
+      allow delete: if false;
     }
 
     // Alias for requested monthly_costs naming.
     match /monthly_costs/{docId} {
       allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow write: if false;
+      allow create: if isActiveUser() && sameTenantOrLegacyWrite();
+      allow update: if isActiveUser() && sameTenantOrLegacyUpdate();
+      allow delete: if false;
     }
 
     match /user_presence/{userId} {

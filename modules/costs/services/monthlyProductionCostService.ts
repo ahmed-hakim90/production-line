@@ -26,6 +26,7 @@ import type {
   AssetDepreciation,
   ProductionReport,
 } from '../../../types';
+import { resolveReportType } from '../../production/utils/reportTypes';
 import {
   buildSupervisorIndirectShareMap,
   calculateDailyIndirectCost,
@@ -55,6 +56,7 @@ type CostProductionReport = ProductionReportData & {
   employeeId?: string;
   supervisorIndirectCost?: number;
   productCategory?: string;
+  reportType?: ProductionReport['reportType'];
 };
 
 type CostServiceProviders = {
@@ -125,6 +127,7 @@ function toLegacyProductionReports(reports: CostProductionReport[]): ProductionR
     workHours: Number(report.hours || 0),
     supervisorIndirectCost: Number(report.supervisorIndirectCost || 0),
     workOrderId: report.workOrderId,
+    reportType: resolveReportType(report.reportType),
   }));
 }
 

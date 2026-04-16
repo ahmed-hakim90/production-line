@@ -1,9 +1,12 @@
 import type { IProductionProvider, ProductionReportData } from '../../shared/contracts/IProductionProvider';
+import type { ProductionReport } from '../../../types';
+import { countsTowardProductManufacturingVolume, resolveReportType } from '../../production/utils/reportTypes';
 
 type ProductionReportWithMeta = ProductionReportData & {
   employeeId?: string;
   supervisorIndirectCost?: number;
   productCategory?: string;
+  reportType?: ProductionReport['reportType'];
 };
 
 function getMonthDateRange(month: string): { startDate: string; endDate: string } {
@@ -34,21 +37,24 @@ export class ProductionAdapter implements IProductionProvider {
     const allowedLineIds = new Set((lineIds || []).map((id) => String(id || '')).filter(Boolean));
     const shouldFilterByLine = allowedLineIds.size > 0;
 
-    return reports
+    const manufacturing = reports
       .filter((report) => !shouldFilterByLine || allowedLineIds.has(String(report.lineId || '')))
-      .map((report) => ({
-        id: String(report.id || ''),
-        date: String(report.date || ''),
-        lineId: String(report.lineId || ''),
-        productId: String(report.productId || ''),
-        quantity: Number(report.quantityProduced || 0),
-        workers: Number(report.workersCount || 0),
-        hours: Number(report.workHours || 0),
-        workOrderId: report.workOrderId,
-        employeeId: String(report.employeeId || '') || undefined,
-        supervisorIndirectCost: Number(report.supervisorIndirectCost || 0),
-        productCategory: String(productCategoryById.get(String(report.productId || '')) || ''),
-      } as ProductionReportWithMeta));
+      .filter((report) => countsTowardProductManufacturingVolume(report));
+
+    return manufacturing.map((report) => ({
+      id: String(report.id || ''),
+      date: String(report.date || ''),
+      lineId: String(report.lineId || ''),
+      productId: String(report.productId || ''),
+      quantity: Number(report.quantityProduced || 0),
+      workers: Number(report.workersCount || 0),
+      hours: Number(report.workHours || 0),
+      workOrderId: report.workOrderId,
+      employeeId: String(report.employeeId || '') || undefined,
+      supervisorIndirectCost: Number(report.supervisorIndirectCost || 0),
+      productCategory: String(productCategoryById.get(String(report.productId || '')) || ''),
+      reportType: resolveReportType(report.reportType),
+    } as ProductionReportWithMeta));
   }
 
   async getProductQuantities(month: string, productIds?: string[]): Promise<Record<string, number>> {
