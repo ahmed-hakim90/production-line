@@ -3,8 +3,16 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
+import type { Request, Response } from 'express';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { defineSecret } from 'firebase-functions/params';
+import {
+  countBostaDeliveriesCreatedInRange,
+  listBostaDeliveriesCreatedInRange,
+  parseYmdRangeToDispatchDayLocalBounds,
+} from './bostaHttp.js';
+import { syncTenantOnlineDispatchBostaFields, syncTenantOnlineDispatchByDocIds } from './bostaSync.js';
 import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
@@ -361,6 +369,225 @@ const hasAnyPermission = async (uid: string, permissionKeys: string[]): Promise<
   const permissions = role.permissions || {};
   return permissionKeys.some((key) => permissions[key] === true);
 };
+
+/**
+ * اسم الـ Secret في Google Secret Manager يجب أن يطابق هذا الحرفيًا:
+ * `firebase functions:secrets:set BOSTA_API_KEY`
+ * (الاسم sokany_eg_api غير موجود عندك → 404؛ أنشئ BOSTA_API_KEY أو انسخ القيمة لسر بهذا الاسم.)
+ */
+const bostaApiKeySecret = defineSecret('BOSTA_API_KEY');
+const ONLINE_DISPATCH_SHIPMENTS_COLLECTION = 'online_dispatch_shipments';
+
+const hasOnlineDispatchBostaAccess = async (uid: string): Promise<boolean> =>
+  hasAnyPermission(uid, [
+    'onlineDispatch.view',
+    'onlineDispatch.manage',
+    'onlineDispatch.handoffToWarehouse',
+    'onlineDispatch.handoffToPost',
+    'onlineDispatch.cancelFromWarehouseQueue',
+  ]);
+
+/** JSON body for HTTP Bosta helpers (rawBody من Cloud Functions أو req.body). */
+function parseBostaHttpJsonBody(req: Request): Record<string, unknown> {
+  try {
+    const raw = (req as Request & { rawBody?: Buffer }).rawBody;
+    if (raw && raw.length) {
+      const parsed = JSON.parse(raw.toString('utf8')) as unknown;
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    return req.body as Record<string, unknown>;
+  }
+  return {};
+}
+
+async function getUidFromBearerAuthorization(req: Request): Promise<string> {
+  const h = String(req.headers.authorization || '');
+  const m = /^Bearer\s+(.+)$/i.exec(h);
+  const token = m?.[1]?.trim();
+  if (!token) {
+    throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+  }
+  const decoded = await getAuth().verifyIdToken(token);
+  return decoded.uid;
+}
+
+function sendBostaHttpError(res: Response, err: unknown): void {
+  if (err instanceof HttpsError) {
+    res.status(err.httpErrorCode.status).json({
+      error: { code: err.code, message: err.message },
+    });
+    return;
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error('[bosta] HTTP handler unexpected error', msg);
+  res.status(500).json({ error: { code: 'internal', message: `خطأ داخلي: ${msg}` } });
+}
+
+async function bostaGetDeliveriesCreatedCountCore(
+  requesterUid: string,
+  rangeFrom: string,
+  rangeTo: string,
+): Promise<{ count: number; rangeFrom: string; rangeTo: string }> {
+  const allowed = await hasOnlineDispatchBostaAccess(requesterUid);
+  if (!allowed) {
+    throw new HttpsError('permission-denied', 'ليس لديك صلاحية عرض مؤشرات الأونلاين.');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rangeFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(rangeTo)) {
+    throw new HttpsError('invalid-argument', 'يجب تمرير rangeFrom و rangeTo بصيغة YYYY-MM-DD.');
+  }
+  const apiKey = resolveBostaApiKey();
+  if (!apiKey) {
+    throw new HttpsError(
+      'failed-precondition',
+      'لم يُهيأ مفتاح بوسطة. نفّذ: firebase functions:secrets:set BOSTA_API_KEY (أو للمحاكي: BOSTA_API_KEY في .env).',
+    );
+  }
+  const { startMs, endMs } = parseYmdRangeToDispatchDayLocalBounds(rangeFrom, rangeTo);
+  try {
+    const count = await countBostaDeliveriesCreatedInRange(apiKey, startMs, endMs);
+    return { count, rangeFrom, rangeTo };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[bosta] getBostaDeliveriesCreatedCount failed', { rangeFrom, rangeTo, error: msg });
+    throw new HttpsError('internal', `فشل طلب بوسطة: ${msg}`);
+  }
+}
+
+async function bostaListDeliveriesForRangeCore(
+  requesterUid: string,
+  rangeFrom: string,
+  rangeTo: string,
+): Promise<{
+  items: Array<{ trackingNumber: string; createdAtMs: number; stateLabel: string | null }>;
+  truncated: boolean;
+  rangeFrom: string;
+  rangeTo: string;
+}> {
+  const allowed = await hasOnlineDispatchBostaAccess(requesterUid);
+  if (!allowed) {
+    throw new HttpsError('permission-denied', 'ليس لديك صلاحية عرض مؤشرات الأونلاين.');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rangeFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(rangeTo)) {
+    throw new HttpsError('invalid-argument', 'يجب تمرير rangeFrom و rangeTo بصيغة YYYY-MM-DD.');
+  }
+  const apiKey = resolveBostaApiKey();
+  if (!apiKey) {
+    throw new HttpsError(
+      'failed-precondition',
+      'لم يُهيأ مفتاح بوسطة. نفّذ: firebase functions:secrets:set BOSTA_API_KEY (أو للمحاكي: BOSTA_API_KEY في .env).',
+    );
+  }
+  const { startMs, endMs } = parseYmdRangeToDispatchDayLocalBounds(rangeFrom, rangeTo);
+  try {
+    const { items, truncated } = await listBostaDeliveriesCreatedInRange(apiKey, startMs, endMs, {
+      maxItems: 2000,
+    });
+    return { items, truncated, rangeFrom, rangeTo };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[bosta] listBostaDeliveriesForRange failed', { rangeFrom, rangeTo, error: msg });
+    throw new HttpsError('internal', `فشل طلب بوسطة: ${msg}`);
+  }
+}
+
+async function bostaSyncOnlineDispatchStatusesCore(
+  requesterUid: string,
+  limit: number,
+  options?: { advancePaginationCursor?: boolean },
+): Promise<{ processed: number; tenantId: string }> {
+  const allowed = await hasOnlineDispatchBostaAccess(requesterUid);
+  if (!allowed) {
+    throw new HttpsError('permission-denied', 'ليس لديك صلاحية.');
+  }
+  const userSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+  const tenantId = String((userSnap.data() as { tenantId?: string } | undefined)?.tenantId || '').trim();
+  if (!tenantId) {
+    throw new HttpsError('failed-precondition', 'لا يوجد شركة مرتبطة بالمستخدم.');
+  }
+  const apiKey = resolveBostaApiKey();
+  if (!apiKey) {
+    throw new HttpsError('failed-precondition', 'لم يُهيّأ مفتاح بوسطة (Secret: BOSTA_API_KEY).');
+  }
+  const advance = options?.advancePaginationCursor === true;
+  try {
+    const { processed } = await syncTenantOnlineDispatchBostaFields({
+      db,
+      tenantId,
+      collectionName: ONLINE_DISPATCH_SHIPMENTS_COLLECTION,
+      apiKey,
+      maxDocs: limit,
+      /** false: أحدث N شحنة. true: يكمل من مؤشر الجدولة (نفس المزامنة الدورية). */
+      advancePaginationCursor: advance,
+    });
+    return { processed, tenantId };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[bosta] syncBostaOnlineDispatchStatuses failed', { tenantId, error: msg });
+    throw new HttpsError('internal', `فشل مزامنة بوسطة: ${msg}`);
+  }
+}
+
+async function bostaSyncOnlineDispatchByDocIdsCore(
+  requesterUid: string,
+  docIds: string[],
+): Promise<{ processed: number; skipped: number; tenantId: string }> {
+  const allowed = await hasOnlineDispatchBostaAccess(requesterUid);
+  if (!allowed) {
+    throw new HttpsError('permission-denied', 'ليس لديك صلاحية.');
+  }
+  const userSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+  const tenantId = String((userSnap.data() as { tenantId?: string } | undefined)?.tenantId || '').trim();
+  if (!tenantId) {
+    throw new HttpsError('failed-precondition', 'لا يوجد شركة مرتبطة بالمستخدم.');
+  }
+  const apiKey = resolveBostaApiKey();
+  if (!apiKey) {
+    throw new HttpsError('failed-precondition', 'لم يُهيّأ مفتاح بوسطة (Secret: BOSTA_API_KEY).');
+  }
+  const uniq = [...new Set(docIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  const max = 250;
+  if (uniq.length === 0) {
+    throw new HttpsError('invalid-argument', 'مرّر معرفًا واحدًا على الأقل.');
+  }
+  if (uniq.length > max) {
+    throw new HttpsError('invalid-argument', `يُسمح بحد أقصى ${max} شحنة في الطلب الواحد.`);
+  }
+  try {
+    const { processed, skipped } = await syncTenantOnlineDispatchByDocIds({
+      db,
+      tenantId,
+      collectionName: ONLINE_DISPATCH_SHIPMENTS_COLLECTION,
+      apiKey,
+      docIds: uniq,
+    });
+    return { processed, skipped, tenantId };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[bosta] syncBostaOnlineDispatchByDocIds failed', { tenantId, error: msg });
+    throw new HttpsError('internal', `فشل مزامنة بوسطة: ${msg}`);
+  }
+}
+
+function resolveBostaApiKey(): string {
+  const env = String(
+    process.env.BOSTA_API_KEY ||
+      process.env.sokany_eg_api ||
+      process.env.SOKANY_EG_API ||
+      '',
+  ).trim();
+  if (env) return env;
+  try {
+    return bostaApiKeySecret.value().trim();
+  } catch {
+    return '';
+  }
+}
 
 const hasRepairBranchManagePermission = async (uid: string): Promise<boolean> => {
   const userSnap = await db.collection(USERS_COLLECTION).doc(uid).get();
@@ -1746,5 +1973,251 @@ export const trackRepairJobPublic = onCall(
         updatedAtMs: toEpochMs(data.updatedAt),
       },
     };
+  },
+);
+
+/** KPI: count Bosta deliveries created in [rangeFrom, rangeTo] (local calendar bounds). */
+export const getBostaDeliveriesCreatedCount = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 120,
+    /** صريح لطلبات المتصفح (localhost + الإنتاج) — بدونها قد يظهر خطأ CORS إذا لم تُعدّ الاستجابة كـ callable سليمة */
+    cors: true,
+    /** Gen2 / Cloud Run: السماح باستدعاء الـ URL من الويب؛ التحقق من الهوية يبقى عبر Firebase Auth في جسم الطلب */
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const data = (request.data || {}) as { rangeFrom?: string; rangeTo?: string };
+    const rangeFrom = String(data.rangeFrom || '').trim();
+    const rangeTo = String(data.rangeTo || '').trim();
+    return bostaGetDeliveriesCreatedCountCore(requesterUid, rangeFrom, rangeTo);
+  },
+);
+
+/**
+ * نفس منطق العدّ عبر HTTP POST + Bearer ID token — يتجنب بعض مشاكل callable/CORS في المتصفح.
+ * URL: https://us-central1-<projectId>.cloudfunctions.net/getBostaDeliveriesCreatedCountHttp
+ */
+export const getBostaDeliveriesCreatedCountHttp = onRequest(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 120,
+    cors: true,
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (req: Request, res: Response) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: { code: 'invalid-argument', message: 'استخدم POST.' } });
+      return;
+    }
+    try {
+      const requesterUid = await getUidFromBearerAuthorization(req);
+      const body = parseBostaHttpJsonBody(req);
+      const rangeFrom = String(body.rangeFrom || '').trim();
+      const rangeTo = String(body.rangeTo || '').trim();
+      const out = await bostaGetDeliveriesCreatedCountCore(requesterUid, rangeFrom, rangeTo);
+      res.status(200).json(out);
+    } catch (err) {
+      sendBostaHttpError(res, err);
+    }
+  },
+);
+
+/** قائمة بوالص بوسطة (تاريخ إنشاء ضمن النطاق المحلي) — للوحة الدمج مع Firestore. */
+export const listBostaDeliveriesForRange = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 180,
+    cors: true,
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const data = (request.data || {}) as { rangeFrom?: string; rangeTo?: string };
+    const rangeFrom = String(data.rangeFrom || '').trim();
+    const rangeTo = String(data.rangeTo || '').trim();
+    return bostaListDeliveriesForRangeCore(requesterUid, rangeFrom, rangeTo);
+  },
+);
+
+export const listBostaDeliveriesForRangeHttp = onRequest(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 180,
+    cors: true,
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (req: Request, res: Response) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: { code: 'invalid-argument', message: 'استخدم POST.' } });
+      return;
+    }
+    try {
+      const requesterUid = await getUidFromBearerAuthorization(req);
+      const body = parseBostaHttpJsonBody(req);
+      const rangeFrom = String(body.rangeFrom || '').trim();
+      const rangeTo = String(body.rangeTo || '').trim();
+      const out = await bostaListDeliveriesForRangeCore(requesterUid, rangeFrom, rangeTo);
+      res.status(200).json(out);
+    } catch (err) {
+      sendBostaHttpError(res, err);
+    }
+  },
+);
+
+/** Manual sync: refresh Bosta tracking state for up to `limit` shipments in the caller's tenant. */
+export const syncBostaOnlineDispatchStatuses = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+    cors: true,
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const rawLimit = Number((request.data as { limit?: unknown } | undefined)?.limit);
+    const limit = Math.min(250, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 25));
+    const advancePaginationCursor = Boolean(
+      (request.data as { advancePaginationCursor?: unknown } | undefined)?.advancePaginationCursor,
+    );
+    return bostaSyncOnlineDispatchStatusesCore(requesterUid, limit, { advancePaginationCursor });
+  },
+);
+
+/** نفس منطق المزامنة عبر HTTP POST + Bearer ID token. */
+export const syncBostaOnlineDispatchStatusesHttp = onRequest(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+    cors: true,
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (req: Request, res: Response) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: { code: 'invalid-argument', message: 'استخدم POST.' } });
+      return;
+    }
+    try {
+      const requesterUid = await getUidFromBearerAuthorization(req);
+      const body = parseBostaHttpJsonBody(req);
+      const rawLimit = Number(body.limit);
+      const limit = Math.min(250, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 25));
+      const advancePaginationCursor = Boolean(body.advancePaginationCursor);
+      const out = await bostaSyncOnlineDispatchStatusesCore(requesterUid, limit, {
+        advancePaginationCursor,
+      });
+      res.status(200).json(out);
+    } catch (err) {
+      sendBostaHttpError(res, err);
+    }
+  },
+);
+
+/** مزامنة حالة بوسطة لقائمة مستندات (مثلاً كل الشحنات ضمن نطاق التاريخ في لوحة الأونلاين). حتى ٢٥٠ معرفًا لكل طلب. */
+export const syncBostaOnlineDispatchByDocIds = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+    cors: true,
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (request) => {
+    const requesterUid = String(request.auth?.uid || '').trim();
+    if (!requesterUid) {
+      throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    }
+    const raw = (request.data as { docIds?: unknown } | undefined)?.docIds;
+    const docIds = Array.isArray(raw) ? raw.map((x) => String(x ?? '')) : [];
+    return bostaSyncOnlineDispatchByDocIdsCore(requesterUid, docIds);
+  },
+);
+
+export const syncBostaOnlineDispatchByDocIdsHttp = onRequest(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+    cors: true,
+    invoker: 'public',
+    secrets: [bostaApiKeySecret],
+  },
+  async (req: Request, res: Response) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: { code: 'invalid-argument', message: 'استخدم POST.' } });
+      return;
+    }
+    try {
+      const requesterUid = await getUidFromBearerAuthorization(req);
+      const body = parseBostaHttpJsonBody(req);
+      const raw = body.docIds;
+      const docIds = Array.isArray(raw) ? raw.map((x) => String(x ?? '')) : [];
+      const out = await bostaSyncOnlineDispatchByDocIdsCore(requesterUid, docIds);
+      res.status(200).json(out);
+    } catch (err) {
+      sendBostaHttpError(res, err);
+    }
+  },
+);
+
+/** Periodic sync across tenants (capped API calls per run). */
+export const bostaSyncOnlineDispatchStatusesScheduled = onSchedule(
+  {
+    schedule: 'every 30 minutes',
+    region: 'us-central1',
+    timeZone: 'Africa/Cairo',
+    secrets: [bostaApiKeySecret],
+    memory: '512MiB',
+    timeoutSeconds: 300,
+  },
+  async () => {
+    const apiKey = resolveBostaApiKey();
+    if (!apiKey) {
+      console.warn('[bosta] BOSTA_API_KEY secret missing — skip scheduled sync');
+      return;
+    }
+    /** مكالمات API لكل تشغيل؛ كل شركة قد تستهلك الجزء كله عبر حلقة while (مؤشر صفحات). */
+    let budget = 150;
+    const tenantsSnap = await db.collection(TENANTS_COLLECTION).get();
+    for (const t of tenantsSnap.docs) {
+      if (budget <= 0) break;
+      const tenantId = t.id;
+      while (budget > 0) {
+        const chunk = Math.min(50, budget);
+        const { processed } = await syncTenantOnlineDispatchBostaFields({
+          db,
+          tenantId,
+          collectionName: ONLINE_DISPATCH_SHIPMENTS_COLLECTION,
+          apiKey,
+          maxDocs: chunk,
+          advancePaginationCursor: true,
+        });
+        budget -= processed;
+        if (processed === 0) break;
+      }
+    }
   },
 );

@@ -6,12 +6,16 @@ import {
   summarizeOnlineDispatchByRange,
 } from '../services/onlineDispatchService';
 import type { OnlineDispatchShipment } from '../../../types';
-import { parseYmdRangeToLocalBounds, todayYmd } from '../utils/dateRange';
+import { parseYmdRangeToDispatchDayLocalBounds, todayYmd } from '../utils/dateRange';
+import { isConfigured, syncBostaOnlineDispatchStatusesCallable } from '../../auth/services/firebase';
+import { useBostaDeliveriesForRange } from '../hooks/useBostaDeliveriesForRange';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
+import { toast } from '../../../components/Toast';
 
 export type OnlineDispatchKpisSectionProps = {
   /** أصغر أرقامًا مناسبة للتضمين في لوحة تحكم أخرى */
@@ -29,6 +33,26 @@ export type OnlineDispatchKpisSectionProps = {
   dateTo?: string;
   onDateFromChange?: (v: string) => void;
   onDateToChange?: (v: string) => void;
+  /** عنصر HTML id لبطاقة المؤشرات (للتمرير من شريط السياق). */
+  kpiSectionCardId?: string;
+  /**
+   * عند تمريرها من لوحة الأونلاين: نفس جلب `listBostaDeliveriesForRange` (بدون استدعاء عدّ منفصل).
+   * عند الغياب: يُستدعى الجلب داخليًا (مثلاً لوحة الإدارة).
+   */
+  bostaListStats?: {
+    count: number;
+    loading: boolean;
+    error: string | null;
+    truncated?: boolean;
+  };
+  kpiScrollTargetIds?: {
+    /** طابور المخزن → جدول النظام */
+    queue?: string;
+    /** عدد بوسطة → جدول API */
+    bostaApi?: string;
+    /** إلغاء / تسليم بوسطة / تسجيلات جديدة → سجلات Firestore */
+    firestore?: string;
+  };
 };
 
 /**
@@ -43,6 +67,9 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
   dateTo: dateToProp,
   onDateFromChange,
   onDateToChange,
+  kpiSectionCardId,
+  bostaListStats,
+  kpiScrollTargetIds,
 }) => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
@@ -52,11 +79,18 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
   const [localTo, setLocalTo] = useState(t);
   const [internalRows, setInternalRows] = useState<Array<OnlineDispatchShipment & { id: string }>>([]);
   const [queueCount, setQueueCount] = useState(0);
+  const [bostaSyncBusy, setBostaSyncBusy] = useState(false);
 
   const rangeFrom = dateFromProp ?? localFrom;
   const rangeTo = dateToProp ?? localTo;
   const setRangeFrom = onDateFromChange ?? setLocalFrom;
   const setRangeTo = onDateToChange ?? setLocalTo;
+
+  const internalBosta = useBostaDeliveriesForRange(rangeFrom, rangeTo, 0, { skip: Boolean(bostaListStats) });
+  const bostaLoading = bostaListStats?.loading ?? internalBosta.loading;
+  const bostaError = bostaListStats?.error ?? internalBosta.error;
+  const bostaTruncated = bostaListStats?.truncated ?? internalBosta.truncated;
+  const bostaCount = bostaError ? null : (bostaListStats?.count ?? internalBosta.items.length);
 
   const rows = tenantShipments ?? internalRows;
 
@@ -72,7 +106,7 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
   }, [tenantShipments]);
 
   const { startMs, endMs } = useMemo(
-    () => parseYmdRangeToLocalBounds(rangeFrom, rangeTo),
+    () => parseYmdRangeToDispatchDayLocalBounds(rangeFrom, rangeTo),
     [rangeFrom, rangeTo],
   );
   const summary = useMemo(
@@ -85,8 +119,36 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
   const tileClass =
     'flex min-h-[5.75rem] flex-col rounded-lg border border-border bg-card p-3 sm:min-h-[6rem] sm:p-4 shadow-sm';
 
+  const scrollTo = (id: string | undefined) => {
+    if (!id) return;
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const TileWrap: React.FC<{
+    scrollId?: string;
+    className?: string;
+    children: React.ReactNode;
+  }> = ({ scrollId, className: tileClassName, children }) => {
+    if (scrollId) {
+      return (
+        <button
+          type="button"
+          className={cn(
+            tileClass,
+            tileClassName,
+            'w-full cursor-pointer text-right transition-colors hover:bg-muted/50',
+          )}
+          onClick={() => scrollTo(scrollId)}
+        >
+          {children}
+        </button>
+      );
+    }
+    return <div className={cn(tileClass, tileClassName)}>{children}</div>;
+  };
+
   return (
-    <div className={cn('space-y-4', className)}>
+    <div className={cn('space-y-4', className)} id={kpiSectionCardId}>
       <Card className="shadow-sm">
         <CardContent className={cn(compact ? 'p-3' : 'p-4 sm:p-6')}>
           <div
@@ -95,20 +157,37 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
               compact ? 'gap-2' : 'gap-3 sm:gap-4',
             )}
           >
-            <div className={tileClass}>
+            <TileWrap scrollId={kpiScrollTargetIds?.queue}>
               <p className="text-xs text-muted-foreground">اوردر لم يتم تسليمه</p>
               <p className={cn(numClass, 'mt-1 text-primary')}>{queueCount}</p>
-            </div>
-            <div className={tileClass}>
-              <p className="text-xs text-muted-foreground">تسليم للمخزن (ضمن الفترة)</p>
-              <p className={cn(numClass, 'mt-1')}>{summary.toWarehouse}</p>
+            </TileWrap>
+            <TileWrap scrollId={kpiScrollTargetIds?.bostaApi}>
+              <p className="text-xs text-muted-foreground">بوالص منشأة في بوسطة (ضمن الفترة)</p>
+              <p className={cn(numClass, 'mt-1 flex items-center gap-2')}>
+                {bostaLoading ? (
+                  <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" aria-hidden />
+                ) : (
+                  (bostaError ? '—' : bostaCount) ?? '—'
+                )}
+              </p>
+              {!compact && bostaTruncated && !bostaError ? (
+                <p className="mt-1 text-[10px] leading-snug text-amber-800 dark:text-amber-200">
+                  القائمة مقصورة على السيرفر — العدد المعروض أقصى ما يُجلب في طلب واحد.
+                </p>
+              ) : null}
               {!compact && (
                 <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-                  نشط فقط — بلا إلغاء من التسليم
+                  من API بوسطة بحسب تاريخ إنشاء البوالص (تقويم محلي)
                 </p>
               )}
-            </div>
-            <div className={cn(tileClass, 'border-rose-500/25 bg-rose-50/40 dark:bg-rose-950/20')}>
+              {bostaError && !compact && (
+                <p className="mt-1 text-[10px] leading-snug text-rose-600 dark:text-rose-400">{bostaError}</p>
+              )}
+            </TileWrap>
+            <TileWrap
+              scrollId={kpiScrollTargetIds?.firestore}
+              className="border-rose-500/25 bg-rose-50/40 dark:bg-rose-950/20"
+            >
               <p className="text-xs text-muted-foreground">إلغاء من التسليم (ضمن الفترة)</p>
               <p className={cn(numClass, 'mt-1 text-rose-800 dark:text-rose-200')}>
                 {summary.cancelledInPeriod}
@@ -118,12 +197,12 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
                   بحسب وقت تسجيل الإلغاء
                 </p>
               )}
-            </div>
-            <div className={tileClass}>
+            </TileWrap>
+            <TileWrap scrollId={kpiScrollTargetIds?.firestore}>
               <p className="text-xs text-muted-foreground">تسليم للبوسطة (ضمن الفترة)</p>
               <p className={cn(numClass, 'mt-1')}>{summary.toPost}</p>
-            </div>
-            <div className={tileClass}>
+            </TileWrap>
+            <TileWrap scrollId={kpiScrollTargetIds?.firestore}>
               <p className="text-xs text-muted-foreground">تسجيلات جديدة (ضمن الفترة)</p>
               <p className={cn(numClass, 'mt-1')}>
                 {summary.createdInPeriod - summary.cancelledInPeriod}
@@ -133,7 +212,7 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
                   أول ظهور للباركود في النظام بحسب تاريخ الإنشاء
                 </p>
               )}
-            </div>
+            </TileWrap>
           </div>
         </CardContent>
       </Card>
@@ -180,6 +259,70 @@ export const OnlineDispatchKpisSection: React.FC<OnlineDispatchKpisSectionProps>
               <Button type="button" variant="default" onClick={() => navigate('/online/scan/post')}>
                 مسح — للبوسطة
               </Button>
+            )}
+            {(can('onlineDispatch.view') || can('onlineDispatch.manage')) && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={bostaSyncBusy || !isConfigured}
+                  onClick={() => {
+                    setBostaSyncBusy(true);
+                    void (async () => {
+                      try {
+                        const r = await syncBostaOnlineDispatchStatusesCallable({ limit: 150 });
+                        toast.success(
+                          `تم مزامنة ${r.processed} شحنة (أحدث الطلبات). المزامنة المجدولة تتقدم على باقي الشحنات تدريجيًا.`,
+                        );
+                      } catch (e) {
+                        // eslint-disable-next-line no-console
+                        console.error('[Bosta sync] syncBostaOnlineDispatchStatuses failed', e);
+                        toast.error(e instanceof Error ? e.message : 'تعذر مزامنة بوسطة');
+                      } finally {
+                        setBostaSyncBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  {bostaSyncBusy ? (
+                    <Loader2 className="ml-1 h-4 w-4 animate-spin" aria-hidden />
+                  ) : null}
+                  تحديث حالة بوسطة
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={bostaSyncBusy || !isConfigured}
+                  title="يتبع نفس ترتيب المزامنة المجدولة — كرر الضغط حتى تغطي كل الشحنات"
+                  onClick={() => {
+                    setBostaSyncBusy(true);
+                    void (async () => {
+                      try {
+                        const r = await syncBostaOnlineDispatchStatusesCallable({
+                          limit: 150,
+                          advancePaginationCursor: true,
+                        });
+                        toast.success(
+                          r.processed === 0
+                            ? 'لا توجد دفعة جديدة (انتهت الدورة أو لا توجد شحنات). جرّب «تحديث حالة بوسطة» لأحدث الطلبات.'
+                            : `تم مزامنة الدفعة التالية: ${r.processed} شحنة. كرر الضغط لاحقًا لدفعة أخرى.`,
+                        );
+                      } catch (e) {
+                        // eslint-disable-next-line no-console
+                        console.error('[Bosta sync] next batch failed', e);
+                        toast.error(e instanceof Error ? e.message : 'تعذر مزامنة بوسطة');
+                      } finally {
+                        setBostaSyncBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  {bostaSyncBusy ? (
+                    <Loader2 className="ml-1 h-4 w-4 animate-spin" aria-hidden />
+                  ) : null}
+                  مزامنة الدفعة التالية
+                </Button>
+              </>
             )}
           </CardContent>
         </Card>

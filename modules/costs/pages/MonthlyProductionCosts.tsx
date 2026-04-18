@@ -204,6 +204,8 @@ export const MonthlyProductionCosts: React.FC = () => {
     ensureReportsUiReferenceData: s.ensureReportsUiReferenceData,
   }));
 
+  const cnyToEgpRate = Number(laborSettings?.cnyToEgpRate ?? 0);
+
   useEffect(() => {
     void ensureReportsUiReferenceData();
   }, [ensureReportsUiReferenceData]);
@@ -951,6 +953,10 @@ export const MonthlyProductionCosts: React.FC = () => {
       const bdRow = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
       if (extraColumns.unitCostChinese) {
         row['تكلفة الوحدة الصينية (ج.م/وحدة)'] = bdRow ? bdRow.chineseUnitCost : '—';
+        if (cnyToEgpRate > 0) {
+          row['تكلفة الوحدة الصينية (¥/وحدة تقريبياً)'] =
+            bdRow != null ? bdRow.chineseUnitCost / cnyToEgpRate : '—';
+        }
       }
       if (extraColumns.unitCostRawMaterials) {
         row['المواد الخام (ج.م/وحدة)'] = bdRow ? bdRow.rawMaterialCost : '—';
@@ -1229,6 +1235,9 @@ export const MonthlyProductionCosts: React.FC = () => {
                     <th className="erp-th min-w-[100px]">
                       تكلفة الوحدة الصينية
                       <span className="block text-[10px] font-normal opacity-80">ج.م/وحدة</span>
+                      {cnyToEgpRate > 0 && (
+                        <span className="block text-[10px] font-normal opacity-80">+ ما يعادل ¥</span>
+                      )}
                     </th>
                   )}
                   {extraColumns.unitCostRawMaterials && (
@@ -1414,7 +1423,18 @@ export const MonthlyProductionCosts: React.FC = () => {
                       <td className="py-3 px-4 font-mono font-semibold text-[var(--color-text)] tabular-nums">
                         {(() => {
                           const bd = unitBreakdownByRecordKey.get(monthlyCostRecordKey(r));
-                          return bd ? formatCost(bd.chineseUnitCost) : '—';
+                          if (!bd) return '—';
+                          const egp = bd.chineseUnitCost;
+                          return (
+                            <div className="flex flex-col gap-0.5 items-start">
+                              <span>{formatCost(egp)}</span>
+                              {cnyToEgpRate > 0 && (
+                                <span className="text-[10px] font-normal text-[var(--color-text-muted)]">
+                                  ¥ {formatCost(egp / cnyToEgpRate)}
+                                </span>
+                              )}
+                            </div>
+                          );
                         })()}
                       </td>
                     )}
@@ -1566,7 +1586,14 @@ export const MonthlyProductionCosts: React.FC = () => {
                   )}
                   {extraColumns.unitCostChinese && (
                     <td className="py-3 px-4 font-mono text-[var(--color-text)]">
-                      {formatCost(unitBreakdownWeightedForDisplay.chinese)}
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <span className="tabular-nums">{formatCost(unitBreakdownWeightedForDisplay.chinese)}</span>
+                        {cnyToEgpRate > 0 && (
+                          <span className="text-[10px] font-normal text-[var(--color-text-muted)]">
+                            ¥ {formatCost(unitBreakdownWeightedForDisplay.chinese / cnyToEgpRate)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   )}
                   {extraColumns.unitCostRawMaterials && (

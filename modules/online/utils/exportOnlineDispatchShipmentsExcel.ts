@@ -4,6 +4,8 @@ import type { OnlineDispatchShipment } from '../../../types';
 import { ONLINE_DISPATCH_STATUS_LABEL } from '../components/OnlineDispatchStatusBadge';
 import { onlineDispatchTsToMs } from '../services/onlineDispatchService';
 import { onlineDispatchCreatorUid } from './onlineDispatchActorUids';
+import type { BostaApiMergedRow } from './bostaApiMerge';
+import { arabicLabelForBostaState } from './bostaStatePresentation';
 
 type ExportRow = OnlineDispatchShipment & { id: string };
 
@@ -36,6 +38,8 @@ export type OnlineDispatchExportExcelRow = {
   'تسليم المخزن — المستخدم': string;
   'تسليم البوسطة — الوقت': string;
   'تسليم البوسطة — المستخدم': string;
+  'حالة بوسطة': string;
+  'مزامنة بوسطة — الوقت': string;
   'إلغاء من التسليم — الوقت': string;
   'إلغاء من التسليم — المستخدم': string;
   ملاحظات: string;
@@ -59,6 +63,8 @@ function toSheetRows(rows: ExportRow[], userLabels: Record<string, string>): Onl
     'تسليم المخزن — المستخدم': labelFor(r.handedToWarehouseByUid, userLabels),
     'تسليم البوسطة — الوقت': formatTs(r.handedToPostAt),
     'تسليم البوسطة — المستخدم': labelFor(r.handedToPostByUid, userLabels),
+    'حالة بوسطة': (r.bostaStateLabel ?? r.bostaState ?? '').trim() || '—',
+    'مزامنة بوسطة — الوقت': formatTs(r.bostaSyncedAt),
     'إلغاء من التسليم — الوقت': formatTs(r.cancelledAt),
     'إلغاء من التسليم — المستخدم': labelFor(r.cancelledByUid, userLabels),
     ملاحظات: (r.notes ?? '').trim() || '—',
@@ -86,6 +92,37 @@ export function exportOnlineDispatchShipmentsExcel(
   const ws = XLSX.utils.json_to_sheet(sheetRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'شحنات');
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  saveAs(new Blob([buf], { type: 'application/octet-stream' }), fileName);
+}
+
+function defaultBostaMergedFileName(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  return `online-dispatch-bosta-api_${stamp}.xlsx`;
+}
+
+/** Excel export for Bosta API list merged with local tracking (Arabic headers). */
+export function exportBostaApiMergedExcel(
+  rows: BostaApiMergedRow[],
+  fileName: string = defaultBostaMergedFileName(),
+): void {
+  if (rows.length === 0) return;
+  const sheetRows = rows.map((r) => ({
+    'رقم التتبع': r.api.trackingNumber,
+    'حالة بوسطة (API)': arabicLabelForBostaState(r.api.stateLabel),
+    'تاريخ إنشاء البوليصة': r.api.createdAtMs
+      ? new Date(r.api.createdAtMs).toLocaleString('ar-EG')
+      : '—',
+    'مسجل محلياً': r.local ? 'نعم' : 'لا',
+    الباركود: r.local?.barcode ?? '—',
+    'الحالة المحلية': r.local ? (ONLINE_DISPATCH_STATUS_LABEL[r.local.status] ?? r.local.status) : '—',
+    'تسليم بوسطة محلي': formatTs(r.local?.handedToPostAt),
+  }));
+  const ws = XLSX.utils.json_to_sheet(sheetRows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'بوسطة API');
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   saveAs(new Blob([buf], { type: 'application/octet-stream' }), fileName);
 }

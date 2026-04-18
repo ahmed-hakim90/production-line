@@ -4,6 +4,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
+import { ONLINE_DISPATCH_BOSTA_INVALIDATE_EVENT } from '../hooks/useBostaDeliveriesForRange';
 import {
   getWarehouseDispatchDayStartMs,
   isValidDispatchBarcode,
@@ -264,6 +265,7 @@ export const OnlineQuickScan: React.FC = () => {
             await loadPostDispatchDayList();
           }
         }
+        window.dispatchEvent(new CustomEvent(ONLINE_DISPATCH_BOSTA_INVALIDATE_EVENT));
         playFeedbackTone('success');
         setValue('');
       } catch (e) {

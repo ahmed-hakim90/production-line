@@ -8,6 +8,10 @@ import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreProduct } from '../../../types';
 import { categoryService } from '../../../modules/catalog/services/categoryService';
 import { useTranslation } from 'react-i18next';
+import {
+  chineseUnitCostEgpFromYuanUnitPrice,
+} from '../../../utils/chineseUnitCostCny';
+import { formatCost } from '../../../utils/costCalculations';
 
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
   name: '',
@@ -29,7 +33,9 @@ export const GlobalCreateProductModal: React.FC = () => {
   const canViewCosts = can('costs.view');
   const createProduct = useAppStore((s) => s.createProduct);
   const rawProducts = useAppStore((s) => s._rawProducts);
+  const laborSettings = useAppStore((s) => s.laborSettings);
   const [form, setForm] = useState(emptyForm);
+  const [chineseUnitPriceYuan, setChineseUnitPriceYuan] = useState('');
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -72,6 +78,13 @@ export const GlobalCreateProductModal: React.FC = () => {
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setChineseUnitPriceYuan('');
+  }, [isOpen]);
+
+  const cnyToEgpRate = Number(laborSettings?.cnyToEgpRate ?? 0);
+
   if (!isOpen) return null;
   if (!can('products.create')) return null;
 
@@ -87,6 +100,13 @@ export const GlobalCreateProductModal: React.FC = () => {
     setMessage(null);
     try {
       const createData: Omit<FirestoreProduct, 'id'> = { ...form };
+      if (canViewCosts) {
+        if (cnyToEgpRate > 0) {
+          const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
+          createData.chineseUnitCost = chineseUnitCostEgpFromYuanUnitPrice(yuan, cnyToEgpRate);
+        }
+        /* else: keep form.chineseUnitCost from manual EGP field */
+      }
       if (
         typeof createData.routingTargetUnitSeconds !== 'number' ||
         !Number.isFinite(createData.routingTargetUnitSeconds) ||
@@ -100,6 +120,7 @@ export const GlobalCreateProductModal: React.FC = () => {
       if (!id) throw new Error('create failed');
       setMessage({ type: 'success', text: t('modalManager.createProduct.createSuccess') });
       setForm(emptyForm);
+      setChineseUnitPriceYuan('');
     } catch {
       setMessage({ type: 'error', text: t('modalManager.createProduct.saveError') });
     } finally {
@@ -215,9 +236,50 @@ export const GlobalCreateProductModal: React.FC = () => {
 
           {canViewCosts && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.chineseUnitCost')}</label>
-                <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step="any" placeholder="0" value={form.chineseUnitCost ?? ''} onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })} />
+              <div className="space-y-2 sm:col-span-2">
+                {cnyToEgpRate > 0 ? (
+                  <>
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                      {t('modalManager.createProduct.chineseUnitPriceYuan')}
+                    </label>
+                    <input
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
+                      type="number"
+                      min={0}
+                      step="any"
+                      placeholder="0"
+                      value={chineseUnitPriceYuan}
+                      onChange={(e) => setChineseUnitPriceYuan(e.target.value)}
+                    />
+                    <p className="text-xs text-[var(--color-text-muted)]">
+                      {t('modalManager.createProduct.chineseUnitCostPreview', {
+                        rate: formatCost(cnyToEgpRate),
+                        egp: formatCost(
+                          chineseUnitCostEgpFromYuanUnitPrice(
+                            Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0,
+                            cnyToEgpRate,
+                          ),
+                        ),
+                      })}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-3 py-2">
+                      {t('modalManager.createProduct.cnyRateMissingHint')}
+                    </p>
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.chineseUnitCostManualEgp')}</label>
+                    <input
+                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
+                      type="number"
+                      min={0}
+                      step="any"
+                      placeholder="0"
+                      value={form.chineseUnitCost ?? ''}
+                      onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })}
+                    />
+                  </>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.innerBoxCost')}</label>

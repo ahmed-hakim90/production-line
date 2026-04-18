@@ -80,7 +80,7 @@ export function isValidDispatchBarcode(s: string): boolean {
     if (!/^\d+$/.test(rest)) return false;
     return rest.length >= MIN_TRACK_DIGITS && rest.length <= MAX_TRACK_DIGITS;
   }
-  return true;
+  return extractBostaTrackingDigits(t) !== null;
 }
 
 function isQueryableBarcodeCandidate(b: string): boolean {
@@ -223,7 +223,7 @@ export const onlineDispatchService = {
     const rawT = rawBarcode.trim();
     const barcode = normalizeBostaBarcode(rawBarcode);
     if (!isValidDispatchBarcode(barcode)) {
-      throw new Error('أدخل باركودًا غير فارغ (حد أقصى ٥١٢ حرفًا)');
+      throw new Error('باركود بوسطة غير صالح — يُتوقع رقم تتبع من ٦ إلى ١٥ رقمًا (أو BOSTA_ متبوعًا بالأرقام)');
     }
     const ck = cooldownKey('w', barcode);
     const now = Date.now();
@@ -282,7 +282,7 @@ export const onlineDispatchService = {
     const rawT = rawBarcode.trim();
     const barcode = normalizeBostaBarcode(rawBarcode);
     if (!isValidDispatchBarcode(barcode)) {
-      throw new Error('أدخل باركودًا غير فارغ (حد أقصى ٥١٢ حرفًا)');
+      throw new Error('باركود بوسطة غير صالح — يُتوقع رقم تتبع من ٦ إلى ١٥ رقمًا (أو BOSTA_ متبوعًا بالأرقام)');
     }
     const ck = cooldownKey('p', barcode);
     const now = Date.now();

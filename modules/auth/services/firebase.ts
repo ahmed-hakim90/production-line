@@ -88,6 +88,16 @@ const normalizeCallableError = (error: any): Error => {
   if (code.includes('unavailable') || code.includes('deadline-exceeded')) {
     return new Error('تعذر الاتصال بالخادم. تحقق من اتصال الإنترنت ثم أعد المحاولة.');
   }
+  /** يظهر غالبًا عند فشل الشبكة أو CORS أو استجابة ليست من callable سليم (دالة غير منشورة، 404، إلخ). */
+  if (
+    message.toLowerCase() === 'internal' ||
+    code === 'functions/internal' ||
+    message.includes('Failed to fetch')
+  ) {
+    return new Error(
+      'تعذر استدعاء الخادم. إن ظهرت رسالة CORS: غالبًا الدالة غير منشورة أو Secret BOSTA_API_KEY غير مُنشأ في المشروع. نفّذ: firebase functions:secrets:set BOSTA_API_KEY ثم firebase deploy --only functions',
+    );
+  }
   if (message) {
     return new Error(message);
   }
@@ -319,6 +329,118 @@ export const trackRepairJobPublicCallable = async (input: {
   } catch (error: any) {
     throw normalizeCallableError(error);
   }
+};
+
+const functionsUsCentral1HttpBase = (): string => {
+  const pid = firebaseConfig.projectId;
+  if (!pid) throw new Error('Firebase not configured');
+  return `https://us-central1-${pid}.cloudfunctions.net`;
+};
+
+/**
+ * استدعاء دالة HTTP في نفس المشروع مع Bearer ID token — يتفادى مشاكل callable/CORS مع بعض إعدادات Cloud Run.
+ */
+async function callAuthenticatedCloudFunctionJson<T>(functionName: string, body: Record<string, unknown>): Promise<T> {
+  if (!isConfigured || !auth) throw new Error('Firebase not configured');
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('يجب تسجيل الدخول أولًا ثم إعادة المحاولة.');
+  }
+  const idToken = await user.getIdToken();
+  const url = `${functionsUsCentral1HttpBase()}/${functionName}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e: unknown) {
+    const m = e instanceof Error ? e.message : String(e);
+    if (m.includes('Failed to fetch') || m.includes('NetworkError')) {
+      throw new Error(
+        'تعذر الاتصال بالخادم. تحقق من الشبكة ثم أعد المحاولة، أو تأكد من نشر الدوال (getBostaDeliveriesCreatedCountHttp).',
+      );
+    }
+    throw new Error(m);
+  }
+  const text = await res.text();
+  let parsed: unknown;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(text ? text.slice(0, 200) : `استجابة غير صالحة (${res.status})`);
+  }
+  if (!res.ok) {
+    const errObj = parsed as { error?: { code?: string; message?: string } };
+    const code = errObj.error?.code ? `functions/${errObj.error.code}` : 'functions/internal';
+    const message = String(errObj.error?.message || '').trim();
+    throw normalizeCallableError({ code, message: message || `HTTP ${res.status}` });
+  }
+  return parsed as T;
+}
+
+/** Bosta: count deliveries created in the same local date range as the online KPI date picker. */
+export const getBostaDeliveriesCreatedCountCallable = async (input: {
+  rangeFrom: string;
+  rangeTo: string;
+}): Promise<{ count: number; rangeFrom: string; rangeTo: string }> => {
+  return callAuthenticatedCloudFunctionJson<{ count: number; rangeFrom: string; rangeTo: string }>(
+    'getBostaDeliveriesCreatedCountHttp',
+    { rangeFrom: input.rangeFrom, rangeTo: input.rangeTo },
+  );
+};
+
+export type BostaApiDeliveryRow = {
+  trackingNumber: string;
+  createdAtMs: number;
+  stateLabel: string | null;
+};
+
+/** Bosta: list deliveries created in range (for dashboard merge with Firestore). */
+export const listBostaDeliveriesForRangeCallable = async (input: {
+  rangeFrom: string;
+  rangeTo: string;
+}): Promise<{
+  items: BostaApiDeliveryRow[];
+  truncated: boolean;
+  rangeFrom: string;
+  rangeTo: string;
+}> => {
+  return callAuthenticatedCloudFunctionJson<{
+    items: BostaApiDeliveryRow[];
+    truncated: boolean;
+    rangeFrom: string;
+    rangeTo: string;
+  }>('listBostaDeliveriesForRangeHttp', { rangeFrom: input.rangeFrom, rangeTo: input.rangeTo });
+};
+
+/** Bosta: refresh cached tracking state on shipment docs (server-side). */
+export const syncBostaOnlineDispatchStatusesCallable = async (input?: {
+  limit?: number;
+  /** يكمل من مؤشر الصفحات (نفس المزامنة المجدولة) بدل أحدث الطلبات فقط. */
+  advancePaginationCursor?: boolean;
+}): Promise<{ processed: number; tenantId: string }> => {
+  const payload: Record<string, unknown> = {};
+  if (input?.limit !== undefined) payload.limit = input.limit;
+  if (input?.advancePaginationCursor === true) payload.advancePaginationCursor = true;
+  return callAuthenticatedCloudFunctionJson<{ processed: number; tenantId: string }>(
+    'syncBostaOnlineDispatchStatusesHttp',
+    payload,
+  );
+};
+
+/** مزامنة حالة بوسطة لشحنات محددة بالمعرف (حتى ٢٥٠ لكل طلب) — مثلاً كل الشحنات ضمن نطاق التاريخ في لوحة الأونلاين. */
+export const syncBostaOnlineDispatchByDocIdsCallable = async (input: {
+  docIds: string[];
+}): Promise<{ processed: number; skipped: number; tenantId: string }> => {
+  return callAuthenticatedCloudFunctionJson<{ processed: number; skipped: number; tenantId: string }>(
+    'syncBostaOnlineDispatchByDocIdsHttp',
+    { docIds: input.docIds },
+  );
 };
 
 export type TenantFirestoreFootprint = {

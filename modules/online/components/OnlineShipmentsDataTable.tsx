@@ -5,6 +5,13 @@ import { OnlineDispatchStatusBadge } from './OnlineDispatchStatusBadge';
 import { useFirestoreUserLabels } from '../utils/firestoreUserLabels';
 import { onlineDispatchCreatorUid } from '../utils/onlineDispatchActorUids';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import {
+  arabicLabelForBostaState,
+  bostaCategoryBadgeClass,
+  categorizeBostaStateLabel,
+} from '../utils/bostaStatePresentation';
 
 export type OnlineShipmentsTableRow = OnlineDispatchShipment & { id: string };
 
@@ -34,6 +41,8 @@ export type OnlineShipmentsDataTableProps = {
   /** When set, used for user display names instead of fetching inside the table. */
   userLabels?: Record<string, string>;
   selection?: OnlineShipmentsSelectionProps;
+  /** عند false: إخفاء عمود «تسليم المخزن» (عرض يعتمد على API بوسطة). */
+  showWarehouseColumn?: boolean;
 };
 
 export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> = ({
@@ -43,6 +52,7 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
   renderActionCell,
   userLabels: userLabelsProp,
   selection,
+  showWarehouseColumn = false,
 }) => {
   const internalUids = useMemo(
     () =>
@@ -66,20 +76,24 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
     !!selection && pageIds.some((id) => selection.selectedIds.has(id)) && !allPageSelected;
 
   const hasSelectCol = Boolean(selection);
-  const colSpan = (hasSelectCol ? 1 : 0) + 5 + (showActionColumn ? 1 : 0);
+  const dataCols = showWarehouseColumn ? 6 : 5;
+  const colSpan = (hasSelectCol ? 1 : 0) + dataCols + (showActionColumn ? 1 : 0);
 
   const cellPad = 'py-2.5 px-3 align-top';
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[960px] table-fixed border-collapse text-sm">
+      <table
+        className={`w-full table-fixed border-collapse text-sm ${showWarehouseColumn ? 'min-w-[1080px]' : 'min-w-[920px]'}`}
+      >
         <colgroup>
           {hasSelectCol && <col className="w-[44px]" />}
+          <col className="w-[10%]" />
+          <col className="w-[14%]" />
+          {showWarehouseColumn ? <col className="w-[14%]" /> : null}
+          <col className="w-[14%]" />
           <col className="w-[11%]" />
-          <col className="w-[17%]" />
-          <col className="w-[17%]" />
-          <col className="w-[17%]" />
-          <col className={showActionColumn ? 'w-[13%]' : 'w-[21%]'} />
+          <col className={showActionColumn ? 'w-[13%]' : 'w-[19%]'} />
           {showActionColumn && <col className="w-[8%]" />}
         </colgroup>
         <thead>
@@ -97,13 +111,18 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
             <th className={`${cellPad} text-right text-xs font-semibold text-muted-foreground`}>
               المنشئ والإنشاء
             </th>
-            <th className={`${cellPad} text-right text-xs font-semibold text-muted-foreground`}>
-              تسليم المخزن
-            </th>
+            {showWarehouseColumn ? (
+              <th className={`${cellPad} text-right text-xs font-semibold text-muted-foreground`}>
+                تسليم المخزن
+              </th>
+            ) : null}
             <th className={`${cellPad} text-right text-xs font-semibold text-muted-foreground`}>
               تسليم البوسطة
             </th>
             <th className={`${cellPad} text-right text-xs font-semibold text-muted-foreground`}>الحالة</th>
+            <th className={`${cellPad} text-right text-xs font-semibold text-muted-foreground`}>
+              حالة بوسطة
+            </th>
             {showActionColumn && (
               <th className={`${cellPad} text-center text-xs font-semibold text-muted-foreground`}>إجراء</th>
             )}
@@ -130,31 +149,33 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
                   <p className="tabular-nums text-foreground">الإنشاء: {formatDispatchTimestamp(r.createdAt)}</p>
                 </div>
               </td>
-              <td className={cellPad}>
-                {onlineDispatchTsToMs(r.handedToWarehouseAt) ? (
-                  <div className="min-w-0 space-y-0.5 text-[11px] leading-tight">
-                    <p className="break-words text-muted-foreground">
-                      مَن سلّم:{' '}
-                      {r.handedToWarehouseByUid ? userLabels[r.handedToWarehouseByUid] ?? '…' : '—'}
-                    </p>
-                    <p className="tabular-nums text-foreground">
-                      الوقت: {formatDispatchTimestamp(r.handedToWarehouseAt)}
-                    </p>
-                  </div>
-                ) : r.status === 'pending_reconciliation' && onlineDispatchTsToMs(r.firstCaptureAt) ? (
-                  <div className="min-w-0 space-y-0.5 text-[11px] leading-tight text-violet-900/90 dark:text-violet-100/90">
-                    <p className="break-words text-muted-foreground">
-                      أول مسح بوسطة:{' '}
-                      {r.firstCaptureByUid ? userLabels[r.firstCaptureByUid] ?? '…' : '—'}
-                    </p>
-                    <p className="tabular-nums text-foreground">
-                      {formatDispatchTimestamp(r.firstCaptureAt)}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-[11px] leading-tight text-muted-foreground">—</p>
-                )}
-              </td>
+              {showWarehouseColumn ? (
+                <td className={cellPad}>
+                  {onlineDispatchTsToMs(r.handedToWarehouseAt) ? (
+                    <div className="min-w-0 space-y-0.5 text-[11px] leading-tight">
+                      <p className="break-words text-muted-foreground">
+                        مَن سلّم:{' '}
+                        {r.handedToWarehouseByUid ? userLabels[r.handedToWarehouseByUid] ?? '…' : '—'}
+                      </p>
+                      <p className="tabular-nums text-foreground">
+                        الوقت: {formatDispatchTimestamp(r.handedToWarehouseAt)}
+                      </p>
+                    </div>
+                  ) : r.status === 'pending_reconciliation' && onlineDispatchTsToMs(r.firstCaptureAt) ? (
+                    <div className="min-w-0 space-y-0.5 text-[11px] leading-tight text-violet-900/90 dark:text-violet-100/90">
+                      <p className="break-words text-muted-foreground">
+                        أول مسح بوسطة:{' '}
+                        {r.firstCaptureByUid ? userLabels[r.firstCaptureByUid] ?? '…' : '—'}
+                      </p>
+                      <p className="tabular-nums text-foreground">
+                        {formatDispatchTimestamp(r.firstCaptureAt)}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] leading-tight text-muted-foreground">—</p>
+                  )}
+                </td>
+              ) : null}
               <td className={cellPad}>
                 {onlineDispatchTsToMs(r.handedToPostAt) ? (
                   <div className="min-w-0 space-y-0.5 text-[11px] leading-tight">
@@ -171,6 +192,39 @@ export const OnlineShipmentsDataTable: React.FC<OnlineShipmentsDataTableProps> =
               </td>
               <td className={cellPad}>
                 <OnlineDispatchStatusBadge status={r.status} />
+              </td>
+              <td className={cellPad}>
+                <div className="min-w-0 space-y-1 text-[11px] leading-tight">
+                  {(() => {
+                    const raw = (r.bostaStateLabel ?? r.bostaState)?.trim();
+                    if (!raw) {
+                      return <span className="text-muted-foreground">—</span>;
+                    }
+                    const cat = categorizeBostaStateLabel(raw);
+                    const ar = arabicLabelForBostaState(raw);
+                    return (
+                      <div className="space-y-0.5">
+                        <Badge
+                          variant="outline"
+                          className={cn('text-[10px] font-medium', bostaCategoryBadgeClass(cat))}
+                        >
+                          {ar}
+                        </Badge>
+                        {raw !== ar ? (
+                          <p className="break-words text-muted-foreground">{raw}</p>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+                  {r.bostaLastError ? (
+                    <p className="break-words text-rose-600 dark:text-rose-400">{r.bostaLastError}</p>
+                  ) : null}
+                  {onlineDispatchTsToMs(r.bostaSyncedAt) ? (
+                    <p className="tabular-nums text-muted-foreground">
+                      مزامنة: {formatDispatchTimestamp(r.bostaSyncedAt)}
+                    </p>
+                  ) : null}
+                </div>
               </td>
               {showActionColumn && (
                 <td className={`${cellPad} text-center`}>{renderActionCell?.(r)}</td>

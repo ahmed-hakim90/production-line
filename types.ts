@@ -815,9 +815,14 @@ export interface OnlineDispatchShipment {
   handedToWarehouseByUid?: string;
   handedToPostAt?: unknown;
   handedToPostByUid?: string;
-  /** Set when a user cancels the shipment from the warehouse handoff queue (no longer expected at post). */
+  /** Set when the row is cancelled from dispatch (warehouse cancel flow). */
   cancelledAt?: unknown;
-  cancelledByUid?: string;
+  /** Latest delivery state string from Bosta API (synced by Cloud Functions). */
+  bostaState?: string | null;
+  /** Human-readable Bosta status for display. */
+  bostaStateLabel?: string | null;
+  bostaSyncedAt?: unknown;
+  bostaLastError?: string | null;
   notes?: string;
 }
 

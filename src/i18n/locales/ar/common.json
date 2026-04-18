@@ -852,6 +852,10 @@
       "categoryModelPlaceholder": "اختر أو اكتب فئة",
       "sellingPrice": "سعر البيع (ج.م)",
       "autoDeductScrap": "خصم هالك المكونات تلقائياً من مخزن المفكك أثناء تقرير الإنتاج",
+      "chineseUnitPriceYuan": "سعر الوحدة باليوان (¥)",
+      "chineseUnitCostPreview": "سيتم حفظ تكلفة الوحدة الصينية ≈ {{egp}} ج.م (معامل الصرف {{rate}} ج.م لكل ¥)",
+      "cnyRateMissingHint": "لم يُضبط معامل تحويل اليوان في إعدادات التكاليف. أدخل تكلفة الوحدة الصينية بالجنيه أدناه، أو اضبط المعامل أولاً من إعدادات التكاليف.",
+      "chineseUnitCostManualEgp": "تكلفة الوحدة الصينية (ج.م) — إدخال يدوي",
       "chineseUnitCost": "تكلفة الوحدة الصينية (ج.م)",
       "innerBoxCost": "تكلفة العلبة الداخلية (ج.م)",
       "outerCartonCost": "تكلفة الكرتونة الخارجية (ج.م)",
@@ -914,6 +918,47 @@
         "checkOut": "خروج",
         "action": "إجراء"
       }
+    }
+  },
+  "onlineDispatchDashboard": {
+    "bostaApiCardTitle": "بوالص بوسطة (API)",
+    "bostaApiCardDescription": "البوالص المُنشأة في بوسطة ضمن نطاق التاريخ المحلي المختار، مع الدمج مع السجلات المحلية حسب رقم التتبع.",
+    "legacyWarehouseMode": "وضع المخزن (قديم)",
+    "classicFirestoreTrigger": "العرض الكلاسيكي — سجلات النظام (Firestore)",
+    "classicFirestoreDescription": "تصفية وإدارة السجلات المخزّنة في النظام لنفس نطاق التاريخ.",
+    "bostaListLoadError": "تعذر جلب قائمة بوسطة",
+    "bostaTableEmpty": "لا توجد بوالص في هذا النطاق",
+    "exportBostaMerged": "تصدير Excel — قائمة بوسطة",
+    "exportBostaMergedAll": "كل البوالص في النطاق (دمج API)",
+    "exportBostaMergedFiltered": "عرض الجدول الحالي (بعد الفلاتر)",
+    "bostaTableColTracking": "رقم التتبع",
+    "bostaTableColState": "حالة بوسطة (API)",
+    "bostaTableColCreated": "إنشاء البوليصة (بوسطة)",
+    "bostaTableColLocal": "السجل المحلي",
+    "bostaTableTruncated": "تم تقصير القائمة على السيرفر — ضيّق نطاق التاريخ أو اختر يومًا واحدًا.",
+    "notRegisteredLocalHint": "غير مسجّل محليًا — امسح للبوسطة عند التسليم",
+    "lagPanelToggleShow": "إظهار بطاقة التأخر",
+    "lagPanelToggleHide": "إخفاء بطاقة التأخر",
+    "contextBarFrom": "من",
+    "contextBarTo": "إلى",
+    "contextBarHint": "اليوم يبدأ الساعة ٨ صباحًا محليًا (حتى ٧:٥٩ صباحًا اليوم التالي). يطبّق على المؤشرات وجدول بوسطة وسجلات النظام.",
+    "jumpBostaTable": "جدول بوسطة",
+    "jumpReconciliation": "طابور المراجعة",
+    "jumpFirestore": "سجلات النظام",
+    "summaryTotal": "الصفوف",
+    "summaryNoLocal": "غير مسجّلة محليًا",
+    "analysisTabBosta": "تحليل بوسطة",
+    "analysisTabLocal": "سجلات النظام",
+    "bostaFiltersCategory": "فئة الحالة",
+    "bostaFiltersCategoryAll": "كل الفئات",
+    "bostaFiltersNoLocalOnly": "غير مسجّلة محليًا فقط",
+    "bostaFiltersTrackingPlaceholder": "تصفية بالتتبع…",
+    "bostaCategoryShort": {
+      "delivered": "تسليم",
+      "in_transit": "قيد النقل",
+      "exception": "استثناء",
+      "cancelled": "ملغاة",
+      "unknown": "أخرى"
     }
   }
 }
