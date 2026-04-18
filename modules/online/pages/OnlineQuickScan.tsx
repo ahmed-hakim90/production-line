@@ -257,13 +257,9 @@ export const OnlineQuickScan: React.FC = () => {
           toast.success('تم تسجيل التسليم للمخزن');
           await loadWarehouseDispatchDayList();
         } else {
-          const postResult = await onlineDispatchService.applyPostScan(uid, trimmed);
-          if (postResult.status === 'pending_reconciliation') {
-            toast.success('تم حفظ الباركود قيد المراجعة — راجع لوحة الأونلاين للموافقة');
-          } else {
-            toast.success('تم تسجيل التسليم للبوسطة');
-            await loadPostDispatchDayList();
-          }
+          await onlineDispatchService.applyPostScan(uid, trimmed);
+          toast.success('تم تسجيل التسليم للبوسطة');
+          await loadPostDispatchDayList();
         }
         window.dispatchEvent(new CustomEvent(ONLINE_DISPATCH_BOSTA_INVALIDATE_EVENT));
         playFeedbackTone('success');
@@ -362,7 +358,7 @@ export const OnlineQuickScan: React.FC = () => {
         subtitle={
           scanMode === 'warehouse'
             ? 'أول مسح لهذا الباركود يُنشئ السجل ويُسجّل التسليم للمخزن — أو امسح رمز QR'
-            : 'إن لم يكن الباركود مسجّلًا مسبقًا يُحفظ تلقائيًا «قيد المراجعة» من لوحة الأونلاين؛ وإلا يُسجَّل التسليم للبوسطة عند جاهزية الشحنة'
+            : 'إن لم يكن الباركود مسجّلًا مسبقًا يُنشأ سجل بتسليم للبوسطة فقط؛ وإلا يُسجَّل التسليم للبوسطة عند جاهزية الشحنة (بعد تسليم المخزن)'
         }
         icon="search"
         secondaryAction={{
@@ -441,15 +437,9 @@ export const OnlineQuickScan: React.FC = () => {
             )}
           </div>
         </div>
-        {/* <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
-          على الموبايل (خصوصاً Safari على آيفون) يجب السماح بالكاميرا من نافذة المتصفح عند الضغط أعلاه؛ إن لم تظهر، تحقق من إعدادات الموقع أو أن الصفحة تُفتح عبر HTTPS.
-        </p> */}
 
         {inputMode === 'manual' ? (
           <>
-            {/* <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
-              استخدم لوحة المفاتيح أو قارئ الباركود المتصل (يُدخل النص كلوحة مفاتيح): ركّز الحقل ثم امسح، وعادةً يُرسل القارئ زر Enter؛ أو اضغط «تسجيل».
-            </p> */}
             <div className="space-y-2">
               <Label htmlFor="online-scan-barcode" className="text-xs text-muted-foreground">
                 الباركود

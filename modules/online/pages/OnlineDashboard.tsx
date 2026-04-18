@@ -781,8 +781,8 @@ export const OnlineDashboard: React.FC = () => {
             <div className="min-w-0 flex-1 space-y-1">
               <CardTitle className="text-base font-semibold">قائمة المراجعة — مسح بوسطة بدون سجل سابق</CardTitle>
               <CardDescription className="text-xs leading-relaxed">
-                باركود وُجد عند مسح التسليم للبوسطة دون أن يكون مسجّلًا مسبقًا. يمكن لمن لديه صلاحية الإدارة الموافقة
-                لتسجيل التسليم للمخزن وللبوسطة دفعة واحدة للمراجعة والتقارير.
+                للسجلات القديمة «قيد المراجعة» فقط: باركود وُجد عند مسح التسليم للبوسطة دون أن يكون مسجّلًا مسبقًا. يمكن لمن لديه صلاحية الإدارة الموافقة
+                لتسجيل التسليم للمخزن وللبوسطة دفعة واحدة للمراجعة والتقارير. المسح الجديد بدون سجل سابق يُسجَّل مباشرة كتسليم للبوسطة من شاشة المسح.
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">

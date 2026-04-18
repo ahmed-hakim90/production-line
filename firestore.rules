@@ -666,6 +666,19 @@ service cloud.firestore {
             && request.resource.data.lastStatusByUid == request.auth.uid
             && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'firstCapturePhase', 'firstCaptureAt', 'firstCaptureByUid', 'createdByUid', 'lastStatusByUid'])
           )
+          || (
+            onlineDispatchCanPostHandoff()
+            && request.resource.data.status == 'handed_to_post'
+            && request.resource.data.handedToPostAt is timestamp
+            && request.resource.data.handedToPostByUid == request.auth.uid
+            && request.resource.data.createdAt is timestamp
+            && request.resource.data.createdByUid == request.auth.uid
+            && request.resource.data.lastStatusByUid == request.auth.uid
+            && request.resource.data.firstCapturePhase == 'post'
+            && request.resource.data.firstCaptureAt is timestamp
+            && request.resource.data.firstCaptureByUid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'handedToPostAt', 'handedToPostByUid', 'firstCapturePhase', 'firstCaptureAt', 'firstCaptureByUid', 'createdByUid', 'lastStatusByUid'])
+          )
         );
       allow update: if isActiveUser()
         && resource.data.tenantId == currentUserDoc().data.tenantId

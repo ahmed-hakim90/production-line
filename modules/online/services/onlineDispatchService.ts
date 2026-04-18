@@ -305,8 +305,10 @@ export const onlineDispatchService = {
       const ref = await addDoc(collection(db, COLLECTION), {
         tenantId,
         barcode,
-        status: 'pending_reconciliation' as OnlineDispatchStatus,
+        status: 'handed_to_post' as OnlineDispatchStatus,
         createdAt: serverTimestamp(),
+        handedToPostAt: serverTimestamp(),
+        handedToPostByUid: uid,
         firstCapturePhase: 'post' as const,
         firstCaptureAt: serverTimestamp(),
         firstCaptureByUid: uid,
@@ -314,7 +316,7 @@ export const onlineDispatchService = {
         lastStatusByUid: uid,
       });
       cooldown.set(ck, Date.now());
-      return { id: ref.id, barcode, status: 'pending_reconciliation' };
+      return { id: ref.id, barcode, status: 'handed_to_post' };
     }
     const docRef = found.ref;
     const rowBefore = found.data() as OnlineDispatchShipment;
