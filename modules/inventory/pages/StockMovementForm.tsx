@@ -9,7 +9,13 @@ import { warehouseService } from '../services/warehouseService';
 import type { RawMaterial, Warehouse, StockItemBalance } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
-import { exportToPDF, shareToWhatsApp, waitForExportPaint, type ShareResult } from '../../../utils/reportExport';
+import {
+  exportToPDF,
+  getShareResultFeedbackMessage,
+  shareToWhatsApp,
+  waitForExportPaint,
+  type ShareResult,
+} from '../../../utils/reportExport';
 import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData } from '../components/StockTransferPrint';
 import type { TransferDisplayUnitMode } from '../utils/transferUnits';
 import {
@@ -259,12 +265,10 @@ export const StockMovementForm: React.FC = () => {
     });
 
   const showShareFeedback = (result: ShareResult) => {
-    if (result.method === 'native_share' || result.method === 'cancelled') return;
-    const msg = result.copied
-      ? 'تم تحميل صورة التحويلة ونسخها — افتح واتساب والصق الصورة (Ctrl+V)'
-      : 'تم تحميل صورة التحويلة — أرفقها في محادثة واتساب';
+    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التحويلة' });
+    if (!msg) return;
     setShareToast(msg);
-    setTimeout(() => setShareToast(null), 6000);
+    setTimeout(() => setShareToast(null), 8000);
   };
 
   const printTransfer = async (fileName: string) => {

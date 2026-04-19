@@ -11,7 +11,12 @@ import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData
 import { useManagedPrint } from '../../../utils/printManager';
 import { useAppStore } from '../../../store/useAppStore';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
-import { shareToWhatsApp, waitForExportPaint, type ShareResult } from '../../../utils/reportExport';
+import {
+  getShareResultFeedbackMessage,
+  shareToWhatsApp,
+  waitForExportPaint,
+  type ShareResult,
+} from '../../../utils/reportExport';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { toast } from '../../../components/Toast';
@@ -278,12 +283,10 @@ export const StockTransactions: React.FC = () => {
   };
 
   const showShareFeedback = useCallback((result: ShareResult) => {
-    if (result.method === 'native_share' || result.method === 'cancelled') return;
-    const msg = result.copied
-      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
-      : 'تم تحميل صورة التحويلة — أرفقها في محادثة واتساب';
+    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التحويلة' });
+    if (!msg) return;
     setShareToast(msg);
-    setTimeout(() => setShareToast(null), 6000);
+    setTimeout(() => setShareToast(null), 8000);
   }, []);
 
   const buildSharePayloadFromTransferLine = (row: StockTransaction): StockTransferPrintData | null => {

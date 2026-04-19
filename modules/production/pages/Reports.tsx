@@ -63,7 +63,11 @@ import {
   type PackagingReportLine,
 } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import type { ShareResult } from '../../../utils/reportExport';
+import { getShareResultFeedbackMessage, type ShareResult } from '../../../utils/reportExport';
+import {
+  formatBulkProductionReportsShareCaption,
+  formatProductionReportShareCaption,
+} from '../../../utils/productionReportShareCaption';
 import type {
   ImportResult,
   ParsedReportRow,
@@ -1482,12 +1486,10 @@ export const Reports: React.FC = () => {
   }, [handleBulkPrint, isMobilePrint, printTemplate?.orientation, printTemplate?.paperSize, startDate]);
 
   const showShareFeedback = useCallback((result: ShareResult) => {
-    if (result.method === 'native_share' || result.method === 'cancelled') return;
-    const msg = result.copied
-      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
-      : 'تم تحميل صورة التقرير — أرفقها في محادثة واتساب';
+    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
+    if (!msg) return;
     setShareToast(msg);
-    setTimeout(() => setShareToast(null), 6000);
+    setTimeout(() => setShareToast(null), 8000);
   }, []);
 
   const triggerSingleShare = useCallback(
@@ -1530,6 +1532,7 @@ export const Reports: React.FC = () => {
         const result = await shareToWhatsApp(
           sharePrintRef.current,
           `تقرير-إنتاج-${row.date}-${row.lineName}`,
+          { caption: formatProductionReportShareCaption(row, printTemplate) },
         );
         showShareFeedback(result);
       } catch (error: unknown) {
@@ -1548,6 +1551,7 @@ export const Reports: React.FC = () => {
       routingVarianceBasisSecondsByProduct,
       routingPlanTargetUnitSecondsByProduct,
       routingProductTargetUnitSecondsByProduct,
+      printTemplate,
       showShareFeedback,
     ]
   );
@@ -2270,7 +2274,17 @@ export const Reports: React.FC = () => {
     try {
       const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
       await waitForExportPaint(150);
-      const result = await shareToWhatsApp(bulkPrintRef.current, `تقارير الإنتاج ${startDate}`);
+      const result = await shareToWhatsApp(bulkPrintRef.current, `تقارير الإنتاج ${startDate}`, {
+        caption: formatBulkProductionReportsShareCaption({
+          title:
+            viewMode === 'today'
+              ? `تقارير إنتاج اليوم — ${getOperationalDateString(8)}`
+              : `تقارير الإنتاج — ${startDate} إلى ${endDate}`,
+          subtitle: `${printRows.length} تقرير`,
+          totals: printTotals,
+          decimalPlaces: printTemplate?.decimalPlaces,
+        }),
+      });
       showShareFeedback(result);
     } finally {
       setExporting(false);
@@ -2950,6 +2964,18 @@ export const Reports: React.FC = () => {
     }
   }, [buildReportRow, printTemplate?.paperSize, printTemplate?.orientation, startDate]);
 
+  const handleBulkShareWhatsAppSelected = useCallback(
+    async (items: ProductionReport[]) => {
+      if (items.length === 0) return;
+      if (items.length > 1) {
+        toast.error('اختر تقريراً واحداً فقط لمشاركة واتساب مع تفاصيل النص.');
+        return;
+      }
+      await triggerSingleShare(items[0]);
+    },
+    [triggerSingleShare],
+  );
+
   const handleBulkDeleteConfirmed = useCallback(async () => {
     if (!bulkDeleteItems) return;
     setBulkDeleting(true);
@@ -2986,6 +3012,12 @@ export const Reports: React.FC = () => {
   const reportBulkActions = useMemo<TableBulkAction<ProductionReport>[]>(() => {
     const actions: TableBulkAction<ProductionReport>[] = [
       { label: 'طباعة المحدد', icon: 'print', action: handleBulkPrintSelected, permission: 'print' },
+      {
+        label: 'مشاركة واتساب',
+        icon: 'share',
+        action: handleBulkShareWhatsAppSelected,
+        permission: 'print',
+      },
       { label: 'طباعة منفصلة PDF', icon: 'picture_as_pdf', action: handleBulkPrintSelectedAsSinglePagesPdf, permission: 'print' },
       { label: 'حذف المحدد', icon: 'delete', action: (items) => setBulkDeleteItems(items), permission: 'reports.delete', variant: 'danger' },
     ];
@@ -3003,7 +3035,17 @@ export const Reports: React.FC = () => {
       });
     }
     return actions;
-  }, [handleBulkPrintSelected, handleBulkPrintSelectedAsSinglePagesPdf, canExportFromPage, startDate, endDate, lookups, canViewCosts, reportCosts]);
+  }, [
+    handleBulkPrintSelected,
+    handleBulkShareWhatsAppSelected,
+    handleBulkPrintSelectedAsSinglePagesPdf,
+    canExportFromPage,
+    startDate,
+    endDate,
+    lookups,
+    canViewCosts,
+    reportCosts,
+  ]);
 
   const renderReportActions = (report: ProductionReport) => (
     <div className="flex min-w-[170px] flex-nowrap items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">

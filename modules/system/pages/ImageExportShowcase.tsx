@@ -3,7 +3,12 @@ import { Card, Button } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
-import { exportAsImage, shareToWhatsApp, type ShareResult } from '../../../utils/reportExport';
+import {
+  exportAsImage,
+  getShareResultFeedbackMessage,
+  shareToWhatsApp,
+  type ShareResult,
+} from '../../../utils/reportExport';
 import {
   SingleReportPrint,
   ProductionReportPrint,
@@ -68,11 +73,9 @@ export const ImageExportShowcase: React.FC = () => {
   const [busy, setBusy] = useState<string | null>(null);
 
   const showShareFeedback = useCallback((result: ShareResult) => {
-    if (result.method === 'native_share' || result.method === 'cancelled') return;
-    const msg = result.copied
-      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
-      : 'تم تحميل صورة التقرير — أرفقها في محادثة واتساب';
-    toast.success(msg, 6000);
+    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
+    if (!msg) return;
+    toast.success(msg, 8000);
   }, []);
 
   const runExport = async (key: string, el: HTMLElement | null, fileName: string) => {

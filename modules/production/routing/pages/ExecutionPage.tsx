@@ -20,7 +20,15 @@ import { routingExecutionService } from '../services/routingExecutionService';
 import { formatDurationSeconds } from '../domain/calculations';
 import type { ProductionRoutingStep } from '../types';
 import { RoutingExecutionPrint } from '../components/RoutingExecutionPrint';
-import { exportAsImage, exportToPDF, shareToWhatsApp, waitForExportPaint, type ShareResult } from '@/utils/reportExport';
+import {
+  exportAsImage,
+  exportToPDF,
+  getShareResultFeedbackMessage,
+  shareToWhatsApp,
+  waitForExportPaint,
+  type ShareResult,
+} from '@/utils/reportExport';
+import { formatRoutingExecutionShareCaption } from '../utils/routingExecutionShareCaption';
 
 type Phase = 'pick' | 'preview' | 'run' | 'done';
 
@@ -89,12 +97,10 @@ export const ExecutionPage: React.FC = () => {
   }, [execution, _rawEmployees]);
 
   const showShareFeedback = useCallback((result: ShareResult) => {
-    if (result.method === 'native_share' || result.method === 'cancelled') return;
-    const msg = result.copied
-      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
-      : 'تم تحميل صورة التقرير — أرفقها في محادثة واتساب';
+    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
+    if (!msg) return;
     setShareToast(msg);
-    setTimeout(() => setShareToast(null), 6000);
+    setTimeout(() => setShareToast(null), 8000);
   }, []);
 
   const handleExecExportPdf = useCallback(async () => {
@@ -126,15 +132,23 @@ export const ExecutionPage: React.FC = () => {
     setExporting(true);
     try {
       await waitForExportPaint(150);
+      const caption = formatRoutingExecutionShareCaption(
+        execution,
+        execSteps,
+        executionProductName,
+        executionSupervisorName,
+        printTemplate,
+      );
       const result = await shareToWhatsApp(
         printRef.current,
         `تنفيذ مسار - ${executionProductName || execution.productId}`,
+        { caption },
       );
       showShareFeedback(result);
     } finally {
       setExporting(false);
     }
-  }, [execution, executionProductName, showShareFeedback]);
+  }, [execution, execSteps, executionProductName, executionSupervisorName, printTemplate, showShareFeedback]);
 
   const startMut = useMutation({
     mutationFn: async () => {

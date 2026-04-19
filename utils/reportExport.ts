@@ -22,6 +22,15 @@ export interface CaptureOptions {
   windowHeight?: number;
 }
 
+/** Options for `shareToWhatsApp`: html2canvas capture + optional plain-text caption (Web Share). */
+export type ShareToWhatsAppOptions = CaptureOptions & {
+  /**
+   * Plain text paired with the image when the OS share sheet supports it
+   * (often appears as WhatsApp image caption on Android).
+   */
+  caption?: string;
+};
+
 const applyRtlFontClone = (clonedDoc: Document) => {
   clonedDoc.documentElement.setAttribute('dir', 'rtl');
   clonedDoc.documentElement.setAttribute('lang', 'ar');
@@ -328,7 +337,40 @@ export const exportAsImage = async (
 export type ShareResult = {
   method: 'native_share' | 'cancelled' | 'clipboard_and_download' | 'download_only';
   copied: boolean;
+  /** True when the caption was copied because file+text could not be shared in one call (paste as WhatsApp caption). */
+  captionCopied?: boolean;
 };
+
+/** Toast / hint text after share when the flow fell back to download or split file+text. */
+export function getShareResultFeedbackMessage(
+  result: ShareResult,
+  options?: { downloadEntityLabel?: string },
+): string | null {
+  if (result.method === 'cancelled') return null;
+  const dl = options?.downloadEntityLabel ?? 'التقرير';
+
+  if (result.method === 'native_share') {
+    if (result.captionCopied) {
+      return 'تم إرسال الصورة. تم نسخ التفاصيل — الصقها في واتساب كتعليق على الصورة إن لم تُضف تلقائياً.';
+    }
+    return null;
+  }
+
+  if (result.method === 'clipboard_and_download') {
+    if (result.captionCopied) {
+      return 'تم تحميل الصورة ونسخ التفاصيل — أرفق الصورة من المجلد ثم الصق النص في التعليق.';
+    }
+    if (result.copied) {
+      return 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)';
+    }
+  }
+
+  if (result.method === 'download_only') {
+    return `تم تحميل صورة ${dl} — أرفقها في محادثة واتساب`;
+  }
+
+  return null;
+}
 
 // ─── Share as image to WhatsApp ─────────────────────────────────────────────
 
@@ -337,23 +379,49 @@ const MOBILE_SHARE_JPEG_QUALITY = 0.97;
 export const shareToWhatsApp = async (
   el: HTMLElement,
   title: string,
-  captureOptions?: CaptureOptions,
+  options?: ShareToWhatsAppOptions,
 ): Promise<ShareResult> => {
+  const { caption, ...captureOptions } = options ?? {};
   const canvas = await capture(el, captureOptions);
   const pngBlob = await canvasToBlob(canvas, 'image/png');
   const fileBaseName = toSafeFileBaseName(title);
 
   const tryNativeShare = async (file: File): Promise<ShareResult | null> => {
     if (!navigator.share) return null;
+    const trimmedCaption = caption?.trim();
+    const shareData: ShareData = { files: [file], title };
+    if (trimmedCaption) shareData.text = trimmedCaption;
+
+    const shareFilesOnly = (): ShareData => ({ files: [file], title });
+
     try {
-      if (navigator.canShare && !navigator.canShare({ files: [file] })) return null;
-      await navigator.share({ files: [file], title });
+      /**
+       * Android Chrome often reports `canShare({ files, text })` as false even when
+       * `share()` succeeds — only bail out when there is no caption to justify a blind try.
+       */
+      if (navigator.canShare && !navigator.canShare(shareData) && !trimmedCaption) {
+        return null;
+      }
+      await navigator.share(shareData);
       return { method: 'native_share', copied: false };
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return { method: 'cancelled', copied: false };
       }
-      return null;
+      if (!trimmedCaption) return null;
+      try {
+        const filesOnly = shareFilesOnly();
+        if (navigator.canShare && !navigator.canShare(filesOnly)) return null;
+        await navigator.share(filesOnly);
+        try {
+          await navigator.clipboard?.writeText(trimmedCaption);
+        } catch {
+          /* ignore */
+        }
+        return { method: 'native_share', copied: true, captionCopied: true };
+      } catch {
+        return null;
+      }
     }
   };
 
@@ -376,6 +444,16 @@ export const shareToWhatsApp = async (
   downloadBlob(pngBlob, `${fileBaseName}.png`);
 
   let copied = false;
+  const trimmedCaption = caption?.trim();
+
+  if (isMobileDevice && trimmedCaption) {
+    try {
+      await navigator.clipboard?.writeText(trimmedCaption);
+      copied = true;
+    } catch {
+      /* ignore */
+    }
+  }
 
   if (isMobileDevice) {
     setTimeout(() => {
@@ -395,5 +473,9 @@ export const shareToWhatsApp = async (
     window.open('https://web.whatsapp.com/', '_blank');
   }
 
-  return { method: copied ? 'clipboard_and_download' : 'download_only', copied };
+  return {
+    method: copied ? 'clipboard_and_download' : 'download_only',
+    copied,
+    ...(isMobileDevice && trimmedCaption && copied ? { captionCopied: true } : {}),
+  };
 };

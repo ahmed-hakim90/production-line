@@ -3,7 +3,15 @@ import { Plus } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
-import { exportAsImage, exportToPDF, shareToWhatsApp, waitForExportPaint, ShareResult } from '../../../utils/reportExport';
+import {
+  exportAsImage,
+  exportToPDF,
+  getShareResultFeedbackMessage,
+  shareToWhatsApp,
+  waitForExportPaint,
+  ShareResult,
+} from '../../../utils/reportExport';
+import { formatProductionReportShareCaption } from '../../../utils/productionReportShareCaption';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
@@ -609,12 +617,10 @@ export const QuickAction: React.FC = () => {
   };
 
   const showShareFeedback = (result: ShareResult) => {
-    if (result.method === 'native_share' || result.method === 'cancelled') return;
-    const msg = result.copied
-      ? 'تم تحميل الصورة ونسخها — افتح المحادثة والصق الصورة (Ctrl+V)'
-      : 'تم تحميل صورة التقرير — أرفقها في محادثة واتساب';
+    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
+    if (!msg) return;
     setShareToast(msg);
-    setTimeout(() => setShareToast(null), 6000);
+    setTimeout(() => setShareToast(null), 8000);
   };
 
   const handleShareWhatsApp = async () => {
@@ -632,19 +638,22 @@ export const QuickAction: React.FC = () => {
       routingPlanTargetUnitSecondsByProduct,
       routingProductTargetUnitSecondsByProduct,
     });
-    setPrintReport({
+    const rowForShare: ReportPrintRow = {
       ...printReport,
       ...(printReport.sourceReportType === 'packaging' ? { packagingShareImage: true } : {}),
       ...(!packagingShareMulti
         ? { shareStandardVariance: buildShareStandardVarianceBanner(variance) }
         : {}),
-    });
+    };
+    const caption = formatProductionReportShareCaption(rowForShare, printTemplate);
+    setPrintReport(rowForShare);
     await waitForExportPaint(150);
     setExporting(true);
     try {
       const result = await shareToWhatsApp(
         printRef.current,
-        `تقرير إنتاج - ${getLineName(lineId)} - ${today}`
+        `تقرير إنتاج - ${getLineName(lineId)} - ${today}`,
+        { caption },
       );
       showShareFeedback(result);
     } finally {
