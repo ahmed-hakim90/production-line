@@ -55,6 +55,7 @@ export const ExecutionPage: React.FC = () => {
   const [stepIndex, setStepIndex] = useState(0);
   const [actualWorkers, setActualWorkers] = useState(1);
   const printRef = useRef<HTMLDivElement>(null);
+  const shareWhatsAppLockRef = useRef(false);
   const [exporting, setExporting] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
 
@@ -129,12 +130,13 @@ export const ExecutionPage: React.FC = () => {
 
   const handleExecShareWhatsApp = useCallback(async () => {
     if (!printRef.current || !execution) return;
+    if (shareWhatsAppLockRef.current) return;
+    shareWhatsAppLockRef.current = true;
     setExporting(true);
     try {
       await waitForExportPaint(150);
       const caption = formatRoutingExecutionShareCaption(
         execution,
-        execSteps,
         executionProductName,
         executionSupervisorName,
         printTemplate,
@@ -146,9 +148,10 @@ export const ExecutionPage: React.FC = () => {
       );
       showShareFeedback(result);
     } finally {
+      shareWhatsAppLockRef.current = false;
       setExporting(false);
     }
-  }, [execution, execSteps, executionProductName, executionSupervisorName, printTemplate, showShareFeedback]);
+  }, [execution, executionProductName, executionSupervisorName, printTemplate, showShareFeedback]);
 
   const startMut = useMutation({
     mutationFn: async () => {

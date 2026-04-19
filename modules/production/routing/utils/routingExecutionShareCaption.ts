@@ -2,21 +2,19 @@ import type { PrintTemplateSettings } from '@/types';
 import { DEFAULT_PRINT_TEMPLATE } from '@/utils/dashboardConfig';
 import { formatDurationSeconds } from '../domain/calculations';
 import { formatRoutingFirestoreInstant } from '../domain/formatFirestore';
-import type { ProductionRoutingExecution, ProductionRoutingExecutionStep } from '../types';
+import type { ProductionRoutingExecution } from '../types';
 
 /**
- * Plain-text caption aligned with RoutingExecutionPrint / PrintReportLayout order.
+ * Plain-text caption aligned with RoutingExecutionPrint / PrintReportLayout order (no step-by-step routing detail).
  */
 export function formatRoutingExecutionShareCaption(
   execution: ProductionRoutingExecution,
-  steps: ProductionRoutingExecutionStep[],
   productName: string,
   supervisorName: string,
   printSettings?: PrintTemplateSettings,
 ): string {
   const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
   const dp = ps.decimalPlaces ?? 0;
-  const now = new Date().toLocaleString('ar-EG');
   const refShort =
     execution.id.length > 12 ? `…${execution.id.slice(-8)}` : execution.id;
   const finishedLabel = formatRoutingFirestoreInstant(execution.finishedAt);
@@ -32,27 +30,15 @@ export function formatRoutingExecutionShareCaption(
       ? `${(execution.laborEfficiency * 100).toFixed(1)}%`
       : null;
 
-  const sortedSteps = [...steps].sort((a, b) => a.orderIndex - b.orderIndex);
-  const stepLines =
-    sortedSteps.length > 0
-      ? sortedSteps.map((st, idx) => {
-          const act = st.actualDurationSeconds ?? 0;
-          const actW = st.actualWorkersCount ?? st.standardWorkersCount;
-          return `الخطوة ${idx + 1} — ${st.name || '—'}: قياسي ${formatDurationSeconds(st.standardDurationSeconds)} (${st.standardWorkersCount} عامل) | فعلي ${formatDurationSeconds(act)} (${actW} عامل)`;
-        })
-      : ['لا تتوفر تفاصيل خطوات في التقرير.'];
-
   const company = ps.headerText || 'مؤسسة المغربي للإستيراد';
 
   const blocks = [
     company,
     'تقرير تنفيذ مسار',
-    `تاريخ الطباعة: ${now}`,
     '—',
     'بيانات التقرير',
     `رقم المرجع: ${refShort}`,
     `تاريخ الإنهاء: ${finishedLabel}`,
-    `خط الإنتاج: مسار إنتاج`,
     `الإشراف: ${supervisorName || '—'}`,
     '—',
     'المؤشرات',
@@ -83,9 +69,6 @@ export function formatRoutingExecutionShareCaption(
         : '—'
     }`,
     ...(laborEffPct ? [`كفاءة العمالة (إصدار قديم): ${laborEffPct}`] : []),
-    '—',
-    'خطوات التنفيذ',
-    ...stepLines,
   ];
 
   return blocks.join('\n');

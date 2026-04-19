@@ -39,7 +39,6 @@ export function formatProductionReportShareCaption(
 ): string {
   const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
   const dp = ps.decimalPlaces ?? 0;
-  const now = new Date().toLocaleString('ar-EG');
   const total = Number(report.quantityProduced || 0) + Number(report.wasteQuantity || 0);
   const wasteRatio = total > 0 ? ((Number(report.wasteQuantity || 0) / total) * 100).toFixed(dp) : '0';
   const rt = report.sourceReportType;
@@ -119,16 +118,10 @@ export function formatProductionReportShareCaption(
 
   const blocks: string[] = [];
 
-  const v = report.shareStandardVariance;
-  if (v) {
-    blocks.push([v.headline, ...v.lines].join('\n'));
-  }
-
   blocks.push(
     [
       ps.headerText || 'مؤسسة المغربي للإستيراد',
       reportTypeHeading,
-      `تاريخ الطباعة: ${now}`,
       '—',
       rt === 'packaging'
         ? section('بيانات التقرير', [
@@ -169,12 +162,10 @@ export function formatBulkProductionReportsShareCaption(input: {
   decimalPlaces?: number;
 }): string {
   const dp = input.decimalPlaces ?? 0;
-  const now = new Date().toLocaleString('ar-EG');
   const t = input.totals;
   const lines = [
     input.title,
     input.subtitle ? input.subtitle : null,
-    `تاريخ الطباعة: ${now}`,
     '—',
     'الإجماليات',
     `الكمية المنتجة: ${fmtNum(t.totalProduced, dp)} وحدة`,

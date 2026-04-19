@@ -627,6 +627,8 @@ export const Reports: React.FC = () => {
 
   // Bulk print ref
   const bulkPrintRef = useRef<HTMLDivElement>(null);
+  /** Blocks duplicate shareToWhatsApp (rapid taps / menu + row action). */
+  const shareWhatsAppLockRef = useRef(false);
   const [bulkPrintSource, setBulkPrintSource] = useState<ProductionReport[] | null>(null);
   const [bulkDeleteItems, setBulkDeleteItems] = useState<ProductionReport[] | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -1494,6 +1496,8 @@ export const Reports: React.FC = () => {
 
   const triggerSingleShare = useCallback(
     async (report: ProductionReport) => {
+      if (shareWhatsAppLockRef.current) return;
+      shareWhatsAppLockRef.current = true;
       const base = buildReportRow(report);
       const validPackagingLines = (report.packagingLines ?? [])
         .map((l) => ({
@@ -1521,28 +1525,32 @@ export const Reports: React.FC = () => {
           : {}),
       };
       setSharePrintRow(row);
-      const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
-      await waitForExportPaint(150);
-      if (!sharePrintRef.current) {
-        setSharePrintRow(null);
-        return;
-      }
-      setExporting(true);
       try {
-        const result = await shareToWhatsApp(
-          sharePrintRef.current,
-          `تقرير-إنتاج-${row.date}-${row.lineName}`,
-          { caption: formatProductionReportShareCaption(row, printTemplate) },
-        );
-        showShareFeedback(result);
-      } catch (error: unknown) {
-        const err = error as { name?: string; message?: string };
-        if (err?.name !== 'AbortError') {
-          toast.error(err?.message || 'تعذر مشاركة التقرير الآن. حاول مرة أخرى.');
+        const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
+        await waitForExportPaint(150);
+        if (!sharePrintRef.current) {
+          setSharePrintRow(null);
+          return;
+        }
+        setExporting(true);
+        try {
+          const result = await shareToWhatsApp(
+            sharePrintRef.current,
+            `تقرير-إنتاج-${row.date}-${row.lineName}`,
+            { caption: formatProductionReportShareCaption(row, printTemplate) },
+          );
+          showShareFeedback(result);
+        } catch (error: unknown) {
+          const err = error as { name?: string; message?: string };
+          if (err?.name !== 'AbortError') {
+            toast.error(err?.message || 'تعذر مشاركة التقرير الآن. حاول مرة أخرى.');
+          }
+        } finally {
+          setExporting(false);
+          setSharePrintRow(null);
         }
       } finally {
-        setExporting(false);
-        setSharePrintRow(null);
+        shareWhatsAppLockRef.current = false;
       }
     },
     [
@@ -2270,6 +2278,8 @@ export const Reports: React.FC = () => {
 
   const handleWhatsApp = async () => {
     if (!bulkPrintRef.current) return;
+    if (shareWhatsAppLockRef.current) return;
+    shareWhatsAppLockRef.current = true;
     setExporting(true);
     try {
       const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
@@ -2287,6 +2297,7 @@ export const Reports: React.FC = () => {
       });
       showShareFeedback(result);
     } finally {
+      shareWhatsAppLockRef.current = false;
       setExporting(false);
     }
   };

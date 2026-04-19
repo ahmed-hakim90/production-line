@@ -123,6 +123,8 @@ export const QuickAction: React.FC = () => {
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
 
   const printRef = useRef<HTMLDivElement>(null);
+  /** Prevents double shareToWhatsApp from rapid taps before React re-disables the button. */
+  const shareWhatsAppLockRef = useRef(false);
 
   const [today, setToday] = useState(() => getOperationalDateString(8));
   const canCreateFinishedReportsBase = can('reports.create');
@@ -625,6 +627,8 @@ export const QuickAction: React.FC = () => {
 
   const handleShareWhatsApp = async () => {
     if (!printRef.current || !printReport) return;
+    if (shareWhatsAppLockRef.current) return;
+    shareWhatsAppLockRef.current = true;
     const packagingShareMulti = printReport.sourceReportType === 'packaging'
       && (printReport.packagingPrintLines?.length ?? 0) > 1;
     const variance = computeProductionReportStandardQtyVariance({
@@ -657,6 +661,7 @@ export const QuickAction: React.FC = () => {
       );
       showShareFeedback(result);
     } finally {
+      shareWhatsAppLockRef.current = false;
       setExporting(false);
       setPrintReport((prev) => (prev
         ? { ...prev, shareStandardVariance: undefined, packagingShareImage: undefined }
