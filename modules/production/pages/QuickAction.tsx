@@ -29,6 +29,7 @@ import {
   ReportPrintRow,
   buildPackagingPrintLinesFromReport,
 } from '../components/ProductionReportPrint';
+import { reportService } from '../services/reportService';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
 import { ComponentScrapModal } from '../components/ComponentScrapModal';
@@ -529,6 +530,7 @@ export const QuickAction: React.FC = () => {
       if (reportType === 'packaging') {
         setProductId(validPackagingLines[0].productId);
       }
+      const saved = await reportService.getById(id);
       const packagingPrintLines = reportType === 'packaging'
         ? buildPackagingPrintLinesFromReport(
           {
@@ -540,6 +542,8 @@ export const QuickAction: React.FC = () => {
         )
         : undefined;
       const row: ReportPrintRow = {
+        reportId: id,
+        reportCode: saved?.reportCode,
         date: today,
         sourceReportType: resolveReportType(reportType),
         lineName: getLineName(lineId),
