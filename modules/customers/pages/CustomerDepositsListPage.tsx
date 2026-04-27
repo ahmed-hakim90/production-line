@@ -13,7 +13,7 @@ import { CustomerDepositsDataTable } from '../components/CustomerDepositsDataTab
 import { CustomerDepositEntryDrawer } from '../components/CustomerDepositEntryDrawer';
 import { CustomerDepositsKpisSection } from '../components/CustomerDepositsKpisSection';
 import { CUSTOMER_DEPOSITS_TABLE_PAGE_SIZE, useClientTablePagination } from '../hooks/useClientTablePagination';
-import { OnlineDataPaginationFooter } from '../../online/components/OnlineDataPaginationFooter';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -279,7 +279,7 @@ export const CustomerDepositsListPage: React.FC = () => {
             }}
           />
         </CardContent>
-        <OnlineDataPaginationFooter
+        <DataPaginationFooter
           page={listPg.page}
           totalPages={listPg.totalPages}
           totalItems={listPg.totalItems}

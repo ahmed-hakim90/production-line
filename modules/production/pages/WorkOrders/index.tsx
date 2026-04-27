@@ -80,6 +80,7 @@ export const WorkOrders: React.FC = () => {
     costAllocations: s.costAllocations,
   }));
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const deleteWorkOrder = useAppStore((s) => s.deleteWorkOrder);
 
   const loggedInSupervisor = useMemo(() => {
     if (currentEmployee?.id) return currentEmployee;
@@ -114,6 +115,7 @@ export const WorkOrders: React.FC = () => {
   const woPrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
   const canCreateWorkOrder = can('workOrders.create') || can('workOrders.componentInjection.manage');
+  const canDeleteWorkOrder = can('workOrders.delete');
   const openedCreateFromParamsRef = useRef(false);
 
   useEffect(() => {
@@ -480,6 +482,33 @@ export const WorkOrders: React.FC = () => {
     });
   };
 
+  const handleDeleteOrder = useCallback(
+    async (order: WorkOrder) => {
+      if (!order.id) return;
+      if (!canDeleteWorkOrder) {
+        toast.error('غير مصرح بحذف أمر الشغل.');
+        return;
+      }
+      if (
+        !window.confirm(
+          `حذف أمر الشغل ${order.workOrderNumber}؟\nلا يمكن التراجع عن هذا الإجراء.`,
+        )
+      ) {
+        return;
+      }
+
+      try {
+        setSelectedOrder(null);
+        await deleteWorkOrder(order.id);
+        toast.success('تم حذف أمر الشغل.');
+      } catch (deleteError) {
+        toast.error('تعذر حذف أمر الشغل. تحقق من الصلاحيات أو الاتصال.');
+        console.error('work order delete error', deleteError);
+      }
+    },
+    [canDeleteWorkOrder, deleteWorkOrder, setSelectedOrder],
+  );
+
   const handleOpenScanner = useCallback(
     (order: WorkOrder) => {
       if (!order.id || order.status === 'cancelled') return;
@@ -626,6 +655,7 @@ export const WorkOrders: React.FC = () => {
         onStatusChange={handleStatusChange}
         onEdit={handleEditOrder}
         onCloseOrder={(order) => void handleCloseOrder(order)}
+        onDelete={canDeleteWorkOrder ? (order) => void handleDeleteOrder(order) : undefined}
         onReopenCompleted={can('workOrders.edit') ? handleReopenCompletedOrder : undefined}
         onOpenScanner={handleOpenScanner}
         onLoadMore={() => void loadMore()}

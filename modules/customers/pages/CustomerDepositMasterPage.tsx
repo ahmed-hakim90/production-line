@@ -20,7 +20,7 @@ import { usePermission } from '../../../utils/permissions';
 import { CustomerDepositsPackImportExportSection } from '../components/CustomerDepositsPackImportExportSection';
 import { CustomerDepositCustomerDrawer } from '../components/CustomerDepositCustomerDrawer';
 import { CUSTOMER_DEPOSITS_TABLE_PAGE_SIZE, useClientTablePagination } from '../hooks/useClientTablePagination';
-import { OnlineDataPaginationFooter } from '../../online/components/OnlineDataPaginationFooter';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -1063,7 +1063,7 @@ export const CustomerDepositMasterPage: React.FC = () => {
               )}
             </TableBody>
           </Table>
-            <OnlineDataPaginationFooter
+            <DataPaginationFooter
               page={customersPg.page}
               totalPages={customersPg.totalPages}
               totalItems={customersPg.totalItems}
@@ -1266,7 +1266,7 @@ export const CustomerDepositMasterPage: React.FC = () => {
               )}
             </TableBody>
           </Table>
-            <OnlineDataPaginationFooter
+            <DataPaginationFooter
               page={banksPg.page}
               totalPages={banksPg.totalPages}
               totalItems={banksPg.totalItems}
@@ -1392,7 +1392,7 @@ export const CustomerDepositMasterPage: React.FC = () => {
               )}
             </TableBody>
           </Table>
-            <OnlineDataPaginationFooter
+            <DataPaginationFooter
               page={adjustmentsPg.page}
               totalPages={adjustmentsPg.totalPages}
               totalItems={adjustmentsPg.totalItems}

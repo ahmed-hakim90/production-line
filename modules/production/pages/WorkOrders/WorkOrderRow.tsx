@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit2, Eye, RotateCcw, ScanLine, X } from 'lucide-react';
+import { Edit2, Eye, RotateCcw, ScanLine, Trash2, X } from 'lucide-react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { formatNumber } from '../../../../utils/calculations';
@@ -33,6 +33,7 @@ interface WorkOrderRowProps {
   onStatusChange: (id: string, status: WorkOrderStatus) => void;
   onEdit: (order: WorkOrder) => void;
   onCloseOrder: (order: WorkOrder) => void;
+  onDelete?: (order: WorkOrder) => void;
   onReopenCompleted?: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;
 }
@@ -43,7 +44,7 @@ const progressColorClass = (progress: number): string => {
   return styles.progressPrimary;
 };
 
-function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onCloseOrder, onReopenCompleted, onOpenScanner }: WorkOrderRowProps) {
+function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onCloseOrder, onDelete, onReopenCompleted, onOpenScanner }: WorkOrderRowProps) {
   const { order } = row;
   const produced = Number(order.producedQuantity || 0);
   const target = Number(order.quantity || 0);
@@ -82,6 +83,16 @@ function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onClos
         ]
       : []),
     { separator: true },
+    ...(onDelete
+      ? [
+          {
+            label: 'حذف أمر الشغل',
+            icon: <Trash2 size={14} />,
+            onClick: () => onDelete(order),
+            variant: 'danger',
+          } as RowActionMenuEntry,
+        ]
+      : []),
     {
       label: 'إغلاق الأمر',
       icon: <X size={14} />,
@@ -148,6 +159,7 @@ export const WorkOrderRow = React.memo(
     prev.onStatusChange === next.onStatusChange &&
     prev.onEdit === next.onEdit &&
     prev.onCloseOrder === next.onCloseOrder &&
+    prev.onDelete === next.onDelete &&
     prev.onOpenScanner === next.onOpenScanner &&
     prev.onReopenCompleted === next.onReopenCompleted &&
     prev.row.storedStatus === next.row.storedStatus &&

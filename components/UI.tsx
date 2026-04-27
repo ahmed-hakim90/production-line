@@ -327,7 +327,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           </span>
         </UiButton>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="z-[500] w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
           <CommandInput placeholder={resolvedPlaceholder} />
           <CommandList>

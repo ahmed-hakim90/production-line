@@ -10,7 +10,7 @@ import { companyBankCashBalance } from '../utils/balances';
 import type { CustomerDepositCompanyBankAccount } from '../types';
 import { CustomerDepositStatusBadge } from '../components/CustomerDepositStatusBadge';
 import { CUSTOMER_DEPOSITS_TABLE_PAGE_SIZE, useClientTablePagination } from '../hooks/useClientTablePagination';
-import { OnlineDataPaginationFooter } from '../../online/components/OnlineDataPaginationFooter';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -170,7 +170,7 @@ export const CustomerDepositBankPage: React.FC = () => {
             )}
           </TableBody>
         </Table>
-        <OnlineDataPaginationFooter
+        <DataPaginationFooter
           page={entriesPg.page}
           totalPages={entriesPg.totalPages}
           totalItems={entriesPg.totalItems}
@@ -211,7 +211,7 @@ export const CustomerDepositBankPage: React.FC = () => {
             )}
           </TableBody>
         </Table>
-        <OnlineDataPaginationFooter
+        <DataPaginationFooter
           page={adjustmentsPg.page}
           totalPages={adjustmentsPg.totalPages}
           totalItems={adjustmentsPg.totalItems}

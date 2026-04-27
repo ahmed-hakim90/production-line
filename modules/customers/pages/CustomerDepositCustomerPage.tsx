@@ -11,7 +11,7 @@ import { buildCustomerStatementRows, runningBalancesForStatement } from '../util
 import type { CustomerDepositCustomer } from '../types';
 import { CustomerDepositStatusBadge } from '../components/CustomerDepositStatusBadge';
 import { CUSTOMER_DEPOSITS_TABLE_PAGE_SIZE, useClientTablePagination } from '../hooks/useClientTablePagination';
-import { OnlineDataPaginationFooter } from '../../online/components/OnlineDataPaginationFooter';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -203,7 +203,7 @@ export const CustomerDepositCustomerPage: React.FC = () => {
             ))}
           </TableBody>
         </Table>
-        <OnlineDataPaginationFooter
+        <DataPaginationFooter
           page={statementPg.page}
           totalPages={statementPg.totalPages}
           totalItems={statementPg.totalItems}

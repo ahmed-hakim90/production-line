@@ -15,6 +15,7 @@ interface WorkOrdersTableProps {
   onStatusChange: (id: string, status: WorkOrderStatus) => void;
   onEdit: (order: WorkOrder) => void;
   onCloseOrder: (order: WorkOrder) => void;
+  onDelete?: (order: WorkOrder) => void;
   onReopenCompleted?: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;
   onLoadMore: () => void;
@@ -74,6 +75,7 @@ export function WorkOrdersTable({
   onStatusChange,
   onEdit,
   onCloseOrder,
+  onDelete,
   onReopenCompleted,
   onOpenScanner,
   onLoadMore,
@@ -135,6 +137,7 @@ export function WorkOrdersTable({
                   onStatusChange={onStatusChange}
                   onEdit={onEdit}
                   onCloseOrder={onCloseOrder}
+                  onDelete={onDelete}
                   onReopenCompleted={onReopenCompleted}
                   onOpenScanner={onOpenScanner}
                 />

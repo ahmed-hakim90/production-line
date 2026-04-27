@@ -8,11 +8,9 @@ type DefaultHomePathSectionProps = {
 
 const OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'افتراضي — لوحات التحكم حسب الدور' },
-  { value: '/online', label: 'لوحة الأونلاين (/online)' },
-  { value: '/online/dashboard', label: 'لوحة الأونلاين (/online/dashboard)' },
 ];
 
-/** Tenant default route after opening home `/` — requires onlineDispatch.view when set to online paths. */
+/** Tenant default route after opening home `/`. */
 export const DefaultHomePathSection: React.FC<DefaultHomePathSectionProps> = ({ value, onChange }) => (
   <Card title="الصفحة الرئيسية بعد تسجيل الدخول">
     <p className="text-xs text-[var(--color-text-muted)] mb-3">

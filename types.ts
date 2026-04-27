@@ -792,45 +792,6 @@ export interface MonthlyProductionCost {
   calculatedAt?: any;
 }
 
-// â”€â”€â”€ Online dispatch (BOSTA barcodes: admin â†’ warehouse â†’ post) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-export type OnlineDispatchStatus =
-  | 'pending'
-  | 'at_warehouse'
-  | 'handed_to_post'
-  | 'cancelled'
-  /** Post scan for unknown barcode: saved for manager review before counting as full handoff. */
-  | 'pending_reconciliation';
-
-export interface OnlineDispatchShipment {
-  id?: string;
-  tenantId: string;
-  barcode: string;
-  status: OnlineDispatchStatus;
-  createdAt?: unknown;
-  /** Set when an admin creates a pending row, or mirrored on first-scan create paths. */
-  createdByUid?: string;
-  /** Last user who moved the shipment to the current `status` (warehouse / post / revert / cancel). */
-  lastStatusByUid?: string;
-  /** First appearance from post scan when barcode had no prior shipment (v1 reconciliation flow). */
-  firstCapturePhase?: 'post';
-  firstCaptureAt?: unknown;
-  firstCaptureByUid?: string;
-  handedToWarehouseAt?: unknown;
-  handedToWarehouseByUid?: string;
-  handedToPostAt?: unknown;
-  handedToPostByUid?: string;
-  /** Set when the row is cancelled from dispatch (warehouse cancel flow). */
-  cancelledAt?: unknown;
-  /** Latest delivery state string from Bosta API (synced by Cloud Functions). */
-  bostaState?: string | null;
-  /** Human-readable Bosta status for display. */
-  bostaStateLabel?: string | null;
-  bostaSyncedAt?: unknown;
-  bostaLastError?: string | null;
-  notes?: string;
-}
-
 // â”€â”€â”€ System Settings (system_settings/{tenantId}) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface WidgetConfig {
@@ -1070,7 +1031,7 @@ export interface RepairSettings {
 
 export interface SystemSettings {
   /**
-   * Logical path after tenant prefix for the default home screen, e.g. `/online` or `/online/dashboard`.
+   * Logical path after tenant prefix for the default home screen.
    * Empty/undefined keeps legacy HomeDashboardRouter behavior.
    */
   defaultHomeLogicalPath?: string;

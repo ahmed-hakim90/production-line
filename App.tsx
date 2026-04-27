@@ -20,7 +20,6 @@ import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
 import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
 import { CATALOG_ROUTES } from './modules/catalog/routes';
 import { PRODUCTION_ROUTES } from './modules/production/routes';
-import { ONLINE_ROUTES } from './modules/online/routes';
 import { CUSTOMER_DEPOSIT_ROUTES } from './modules/customers/routes';
 import { QUALITY_ROUTES } from './modules/quality/routes';
 import { HR_ROUTES } from './modules/hr/routes';
@@ -193,7 +192,6 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...SYSTEM_ROUTES,
   ...INVENTORY_ROUTES,
   ...REPAIR_ROUTES,
-  ...ONLINE_ROUTES,
   ...CUSTOMER_DEPOSIT_ROUTES,
 ];
 

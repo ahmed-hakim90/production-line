@@ -44,14 +44,6 @@ service cloud.firestore {
         && currentRoleDoc().data.permissions[permissionKey] == true;
     }
 
-    function onlineDispatchReadPerm() {
-      return hasPermission('onlineDispatch.view')
-        || hasPermission('onlineDispatch.manage')
-        || hasPermission('onlineDispatch.handoffToWarehouse')
-        || hasPermission('onlineDispatch.handoffToPost')
-        || hasPermission('onlineDispatch.cancelFromWarehouseQueue');
-    }
-
     function customerDepositsReadPerm() {
       return isSuperAdmin()
         || hasPermission('customerDeposits.view')
@@ -109,18 +101,6 @@ service cloud.firestore {
     function depositEntrySerialUnchanged() {
       return !('depositSerial' in resource.data)
         || request.resource.data.depositSerial == resource.data.depositSerial;
-    }
-
-    /** Warehouse scan create/update, or full online manager. */
-    function onlineDispatchCanWarehouseHandoff() {
-      return hasPermission('onlineDispatch.handoffToWarehouse')
-        || hasPermission('onlineDispatch.manage');
-    }
-
-    /** Post handoff update, or full online manager. */
-    function onlineDispatchCanPostHandoff() {
-      return hasPermission('onlineDispatch.handoffToPost')
-        || hasPermission('onlineDispatch.manage');
     }
 
     function isActiveUser() {
@@ -611,114 +591,6 @@ service cloud.firestore {
         && (
           get(/databases/$(database)/documents/production_routing_executions/$(resource.data.executionId)).data.status != 'completed'
           || hasPermission('routing.manage')
-        );
-    }
-
-    match /online_dispatch_shipments/{docId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead() && onlineDispatchReadPerm();
-      allow create: if isActiveUser() && sameTenantOrLegacyWrite()
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
-        && request.resource.data.barcode is string
-        && request.resource.data.barcode.size() >= 1
-        && request.resource.data.barcode.size() <= 512
-        && (
-          (
-            hasPermission('onlineDispatch.manage')
-            && request.resource.data.status == 'pending'
-            && request.resource.data.createdAt is timestamp
-            && (
-              request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt'])
-              || (
-                request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'notes'])
-                && request.resource.data.notes is string
-              )
-              || (
-                request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'createdByUid', 'lastStatusByUid'])
-                && request.resource.data.createdByUid == request.auth.uid
-                && request.resource.data.lastStatusByUid == request.auth.uid
-              )
-              || (
-                request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'notes', 'createdByUid', 'lastStatusByUid'])
-                && request.resource.data.notes is string
-                && request.resource.data.createdByUid == request.auth.uid
-                && request.resource.data.lastStatusByUid == request.auth.uid
-              )
-            )
-          )
-          || (
-            onlineDispatchCanWarehouseHandoff()
-            && request.resource.data.status == 'at_warehouse'
-            && request.resource.data.handedToWarehouseByUid == request.auth.uid
-            && request.resource.data.createdAt is timestamp
-            && request.resource.data.handedToWarehouseAt is timestamp
-            && request.resource.data.createdByUid == request.auth.uid
-            && request.resource.data.lastStatusByUid == request.auth.uid
-            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'handedToWarehouseAt', 'handedToWarehouseByUid', 'createdByUid', 'lastStatusByUid'])
-          )
-          || (
-            onlineDispatchCanPostHandoff()
-            && request.resource.data.status == 'pending_reconciliation'
-            && request.resource.data.firstCapturePhase == 'post'
-            && request.resource.data.firstCaptureAt is timestamp
-            && request.resource.data.firstCaptureByUid == request.auth.uid
-            && request.resource.data.createdAt is timestamp
-            && request.resource.data.createdByUid == request.auth.uid
-            && request.resource.data.lastStatusByUid == request.auth.uid
-            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'firstCapturePhase', 'firstCaptureAt', 'firstCaptureByUid', 'createdByUid', 'lastStatusByUid'])
-          )
-          || (
-            onlineDispatchCanPostHandoff()
-            && request.resource.data.status == 'handed_to_post'
-            && request.resource.data.handedToPostAt is timestamp
-            && request.resource.data.handedToPostByUid == request.auth.uid
-            && request.resource.data.createdAt is timestamp
-            && request.resource.data.createdByUid == request.auth.uid
-            && request.resource.data.lastStatusByUid == request.auth.uid
-            && request.resource.data.firstCapturePhase == 'post'
-            && request.resource.data.firstCaptureAt is timestamp
-            && request.resource.data.firstCaptureByUid == request.auth.uid
-            && request.resource.data.keys().hasOnly(['tenantId', 'barcode', 'status', 'createdAt', 'handedToPostAt', 'handedToPostByUid', 'firstCapturePhase', 'firstCaptureAt', 'firstCaptureByUid', 'createdByUid', 'lastStatusByUid'])
-          )
-        );
-      allow update: if isActiveUser()
-        && resource.data.tenantId == currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == resource.data.tenantId
-        && request.resource.data.barcode == resource.data.barcode
-        && (
-          (resource.data.status == 'pending'
-            && request.resource.data.status == 'at_warehouse'
-            && onlineDispatchCanWarehouseHandoff())
-          || (resource.data.status == 'at_warehouse'
-            && request.resource.data.status == 'handed_to_post'
-            && onlineDispatchCanPostHandoff())
-          || (resource.data.status == 'at_warehouse'
-            && request.resource.data.status == 'pending'
-            && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse')))
-          || (resource.data.status == 'at_warehouse'
-            && request.resource.data.status == 'cancelled'
-            && (hasPermission('onlineDispatch.cancelFromWarehouseQueue') || hasPermission('onlineDispatch.manage'))
-            && request.resource.data.cancelledAt is timestamp
-            && request.resource.data.cancelledByUid == request.auth.uid
-            && request.resource.data.lastStatusByUid == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledByUid', 'lastStatusByUid']))
-          || (resource.data.status == 'pending_reconciliation'
-            && request.resource.data.status == 'handed_to_post'
-            && hasPermission('onlineDispatch.manage')
-            && request.resource.data.handedToWarehouseAt is timestamp
-            && request.resource.data.handedToWarehouseByUid == request.auth.uid
-            && request.resource.data.handedToPostAt is timestamp
-            && request.resource.data.handedToPostByUid == request.auth.uid
-            && request.resource.data.lastStatusByUid == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'handedToWarehouseAt', 'handedToWarehouseByUid', 'handedToPostAt', 'handedToPostByUid', 'lastStatusByUid']))
-        );
-      allow delete: if isActiveUser()
-        && resource.data.tenantId == currentUserDoc().data.tenantId
-        && (
-          hasPermission('onlineDispatch.deletePermanent')
-          || (
-            resource.data.status == 'at_warehouse'
-            && (hasPermission('onlineDispatch.manage') || hasPermission('onlineDispatch.handoffToWarehouse'))
-          )
         );
     }
 

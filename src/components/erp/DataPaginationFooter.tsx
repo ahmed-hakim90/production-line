@@ -1,9 +1,9 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
 import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export type OnlineDataPaginationFooterProps = {
+export type DataPaginationFooterProps = {
   page: number;
   totalPages: number;
   totalItems: number;
@@ -13,10 +13,8 @@ export type OnlineDataPaginationFooterProps = {
   className?: string;
 };
 
-/**
- * RTL-friendly footer: page info + first/prev/numbered/next/last (matches production Products table pattern).
- */
-export const OnlineDataPaginationFooter: React.FC<OnlineDataPaginationFooterProps> = ({
+/** RTL-friendly footer: page info + first/prev/numbered/next/last. */
+export const DataPaginationFooter: React.FC<DataPaginationFooterProps> = ({
   page,
   totalPages,
   totalItems,

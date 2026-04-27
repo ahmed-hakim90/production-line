@@ -4,7 +4,7 @@ import { Button, SearchableSelect } from '../../../modules/production/components
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { estimateReportCost } from '../../../utils/costCalculations';
-import { addDaysToDate, formatNumber, getTodayDateString } from '../../../utils/calculations';
+import { formatNumber, getTodayDateString } from '../../../utils/calculations';
 import { workOrderService } from '../../../modules/production/services/workOrderService';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -21,12 +21,6 @@ const durationDaysBetweenInclusive = (startDate: string, endDate: string): numbe
   const diffMs = end.getTime() - start.getTime();
   if (!Number.isFinite(diffMs) || diffMs < 0) return 1;
   return Math.floor(diffMs / 86_400_000) + 1;
-};
-
-const endDateFromDuration = (startDate: string, durationDays: number): string => {
-  if (!startDate) return getTodayDateString();
-  const safeDays = Math.max(1, Math.ceil(Number(durationDays || 1)));
-  return safeDays <= 1 ? startDate : addDaysToDate(startDate, safeDays - 1);
 };
 
 type WorkOrderFormState = {
@@ -105,20 +99,27 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     [plans],
   );
 
-  const planOptions = useMemo(
-    () => [
-      { value: '', label: t('modalManager.createWorkOrder.noPlan') },
-      ...activePlans.map((p) => ({
-        value: p.id!,
-        label: `${productNameById.get(p.productId) || t('modalManager.createWorkOrder.unknownProduct')} — ${t('modalManager.createWorkOrder.remaining')}: ${formatNumber(Math.max((p.plannedQuantity || 0) - (p.producedQuantity || 0), 0))}${p.plannedEndDate ? ` - ${p.plannedEndDate}` : ''}`,
-      })),
-    ],
-    [activePlans, productNameById, t],
+  const selectedPlan = useMemo(
+    () => plans.find((p) => p.id === form.planId) ?? null,
+    [plans, form.planId],
   );
 
-  const selectedPlan = useMemo(
-    () => activePlans.find((p) => p.id === form.planId) ?? null,
-    [activePlans, form.planId],
+  const planOptions = useMemo(
+    () => {
+      const optionPlans = [...activePlans];
+      if (selectedPlan?.id && !optionPlans.some((p) => p.id === selectedPlan.id)) {
+        optionPlans.unshift(selectedPlan);
+      }
+
+      return [
+        { value: '', label: t('modalManager.createWorkOrder.noPlan') },
+        ...optionPlans.map((p) => ({
+          value: p.id!,
+          label: `${productNameById.get(p.productId) || t('modalManager.createWorkOrder.unknownProduct')} — ${t('modalManager.createWorkOrder.remaining')}: ${formatNumber(Math.max((p.plannedQuantity || 0) - (p.producedQuantity || 0), 0))}${p.plannedEndDate ? ` - ${p.plannedEndDate}` : ''}`,
+        })),
+      ];
+    },
+    [activePlans, productNameById, selectedPlan, t],
   );
 
   const selectedPlanRemaining = useMemo(
@@ -228,6 +229,15 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     (openForEdit && can('workOrders.edit'));
   if (!canUseModal) return null;
 
+  const missingRequiredFields = [
+    !form.productId ? 'المنتج' : '',
+    !form.lineId ? 'خط الإنتاج' : '',
+    !form.supervisorId ? 'المشرف' : '',
+    form.quantity <= 0 ? 'الكمية' : '',
+    !form.startDate ? 'تاريخ البداية' : '',
+    !form.targetDate ? 'تاريخ النهاية' : '',
+  ].filter(Boolean);
+
   const handleClose = () => {
     if (saving) return;
     setMessage(null);
@@ -236,7 +246,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0 || !form.startDate || !form.targetDate) return;
+    if (missingRequiredFields.length > 0) {
+      setError(`لا يمكن إنشاء أمر الشغل قبل استكمال: ${missingRequiredFields.join('، ')}`);
+      return;
+    }
     if (form.workOrderType === 'component_injection' && !canManageComponentInjectionWorkOrders) {
       setError(isEditMode ? t('modalManager.createWorkOrder.permissionEditInjectionDenied') : t('modalManager.createWorkOrder.permissionCreateInjectionDenied'));
       return;
@@ -351,7 +364,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           )}
 
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productionPlanOptional')}</label>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">ربط بخطة إنتاج (اختياري)</label>
             <SearchableSelect
               options={planOptions}
               value={form.planId}
@@ -374,7 +387,8 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                   durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
                 }));
               }}
-              placeholder={t('modalManager.createWorkOrder.searchProductOrNoPlan')}
+              placeholder="اختر خطة أو اتركه بدون خطة"
+              className="bg-[var(--color-card)]"
             />
             {selectedPlan && (
               <div className="mt-2 rounded-[var(--border-radius-base)] border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
@@ -405,29 +419,37 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productRequired')}</label>
-            <SearchableSelect
-              options={products.map((p) => ({ value: p.id!, label: `${p.name} (${p.code})` }))}
-              value={form.productId}
-              onChange={(value) => setForm((f) => ({ ...f, productId: value }))}
-              placeholder={t('modalManager.createWorkOrder.searchAndSelectProduct')}
-            />
-          </div>
+          {!selectedPlan && (
+            <>
+              <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)]">
+                بيانات أمر شغل بدون خطة: اختر المنتج وخط الإنتاج يدوياً.
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productRequired')}</label>
+                <SearchableSelect
+                  options={products.map((p) => ({ value: p.id!, label: `${p.name} (${p.code})` }))}
+                  value={form.productId}
+                  onChange={(value) => setForm((f) => ({ ...f, productId: value }))}
+                  placeholder={t('modalManager.createWorkOrder.searchAndSelectProduct')}
+                  className="bg-[var(--color-card)]"
+                />
+              </div>
 
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productionLineRequired')}</label>
-            <select
-              value={form.lineId}
-              onChange={(e) => setForm((f) => ({ ...f, lineId: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
-            >
-              <option value="">{t('modalManager.createWorkOrder.selectLine')}</option>
-              {lines.map((l) => (
-                <option key={l.id} value={l.id!}>{l.name}</option>
-              ))}
-            </select>
-          </div>
+              <div>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productionLineRequired')}</label>
+                <select
+                  value={form.lineId}
+                  onChange={(e) => setForm((f) => ({ ...f, lineId: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+                >
+                  <option value="">{t('modalManager.createWorkOrder.selectLine')}</option>
+                  {lines.map((l) => (
+                    <option key={l.id} value={l.id!}>{l.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.supervisorRequired')}</label>
@@ -477,7 +499,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">تاريخ بداية الأمر</label>
               <input
@@ -485,27 +507,12 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                 value={form.startDate}
                 onChange={(e) => {
                   const startDate = e.target.value || getTodayDateString();
+                  const targetDate = form.targetDate && form.targetDate >= startDate ? form.targetDate : startDate;
                   setForm((f) => ({
                     ...f,
                     startDate,
-                    targetDate: endDateFromDuration(startDate, f.durationDays),
-                  }));
-                }}
-                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">مدة الأمر بالأيام</label>
-              <input
-                type="number"
-                min={1}
-                value={form.durationDays || ''}
-                onChange={(e) => {
-                  const durationDays = Math.max(1, Math.ceil(Number(e.target.value) || 1));
-                  setForm((f) => ({
-                    ...f,
-                    durationDays,
-                    targetDate: endDateFromDuration(f.startDate, durationDays),
+                    targetDate,
+                    durationDays: durationDaysBetweenInclusive(startDate, targetDate),
                   }));
                 }}
                 className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
@@ -527,6 +534,9 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                 className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
               />
             </div>
+            <p className="text-[11px] text-[var(--color-text-muted)] sm:col-span-2">
+              مدة الأمر المحسوبة: <span className="font-bold text-[var(--color-text)]">{formatNumber(form.durationDays || 1)}</span> يوم
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -561,6 +571,11 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           <p className="text-[11px] text-[var(--color-text-muted)]">
             {t('modalManager.createWorkOrder.dailyTimeHint')}
           </p>
+          {missingRequiredFields.length > 0 && (
+            <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+              لاستكمال الإنشاء أدخل: {missingRequiredFields.join('، ')}
+            </div>
+          )}
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
           <Button variant="outline" onClick={handleClose} disabled={saving || loadingEdit}>{t('ui.cancel')}</Button>
@@ -569,14 +584,9 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             onClick={handleSave}
             disabled={
               saving ||
-              loadingEdit ||
-              !form.productId ||
-              !form.lineId ||
-              !form.supervisorId ||
-              !form.startDate ||
-              !form.targetDate ||
-              form.quantity <= 0
+              loadingEdit
             }
+            title={missingRequiredFields.length > 0 ? `استكمل: ${missingRequiredFields.join('، ')}` : undefined}
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : null}
             {showEditChrome ? t('modalManager.createWorkOrder.saveChanges') : t('modalManager.createWorkOrder.createOrder')}

@@ -919,47 +919,6 @@
         "action": "Action"
       }
     }
-  },
-  "onlineDispatchDashboard": {
-    "bostaApiCardTitle": "Bosta waybills (API)",
-    "bostaApiCardDescription": "Waybills created in Bosta within the selected local date range, merged with local records by tracking number.",
-    "legacyWarehouseMode": "Warehouse mode (legacy)",
-    "classicFirestoreTrigger": "Classic view — Firestore records",
-    "classicFirestoreDescription": "Filter and manage rows stored in the system for the same date range.",
-    "bostaListLoadError": "Failed to load Bosta list",
-    "bostaTableEmpty": "No waybills in this range",
-    "exportBostaMerged": "Export Excel — Bosta list",
-    "exportBostaMergedAll": "All waybills in range (API merge)",
-    "exportBostaMergedFiltered": "Current table view (filters applied)",
-    "bostaTableColTracking": "Tracking number",
-    "bostaTableColState": "Bosta state (API)",
-    "bostaTableColCreated": "Created (Bosta)",
-    "bostaTableColLocal": "Local record",
-    "bostaTableTruncated": "List was truncated on the server — narrow the date range or use a single day.",
-    "notRegisteredLocalHint": "Not registered locally — scan for post when handing off.",
-    "lagPanelToggleShow": "Show lag card",
-    "lagPanelToggleHide": "Hide lag card",
-    "contextBarFrom": "From",
-    "contextBarTo": "To",
-    "contextBarHint": "Each day runs 08:00–next day 07:59 (local). Applies to KPIs, Bosta list, and system records.",
-    "jumpBostaTable": "Bosta table",
-    "jumpReconciliation": "Review queue",
-    "jumpFirestore": "System records",
-    "summaryTotal": "Rows",
-    "summaryNoLocal": "Not in system",
-    "analysisTabBosta": "Bosta analysis",
-    "analysisTabLocal": "System records",
-    "bostaFiltersCategory": "State category",
-    "bostaFiltersCategoryAll": "All categories",
-    "bostaFiltersNoLocalOnly": "Not registered locally only",
-    "bostaFiltersTrackingPlaceholder": "Filter by tracking…",
-    "bostaCategoryShort": {
-      "delivered": "Delivered",
-      "in_transit": "In transit",
-      "exception": "Exception",
-      "cancelled": "Cancelled",
-      "unknown": "Other"
-    }
   }
 }
 

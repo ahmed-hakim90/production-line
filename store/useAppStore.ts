@@ -2555,6 +2555,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().fetchWorkOrders();
     } catch (error) {
       set({ error: (error as Error).message });
+      throw error;
     }
   },
 

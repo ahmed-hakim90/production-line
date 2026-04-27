@@ -1275,46 +1275,6 @@
       ]
     },
     {
-      "collectionGroup": "online_dispatch_shipments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "online_dispatch_shipments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "barcode", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "online_dispatch_shipments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "handedToWarehouseAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "online_dispatch_shipments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "handedToPostAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "online_dispatch_shipments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "customer_deposit_entries",
       "queryScope": "COLLECTION",
       "fields": [
