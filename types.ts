@@ -13,6 +13,7 @@ export interface ProductionLine {
   id: string;
   name: string;
   code: string;
+  sortOrder?: number;
   employeeName: string;
   status: ProductionLineStatus;
   currentProduct: string;
@@ -108,6 +109,7 @@ export interface FirestoreProductionLine {
   id?: string;
   name: string;
   code?: string;
+  sortOrder?: number;
   dailyWorkingHours: number;
   maxWorkers: number;
   status: ProductionLineStatus;
@@ -395,7 +397,10 @@ export interface WorkOrder {
   quantity: number;
   producedQuantity: number;
   maxWorkers: number;
+  workHours?: number;
+  startDate?: string;
   targetDate: string;
+  estimatedDurationDays?: number;
   estimatedCost: number;
   actualCost: number;
   workOrderType?: 'finished_product' | 'component_injection';

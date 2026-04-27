@@ -14,12 +14,30 @@ import { tenantQuery } from '../../../lib/tenantFirestore';
 
 const COLLECTION = 'production_lines';
 
+const lineSortValue = (line: FirestoreProductionLine): number => {
+  const value = Number(line.sortOrder || 0);
+  return Number.isFinite(value) && value > 0 ? value : Number.MAX_SAFE_INTEGER;
+};
+
+const sortLines = (lines: FirestoreProductionLine[]): FirestoreProductionLine[] => (
+  [...lines].sort((a, b) => {
+    const orderCompare = lineSortValue(a) - lineSortValue(b);
+    if (orderCompare !== 0) return orderCompare;
+    const codeCompare = (a.code || '').localeCompare((b.code || ''), 'en', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+    if (codeCompare !== 0) return codeCompare;
+    return (a.name || '').localeCompare(b.name || '', 'ar');
+  })
+);
+
 export const lineService = {
   async getAll(): Promise<FirestoreProductionLine[]> {
     if (!isConfigured) return [];
     try {
       const snap = await getDocs(tenantQuery(db, COLLECTION));
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreProductionLine));
+      return sortLines(snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreProductionLine)));
     } catch (error) {
       console.error('lineService.getAll error:', error);
       throw error;

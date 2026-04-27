@@ -33,6 +33,7 @@ const statusOptions: { value: ProductionLineStatus; label: string }[] = [
 const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
   name: '',
   code: '',
+  sortOrder: 0,
   dailyWorkingHours: 8,
   maxWorkers: 20,
   status: ProductionLineStatus.IDLE,
@@ -119,6 +120,21 @@ export const Lines: React.FC = () => {
     () => buildCodeFromLineName(form.name ?? ''),
     [form.name]
   );
+  const nextSortOrder = useMemo(() => {
+    const maxOrder = _rawLines.reduce((max, line) => {
+      const value = Number(line.sortOrder || 0);
+      return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, 0);
+    return maxOrder + 1;
+  }, [_rawLines]);
+  const buildGenericLineCode = () => {
+    const used = new Set(_rawLines.map((line) => normalizeLineCode(line.code ?? '')).filter(Boolean));
+    for (let i = nextSortOrder; i < nextSortOrder + 1000; i += 1) {
+      const code = `LINE-${String(i).padStart(3, '0')}`;
+      if (!used.has(code)) return code;
+    }
+    return `LINE-${Date.now()}`;
+  };
 
   const openTargetModal = (lineId: string, lineName: string) => {
     const existing = lineStatuses.find((s) => s.lineId === lineId);
@@ -184,6 +200,7 @@ export const Lines: React.FC = () => {
     setForm({
       name: raw.name,
       code: raw.code ?? buildCodeFromLineName(raw.name),
+      sortOrder: raw.sortOrder ?? nextSortOrder,
       dailyWorkingHours: raw.dailyWorkingHours,
       maxWorkers: raw.maxWorkers,
       status: raw.status,
@@ -194,9 +211,9 @@ export const Lines: React.FC = () => {
   };
 
   const handleSave = async () => {
-    const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? ''));
+    const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? '') || buildGenericLineCode());
     if (!form.name || !normalizedCode) {
-      setSaveMsg({ type: 'error', text: 'اسم الخط مطلوب. أضف كود الخط أو اكتب رقمظ‹ا داخل اسم الخط (مثال: خط إنتاج 7).' });
+      setSaveMsg({ type: 'error', text: 'اسم الخط مطلوب.' });
       return;
     }
 
@@ -213,6 +230,7 @@ export const Lines: React.FC = () => {
     const payload: Omit<FirestoreProductionLine, 'id'> = {
       ...form,
       code: normalizedCode,
+      sortOrder: Math.max(1, Number(form.sortOrder || nextSortOrder)),
     };
 
     setSaving(true);
@@ -240,6 +258,9 @@ export const Lines: React.FC = () => {
 
   const sortedLines = useMemo(() => {
     return [...productionLines].sort((a, b) => {
+      const orderA = Number(a.sortOrder || 0) || Number.MAX_SAFE_INTEGER;
+      const orderB = Number(b.sortOrder || 0) || Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
       const codeCompare = (a.code || '').localeCompare((b.code || ''), 'en', {
         numeric: true,
         sensitivity: 'base',
@@ -314,6 +335,7 @@ export const Lines: React.FC = () => {
             <table className="erp-table">
               <thead>
                 <tr>
+                  <th>الترتيب</th>
                   <th>الخط</th>
                   <th>الحالة</th>
                   <th>المنتج الحالي</th>
@@ -334,6 +356,7 @@ export const Lines: React.FC = () => {
 
                   return (
                     <tr key={line.id}>
+                      <td className="font-bold tabular-nums">{Number(line.sortOrder || raw?.sortOrder || 0) || '—'}</td>
                       <td>
                         <div className="font-bold text-[var(--color-text)] flex flex-wrap items-center gap-2">
                           {line.name}
@@ -436,11 +459,16 @@ export const Lines: React.FC = () => {
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={form.code ?? ''}
                   onChange={(e) => setForm({ ...form, code: e.target.value })}
-                  placeholder={suggestedCode || 'مثال: LINE-01'}
+                  placeholder={suggestedCode || buildGenericLineCode()}
                 />
                 {!form.code?.trim() && suggestedCode && (
                   <p className="text-[11px] font-bold text-slate-500">
                     سيتم توليد الكود تلقائيًا: <span className="text-primary">{suggestedCode}</span>
+                  </p>
+                )}
+                {!form.code?.trim() && !suggestedCode && (
+                  <p className="text-[11px] font-bold text-slate-500">
+                    سيتم توليد كود تلقائيًا: <span className="text-primary">{buildGenericLineCode()}</span>
                   </p>
                 )}
               </div>
@@ -451,6 +479,17 @@ export const Lines: React.FC = () => {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="مثال: خط الإنتاج A - التعبئة"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">ترتيب الظهور</label>
+                <input
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  type="number"
+                  min={1}
+                  value={form.sortOrder || ''}
+                  onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+                  placeholder={`التالي: ${nextSortOrder}`}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

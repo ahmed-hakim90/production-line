@@ -16,7 +16,7 @@ import type { SupplyCycle, SupplyCycleKind, SupplyCycleStatus } from '../../../t
 import {
   supplyCycleService,
   computeSupplyCycleTotals,
-  aggregateReportWasteForCycle,
+  aggregateCycleReportMetrics,
 } from '../services/supplyCycleService';
 import { formatNumber, formatOperationDateTime } from '../../../utils/calculations';
 import { useAppStore } from '../../../store/useAppStore';
@@ -78,6 +78,7 @@ export const SupplyCyclesList: React.FC = () => {
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [reportWasteById, setReportWasteById] = useState<Record<string, number>>({});
+  const [productionConsumedById, setProductionConsumedById] = useState<Record<string, number>>({});
   const [manualWasteById, setManualWasteById] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SupplyCycleStatus>('all');
@@ -105,14 +106,18 @@ export const SupplyCyclesList: React.FC = () => {
       setCycles(list);
       setRawMaterials(rms);
       const reportNext: Record<string, number> = {};
+      const productionNext: Record<string, number> = {};
       const manualNext: Record<string, number> = {};
       await Promise.all(
         list.map(async (c) => {
           if (!c.id) return;
           try {
-            reportNext[c.id] = await aggregateReportWasteForCycle(c);
+            const m = await aggregateCycleReportMetrics(c);
+            reportNext[c.id] = m.reportWaste;
+            productionNext[c.id] = m.productionConsumed;
           } catch {
             reportNext[c.id] = 0;
+            productionNext[c.id] = 0;
           }
           try {
             const lines = await supplyCycleService.listWasteLines(c.id);
@@ -123,6 +128,7 @@ export const SupplyCyclesList: React.FC = () => {
         }),
       );
       setReportWasteById(reportNext);
+      setProductionConsumedById(productionNext);
       setManualWasteById(manualNext);
     } finally {
       setLoading(false);
@@ -239,7 +245,8 @@ export const SupplyCyclesList: React.FC = () => {
     const rows = filtered.map((c) => {
       const manual = (c.id && manualWasteById[c.id]) || 0;
       const reportW = (c.id && reportWasteById[c.id]) || 0;
-      const { totalWaste, remaining } = computeSupplyCycleTotals(c, manual, reportW);
+      const prodC = (c.id && productionConsumedById[c.id]) || 0;
+      const { totalWaste, remaining } = computeSupplyCycleTotals(c, manual, reportW, prodC);
       return {
         'كود الباتش': c.batchCode,
         النوع: KIND_LABEL[c.kind],
@@ -250,7 +257,8 @@ export const SupplyCyclesList: React.FC = () => {
         'إلى تاريخ': c.periodEnd,
         'أول مدة': c.openingQty,
         وارد: c.receivedQty,
-        صرف: c.consumedQty,
+        'صرف يدوي': c.consumedQty,
+        'صرف إنتاج (تقارير)': prodC,
         'هالك يدوي': manual,
         'هالك تقارير (تقدير)': reportW,
         'هالك إجمالي': totalWaste,
@@ -386,7 +394,7 @@ export const SupplyCyclesList: React.FC = () => {
             </div>
           ) : (
             <div className="erp-table-scroll overflow-x-auto">
-              <table className="erp-table w-full text-right text-sm border-collapse min-w-[900px]">
+              <table className="erp-table w-full text-right text-sm border-collapse min-w-[1000px]">
                 <thead>
                   <tr>
                     <th>كود الباتش</th>
@@ -397,7 +405,8 @@ export const SupplyCyclesList: React.FC = () => {
                     <th>الفترة</th>
                     <th>أول مدة</th>
                     <th>وارد</th>
-                    <th>صرف</th>
+                    <th>صرف يدوي</th>
+                    <th>صرف إنتاج</th>
                     <th>هالك يدوي</th>
                     <th>هالك تقارير</th>
                     <th>متبقي (تقدير)</th>
@@ -408,7 +417,8 @@ export const SupplyCyclesList: React.FC = () => {
                   {filtered.map((c) => {
                     const reportW = (c.id && reportWasteById[c.id]) || 0;
                     const manualW = (c.id && manualWasteById[c.id]) || 0;
-                    const { remaining } = computeSupplyCycleTotals(c, manualW, reportW);
+                    const prodC = (c.id && productionConsumedById[c.id]) || 0;
+                    const { remaining } = computeSupplyCycleTotals(c, manualW, reportW, prodC);
                     return (
                       <tr
                         key={c.id}
@@ -428,6 +438,7 @@ export const SupplyCyclesList: React.FC = () => {
                         <td className="tabular-nums">{formatNumber(c.openingQty)}</td>
                         <td className="tabular-nums">{formatNumber(c.receivedQty)}</td>
                         <td className="tabular-nums">{formatNumber(c.consumedQty)}</td>
+                        <td className="tabular-nums font-medium text-foreground">{formatNumber(prodC)}</td>
                         <td className="tabular-nums">{formatNumber(manualW)}</td>
                         <td className="tabular-nums">{formatNumber(reportW)}</td>
                         <td className="tabular-nums font-semibold text-foreground">{formatNumber(remaining)}</td>
@@ -545,7 +556,7 @@ export const SupplyCyclesList: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label>صرف</Label>
+                <Label>صرف يدوي</Label>
                 <Input
                   type="number"
                   value={form.consumedQty}

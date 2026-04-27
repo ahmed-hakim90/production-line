@@ -124,6 +124,7 @@ export const ProductionPlans: React.FC = () => {
   const canManageComponentInjectionPlans = can('plans.componentInjection.manage');
   const canCreate = can('plans.create') || canManageComponentInjectionPlans;
   const canEdit = can('plans.edit');
+  const canDelete = canEdit;
   const canAddFollowUp = canEdit || canCreate;
   const canViewCosts = can('costs.view');
   const canExport = can('export');
@@ -150,6 +151,7 @@ export const ProductionPlans: React.FC = () => {
   const [formProductInput, setFormProductInput] = useState('');
   const [formLineId, setFormLineId] = useState('');
   const [formQuantity, setFormQuantity] = useState<number>(Number(searchParams.get('quantity')) || 0);
+  const [formDailyTarget, setFormDailyTarget] = useState<number>(0);
   const [formStartDate, setFormStartDate] = useState(() => getTodayDateString());
   const [formPriority, setFormPriority] = useState<PlanPriority>('medium');
   const [formPlanType, setFormPlanType] = useState<'finished_product' | 'component_injection'>('finished_product');
@@ -167,7 +169,7 @@ export const ProductionPlans: React.FC = () => {
 
   // â”€â”€ Edit modal â”€â”€
   const [editPlan, setEditPlan] = useState<ProductionPlan | null>(null);
-  const [editForm, setEditForm] = useState({ plannedQuantity: 0, startDate: '', lineId: '', priority: 'medium' as PlanPriority });
+  const [editForm, setEditForm] = useState({ plannedQuantity: 0, avgDailyTarget: 0, startDate: '', lineId: '', priority: 'medium' as PlanPriority });
   const [editSaving, setEditSaving] = useState(false);
 
   // â”€â”€ Status modal â”€â”€
@@ -241,7 +243,12 @@ export const ProductionPlans: React.FC = () => {
 
     const productAvgDailyProduction = Number(selectedProduct?.avgDailyProduction || 0);
     const usesProductAverage = productAvgDailyProduction > 0;
-    const effectiveDailyRate = usesProductAverage ? productAvgDailyProduction : dailyCapacity;
+    const manualDailyTarget = Number(formDailyTarget || 0);
+    const effectiveDailyRate = manualDailyTarget > 0
+      ? manualDailyTarget
+      : usesProductAverage
+        ? productAvgDailyProduction
+        : dailyCapacity;
     const estimatedDays = calculateEstimatedDays(formQuantity, effectiveDailyRate);
     const avgDailyTarget = effectiveDailyRate > 0 ? Math.ceil(effectiveDailyRate) : 0;
     const plannedEndDate = estimatedDays > 0 ? addDaysToDate(formStartDate, estimatedDays) : '';
@@ -260,8 +267,9 @@ export const ProductionPlans: React.FC = () => {
       estimatedCost,
       plannedEndDate,
       avgDailyTarget,
+      usesManualDailyTarget: manualDailyTarget > 0,
     };
-  }, [formProductId, formLineId, formQuantity, formStartDate, productReports, _rawLines, lineProductConfigs, routingTotalTimeSecondsByProduct, laborSettings, products]);
+  }, [formProductId, formLineId, formQuantity, formDailyTarget, formStartDate, productReports, _rawLines, lineProductConfigs, routingTotalTimeSecondsByProduct, laborSettings, products]);
 
   const formProductOptions = useMemo(() => {
     const q = formProductInput.trim().toLowerCase();
@@ -532,6 +540,7 @@ export const ProductionPlans: React.FC = () => {
     setFormProductInput('');
     setFormLineId('');
     setFormQuantity(0);
+    setFormDailyTarget(0);
     setFormPriority('medium');
     setFormPlanType('finished_product');
     setSaving(false);
@@ -541,10 +550,15 @@ export const ProductionPlans: React.FC = () => {
 
   const handleEdit = async () => {
     if (!editPlan?.id) return;
-    const durationDays = resolvePlanDurationDays(editPlan);
+    const manualDailyTarget = Number(editForm.avgDailyTarget || 0);
+    const durationDays = manualDailyTarget > 0
+      ? calculateEstimatedDays(editForm.plannedQuantity, manualDailyTarget)
+      : resolvePlanDurationDays(editPlan);
     setEditSaving(true);
     await updateProductionPlan(editPlan.id, {
       plannedQuantity: editForm.plannedQuantity,
+      avgDailyTarget: manualDailyTarget > 0 ? Math.ceil(manualDailyTarget) : editPlan.avgDailyTarget,
+      estimatedDurationDays: durationDays > 0 ? durationDays : editPlan.estimatedDurationDays,
       startDate: editForm.startDate,
       plannedStartDate: editForm.startDate,
       plannedEndDate: durationDays > 0 ? addDaysToDate(editForm.startDate, durationDays) : editPlan.plannedEndDate,
@@ -778,6 +792,19 @@ export const ProductionPlans: React.FC = () => {
             </div>
 
             <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">التارجت اليومي</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                value={formDailyTarget || ''}
+                onChange={(e) => setFormDailyTarget(Number(e.target.value))}
+                placeholder="مثال: 500"
+              />
+              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">إذا تركته فارغاً سيتم استخدام متوسط المنتج أو طاقة الخط.</p>
+            </div>
+
+            <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">تاريخ البدء *</label>
               <input type="date" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={formStartDate} onChange={(e) => setFormStartDate(e.target.value)} />
             </div>
@@ -844,7 +871,7 @@ export const ProductionPlans: React.FC = () => {
                     {calculations.effectiveDailyRate > 0 ? `${formatNumber(calculations.effectiveDailyRate)} وحدة` : '—'}
                   </p>
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                    {calculations.usesProductAverage ? 'من سجل المنتج' : 'احتساب من طاقة الخط'}
+                    {calculations.usesManualDailyTarget ? 'من التارجت اليدوي' : calculations.usesProductAverage ? 'من سجل المنتج' : 'احتساب من طاقة الخط'}
                   </p>
                 </div>
                 <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
@@ -1102,7 +1129,7 @@ export const ProductionPlans: React.FC = () => {
               <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-2">
                 {canEdit && (
                   <>
-                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, lineId: activeDrawerPlan.lineId, priority: activeDrawerPlan.priority || 'medium' }); setActiveDrawerPlanId(null); }}>
+                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, lineId: activeDrawerPlan.lineId, priority: activeDrawerPlan.priority || 'medium' }); setActiveDrawerPlanId(null); }}>
                       تعديل
                     </Button>
                     <Button variant="outline" onClick={() => { setStatusPlan(activeDrawerPlan); setNewStatus(activeDrawerPlan.effectiveStatus); setActiveDrawerPlanId(null); }}>
@@ -1132,7 +1159,7 @@ export const ProductionPlans: React.FC = () => {
                     متابعة نقص
                   </button>
                 )}
-                {can('roles.manage') && activeDrawerPlan.id && (
+                {canDelete && activeDrawerPlan.id && (
                   <button onClick={() => { setDeletePlanId(activeDrawerPlan.id!); setActiveDrawerPlanId(null); }} className="px-4 py-2.5 text-sm rounded-[var(--border-radius-base)] bg-rose-500 text-white hover:bg-rose-600 font-bold transition-colors">
                     حذف
                   </button>
@@ -1166,6 +1193,17 @@ export const ProductionPlans: React.FC = () => {
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المخططة</label>
                 <input type="number" min={1} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={editForm.plannedQuantity || ''} onChange={(e) => setEditForm({ ...editForm, plannedQuantity: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">التارجت اليومي</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  value={editForm.avgDailyTarget || ''}
+                  onChange={(e) => setEditForm({ ...editForm, avgDailyTarget: Number(e.target.value) })}
+                  placeholder="مثال: 500"
+                />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">تاريخ البدء</label>
@@ -1256,7 +1294,7 @@ export const ProductionPlans: React.FC = () => {
 
   function TableView({ groups }: { groups: PlanGroupSection[] }) {
     const totalPlans = groups.reduce((sum, group) => sum + group.plans.length, 0);
-    const hasActionColumn = canEdit || can('roles.manage');
+    const hasActionColumn = canEdit || canDelete;
     const columnCount = (canEdit ? 1 : 0) + 8 + (canViewCosts ? 1 : 0) + (hasActionColumn ? 1 : 0);
 
     return (
@@ -1510,7 +1548,7 @@ export const ProductionPlans: React.FC = () => {
                                   {canEdit && (
                                     <>
                                       <button
-                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium' }); }}
+                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium' }); }}
                                         className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
                                         <span className="material-icons-round text-sm">edit</span>
                                       </button>
@@ -1539,7 +1577,7 @@ export const ProductionPlans: React.FC = () => {
                                       <span className="material-icons-round text-sm">report_problem</span>
                                     </button>
                                   )}
-                                  {can('roles.manage') && (
+                                  {canDelete && (
                                     <button onClick={() => setDeletePlanId(plan.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
                                       <span className="material-icons-round text-sm">delete</span>
                                     </button>

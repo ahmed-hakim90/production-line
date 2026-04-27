@@ -82,6 +82,8 @@ export const PlanBuilderPage: React.FC = () => {
 
   const [steps, setSteps] = useState<RoutingStepDraft[]>([newRoutingDraft()]);
   const [routingTargetUnitSeconds, setRoutingTargetUnitSeconds] = useState<number | undefined>(undefined);
+  const [targetCalcQuantity, setTargetCalcQuantity] = useState<number>(0);
+  const [targetCalcRunMinutes, setTargetCalcRunMinutes] = useState<number>(0);
   const publish = usePublishRoutingPlanMutation();
 
   useEffect(() => {
@@ -123,6 +125,10 @@ export const PlanBuilderPage: React.FC = () => {
   );
 
   const totalRouteSeconds = useMemo(() => totalTimeSecondsFromSteps(steps), [steps]);
+  const calculatedTargetUnitSeconds = useMemo(() => {
+    if (targetCalcQuantity <= 0 || targetCalcRunMinutes <= 0) return 0;
+    return Math.round((targetCalcRunMinutes * 60) / targetCalcQuantity);
+  }, [targetCalcQuantity, targetCalcRunMinutes]);
 
   const productName = products.find((p) => p.id === routeProductId)?.name ?? routeProductId;
 
@@ -286,7 +292,7 @@ export const PlanBuilderPage: React.FC = () => {
 
           {!readonly && (
             <Card className="shadow-sm">
-              <CardContent className="space-y-2 p-4">
+              <CardContent className="space-y-4 p-4">
                 <label className="text-sm font-semibold text-foreground" htmlFor="routing-target-seconds">
                   تارجت المسار (ثانية/وحدة) — لاحتساب المتوقع في تقارير الإنتاج
                 </label>
@@ -308,6 +314,52 @@ export const PlanBuilderPage: React.FC = () => {
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   إن وُجد، يُستخدم لحساب الكمية المتوقعة في التقرير مقابل ساعات التشغيل. إن تُرك فارغاً يُعتمد مجموع زمن الخطوات أعلاه.
                 </p>
+                <div className="grid grid-cols-1 gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground" htmlFor="routing-target-calc-qty">
+                      كمية التشغيل
+                    </label>
+                    <input
+                      id="routing-target-calc-qty"
+                      type="number"
+                      min={1}
+                      step={1}
+                      disabled={effectiveReadonly}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm tabular-nums"
+                      value={targetCalcQuantity || ''}
+                      onChange={(e) => setTargetCalcQuantity(Math.max(0, Number(e.target.value) || 0))}
+                      placeholder="مثال: 120"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground" htmlFor="routing-target-calc-minutes">
+                      مدة التشغيل بالدقائق
+                    </label>
+                    <input
+                      id="routing-target-calc-minutes"
+                      type="number"
+                      min={1}
+                      step={0.5}
+                      disabled={effectiveReadonly}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm tabular-nums"
+                      value={targetCalcRunMinutes || ''}
+                      onChange={(e) => setTargetCalcRunMinutes(Math.max(0, Number(e.target.value) || 0))}
+                      placeholder="مثال: 30"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full sm:w-auto"
+                    disabled={effectiveReadonly || calculatedTargetUnitSeconds <= 0}
+                    onClick={() => setRoutingTargetUnitSeconds(calculatedTargetUnitSeconds)}
+                  >
+                    اعتماد {calculatedTargetUnitSeconds > 0 ? `${calculatedTargetUnitSeconds} ث` : 'التارجت'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground sm:col-span-3">
+                    الناتج: {calculatedTargetUnitSeconds > 0 ? `${calculatedTargetUnitSeconds} ثانية/وحدة` : 'أدخل الكمية ومدة التشغيل لعرض التارجت بالثواني.'}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}

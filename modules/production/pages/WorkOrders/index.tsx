@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
@@ -63,6 +64,7 @@ const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
 
 export const WorkOrders: React.FC = () => {
   const navigate = useTenantNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
@@ -112,6 +114,26 @@ export const WorkOrders: React.FC = () => {
   const woPrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
   const canCreateWorkOrder = can('workOrders.create') || can('workOrders.componentInjection.manage');
+  const openedCreateFromParamsRef = useRef(false);
+
+  useEffect(() => {
+    if (!canCreateWorkOrder || openedCreateFromParamsRef.current) return;
+    const planId = searchParams.get('planId')?.trim() || '';
+    const productId = searchParams.get('productId')?.trim() || '';
+    if (!planId && !productId) return;
+    openedCreateFromParamsRef.current = true;
+    openModal(MODAL_KEYS.WORK_ORDERS_CREATE, {
+      source: 'workOrders.queryParams',
+      planId,
+      productId,
+    });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('planId');
+      next.delete('productId');
+      return next;
+    }, { replace: true });
+  }, [canCreateWorkOrder, openModal, searchParams, setSearchParams]);
 
   useEffect(() => {
     setOrders(liveOrders);
@@ -210,8 +232,10 @@ export const WorkOrders: React.FC = () => {
       const lineName = lineNameMap.get(order.lineId || '') || '—';
       const dailyAverage = Number(productAvgDailyMap.get(order.productId || '') || 0);
       const estimatedDays = resolveEstimatedDays(order, dailyAverage);
-      const expectedEndByFirstReport = firstReportDate && estimatedDays > 0
-        ? addDaysToDate(firstReportDate, estimatedDays)
+      const plannedStartDate = String(order.startDate || '').trim();
+      const executionStartDate = firstReportDate || plannedStartDate;
+      const expectedEndByFirstReport = executionStartDate && estimatedDays > 0
+        ? addDaysToDate(executionStartDate, estimatedDays)
         : '';
       const expectedEnd = String(expectedEndByFirstReport || (order as any).expectedEnd || order.targetDate || '');
       const deviationPct = Number((order as any).executionDeviationPct ?? 0);
@@ -292,7 +316,7 @@ export const WorkOrders: React.FC = () => {
           status: effectiveStatus,
           producedQuantity: produced,
           estimatedCost: resolvedEstimatedCost,
-          startedAt: firstReportDate || undefined,
+          startedAt: executionStartDate || undefined,
           expectedEnd,
           dailyAverage,
           estimatedDays,
@@ -306,7 +330,7 @@ export const WorkOrders: React.FC = () => {
         deviationPct,
         storedStatus: order.status,
         effectiveStatus,
-        startDateLabel: firstReportDate || '—',
+        startDateLabel: executionStartDate || '—',
         estimatedDays,
         dailyAverage,
         reportCount,

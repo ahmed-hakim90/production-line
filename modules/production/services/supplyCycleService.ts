@@ -25,6 +25,7 @@ import { tenantQuery } from '../../../lib/tenantFirestore';
 import { getReportWaste } from '../../../utils/calculations';
 import { reportService } from './reportService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
+import { resolveReportType } from '../utils/reportTypes';
 
 const CYCLES = 'supply_cycles';
 const WASTE_LINES = 'supply_cycle_waste_lines';
@@ -73,20 +74,44 @@ async function generateNextBatchCode(): Promise<string> {
   }
 }
 
+/**
+ * Sums `quantityProduced` from supply-linked production reports = «صرف إنتاج» (منتج تام فقط؛ وحدات الانتاج = وحدات الدورة).
+ */
+export function sumProductionQuantityForCycleReports(
+  cycle: Pick<SupplyCycle, 'kind' | 'itemId'>,
+  reports: ProductionReport[],
+): number {
+  if (cycle.kind !== 'finished_good') return 0;
+  return reports.reduce((sum, r) => {
+    if (resolveReportType(r.reportType) === 'packaging') return sum;
+    if (String(r.productId) !== String(cycle.itemId)) return sum;
+    return sum + (Number(r.quantityProduced) || 0);
+  }, 0);
+}
+
 export function computeSupplyCycleTotals(
   cycle: Pick<SupplyCycle, 'openingQty' | 'receivedQty' | 'consumedQty'>,
   manualWasteSum: number,
   reportWasteSum: number,
-): { totalWaste: number; remaining: number; manualWasteSum: number; reportWasteSum: number } {
+  productionConsumedQty = 0,
+): { totalWaste: number; remaining: number; manualWasteSum: number; reportWasteSum: number; productionConsumed: number } {
   const manualWasteSumN = Number(manualWasteSum) || 0;
   const reportWasteSumN = Number(reportWasteSum) || 0;
   const totalWaste = manualWasteSumN + reportWasteSumN;
+  const productionConsumedN = Number(productionConsumedQty) || 0;
   const remaining =
     (Number(cycle.openingQty) || 0) +
     (Number(cycle.receivedQty) || 0) -
     (Number(cycle.consumedQty) || 0) -
+    productionConsumedN -
     totalWaste;
-  return { totalWaste, remaining, manualWasteSum: manualWasteSumN, reportWasteSum: reportWasteSumN };
+  return {
+    totalWaste,
+    remaining,
+    manualWasteSum: manualWasteSumN,
+    reportWasteSum: reportWasteSumN,
+    productionConsumed: productionConsumedN,
+  };
 }
 
 async function deleteWasteLinesForCycle(cycleId: string): Promise<void> {
@@ -140,17 +165,41 @@ async function aggregateReportWasteByDateRange(cycle: SupplyCycle): Promise<numb
   return total;
 }
 
-export async function aggregateReportWasteForCycle(cycle: SupplyCycle): Promise<number> {
-  if (!isConfigured || !cycle.id) return 0;
+/**
+ * جلب تقارير مربوطة بالدورة مرة واحدة: هالك من التقارير + صرف إنتاج (للتام).
+ */
+export async function aggregateCycleReportMetrics(cycle: SupplyCycle): Promise<{
+  reportWaste: number;
+  productionConsumed: number;
+  linkedCount: number;
+}> {
+  if (!isConfigured || !cycle.id) {
+    return { reportWaste: 0, productionConsumed: 0, linkedCount: 0 };
+  }
   const { periodStart, periodEnd, itemId } = cycle;
-  if (!periodStart || !periodEnd || !itemId) return 0;
+  if (!periodStart || !periodEnd || !itemId) {
+    return { reportWaste: 0, productionConsumed: 0, linkedCount: 0 };
+  }
 
   const linked = await reportService.listAllBySupplyCycleId(cycle.id);
   if (linked.length > 0) {
-    return linked.reduce((sum, r) => sum + sumReportWasteForCycleKind(cycle, r), 0);
+    const reportWaste = linked.reduce((sum, r) => sum + sumReportWasteForCycleKind(cycle, r), 0);
+    const productionConsumed = sumProductionQuantityForCycleReports(cycle, linked);
+    return { reportWaste, productionConsumed, linkedCount: linked.length };
   }
 
-  return aggregateReportWasteByDateRange(cycle);
+  const reportWaste = await aggregateReportWasteByDateRange(cycle);
+  return { reportWaste, productionConsumed: 0, linkedCount: 0 };
+}
+
+export async function aggregateReportWasteForCycle(cycle: SupplyCycle): Promise<number> {
+  const { reportWaste } = await aggregateCycleReportMetrics(cycle);
+  return reportWaste;
+}
+
+export async function aggregateProductionConsumedForCycle(cycle: SupplyCycle): Promise<number> {
+  const { productionConsumed } = await aggregateCycleReportMetrics(cycle);
+  return productionConsumed;
 }
 
 function uid(): string | undefined {
@@ -278,7 +327,6 @@ export const supplyCycleService = {
 
     const wasteLines = await this.listWasteLines(id);
     const manualSum = wasteLines.reduce((s, w) => s + (Number(w.quantity) || 0), 0);
-    const reportWaste = await aggregateReportWasteForCycle(existing);
 
     if (existing.status === 'draft') {
       await deleteWasteLinesForCycle(id);
@@ -291,7 +339,14 @@ export const supplyCycleService = {
         (Number(existing.openingQty) || 0) !== 0 ||
         (Number(existing.receivedQty) || 0) !== 0 ||
         (Number(existing.consumedQty) || 0) !== 0;
-      if (wasteLines.length > 0 || hasNumbers || manualSum > 0 || reportWaste > 0) {
+      const m = await aggregateCycleReportMetrics(existing);
+      if (
+        wasteLines.length > 0 ||
+        hasNumbers ||
+        manualSum > 0 ||
+        m.reportWaste > 0 ||
+        m.productionConsumed > 0
+      ) {
         throw new Error('Cannot delete an open cycle with data; clear quantities and waste first, or use draft.');
       }
       await deleteDoc(doc(db, CYCLES, id));
@@ -307,8 +362,13 @@ export const supplyCycleService = {
 
     const wasteLines = await this.listWasteLines(id);
     const manualSum = wasteLines.reduce((s, w) => s + (Number(w.quantity) || 0), 0);
-    const reportWaste = await aggregateReportWasteForCycle(existing);
-    const { totalWaste, remaining } = computeSupplyCycleTotals(existing, manualSum, reportWaste);
+    const m = await aggregateCycleReportMetrics(existing);
+    const { totalWaste, remaining } = computeSupplyCycleTotals(
+      existing,
+      manualSum,
+      m.reportWaste,
+      m.productionConsumed,
+    );
 
     await updateDoc(doc(db, CYCLES, id), {
       status: 'closed',

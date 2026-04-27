@@ -19,6 +19,7 @@ const statusOptions: { value: ProductionLineStatus; key: string }[] = [
 const emptyForm: Omit<FirestoreProductionLine, 'id'> = {
   name: '',
   code: '',
+  sortOrder: 0,
   dailyWorkingHours: 8,
   maxWorkers: 20,
   status: ProductionLineStatus.IDLE,
@@ -49,6 +50,18 @@ export const GlobalCreateLineModal: React.FC = () => {
     if (!Number.isFinite(lineNumber)) return '';
     return `LINE-${String(lineNumber).padStart(2, '0')}`;
   };
+  const nextSortOrder = lines.reduce((max, line) => {
+    const value = Number(line.sortOrder || 0);
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, 0) + 1;
+  const buildGenericLineCode = () => {
+    const used = new Set(lines.map((line) => normalizeLineCode(line.code ?? '')).filter(Boolean));
+    for (let i = nextSortOrder; i < nextSortOrder + 1000; i += 1) {
+      const code = `LINE-${String(i).padStart(3, '0')}`;
+      if (!used.has(code)) return code;
+    }
+    return `LINE-${Date.now()}`;
+  };
 
   const handleClose = () => {
     if (saving) return;
@@ -57,7 +70,7 @@ export const GlobalCreateLineModal: React.FC = () => {
   };
 
   const handleSave = async () => {
-    const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? ''));
+    const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? '') || buildGenericLineCode());
     if (!form.name || !normalizedCode) {
       setMessage({ type: 'error', text: t('modalManager.createLine.nameOrCodeRequiredError') });
       return;
@@ -70,7 +83,11 @@ export const GlobalCreateLineModal: React.FC = () => {
     setSaving(true);
     setMessage(null);
     try {
-      const id = await createLine({ ...form, code: normalizedCode });
+      const id = await createLine({
+        ...form,
+        code: normalizedCode,
+        sortOrder: Math.max(1, Number(form.sortOrder || nextSortOrder)),
+      });
       if (!id) throw new Error('create failed');
       setMessage({ type: 'success', text: t('modalManager.createLine.createSuccess') });
       setForm(emptyForm);
@@ -99,11 +116,27 @@ export const GlobalCreateLineModal: React.FC = () => {
           )}
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.codeOptional')}</label>
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.code ?? ''} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder={t('modalManager.createLine.codePlaceholder')} />
+            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.code ?? ''} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder={buildCodeFromLineName(form.name) || buildGenericLineCode() || t('modalManager.createLine.codePlaceholder')} />
+            {!form.code?.trim() && (
+              <p className="text-[11px] font-bold text-slate-500">
+                سيتم توليد كود تلقائيًا: <span className="text-primary">{buildCodeFromLineName(form.name) || buildGenericLineCode()}</span>
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.nameRequired')}</label>
             <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('modalManager.createLine.namePlaceholder')} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">ترتيب الظهور</label>
+            <input
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
+              type="number"
+              min={1}
+              value={form.sortOrder || ''}
+              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+              placeholder={`التالي: ${nextSortOrder}`}
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">

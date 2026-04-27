@@ -4,19 +4,21 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { Badge, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
-import type { SupplyCycle, SupplyCycleKind, SupplyCycleStatus, SupplyCycleWasteLine } from '../../../types';
+import type { ProductionReport, SupplyCycle, SupplyCycleKind, SupplyCycleStatus, SupplyCycleWasteLine } from '../../../types';
 import {
   supplyCycleService,
   computeSupplyCycleTotals,
-  aggregateReportWasteForCycle,
+  aggregateCycleReportMetrics,
+  sumProductionQuantityForCycleReports,
 } from '../services/supplyCycleService';
+import { reportService } from '../services/reportService';
+import { resolveReportType } from '../utils/reportTypes';
 import { formatNumber, formatOperationDateTime } from '../../../utils/calculations';
 import { useAppStore } from '../../../store/useAppStore';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { RawMaterial } from '../../inventory/types';
 import { exportSupplyCycleDetailExcel } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { reportService } from '../services/reportService';
 import { toast } from '../../../components/Toast';
 import {
   DetailPageShell,
@@ -70,6 +72,7 @@ export const SupplyCycleDetail: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
   const _rawProducts = useAppStore((s) => s._rawProducts);
+  const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
@@ -84,9 +87,11 @@ export const SupplyCycleDetail: React.FC = () => {
   const [wasteLines, setWasteLines] = useState<SupplyCycleWasteLine[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [reportWaste, setReportWaste] = useState(0);
+  const [productionConsumed, setProductionConsumed] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [linkedReportCount, setLinkedReportCount] = useState<number | null>(null);
+  const [linkedReports, setLinkedReports] = useState<ProductionReport[]>([]);
 
   const [wasteQty, setWasteQty] = useState(0);
   const [wasteNote, setWasteNote] = useState('');
@@ -109,6 +114,7 @@ export const SupplyCycleDetail: React.FC = () => {
     setLoading(true);
     try {
       setLinkedReportCount(null);
+      setLinkedReports([]);
       const [c, rms, lines] = await Promise.all([
         supplyCycleService.getById(cycleId),
         rawMaterialService.getAll(),
@@ -119,13 +125,21 @@ export const SupplyCycleDetail: React.FC = () => {
       setWasteLines(lines);
       if (c) {
         try {
-          const linked = await reportService.listAllBySupplyCycleId(c.id!);
-          setLinkedReportCount(linked.length);
+          const m = await aggregateCycleReportMetrics(c);
+          setReportWaste(m.reportWaste);
+          setProductionConsumed(m.productionConsumed);
+          setLinkedReportCount(m.linkedCount);
         } catch {
+          setReportWaste(0);
+          setProductionConsumed(0);
           setLinkedReportCount(null);
         }
-        const rw = await aggregateReportWasteForCycle(c);
-        setReportWaste(rw);
+        try {
+          const rows = await reportService.listAllBySupplyCycleId(c.id!);
+          setLinkedReports(rows);
+        } catch {
+          setLinkedReports([]);
+        }
         setEditForm({
           kind: c.kind,
           itemId: c.itemId,
@@ -159,6 +173,29 @@ export const SupplyCycleDetail: React.FC = () => {
     [rawMaterials, _rawProducts],
   );
 
+  const resolveLineName = useCallback(
+    (lineId: string) => {
+      const L = _rawLines.find((l) => l.id === lineId);
+      return L?.name || lineId;
+    },
+    [_rawLines],
+  );
+
+  const resolveProductName = useCallback(
+    (productId: string) => {
+      const p = _rawProducts.find((x) => x.id === productId);
+      return p?.name || productId;
+    },
+    [_rawProducts],
+  );
+
+  const reportTypeLabel = (rt: ProductionReport['reportType'] | undefined) => {
+    const t = resolveReportType(rt);
+    if (t === 'packaging') return 'تغليف';
+    if (t === 'component_injection') return 'حقن مكوّن';
+    return 'إنتاج تام';
+  };
+
   const resolveUidLabel = useCallback(
     (firestoreUid: string | undefined) => {
       const u = String(firestoreUid || '').trim();
@@ -177,15 +214,17 @@ export const SupplyCycleDetail: React.FC = () => {
   );
 
   const totals = useMemo(() => {
-    if (!cycle) return { totalWaste: 0, remaining: 0 };
+    if (!cycle) return { totalWaste: 0, remaining: 0, productionConsumed: 0 };
+    const live = computeSupplyCycleTotals(cycle, manualSum, reportWaste, productionConsumed);
     if (cycle.status === 'closed' && cycle.closedWasteTotal != null && cycle.closedRemaining != null) {
       return {
         totalWaste: cycle.closedWasteTotal,
         remaining: cycle.closedRemaining,
+        productionConsumed: live.productionConsumed,
       };
     }
-    return computeSupplyCycleTotals(cycle, manualSum, reportWaste);
-  }, [cycle, manualSum, reportWaste]);
+    return live;
+  }, [cycle, manualSum, reportWaste, productionConsumed]);
 
   const editable = cycle && (cycle.status === 'draft' || cycle.status === 'open');
   const canEdit = Boolean(editable && can('supplyCycles.manage'));
@@ -302,7 +341,8 @@ export const SupplyCycleDetail: React.FC = () => {
       'إلى تاريخ': cycle.periodEnd,
       'أول مدة': cycle.openingQty,
       وارد: cycle.receivedQty,
-      صرف: cycle.consumedQty,
+      'صرف يدوي': cycle.consumedQty,
+      'صرف إنتاج (تقارير)': productionConsumed,
       'هالك يدوي': manualSum,
       'هالك تقارير (تقدير)': reportWaste,
       'إجمالي الهالك': totals.totalWaste,
@@ -389,7 +429,8 @@ export const SupplyCycleDetail: React.FC = () => {
   const kpiTiles = [
     { label: 'أول مدة', value: formatNumber(cycle.openingQty) },
     { label: 'وارد', value: formatNumber(cycle.receivedQty) },
-    { label: 'صرف', value: formatNumber(cycle.consumedQty) },
+    { label: 'صرف يدوي', value: formatNumber(cycle.consumedQty) },
+    { label: 'صرف إنتاج', value: formatNumber(totals.productionConsumed) },
     { label: 'هالك يدوي', value: formatNumber(manualSum) },
     { label: 'هالك تقارير (تقدير)', value: formatNumber(reportWaste) },
     { label: 'إجمالي الهالك', value: formatNumber(totals.totalWaste) },
@@ -432,11 +473,15 @@ export const SupplyCycleDetail: React.FC = () => {
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">المتبقي</p>
                 <p className="mt-1 text-3xl font-bold tabular-nums text-primary">{formatNumber(totals.remaining)}</p>
                 <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                  أول مدة + وارد − صرف − هالك (تقدير حتى الإقفال)
+                  {cycle.kind === 'finished_good' ? (
+                    <>أول مدة + وارد − صرف يدوي − صرف إنتاج (كمية منتَجة في التقارير) − هالك</>
+                  ) : (
+                    <>أول مدة + وارد − صرف يدوي − هالك (صرف إنتاج تلقائي لدورات الخام معطّل — اختلاف الوحدة)</>
+                  )}
                 </p>
               </div>
-              <div className={cn('grid grid-cols-2 gap-2 sm:grid-cols-3', 'min-w-0 sm:max-w-md')}>
-                {kpiTiles.slice(0, 3).map((k) => (
+              <div className={cn('grid grid-cols-2 gap-2 sm:grid-cols-4', 'min-w-0 sm:max-w-2xl')}>
+                {kpiTiles.slice(0, 4).map((k) => (
                   <div key={k.label} className={cn('px-3 py-2', NESTED_TILE)}>
                     <p className="text-[10px] font-medium text-muted-foreground">{k.label}</p>
                     <p className="text-sm font-semibold tabular-nums">{k.value}</p>
@@ -490,7 +535,7 @@ export const SupplyCycleDetail: React.FC = () => {
       </DetailCollapsibleSection>
 
       <DetailCollapsibleSection title="ملخص الأرقام" defaultOpen>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           {kpiTiles.map((k) => (
             <div key={k.label} className={cn('space-y-1 p-3', NESTED_TILE)}>
               <p className="text-[11px] font-medium text-muted-foreground leading-tight">{k.label}</p>
@@ -499,7 +544,11 @@ export const SupplyCycleDetail: React.FC = () => {
           ))}
         </div>
         <div className={cn('mt-4 p-4 rounded-xl border-2 border-primary/20 bg-primary/5', NESTED_TILE)}>
-          <p className="text-[11px] font-semibold text-muted-foreground">المتبقي (أول + وارد − صرف − هالك)</p>
+          <p className="text-[11px] font-semibold text-muted-foreground">
+            {cycle.kind === 'finished_good'
+              ? 'المتبقي (أول + وارد − صرف يدوي − صرف إنتاج − هالك)'
+              : 'المتبقي (أول + وارد − صرف يدوي − هالك)'}
+          </p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-primary">{formatNumber(totals.remaining)}</p>
         </div>
       </DetailCollapsibleSection>
@@ -511,8 +560,9 @@ export const SupplyCycleDetail: React.FC = () => {
             <span className="font-bold tabular-nums text-foreground">{linkedReportCount ?? '—'}</span>
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            من صفحة التقارير يمكن اختيار «دورة توريد» عند الحفظ؛ عندها يُحسب هالك التقارير من هذه التقارير المحددة بدل
-            التقدير بالتاريخ فقط.
+            من صفحة التقارير يُربط التقرير بهذه الدورة (أو يرتبط تلقائياً إن وافقت الفترة والصنف). تُحسب <strong>صرف إنتاج</strong> كعدد
+            وحدات منتَجة (مجموع «تم إنتاجه») في التقارير المربوطة — لدورات <strong>المنتج التام</strong> فقط. كما يُفضّل لربط
+            دقيق الهالك من تلك التقارير بدل التقدير بالتاريخ فقط.
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             <Button type="button" variant="outline" size="sm" onClick={() => navigate('/inventory/transactions')}>
@@ -533,6 +583,64 @@ export const SupplyCycleDetail: React.FC = () => {
             )}
           </div>
         </div>
+      </DetailCollapsibleSection>
+
+      <DetailCollapsibleSection title="جدول صرف الإنتاج (تقارير مربوطة)" defaultOpen>
+        {cycle.kind === 'raw_material' && (
+          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+            لدورات <strong>الخام</strong> يُعرض «كمية الإنتاج» في التقارير للمتابعة فقط — عمود «في صرف الإنتاج» لا يُخصم
+            تلقائياً (اختلاف وحدة المخزون).
+          </p>
+        )}
+        {linkedReports.length === 0 ? (
+          <p className="text-sm text-muted-foreground">لا توجد تقارير مربوطة — اربط التقارير بهذه الدورة ليظهر التفصيل ويُحسب صرف الإنتاج (للتام).</p>
+        ) : (
+          <div className="erp-table-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-border">
+            <table className="erp-table w-full text-right text-sm border-collapse min-w-[640px]">
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>كود التقرير</th>
+                  <th>خط الإنتاج</th>
+                  <th>المنتج</th>
+                  <th>النوع</th>
+                  <th>كمية الإنتاج</th>
+                  <th>في صرف الإنتاج</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linkedReports.map((r) => {
+                  const inPc = sumProductionQuantityForCycleReports(cycle, [r]);
+                  return (
+                    <tr key={r.id || `${r.date}-${r.lineId}`}>
+                      <td className="whitespace-nowrap text-xs text-muted-foreground">{r.date}</td>
+                      <td className="font-mono text-xs">{r.reportCode || r.id || '—'}</td>
+                      <td className="max-w-[160px] truncate" title={resolveLineName(r.lineId)}>
+                        {resolveLineName(r.lineId)}
+                      </td>
+                      <td className="max-w-[180px] truncate" title={resolveProductName(r.productId)}>
+                        {resolveProductName(r.productId)}
+                      </td>
+                      <td className="text-xs">{reportTypeLabel(r.reportType)}</td>
+                      <td className="tabular-nums">{formatNumber(r.quantityProduced || 0)}</td>
+                      <td className="tabular-nums font-medium text-foreground">
+                        {cycle.kind === 'finished_good' && inPc > 0 ? formatNumber(inPc) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="bg-slate-50/80 font-semibold dark:bg-muted/30">
+                  <td colSpan={6} className="text-end text-muted-foreground">
+                    إجمالي يُحسب في صرف الإنتاج
+                  </td>
+                  <td className="tabular-nums text-primary">
+                    {cycle.kind === 'finished_good' ? formatNumber(productionConsumed) : '—'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </DetailCollapsibleSection>
 
       <DetailCollapsibleSection title="الهالك اليدوي" defaultOpen>
@@ -705,13 +813,14 @@ export const SupplyCycleDetail: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label>صرف</Label>
+                <Label>صرف يدوي</Label>
                 <Input
                   type="number"
                   className={FIELD_ON_PANEL}
                   value={editForm.consumedQty}
                   onChange={(e) => setEditForm((f) => ({ ...f, consumedQty: Number(e.target.value) }))}
                 />
+                <p className="text-[10px] text-muted-foreground leading-tight">صرف الإنتاج يُحسب تلقائياً من التقارير المربوطة (للتام).</p>
               </div>
             </div>
             <div className="space-y-2">

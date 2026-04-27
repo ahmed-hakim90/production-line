@@ -4,7 +4,7 @@ import { Button, SearchableSelect } from '../../../modules/production/components
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { estimateReportCost } from '../../../utils/costCalculations';
-import { formatNumber, getTodayDateString } from '../../../utils/calculations';
+import { addDaysToDate, formatNumber, getTodayDateString } from '../../../utils/calculations';
 import { workOrderService } from '../../../modules/production/services/workOrderService';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -13,6 +13,21 @@ import { useTranslation } from 'react-i18next';
 const DEFAULT_BREAK_START = '12:00';
 const DEFAULT_BREAK_END = '12:30';
 const DEFAULT_WORKDAY_END = '16:00';
+
+const durationDaysBetweenInclusive = (startDate: string, endDate: string): number => {
+  if (!startDate || !endDate) return 1;
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const diffMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return 1;
+  return Math.floor(diffMs / 86_400_000) + 1;
+};
+
+const endDateFromDuration = (startDate: string, durationDays: number): string => {
+  if (!startDate) return getTodayDateString();
+  const safeDays = Math.max(1, Math.ceil(Number(durationDays || 1)));
+  return safeDays <= 1 ? startDate : addDaysToDate(startDate, safeDays - 1);
+};
 
 type WorkOrderFormState = {
   planId: string;
@@ -23,6 +38,8 @@ type WorkOrderFormState = {
   quantity: number;
   maxWorkers: number;
   workHours: number;
+  startDate: string;
+  durationDays: number;
   targetDate: string;
   notes: string;
   breakStartTime: string;
@@ -39,6 +56,8 @@ const emptyForm = (): WorkOrderFormState => ({
   quantity: 0,
   maxWorkers: 0,
   workHours: 0,
+  startDate: getTodayDateString(),
+  durationDays: 1,
   targetDate: getTodayDateString(),
   notes: '',
   breakStartTime: DEFAULT_BREAK_START,
@@ -126,10 +145,29 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       setEditingId(null);
       setLoadingEdit(false);
       const base = emptyForm();
+      const payloadPlanId = payload && typeof payload.planId === 'string' ? payload.planId.trim() : '';
+      const payloadProductId = payload && typeof payload.productId === 'string' ? payload.productId.trim() : '';
+      const selectedPayloadPlan = payloadPlanId ? plans.find((p) => p.id === payloadPlanId) : null;
+      const planStartDate = selectedPayloadPlan?.plannedStartDate || selectedPayloadPlan?.startDate || base.startDate;
+      const planTargetDate = selectedPayloadPlan?.plannedEndDate || base.targetDate;
+      const planRemaining = selectedPayloadPlan
+        ? Math.max((selectedPayloadPlan.plannedQuantity || 0) - (selectedPayloadPlan.producedQuantity || 0), 0)
+        : 0;
+      const prefilled = {
+        ...base,
+        planId: selectedPayloadPlan?.id || payloadPlanId,
+        workOrderType: selectedPayloadPlan?.planType === 'component_injection' ? 'component_injection' : base.workOrderType,
+        productId: selectedPayloadPlan?.productId || payloadProductId,
+        lineId: selectedPayloadPlan?.lineId || '',
+        quantity: planRemaining,
+        startDate: planStartDate,
+        targetDate: planTargetDate,
+        durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
+      };
       setForm(
         !canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders
-          ? { ...base, workOrderType: 'component_injection' }
-          : base,
+          ? { ...prefilled, workOrderType: 'component_injection' }
+          : prefilled,
       );
       setError(null);
       setMessage(null);
@@ -158,6 +196,8 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         quantity: wo.quantity,
         maxWorkers: wo.maxWorkers,
         workHours: Number((wo as { workHours?: number }).workHours || 0),
+        startDate: wo.startDate || wo.targetDate || getTodayDateString(),
+        durationDays: durationDaysBetweenInclusive(wo.startDate || wo.targetDate, wo.targetDate),
         targetDate: wo.targetDate,
         notes: wo.notes || '',
         breakStartTime: wo.breakStartTime || DEFAULT_BREAK_START,
@@ -169,7 +209,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isOpen, payload, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
+  }, [isOpen, payload, plans, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
 
   const openForEdit =
     isOpen &&
@@ -196,7 +236,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0) return;
+    if (!form.productId || !form.lineId || !form.supervisorId || form.quantity <= 0 || !form.startDate || !form.targetDate) return;
     if (form.workOrderType === 'component_injection' && !canManageComponentInjectionWorkOrders) {
       setError(isEditMode ? t('modalManager.createWorkOrder.permissionEditInjectionDenied') : t('modalManager.createWorkOrder.permissionCreateInjectionDenied'));
       return;
@@ -217,7 +257,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           supervisorId: form.supervisorId,
           quantity: form.quantity,
           maxWorkers: form.maxWorkers,
+          workHours: form.workHours,
+          startDate: form.startDate,
           targetDate: form.targetDate,
+          estimatedDurationDays: form.durationDays,
           notes: form.notes,
           breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
           breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
@@ -249,7 +292,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           quantity: form.quantity,
           producedQuantity: 0,
           maxWorkers: form.maxWorkers,
+          workHours: form.workHours,
+          startDate: form.startDate,
           targetDate: form.targetDate,
+          estimatedDurationDays: form.durationDays,
           estimatedCost: est.totalCost,
           actualCost: 0,
           status: 'pending',
@@ -311,12 +357,21 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
               value={form.planId}
               onChange={(value) => {
                 const plan = plans.find((p) => p.id === value);
+                const planStartDate = plan?.plannedStartDate || plan?.startDate || form.startDate;
+                const planTargetDate = plan?.plannedEndDate || form.targetDate;
+                const remaining = plan
+                  ? Math.max((plan.plannedQuantity || 0) - (plan.producedQuantity || 0), 0)
+                  : form.quantity;
                 setForm((f) => ({
                   ...f,
                   planId: value,
                   workOrderType: plan?.planType === 'component_injection' ? 'component_injection' : f.workOrderType,
                   productId: plan?.productId || f.productId,
                   lineId: plan?.lineId || f.lineId,
+                  quantity: remaining,
+                  startDate: planStartDate,
+                  targetDate: planTargetDate,
+                  durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
                 }));
               }}
               placeholder={t('modalManager.createWorkOrder.searchProductOrNoPlan')}
@@ -424,6 +479,58 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">تاريخ بداية الأمر</label>
+              <input
+                type="date"
+                value={form.startDate}
+                onChange={(e) => {
+                  const startDate = e.target.value || getTodayDateString();
+                  setForm((f) => ({
+                    ...f,
+                    startDate,
+                    targetDate: endDateFromDuration(startDate, f.durationDays),
+                  }));
+                }}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">مدة الأمر بالأيام</label>
+              <input
+                type="number"
+                min={1}
+                value={form.durationDays || ''}
+                onChange={(e) => {
+                  const durationDays = Math.max(1, Math.ceil(Number(e.target.value) || 1));
+                  setForm((f) => ({
+                    ...f,
+                    durationDays,
+                    targetDate: endDateFromDuration(f.startDate, durationDays),
+                  }));
+                }}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">تاريخ نهاية الأمر</label>
+              <input
+                type="date"
+                value={form.targetDate}
+                onChange={(e) => {
+                  const targetDate = e.target.value || form.startDate;
+                  setForm((f) => ({
+                    ...f,
+                    targetDate,
+                    durationDays: durationDaysBetweenInclusive(f.startDate, targetDate),
+                  }));
+                }}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.dailyBreakStart')}</label>
               <input
                 type="time"
@@ -466,6 +573,8 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
               !form.productId ||
               !form.lineId ||
               !form.supervisorId ||
+              !form.startDate ||
+              !form.targetDate ||
               form.quantity <= 0
             }
           >
