@@ -12,6 +12,7 @@ const SupervisorLineAssignment = lazyNamed(() => import('../pages/SupervisorLine
 const ProductionWorkers = lazyNamed(() => import('../pages/ProductionWorkers'), 'ProductionWorkers');
 const ProductionWorkerDetails = lazyNamed(() => import('../pages/ProductionWorkerDetails'), 'ProductionWorkerDetails');
 const Reports = lazyNamed(() => import('../pages/Reports'), 'Reports');
+const ComponentWasteReports = lazyNamed(() => import('../pages/ComponentWasteReports'), 'ComponentWasteReports');
 const QuickAction = lazyNamed(() => import('../pages/QuickAction'), 'QuickAction');
 
 const RoutingPlansPage = lazyNamed(() => import('../routing/pages/RoutingPlansPage'), 'RoutingPlansPage');
@@ -34,6 +35,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/production-workers', permission: 'productionWorkers.view', component: ProductionWorkers },
   { path: '/production-workers/:id', permission: 'productionWorkers.view', component: ProductionWorkerDetails },
   { path: '/reports', permission: 'reports.view', component: Reports },
+  { path: '/component-waste-reports', permission: 'reports.componentWaste.create', component: ComponentWasteReports },
   { path: '/supply-cycles', permission: 'supplyCycles.view', component: SupplyCyclesList },
   { path: '/supply-cycles/:cycleId', permission: 'supplyCycles.view', component: SupplyCycleDetail },
   { path: '/quick-action', permission: 'quickAction.view', component: QuickAction },

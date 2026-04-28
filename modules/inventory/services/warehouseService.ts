@@ -40,6 +40,8 @@ async function clearPlanSettingsWarehouseRefs(warehouseId: string): Promise<void
     'finishedReceiveWarehouseId',
     'wasteReceiveWarehouseId',
     'finalProductWarehouseId',
+    'packagingSourceWarehouseId',
+    'packagingTargetWarehouseId',
   ];
   let changed = false;
   const next: PlanSettings = { ...settings.planSettings };

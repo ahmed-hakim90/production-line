@@ -241,7 +241,7 @@ export interface ProductionReport {
   workOrderId?: string;
   /** اختياري: ربط التقرير بدورة توريد (باتش) لاحتساب الهالك والتتبع */
   supplyCycleId?: string;
-  reportType?: 'finished_product' | 'component_injection' | 'packaging';
+  reportType?: 'finished_product' | 'component_injection' | 'packaging' | 'component_waste';
   /** When set for packaging reports, quantities come from lines; productId/quantityProduced are derived for legacy fields. */
   packagingLines?: PackagingReportLine[];
   componentScrapItems?: ReportComponentScrapItem[];
@@ -876,6 +876,9 @@ export interface PlanSettings {
   finishedReceiveWarehouseId?: string;
   wasteReceiveWarehouseId?: string;
   finalProductWarehouseId?: string;
+  enablePackagingStockTransfer?: boolean;
+  packagingSourceWarehouseId?: string;
+  packagingTargetWarehouseId?: string;
   transferApprovalPermission?: string;
   transferDisplayUnit?: 'piece' | 'carton';
   hrApproverUserIds?: string[];

@@ -252,6 +252,45 @@ async function resolveInventoryRouting(systemSettings: SystemSettings): Promise<
   };
 }
 
+const PACKAGING_STOCK_TRANSFER_NOTE_PREFIX = 'Packaging stock transfer from report';
+const packagingStockTransferNote = (reportId: string) => `${PACKAGING_STOCK_TRANSFER_NOTE_PREFIX} ${reportId}`;
+
+type PackagingStockTransferLine = {
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  quantity: number;
+  minStock: number;
+};
+
+function buildPackagingStockTransferLines(
+  report: Pick<ProductionReport, 'productId' | 'quantityProduced' | 'packagingLines'>,
+  products: FirestoreProduct[],
+): PackagingStockTransferLine[] {
+  const qtyByProduct = new Map<string, number>();
+  const sourceLines = Array.isArray(report.packagingLines) && report.packagingLines.length > 0
+    ? report.packagingLines
+    : [{ productId: report.productId, quantityPieces: report.quantityProduced }];
+
+  sourceLines.forEach((line) => {
+    const productId = String(line?.productId || '').trim();
+    const quantity = Number(line?.quantityPieces || 0);
+    if (!productId || quantity <= 0) return;
+    qtyByProduct.set(productId, Number(qtyByProduct.get(productId) || 0) + quantity);
+  });
+
+  return Array.from(qtyByProduct.entries()).map(([productId, quantity]) => {
+    const product = products.find((p) => String(p.id || '') === productId);
+    return {
+      itemId: productId,
+      itemName: String(product?.name || productId),
+      itemCode: String(product?.code || ''),
+      quantity,
+      minStock: Number((product as any)?.minStock || 0),
+    };
+  });
+}
+
 function normalizeText(value: string): string {
   return value
     .trim()
@@ -543,6 +582,15 @@ export type ReportsUiReferenceSnapshot = {
   fetchedAt: number;
 };
 
+export type CreateComponentWasteReportInput = {
+  employeeId: string;
+  lineId: string;
+  productId: string;
+  date: string;
+  component: ReportComponentScrapItem;
+  notes?: string;
+};
+
 type ProductionReportsRangeCacheEntry = { rows: ProductionReport[]; fetchedAt: number };
 
 // ─── State Shape ────────────────────────────────────────────────────────────
@@ -705,6 +753,7 @@ interface AppState {
 
   // Mutations — Reports
   createReport: (data: Omit<ProductionReport, 'id' | 'createdAt'>) => Promise<string | null>;
+  createComponentWasteReport: (data: CreateComponentWasteReportInput) => Promise<string | null>;
   updateReport: (id: string, data: Partial<ProductionReport>) => Promise<void>;
   deleteReport: (id: string) => Promise<void>;
   syncMissingProductionEntryTransfers: (
@@ -2731,6 +2780,221 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Reports (with automatic activity logging) ──
 
+  createComponentWasteReport: async (data) => {
+    let trackedOperation: ReturnType<typeof actionTrackerService.startOperation> | null = null;
+    try {
+      const permissions = get().userPermissions;
+      if (!hasPermission(permissions, 'reports.componentWaste.create')) {
+        const msg = 'غير مصرح بإنشاء تقرير هالك مكونات.';
+        set({ error: msg });
+        return null;
+      }
+
+      const employeeId = String(data.employeeId || '').trim();
+      const lineId = String(data.lineId || '').trim();
+      const productId = String(data.productId || '').trim();
+      const date = String(data.date || '').trim();
+      const component: ReportComponentScrapItem = {
+        materialId: String(data.component?.materialId || '').trim(),
+        materialName: String(data.component?.materialName || '').trim(),
+        quantity: Number(data.component?.quantity || 0),
+      };
+
+      if (!employeeId || !lineId || !productId || !date) {
+        const msg = 'أكمل بيانات الموظف والخط والمنتج والتاريخ.';
+        set({ error: msg });
+        return null;
+      }
+      if (!component.materialId || component.quantity <= 0) {
+        const msg = 'اختر مكوناً وأدخل كمية هالك أكبر من صفر.';
+        set({ error: msg });
+        return null;
+      }
+
+      const { systemSettings, uid, userDisplayName, userEmail } = get();
+      const routing = await resolveInventoryRouting(systemSettings);
+      if (!routing.decomposedSourceWarehouseId || !routing.wasteReceiveWarehouseId) {
+        const msg = 'حدد مخزن المفكك ومخزن الهالك من إعدادات التخطيط أولاً.';
+        set({ error: msg });
+        return null;
+      }
+
+      const rawMaterials = await rawMaterialService.getAll();
+      const raw = rawMaterials.find((row) => String(row.id) === component.materialId);
+      if (!raw?.id) {
+        const msg = 'المكون المختار غير موجود في المواد الخام.';
+        set({ error: msg });
+        return null;
+      }
+
+      const reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
+        employeeId,
+        productId,
+        lineId,
+        date,
+        quantityProduced: 0,
+        workersCount: 0,
+        workersProductionCount: 0,
+        workersPackagingCount: 0,
+        workersQualityCount: 0,
+        workersMaintenanceCount: 0,
+        workersExternalCount: 0,
+        workHours: 0,
+        notes: String(data.notes || '').trim(),
+        workOrderId: '',
+        reportType: 'component_waste',
+        packagingLines: [],
+        componentScrapItems: [{
+          materialId: raw.id,
+          materialName: component.materialName || raw.name,
+          quantity: component.quantity,
+        }],
+      };
+
+      trackedOperation = actionTrackerService.startOperation({
+        module: 'production',
+        operation: 'component_waste_report.create',
+        action: 'create',
+        entityType: 'production_report',
+        actor: {
+          userId: uid ?? undefined,
+          userName: userDisplayName ?? userEmail ?? undefined,
+        },
+        metadata: {
+          lineId,
+          productId,
+          materialId: raw.id,
+          quantity: component.quantity,
+          reportType: 'component_waste',
+        },
+        description: 'Create component waste report',
+      });
+
+      const id = await reportService.create(reportData);
+      if (!id) {
+        if (trackedOperation) {
+          actionTrackerService.failOperation(trackedOperation, {
+            error: new Error('تعذر حفظ تقرير الهالك'),
+            errorCode: 'COMPONENT_WASTE_REPORT_CREATE_EMPTY_ID',
+          });
+        }
+        set({ error: 'تعذر حفظ تقرير الهالك' });
+        return null;
+      }
+
+      trackedOperation.entityId = id;
+      trackedOperation.batchId = id;
+
+      let postSaveWarning: string | null = null;
+      const actorName = userDisplayName || userEmail || 'System';
+      try {
+        await stockService.createMovement({
+          warehouseId: routing.decomposedSourceWarehouseId,
+          itemType: 'raw_material',
+          itemId: raw.id,
+          itemName: raw.name,
+          itemCode: raw.code,
+          movementType: 'OUT',
+          quantity: component.quantity,
+          note: `Component waste OUT from report ${id}`,
+          createdBy: actorName,
+          allowNegative: routing.allowNegativeDecomposedStock,
+        });
+        await stockService.createMovement({
+          warehouseId: routing.wasteReceiveWarehouseId,
+          itemType: 'raw_material',
+          itemId: raw.id,
+          itemName: raw.name,
+          itemCode: raw.code,
+          movementType: 'IN',
+          quantity: component.quantity,
+          note: `Component waste IN from report ${id}`,
+          createdBy: actorName,
+        });
+      } catch (error) {
+        postSaveWarning = (error as Error)?.message || 'تم حفظ تقرير الهالك ولكن تعذر تنفيذ حركات المخزون الآلية';
+      }
+
+      try {
+        const today = getOperationalDateString(8);
+        const { start: monthStart, end: monthEnd } = getMonthDateRange();
+        const [todayReports, monthlyReports] = await Promise.all([
+          reportService.getByDateRange(today, today),
+          reportService.getByDateRange(monthStart, monthEnd),
+        ]);
+        invalidateProductionReportsRangeCacheForDates([date], get, set);
+        const rangeCacheNow = Date.now();
+        const rkToday = getProductionReportsRangeCacheKey(today, today);
+        const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+        set((state) => ({
+          todayReports,
+          monthlyReports,
+          productionReports: monthlyReports,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
+            [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
+          },
+        }));
+        get()._rebuildProducts();
+      } catch (error) {
+        postSaveWarning = (error as Error)?.message || 'تم حفظ تقرير الهالك ولكن تعذر تحديث البيانات المعروضة';
+      }
+
+      try {
+        eventBus.emit(SystemEvents.USER_ACTION, {
+          module: 'production',
+          entityType: 'production_report',
+          entityId: id,
+          action: 'create',
+          description: 'Component waste report created',
+          actor: {
+            userId: uid ?? undefined,
+            userName: userDisplayName ?? userEmail ?? undefined,
+          },
+          metadata: {
+            lineId,
+            productId,
+            materialId: raw.id,
+            quantity: component.quantity,
+            reportType: 'component_waste',
+          },
+        });
+      } catch {
+        // Keep save flow resilient even if telemetry fails.
+      }
+
+      if (postSaveWarning) {
+        console.warn('createComponentWasteReport post-save warning:', postSaveWarning);
+      }
+      set({ error: postSaveWarning });
+      if (trackedOperation) {
+        actionTrackerService.succeedOperation(trackedOperation, {
+          metadata: {
+            reportId: id,
+            warning: postSaveWarning ?? null,
+          },
+        });
+      }
+
+      get().invalidateReportsUiReferenceCache();
+      return id;
+    } catch (error) {
+      if (trackedOperation) {
+        actionTrackerService.failOperation(trackedOperation, {
+          error,
+          metadata: {
+            lineId: data.lineId,
+            productId: data.productId,
+            materialId: data.component?.materialId,
+          },
+        });
+      }
+      set({ error: (error as Error)?.message || 'تعذر حفظ تقرير الهالك' });
+      return null;
+    }
+  },
+
   createReport: async (data) => {
     let trackedOperation: ReturnType<typeof actionTrackerService.startOperation> | null = null;
     let cachedRawMaterials: Awaited<ReturnType<typeof rawMaterialService.getAll>> | null = null;
@@ -2930,6 +3194,28 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      const packagingStockTransferEnabled =
+        reportType === 'packaging' && Boolean(systemSettings.planSettings?.enablePackagingStockTransfer);
+      if (packagingStockTransferEnabled) {
+        const packagingSourceWarehouseId = String(systemSettings.planSettings?.packagingSourceWarehouseId || '').trim();
+        const packagingTargetWarehouseId = String(systemSettings.planSettings?.packagingTargetWarehouseId || '').trim();
+        if (!packagingSourceWarehouseId || !packagingTargetWarehouseId) {
+          const msg = 'يجب تحديد مخزن التغليف المصدر والوجهة من الإعدادات قبل حفظ تقرير التغليف.';
+          set({ error: msg });
+          return null;
+        }
+        if (packagingSourceWarehouseId === packagingTargetWarehouseId) {
+          const msg = 'مخزن التغليف المصدر يجب أن يكون مختلفاً عن مخزن الوجهة.';
+          set({ error: msg });
+          return null;
+        }
+        if (buildPackagingStockTransferLines(reportData, get()._rawProducts).length === 0) {
+          const msg = 'لا توجد أصناف صالحة لإنشاء حركة مخزون من تقرير التغليف.';
+          set({ error: msg });
+          return null;
+        }
+      }
+
       const { uid, userDisplayName, userEmail } = get();
       trackedOperation = actionTrackerService.startOperation({
         module: 'production',
@@ -2996,7 +3282,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       const skipInventoryAuto = reportType === 'packaging';
       try {
         if (skipInventoryAuto) {
-          // Packaging throughput is tracked for KPI only — no automatic finished-goods / BOM stock flows.
+          const plan = systemSettings.planSettings ?? ({} as any);
+          if (plan.enablePackagingStockTransfer) {
+            const sourceWarehouseId = String(plan.packagingSourceWarehouseId || '').trim();
+            const targetWarehouseId = String(plan.packagingTargetWarehouseId || '').trim();
+            const actorName = get().userDisplayName || get().userEmail || 'System';
+            const transferLines = buildPackagingStockTransferLines(reportData, get()._rawProducts);
+            for (const line of transferLines) {
+              await stockService.createMovement({
+                warehouseId: sourceWarehouseId,
+                toWarehouseId: targetWarehouseId,
+                itemType: 'finished_good',
+                itemId: line.itemId,
+                itemName: line.itemName,
+                itemCode: line.itemCode,
+                movementType: 'TRANSFER',
+                quantity: line.quantity,
+                minStock: line.minStock,
+                note: packagingStockTransferNote(id),
+                createdBy: actorName,
+                allowNegative: Boolean(plan.allowNegativeFinishedTransferStock),
+              });
+            }
+          }
         } else {
         const routing = await resolveInventoryRouting(systemSettings);
         const product = get()._rawProducts.find((p) => p.id === data.productId);
@@ -3496,6 +3804,23 @@ export const useAppStore = create<AppState>((set, get) => ({
             actorName,
             'تم إلغاء طلب دخول تم الصنع تلقائياً بسبب حذف التقرير المصدر.',
           );
+        }
+      }
+
+      if (resolveReportType(reportToDelete.reportType) === 'packaging') {
+        const packagingRows = await stockService.getTransactionsByNote(packagingStockTransferNote(id));
+        const linkedPackagingRows = packagingRows.filter(
+          (tx) => tx.movementType === 'TRANSFER' && tx.itemType === 'finished_good',
+        );
+        if (linkedPackagingRows.length > 0) {
+          try {
+            await stockService.deleteMovements(linkedPackagingRows);
+          } catch (error: any) {
+            throw new Error(
+              error?.message ||
+              'لا يمكن حذف تقرير التغليف لأن حركة المخزون المرتبطة لا يمكن عكسها حالياً.',
+            );
+          }
         }
       }
 

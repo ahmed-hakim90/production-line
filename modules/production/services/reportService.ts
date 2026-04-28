@@ -52,8 +52,10 @@ const buildReportUniqueKey = (data: Pick<ProductionReport, 'date' | 'lineId' | '
     normalizeKeyPart(resolveReportType(data.reportType)),
   ].join('__');
 
-const isPackagingReportType = (rt: ProductionReport['reportType'] | undefined) =>
-  resolveReportType(rt) === 'packaging';
+const skipsReportUniqueConstraint = (rt: ProductionReport['reportType'] | undefined) => {
+  const reportType = resolveReportType(rt);
+  return reportType === 'packaging' || reportType === 'component_waste';
+};
 
 export type FirestoreCursor = QueryDocumentSnapshot | null;
 export interface FirestorePageResult<T> {
@@ -261,7 +263,7 @@ export const reportService = {
       const uniqueRef = doc(db, UNIQUE_COLLECTION, uniqueKey);
 
       await runTransaction(db, async (tx) => {
-        const skipUnique = isPackagingReportType(data.reportType);
+        const skipUnique = skipsReportUniqueConstraint(data.reportType);
         if (!skipUnique) {
           const uniqueSnap = await tx.get(uniqueRef);
           if (uniqueSnap.exists()) {
@@ -332,10 +334,10 @@ export const reportService = {
 
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
         const next = { ...current, ...fields } as ProductionReport;
-        const oldPackaging = isPackagingReportType(current.reportType);
-        const nextPackaging = isPackagingReportType(next.reportType);
+        const oldSkipsUnique = skipsReportUniqueConstraint(current.reportType);
+        const nextSkipsUnique = skipsReportUniqueConstraint(next.reportType);
 
-        if (!oldPackaging && !nextPackaging) {
+        if (!oldSkipsUnique && !nextSkipsUnique) {
           const oldKey = buildReportUniqueKey(current);
           const nextKey = buildReportUniqueKey(next);
 
@@ -368,7 +370,7 @@ export const reportService = {
             const sameUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
             tx.set(sameUniqueRef, { reportId: id, updatedAt: serverTimestamp() }, { merge: true });
           }
-        } else if (oldPackaging && !nextPackaging) {
+        } else if (oldSkipsUnique && !nextSkipsUnique) {
           const legacyUniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
           const legacySnap = await tx.get(legacyUniqueRef);
           if (legacySnap.exists()) {
@@ -398,7 +400,7 @@ export const reportService = {
             },
             { merge: true },
           );
-        } else if (!oldPackaging && nextPackaging) {
+        } else if (!oldSkipsUnique && nextSkipsUnique) {
           const oldUniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
           const oldSnap = await tx.get(oldUniqueRef);
           if (oldSnap.exists()) {
@@ -447,8 +449,8 @@ export const reportService = {
         const uniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
 
         // Firestore: all tx.get() calls must run before any writes.
-        let deleteUniqueDoc = !isPackagingReportType(current.reportType);
-        if (isPackagingReportType(current.reportType)) {
+        let deleteUniqueDoc = !skipsReportUniqueConstraint(current.reportType);
+        if (skipsReportUniqueConstraint(current.reportType)) {
           const legacySnap = await tx.get(uniqueRef);
           if (legacySnap.exists()) {
             const ownerId = String((legacySnap.data() as { reportId?: string })?.reportId || '');

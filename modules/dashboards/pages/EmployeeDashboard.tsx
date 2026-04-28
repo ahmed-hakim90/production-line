@@ -536,6 +536,16 @@ export const EmployeeDashboard: React.FC = () => {
             حركة المخزون
           </GhostButton>
         )}
+        {can('reports.componentWaste.create') && (
+          <GhostButton
+            type="button"
+            onClick={() => navigate('/component-waste-reports')}
+            className="shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50"
+          >
+            <span className="material-icons-round text-base">report_problem</span>
+            هالك المكونات
+          </GhostButton>
+        )}
         {can('lineWorkers.view') && (
           <GhostButton
             type="button"

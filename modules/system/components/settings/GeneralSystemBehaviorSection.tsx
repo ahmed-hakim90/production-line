@@ -247,6 +247,68 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
         </div>
 
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-primary">inventory</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-[var(--color-text)]">تأثير تقرير التغليف على المخزون</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                عند التفعيل، كل تقرير تغليف ينشئ حركة تحويل مباشرة للأصناف المغلفة من مخزن المصدر إلى مخزن الوجهة.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLocalPlanSettings((prev) => ({ ...prev, enablePackagingStockTransfer: !prev.enablePackagingStockTransfer }))}
+              className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${localPlanSettings.enablePackagingStockTransfer ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
+            >
+              <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${localPlanSettings.enablePackagingStockTransfer ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text)] mb-2">مخزن التغليف من</label>
+              <select
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                value={localPlanSettings.packagingSourceWarehouseId ?? ''}
+                onChange={(e) => setLocalPlanSettings((p) => ({ ...p, packagingSourceWarehouseId: e.target.value }))}
+              >
+                <option value="">غير محدد</option>
+                {inventoryWarehouses.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text)] mb-2">مخزن التغليف إلى</label>
+              <select
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                value={localPlanSettings.packagingTargetWarehouseId ?? ''}
+                onChange={(e) => setLocalPlanSettings((p) => ({ ...p, packagingTargetWarehouseId: e.target.value }))}
+              >
+                <option value="">غير محدد</option>
+                {inventoryWarehouses.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {localPlanSettings.enablePackagingStockTransfer
+            && (
+              !localPlanSettings.packagingSourceWarehouseId
+              || !localPlanSettings.packagingTargetWarehouseId
+              || localPlanSettings.packagingSourceWarehouseId === localPlanSettings.packagingTargetWarehouseId
+            ) && (
+            <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-3">
+              اختر مخزنين مختلفين لتفعيل تحويلات التغليف عند حفظ التقارير.
+            </p>
+          )}
+        </div>
+
+        <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">filter_alt</span>
             <p className="text-sm font-bold text-[var(--color-text)]">فلاتر فئة مكونات الحقن</p>

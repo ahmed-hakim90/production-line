@@ -561,7 +561,21 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     }
 
     return (
-      <div ref={ref} className="bg-white w-[640px] mx-auto">
+      <div
+        ref={ref}
+        dir="rtl"
+        lang="ar"
+        className="print-root print-report arabic-export-root bg-white w-[640px] mx-auto"
+        style={{
+          fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
+          width: 640,
+          minWidth: 640,
+          maxWidth: 640,
+          boxSizing: 'border-box',
+          letterSpacing: 'normal',
+          wordSpacing: 'normal',
+        }}
+      >
         {v ? (
           <div
             className={cn(

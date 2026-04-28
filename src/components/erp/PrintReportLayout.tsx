@@ -131,6 +131,11 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
           fontSize: "13px",
           letterSpacing: "normal",
           wordSpacing: "normal",
+          width: 640,
+          minWidth: 640,
+          maxWidth: 640,
+          boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         <div className="flex items-start justify-between pb-3 mb-4 border-b-2" style={headerBorderStyle}>

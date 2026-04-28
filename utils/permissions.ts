@@ -24,7 +24,7 @@ export type Permission =
   | 'productionWorkers.view'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create'
+  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
   | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
@@ -143,6 +143,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.componentInjection.only', label: 'وضع حقن فقط (قفل تقرير المنتج العادي)' },
       { key: 'reports.packaging.only', label: 'تقارير تغليف فقط (إخفاء إنتاج/حقن وقفل النوع على التغليف)' },
       { key: 'reports.packaging.create', label: 'إنشاء تقرير تغليف (بدون صلاحة إنشاء تقارير الإنتاج العامة)' },
+      { key: 'reports.componentWaste.create', label: 'إنشاء تقرير هالك مكونات' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },

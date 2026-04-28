@@ -538,11 +538,11 @@ export const GlobalCreateReportModal: React.FC = () => {
                 setForm((prev) => ({
                   ...prev,
                   workOrderId: wo.id ?? '',
-                  reportType: wo.workOrderType === 'component_injection' ? 'component_injection' : resolveReportType(prev.reportType),
+                  reportType: wo.workOrderType === 'component_injection' ? 'component_injection' : prev.reportType,
                   lineId: wo.lineId,
                   productId: wo.productId,
                   employeeId: shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
-                  packagingLines: resolveReportType(prev.reportType) === 'packaging'
+                  packagingLines: prev.reportType === 'packaging'
                     ? [{ ...newEmptyPackagingLine(), productId: wo.productId }]
                     : prev.packagingLines,
                 }));

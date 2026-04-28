@@ -602,6 +602,7 @@ export const QuickAction: React.FC = () => {
     if (!printRef.current) return;
     setExporting(true);
     try {
+      await waitForExportPaint(150);
       await exportToPDF(printRef.current, `تقرير-سريع-${today}`, {
         paperSize: printTemplate?.paperSize,
         orientation: printTemplate?.orientation,
@@ -616,6 +617,7 @@ export const QuickAction: React.FC = () => {
     if (!printRef.current) return;
     setExporting(true);
     try {
+      await waitForExportPaint(150);
       await exportAsImage(printRef.current, `تقرير-سريع-${today}`);
     } finally {
       setExporting(false);
@@ -1483,7 +1485,19 @@ export const QuickAction: React.FC = () => {
       )}
 
       {/* Hidden print component */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          zIndex: -1,
+          pointerEvents: 'none',
+          direction: 'rtl',
+          width: 'max-content',
+          maxWidth: 'none',
+          overflow: 'visible',
+        }}
+      >
         <SingleReportPrint ref={printRef} report={printReport} printSettings={printTemplate} />
       </div>
 

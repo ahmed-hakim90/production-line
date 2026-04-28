@@ -80,6 +80,25 @@ const isWideExportCardRoot = (node: HTMLElement): boolean =>
   node.matches('.print-root, .print-report, .arabic-export-root') ||
   !!node.querySelector('.print-root, .print-report, .arabic-export-root');
 
+const measureExportElement = (node: HTMLElement) => {
+  const rect = node.getBoundingClientRect();
+  const candidateWidths = [
+    node.scrollWidth,
+    node.offsetWidth,
+    Math.round(rect.width),
+  ];
+  const candidateHeights = [
+    node.scrollHeight,
+    node.offsetHeight,
+    Math.round(rect.height),
+  ];
+
+  const width = Math.max(1, ...candidateWidths.filter((value) => Number.isFinite(value) && value > 0));
+  const height = Math.max(1, ...candidateHeights.filter((value) => Number.isFinite(value) && value > 0));
+
+  return { width, height };
+};
+
 const waitForImagesInElement = async (root: HTMLElement, timeoutMs = 4000) => {
   const imgs = [...root.querySelectorAll('img')] as HTMLImageElement[];
   if (!imgs.length) return;
@@ -140,14 +159,16 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
    * viewport → squeezed column with large side margins in the PNG. Size the clone from the
    * target element instead (see also StockTransactions share with explicit windowWidth).
    */
-  const rect = el.getBoundingClientRect();
-  const measuredW = Math.max(1, el.scrollWidth, el.offsetWidth, Math.round(rect.width));
-  const measuredH = Math.max(1, el.scrollHeight, el.offsetHeight, Math.round(rect.height));
+  const { width: measuredW, height: measuredH } = measureExportElement(el);
   const wideCard = isWideExportCardRoot(el);
-  const winW =
-    windowWidth != null ? windowWidth : width != null ? width : wideCard
-      ? Math.max(measuredW, EXPORT_CARD_MIN_WINDOW_WIDTH)
-      : measuredW;
+  const shouldUseCardMinWidth =
+    wideCard &&
+    (measuredW >= 500 ||
+      el.matches('.arabic-export-root') ||
+      !!el.querySelector('.arabic-export-root'));
+  const targetW = shouldUseCardMinWidth ? Math.max(measuredW, EXPORT_CARD_MIN_WINDOW_WIDTH) : measuredW;
+  const captureW = width ?? targetW;
+  const winW = windowWidth ?? Math.max(captureW, targetW);
   const winH = windowHeight ?? measuredH;
 
   return html2canvas(el, {
@@ -155,7 +176,7 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
     useCORS: true,
     backgroundColor: '#ffffff',
     logging: false,
-    ...(width != null ? { width } : {}),
+    width: captureW,
     windowWidth: winW,
     windowHeight: winH,
     ...(cloneRtlAndFonts

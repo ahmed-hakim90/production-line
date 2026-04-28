@@ -5,6 +5,7 @@ export function resolveReportType(
 ): NonNullable<ProductionReport['reportType']> {
   if (value === 'component_injection') return 'component_injection';
   if (value === 'packaging') return 'packaging';
+  if (value === 'component_waste') return 'component_waste';
   return 'finished_product';
 }
 
@@ -15,7 +16,8 @@ export function resolveReportType(
 export function countsTowardProductManufacturingVolume(
   report: Pick<ProductionReport, 'reportType'>,
 ): boolean {
-  return resolveReportType(report.reportType) !== 'packaging';
+  const reportType = resolveReportType(report.reportType);
+  return reportType !== 'packaging' && reportType !== 'component_waste';
 }
 
 export function resolveWorkOrderReportType(
@@ -29,6 +31,7 @@ export function workOrderMatchesReportType(
   wo: Pick<WorkOrder, 'workOrderType'>,
   reportType: NonNullable<ProductionReport['reportType']>,
 ): boolean {
+  if (reportType === 'component_waste') return false;
   const woRt = resolveWorkOrderReportType(wo.workOrderType);
   if (reportType === 'packaging') return woRt === 'finished_product';
   return woRt === reportType;

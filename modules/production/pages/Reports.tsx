@@ -63,7 +63,7 @@ import {
   type PackagingReportLine,
 } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { getShareResultFeedbackMessage, type ShareResult } from '../../../utils/reportExport';
+import { getShareResultFeedbackMessage, waitForExportPaint, type ShareResult } from '../../../utils/reportExport';
 import {
   formatBulkProductionReportsShareCaption,
   formatProductionReportShareCaption,
@@ -1446,7 +1446,7 @@ export const Reports: React.FC = () => {
     async (report: ProductionReport) => {
       const row = buildReportRow(report);
       setPrintReport(row);
-      await new Promise((r) => setTimeout(r, 300));
+      await waitForExportPaint(150);
       if (!singlePrintRef.current) return;
       if (isMobilePrint) {
         setExporting(true);
@@ -1473,6 +1473,7 @@ export const Reports: React.FC = () => {
     if (isMobilePrint) {
       setExporting(true);
       try {
+        await waitForExportPaint(150);
         const { exportToPDF } = await import('../../../utils/reportExport');
         await exportToPDF(bulkPrintRef.current, `تقارير-الإنتاج-${startDate}`, {
           paperSize: printTemplate?.paperSize,
@@ -1526,8 +1527,8 @@ export const Reports: React.FC = () => {
       };
       setSharePrintRow(row);
       try {
-        const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
         await waitForExportPaint(150);
+        const { shareToWhatsApp } = await import('../../../utils/reportExport');
         if (!sharePrintRef.current) {
           setSharePrintRow(null);
           return;
@@ -2265,6 +2266,7 @@ export const Reports: React.FC = () => {
     if (!bulkPrintRef.current) return;
     setExporting(true);
     try {
+      await waitForExportPaint(150);
       const { exportToPDF } = await import('../../../utils/reportExport');
       await exportToPDF(bulkPrintRef.current, `تقارير-الإنتاج-${startDate}`, {
         paperSize: printTemplate?.paperSize,
@@ -2282,8 +2284,8 @@ export const Reports: React.FC = () => {
     shareWhatsAppLockRef.current = true;
     setExporting(true);
     try {
-      const { shareToWhatsApp, waitForExportPaint } = await import('../../../utils/reportExport');
       await waitForExportPaint(150);
+      const { shareToWhatsApp } = await import('../../../utils/reportExport');
       const result = await shareToWhatsApp(bulkPrintRef.current, `تقارير الإنتاج ${startDate}`, {
         caption: formatBulkProductionReportsShareCaption({
           title:
@@ -2941,7 +2943,7 @@ export const Reports: React.FC = () => {
 
   const handleBulkPrintSelected = useCallback(async (items: ProductionReport[]) => {
     setBulkPrintSource(items);
-    await new Promise((r) => setTimeout(r, 300));
+    await waitForExportPaint(150);
     await triggerBulkPrint();
     setTimeout(() => setBulkPrintSource(null), 1000);
   }, [triggerBulkPrint]);
@@ -2953,7 +2955,7 @@ export const Reports: React.FC = () => {
     setBulkSinglePrintRows(rows);
     setExporting(true);
     try {
-      await new Promise((r) => setTimeout(r, 350));
+      await waitForExportPaint(150);
       const printableElements = bulkSinglePrintRefs.current
         .slice(0, rows.length)
         .filter((el): el is HTMLDivElement => !!el);
@@ -3590,7 +3592,19 @@ export const Reports: React.FC = () => {
       )}
 
       {/* Hidden print components (off-screen, only rendered for print) */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl' }}>
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          zIndex: -1,
+          pointerEvents: 'none',
+          direction: 'rtl',
+          width: 'max-content',
+          maxWidth: 'none',
+          overflow: 'visible',
+        }}
+      >
         {sharePrintRow && (
           <SingleReportPrint ref={sharePrintRef} report={sharePrintRow} printSettings={printTemplate} />
         )}
