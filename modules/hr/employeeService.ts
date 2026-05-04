@@ -11,7 +11,12 @@ import {
   doc,
   query,
   where,
+  orderBy,
+  limit,
+  startAfter,
+  getCountFromServer,
   serverTimestamp,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
@@ -19,6 +24,8 @@ import { employeesRef, HR_COLLECTIONS } from './collections';
 import type { FirestoreEmployee } from '@/types';
 
 const eqTenant = () => where('tenantId', '==', getCurrentTenantId());
+
+export type EmployeePageCursor = QueryDocumentSnapshot | null;
 
 /** Strip undefined values — Firestore rejects them */
 function clean<T extends Record<string, any>>(obj: T): T {
@@ -34,6 +41,35 @@ export const employeeService = {
     if (!isConfigured) return [];
     const snap = await getDocs(query(employeesRef(), eqTenant()));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployee));
+  },
+
+  /** Server-side total for the current tenant (cheap aggregate read). */
+  async countTenantEmployees(): Promise<number> {
+    if (!isConfigured) return 0;
+    const snap = await getCountFromServer(query(employeesRef(), eqTenant()));
+    return snap.data().count;
+  },
+
+  /**
+   * Paginated list ordered by name. Requires a composite index:
+   * employees: tenantId ==, name ASC
+   */
+  async listPaged(options: {
+    pageSize?: number;
+    cursor?: EmployeePageCursor;
+  }): Promise<{ items: FirestoreEmployee[]; nextCursor: EmployeePageCursor; hasMore: boolean }> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const pageSize = Math.min(Math.max(options.pageSize ?? 50, 1), 100);
+    const take = pageSize + 1;
+    const constraints: any[] = [eqTenant(), orderBy('name')];
+    if (options.cursor) constraints.push(startAfter(options.cursor));
+    constraints.push(limit(take));
+    const snap = await getDocs(query(employeesRef(), ...constraints));
+    const hasMore = snap.docs.length > pageSize;
+    const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const items = docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreEmployee));
+    const nextCursor = hasMore && docs.length > 0 ? docs[docs.length - 1]! : null;
+    return { items, nextCursor, hasMore };
   },
 
   async getById(id: string): Promise<FirestoreEmployee | null> {

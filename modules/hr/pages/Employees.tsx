@@ -32,7 +32,7 @@ import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { userService } from '../../../services/userService';
 import { activityLogService } from '../../system/services/activityLogService';
-import { employeeService } from '../employeeService';
+import { employeeService, type EmployeePageCursor } from '../employeeService';
 import { JOB_LEVEL_LABELS } from '../types';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, FirestoreVehicle } from '../types';
 import { getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -126,6 +126,11 @@ export const Employees: React.FC = () => {
   const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
   const [allUsers, setAllUsers] = useState<FirestoreUser[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [listEmployees, setListEmployees] = useState<FirestoreEmployee[]>([]);
+  const [listCursor, setListCursor] = useState<EmployeePageCursor>(null);
+  const [listHasMore, setListHasMore] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [tenantEmployeeCount, setTenantEmployeeCount] = useState<number | null>(null);
 
   const [search, setSearch] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
@@ -209,23 +214,69 @@ export const Employees: React.FC = () => {
     loadUsers();
   }, [loadUsers]);
 
+  const reloadEmployeeList = useCallback(async () => {
+    setListLoading(true);
+    try {
+      const [count, page] = await Promise.all([
+        employeeService.countTenantEmployees(),
+        employeeService.listPaged({ pageSize: 50, cursor: null }),
+      ]);
+      setTenantEmployeeCount(count);
+      setListEmployees(page.items);
+      setListCursor(page.nextCursor);
+      setListHasMore(page.hasMore);
+    } catch (e) {
+      console.error('reloadEmployeeList error:', e);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadEmployeeList();
+  }, [reloadEmployeeList]);
+
+  const loadMoreEmployees = useCallback(async () => {
+    if (!listHasMore || listLoading || !listCursor) return;
+    setListLoading(true);
+    try {
+      const page = await employeeService.listPaged({ pageSize: 50, cursor: listCursor });
+      setListEmployees((prev) => [...prev, ...page.items]);
+      setListCursor(page.nextCursor);
+      setListHasMore(page.hasMore);
+    } catch (e) {
+      console.error('loadMoreEmployees error:', e);
+    } finally {
+      setListLoading(false);
+    }
+  }, [listHasMore, listLoading, listCursor]);
+
   const getDepartmentName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const getJobPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '—';
   const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name ?? '—';
   const getVehicleName = (id: string) => vehicles.find((v) => v.id === id)?.name ?? '—';
-  const getManagerName = (id: string) => _rawEmployees.find((e) => e.id === id)?.name ?? '—';
+  const getManagerName = (id: string) =>
+    listEmployees.find((e) => e.id === id)?.name
+    ?? _rawEmployees.find((e) => e.id === id)?.name
+    ?? '—';
+
+  const resolveEmployeeById = useCallback(
+    (id: string | null | undefined) =>
+      (id ? listEmployees.find((e) => e.id === id) ?? _rawEmployees.find((e) => e.id === id) : undefined),
+    [listEmployees, _rawEmployees],
+  );
 
   const summaryKpis = useMemo(() => {
-    const total = _rawEmployees.length;
-    const active = _rawEmployees.filter((e) => e.isActive !== false).length;
-    const inactive = total - active;
-    const withSystemAccess = _rawEmployees.filter((e) => e.hasSystemAccess).length;
+    const total = tenantEmployeeCount ?? listEmployees.length;
+    const active = listEmployees.filter((e) => e.isActive !== false).length;
+    const inactive = listEmployees.filter((e) => e.isActive === false).length;
+    const withSystemAccess = listEmployees.filter((e) => e.hasSystemAccess).length;
     const pending = pendingUsers.length;
     return { total, active, inactive, withSystemAccess, pending };
-  }, [_rawEmployees, pendingUsers.length]);
+  }, [tenantEmployeeCount, listEmployees, pendingUsers.length]);
 
   const filtered = useMemo(() => {
-    let list = _rawEmployees;
+    let list = listEmployees;
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -241,7 +292,7 @@ export const Employees: React.FC = () => {
     if (filterSystemAccess === 'yes') list = list.filter((e) => e.hasSystemAccess);
     if (filterSystemAccess === 'no') list = list.filter((e) => !e.hasSystemAccess);
     return list;
-  }, [_rawEmployees, search, filterDepartment, filterJobPosition, filterStatus, filterEmploymentType, filterSystemAccess]);
+  }, [listEmployees, search, filterDepartment, filterJobPosition, filterStatus, filterEmploymentType, filterSystemAccess]);
 
   const filteredSalaryTotal = useMemo(
     () => filtered.reduce((sum, emp) => sum + Number(emp.baseSalary ?? 0), 0),
@@ -263,7 +314,14 @@ export const Employees: React.FC = () => {
   useRegisterModalOpener(MODAL_KEYS.EMPLOYEES_CREATE, () => openCreate());
 
   const openEdit = async (id: string) => {
-    const raw = _rawEmployees.find((e) => e.id === id);
+    let raw = listEmployees.find((e) => e.id === id) ?? _rawEmployees.find((e) => e.id === id);
+    if (!raw) {
+      try {
+        raw = (await employeeService.getById(id)) ?? undefined;
+      } catch {
+        raw = undefined;
+      }
+    }
     if (!raw) return;
     setEditId(id);
     setForm({
@@ -379,9 +437,13 @@ export const Employees: React.FC = () => {
 
         await updateEmployee(editId, payload);
         setSaveMsg({ type: 'success', text: 'تم حفظ بيانات الموظف بنجاح' });
+        await reloadEmployeeList();
       } else {
         const id = await createEmployee(payload);
-        if (id) setSaveMsg({ type: 'success', text: 'تم إضافة الموظف بنجاح' });
+        if (id) {
+          setSaveMsg({ type: 'success', text: 'تم إضافة الموظف بنجاح' });
+          await reloadEmployeeList();
+        }
       }
     } catch (err: any) {
       console.error('Save employee error:', err);
@@ -471,26 +533,28 @@ export const Employees: React.FC = () => {
   };
 
   const handleDeactivate = async (id: string) => {
-    const raw = _rawEmployees.find((e) => e.id === id);
+    const raw = listEmployees.find((e) => e.id === id) ?? _rawEmployees.find((e) => e.id === id);
     if (!raw) return;
     await updateEmployee(id, { isActive: false });
     if (raw.userId) {
       try { await userService.toggleActive(raw.userId, false); } catch { /* ignore */ }
     }
     setDeleteConfirmId(null);
+    await reloadEmployeeList();
   };
 
   const handlePermanentDelete = async (id: string) => {
-    const raw = _rawEmployees.find((e) => e.id === id);
+    const raw = listEmployees.find((e) => e.id === id) ?? _rawEmployees.find((e) => e.id === id);
     if (raw?.userId) {
       try { await userService.delete(raw.userId); } catch { /* ignore */ }
     }
     await deleteEmployee(id);
     setPermanentDeleteId(null);
+    await reloadEmployeeList();
   };
 
   const handleToggleActive = async (id: string) => {
-    const raw = _rawEmployees.find((e) => e.id === id);
+    const raw = listEmployees.find((e) => e.id === id) ?? _rawEmployees.find((e) => e.id === id);
     if (!raw) return;
     const newActive = !raw.isActive;
     await updateEmployee(id, { isActive: newActive });
@@ -498,12 +562,14 @@ export const Employees: React.FC = () => {
       try { await userService.toggleActive(raw.userId, newActive); } catch { /* ignore */ }
     }
     setToggleConfirmId(null);
+    await reloadEmployeeList();
   };
 
   const handleSystemAccessToggle = async (id: string) => {
-    const raw = _rawEmployees.find((e) => e.id === id);
+    const raw = listEmployees.find((e) => e.id === id) ?? _rawEmployees.find((e) => e.id === id);
     if (!raw) return;
     await updateEmployee(id, { hasSystemAccess: !raw.hasSystemAccess });
+    await reloadEmployeeList();
   };
 
   const handleApprove = async (userUid: string) => {
@@ -813,12 +879,15 @@ export const Employees: React.FC = () => {
             label: 'تصدير Excel',
             icon: 'download',
             group: 'تصدير',
-            hidden: !canExportFromPage || _rawEmployees.length === 0,
+            hidden: !canExportFromPage || (tenantEmployeeCount ?? 0) === 0,
             onClick: () => {
-              const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
-              const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
-              const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
-              exportAllEmployees(_rawEmployees, getDeptName, getJobTitle, getShiftName);
+              void (async () => {
+                const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
+                const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
+                const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
+                const all = await employeeService.getAll();
+                exportAllEmployees(all, getDeptName, getJobTitle, getShiftName);
+              })();
             },
           },
           {
@@ -854,6 +923,9 @@ export const Employees: React.FC = () => {
           <p className="text-2xl font-bold text-amber-600">{summaryKpis.pending}</p>
         </Card>
       </div>
+      <p className="text-xs text-[var(--color-text-muted)] px-1">
+        الإجمالي من الخادم. مؤشرات نشط / غير نشط / دخول النظام تُحسب من الموظفين المحمّلين في الجدول — استخدم «تحميل المزيد» لإظهار دفعات إضافية (٥٠ لكل دفعة).
+      </p>
 
       {/* 3. Pending users moved to users page */}
       {pendingUsers.length > 0 && canManageUsers && (
@@ -970,6 +1042,18 @@ export const Employees: React.FC = () => {
         emptySubtitle={can('employees.create') ? 'اضغط "إضافة موظف" لإضافة أول موظف' : undefined}
         pageSize={15}
       />
+
+      {(listHasMore || listLoading) && (
+        <div className="flex justify-center">
+          <Button
+            variant="secondary"
+            disabled={!listHasMore || listLoading}
+            onClick={() => void loadMoreEmployees()}
+          >
+            {listLoading ? 'جاري التحميل...' : (listHasMore ? 'تحميل المزيد (٥٠)' : 'تم تحميل القائمة')}
+          </Button>
+        </div>
+      )}
 
       <Card className="py-3 px-4">
         <div className="flex items-center justify-between gap-3">
@@ -1371,7 +1455,7 @@ export const Employees: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold mb-2">تعطيل موظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
-              سيتم تعطيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === deleteConfirmId))}</span> وإيقاف حساب الدخول المرتبط به.
+              سيتم تعطيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(resolveEmployeeById(deleteConfirmId))}</span> وإيقاف حساب الدخول المرتبط به.
             </p>
             <p className="text-xs text-[var(--color-text-muted)] mb-6">يمكنك إعادة تفعيله لاحقاً. البيانات والتقارير السابقة ستبقى محفوظة.</p>
             <div className="flex items-center justify-center gap-3">
@@ -1397,14 +1481,14 @@ export const Employees: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold mb-2">حذف نهائي</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
-              سيتم حذف <span className="font-bold text-rose-600">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === permanentDeleteId))}</span> نهائياً مع بيانات حسابه.
+              سيتم حذف <span className="font-bold text-rose-600">{getEmployeeDisplayName(resolveEmployeeById(permanentDeleteId))}</span> نهائياً مع بيانات حسابه.
             </p>
             <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 mb-4 text-right">
               <p className="text-xs font-bold text-rose-600 flex items-center gap-1">
                 <EmployeeIcon name="warning" className="text-sm" />
                 لا يمكن التراجع عن هذا الإجراء
               </p>
-              {_rawEmployees.find((e) => e.id === permanentDeleteId)?.userId && (
+              {resolveEmployeeById(permanentDeleteId)?.userId && (
                 <p className="text-xs text-rose-500 mt-1">سيتم حذف حساب المستخدم المرتبط. حساب Firebase Auth يحتاج حذف يدوي من الظ€ Console.</p>
               )}
             </div>
@@ -1431,7 +1515,7 @@ export const Employees: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold mb-2">إعادة تفعيل موظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">
-              سيتم إعادة تفعيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(_rawEmployees.find((e) => e.id === toggleConfirmId))}</span> وتفعيل حساب الدخول المرتبط به.
+              سيتم إعادة تفعيل <span className="font-bold text-[var(--color-text)]">{getEmployeeDisplayName(resolveEmployeeById(toggleConfirmId))}</span> وتفعيل حساب الدخول المرتبط به.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setToggleConfirmId(null)}>إلغاء</Button>

@@ -1,9 +1,21 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { hideZeroForInput } from "@/lib/inputDisplayValue"
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+export type InputProps = React.ComponentProps<"input"> & {
+  /** When true, the value `0` / `"0"` is shown instead of clearing for the placeholder. */
+  showZero?: boolean
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, value, defaultValue, showZero, ...props }, ref) => {
+    const map = (v: InputProps["value"]) =>
+      showZero || v === undefined ? v : (hideZeroForInput(v) as InputProps["value"])
+
+    const mappedValue = value !== undefined ? map(value) : undefined
+    const mappedDefault = defaultValue !== undefined ? map(defaultValue) : undefined
+
     return (
       <input
         type={type}
@@ -13,6 +25,8 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         )}
         ref={ref}
         {...props}
+        {...(mappedValue !== undefined ? { value: mappedValue } : {})}
+        {...(mappedDefault !== undefined ? { defaultValue: mappedDefault } : {})}
       />
     )
   }

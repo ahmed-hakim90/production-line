@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { hideZeroForInput } from '@/lib/inputDisplayValue';
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
   productId: '',
@@ -960,13 +961,14 @@ export const QuickAction: React.FC = () => {
                             <input
                               type="number"
                               min={0}
-                              value={row.quantityCartons ?? 0}
+                              value={hideZeroForInput(row.quantityCartons ?? 0) as number | string}
                               onChange={(e) => {
                                 setPackagingLines((prev) => {
                                   const next = [...prev];
+                                  const raw = e.target.value === '' ? 0 : Number(e.target.value);
                                   next[idx] = {
                                     ...next[idx],
-                                    quantityCartons: Math.max(0, Math.floor(Number(e.target.value))),
+                                    quantityCartons: Math.max(0, Math.floor(Number.isFinite(raw) ? raw : 0)),
                                   };
                                   return next;
                                 });
@@ -987,11 +989,12 @@ export const QuickAction: React.FC = () => {
                                 type="number"
                                 min={0}
                                 max={upc - 1}
-                                value={row.remainderPieces ?? 0}
+                                value={hideZeroForInput(row.remainderPieces ?? 0) as number | string}
                                 onChange={(e) => {
                                   setPackagingLines((prev) => {
                                     const next = [...prev];
-                                    const raw = Math.floor(Number(e.target.value));
+                                    const num = e.target.value === '' ? 0 : Number(e.target.value);
+                                    const raw = Math.floor(num);
                                     const rem = Math.max(0, Math.min(upc - 1, Number.isFinite(raw) ? raw : 0));
                                     next[idx] = { ...next[idx], remainderPieces: rem };
                                     return next;

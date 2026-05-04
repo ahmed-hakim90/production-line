@@ -55,15 +55,37 @@ export function RouterRealtimeSubscriptions() {
   useEffect(() => {
     if (!isAuthenticated || isPendingApproval || deferRealtime) return;
 
-    const unsubReports = subscribeToDashboard();
-    const unsubStatuses = subscribeToLineStatuses();
-    const unsubWorkOrders = subscribeToWorkOrders();
-    const unsubScans = subscribeToScanEventsToday();
+    let cancelled = false;
+    const unsubs: Array<() => void> = [];
+    let scheduleId: number | undefined;
+    let usedIdleCallback = false;
+
+    const start = () => {
+      if (cancelled) return;
+      unsubs.push(subscribeToDashboard());
+      unsubs.push(subscribeToLineStatuses());
+      unsubs.push(subscribeToWorkOrders());
+      unsubs.push(subscribeToScanEventsToday());
+    };
+
+    if (typeof requestIdleCallback !== 'undefined') {
+      usedIdleCallback = true;
+      scheduleId = requestIdleCallback(() => {
+        if (!cancelled) start();
+      }, { timeout: 2800 });
+    } else {
+      scheduleId = window.setTimeout(() => {
+        if (!cancelled) start();
+      }, 400);
+    }
+
     return () => {
-      unsubReports();
-      unsubStatuses();
-      unsubWorkOrders();
-      unsubScans();
+      cancelled = true;
+      if (scheduleId !== undefined) {
+        if (usedIdleCallback) cancelIdleCallback(scheduleId);
+        else window.clearTimeout(scheduleId);
+      }
+      unsubs.forEach((u) => u());
     };
   }, [
     isAuthenticated,

@@ -13,6 +13,7 @@ import {
   NESTED_TILE,
 } from '@/src/components/erp/DetailPageChrome';
 import { cn } from '@/lib/utils';
+import { hideZeroForInput } from '@/lib/inputDisplayValue';
 
 export const AssetDetails: React.FC = () => {
   const { id = '' } = useParams();
@@ -161,11 +162,11 @@ export const AssetDetails: React.FC = () => {
           </label>
           <label className="erp-field">
             <span className="erp-field-label">تكلفة الشراء (ج.م)</span>
-            <input type="number" className="erp-field-input" placeholder="أدخل تكلفة شراء الأصل" value={Number(form.purchaseCost || 0)} onChange={(e) => setForm((p) => ({ ...p, purchaseCost: Number(e.target.value || 0) }))} disabled={!canEdit} />
+            <input type="number" className="erp-field-input" placeholder="أدخل تكلفة شراء الأصل" value={hideZeroForInput(Number(form.purchaseCost || 0)) as number | string} onChange={(e) => setForm((p) => ({ ...p, purchaseCost: Number(e.target.value || 0) }))} disabled={!canEdit} />
           </label>
           <label className="erp-field">
             <span className="erp-field-label">القيمة المتبقية (Salvage)</span>
-            <input type="number" className="erp-field-input" placeholder="القيمة المتوقعة بنهاية العمر" value={Number(form.salvageValue || 0)} onChange={(e) => setForm((p) => ({ ...p, salvageValue: Number(e.target.value || 0) }))} disabled={!canEdit} />
+            <input type="number" className="erp-field-input" placeholder="القيمة المتوقعة بنهاية العمر" value={hideZeroForInput(Number(form.salvageValue || 0)) as number | string} onChange={(e) => setForm((p) => ({ ...p, salvageValue: Number(e.target.value || 0) }))} disabled={!canEdit} />
           </label>
           <label className="erp-field">
             <span className="erp-field-label">العمر الإنتاجي (بالأشهر)</span>

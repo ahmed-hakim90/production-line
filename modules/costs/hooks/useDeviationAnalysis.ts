@@ -39,8 +39,15 @@ function buildPreviousSlice(
   row: MonthlyProductionCost | null,
   prevInfo: PrevInfo | undefined,
 ): PreviousCostSlice {
-  const closed = !!prevInfo?.closed;
-  const avg = closed && (prevInfo?.avg ?? 0) > 0 ? Number(prevInfo.avg) : Number(row?.averageUnitCost ?? 0);
+  const closed = !!(prevInfo?.closed || row?.isClosed);
+  const avgFromInfo =
+    prevInfo?.closed && (prevInfo?.avg ?? 0) > 0 ? Number(prevInfo.avg) : 0;
+  const avgFromRow =
+    row?.isClosed && (row?.averageUnitCost ?? 0) > 0 ? Number(row.averageUnitCost) : 0;
+  const avg =
+    closed
+      ? (avgFromInfo > 0 ? avgFromInfo : avgFromRow > 0 ? avgFromRow : 0)
+      : Number(row?.averageUnitCost ?? 0);
   const qty = Math.max(0, Number(row?.totalProducedQty ?? 0));
   const d = Number(row?.directCost ?? 0);
   const ind = Number(row?.indirectCost ?? 0);
@@ -64,8 +71,18 @@ export type DeviationAnalysisState = {
 const cache = new Map<string, { state: DeviationAnalysisState; ts: number }>();
 const CACHE_MS = 45_000;
 
-function cacheKey(productId: string, month: string, stale: boolean): string {
-  return `${productId}-${month}-${stale ? '1' : '0'}`;
+function cacheKey(
+  productId: string,
+  month: string,
+  stale: boolean,
+  prev: PrevInfo | undefined,
+  current: MonthlyProductionCost | null,
+): string {
+  const pClosed = prev?.closed ? '1' : '0';
+  const pAvg = Number(prev?.avg ?? 0).toFixed(6);
+  const cAvg = Number(current?.averageUnitCost ?? 0).toFixed(6);
+  const cQty = Number(current?.totalProducedQty ?? 0).toFixed(4);
+  return `${productId}-${month}-${stale ? '1' : '0'}-p${pClosed}-${pAvg}-c${cAvg}-${cQty}`;
 }
 
 export function useDeviationAnalysis(params: {
@@ -102,8 +119,8 @@ export function useDeviationAnalysis(params: {
   }, [getNormalizedBreakdown]);
 
   const key = useMemo(
-    () => (productId ? cacheKey(productId, month, isStale) : ''),
-    [productId, month, isStale],
+    () => (productId ? cacheKey(productId, month, isStale, prevMonthInfo, currentRecord) : ''),
+    [productId, month, isStale, prevMonthInfo, currentRecord],
   );
 
   useEffect(() => {

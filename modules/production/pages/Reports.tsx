@@ -110,6 +110,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { hideZeroForInput } from '@/lib/inputDisplayValue';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import {
   Dialog,
@@ -810,24 +811,45 @@ export const Reports: React.FC = () => {
   }, [can, fetchReportsFromStore, startDate, endDate, viewMode]);
 
   useEffect(() => {
-    void ensureReportsUiReferenceData();
+    let scheduleId: number | undefined;
+    let usedIdleCallback = false;
+    const run = () => {
+      void ensureReportsUiReferenceData();
+    };
+    if (typeof requestIdleCallback !== 'undefined') {
+      usedIdleCallback = true;
+      scheduleId = requestIdleCallback(run, { timeout: 5000 });
+    } else {
+      scheduleId = window.setTimeout(run, 350);
+    }
+    return () => {
+      if (scheduleId !== undefined) {
+        if (usedIdleCallback) cancelIdleCallback(scheduleId);
+        else window.clearTimeout(scheduleId);
+      }
+    };
   }, [ensureReportsUiReferenceData]);
 
   const loadRangeReports = useCallback(
-    async (from: string, to: string, append = false) => {
+    async (from: string, to: string, append: boolean) => {
       setRangeLoading(true);
       if (!append) setRangeError(null);
       try {
+        const employeeIdForQuery = myEmployeeId ?? (filterEmployeeId.trim() || undefined);
         const page = await reportService.listByDateRangePaged({
           startDate: from,
           endDate: to,
           limit: 50,
           cursor: append ? rangeCursor : null,
+          lineId: filterLineId.trim() || undefined,
+          employeeId: employeeIdForQuery,
         });
         const current = append ? useAppStore.getState().productionReports : [];
-        useAppStore.setState({ productionReports: [...current, ...page.items] });
+        useAppStore.setState({
+          productionReports: append ? [...current, ...page.items] : page.items,
+        });
         setRangeCursor(page.nextCursor);
-        setRangeHasMore(page.hasMore && !!page.nextCursor);
+        setRangeHasMore(page.hasMore);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
         setRangeError(message);
@@ -835,28 +857,31 @@ export const Reports: React.FC = () => {
         setRangeLoading(false);
       }
     },
-    [rangeCursor],
+    [rangeCursor, filterLineId, filterEmployeeId, myEmployeeId],
   );
 
   const fetchReports = useCallback(
     async (from: string, to: string) => {
-      setRangeLoading(true);
-      setRangeError(null);
-      try {
-        const rows = await reportService.getByDateRange(from, to);
-        useAppStore.setState({ productionReports: rows });
-        useAppStore.getState().upsertProductionReportsRangeCache(from, to, rows);
-        setRangeCursor(null);
-        setRangeHasMore(false);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
-        setRangeError(message);
-      } finally {
-        setRangeLoading(false);
-      }
+      await loadRangeReports(from, to, false);
     },
-    [],
+    [loadRangeReports],
   );
+
+  const reportsFilterEffectPrimed = useRef(false);
+  const loadRangeReportsRef = useRef(loadRangeReports);
+  loadRangeReportsRef.current = loadRangeReports;
+  useEffect(() => {
+    if (viewMode !== 'range' && viewMode !== 'general') {
+      reportsFilterEffectPrimed.current = false;
+      return;
+    }
+    if (!reportsFilterEffectPrimed.current) {
+      reportsFilterEffectPrimed.current = true;
+      return;
+    }
+    void loadRangeReportsRef.current(startDate, endDate, false);
+    // Omit startDate/endDate from deps — period changes call fetchReports directly; avoids double-fetch.
+  }, [filterLineId, filterEmployeeId, viewMode]);
 
   const allReports = viewMode === 'today' ? todayReports : productionReports;
   const productCategoryOptions = useMemo(() => {
@@ -1682,7 +1707,7 @@ export const Reports: React.FC = () => {
     return 'all';
   }, [viewMode, startDate, endDate]);
   const handleLoadMoreRange = async () => {
-    if (viewMode !== 'range' || rangeLoading || !rangeHasMore) return;
+    if ((viewMode !== 'range' && viewMode !== 'general') || rangeLoading || !rangeHasMore) return;
     await loadRangeReports(startDate, endDate, true);
   };
 
@@ -3579,7 +3604,7 @@ export const Reports: React.FC = () => {
           />
         )
       )}
-      {viewMode === 'range' && (
+      {(viewMode === 'range' || viewMode === 'general') && (
         <div className="flex items-center justify-center">
           <Button
             variant="secondary"
@@ -4153,12 +4178,13 @@ export const Reports: React.FC = () => {
                                 type="number"
                                 min={0}
                                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
-                                value={row.quantityCartons ?? 0}
+                                value={hideZeroForInput(row.quantityCartons ?? 0) as number | string}
                                 onChange={(e) => setForm((prev) => {
                                   const next = [...(prev.packagingLines || [])];
+                                  const raw = e.target.value === '' ? 0 : Number(e.target.value);
                                   next[idx] = {
                                     ...next[idx],
-                                    quantityCartons: Math.max(0, Math.floor(Number(e.target.value))),
+                                    quantityCartons: Math.max(0, Math.floor(Number.isFinite(raw) ? raw : 0)),
                                   };
                                   return { ...prev, packagingLines: next };
                                 })}
@@ -4178,10 +4204,11 @@ export const Reports: React.FC = () => {
                                   min={0}
                                   max={upc - 1}
                                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3 outline-none font-medium transition-all"
-                                  value={row.remainderPieces ?? 0}
+                                  value={hideZeroForInput(row.remainderPieces ?? 0) as number | string}
                                   onChange={(e) => setForm((prev) => {
                                     const next = [...(prev.packagingLines || [])];
-                                    const raw = Math.floor(Number(e.target.value));
+                                    const num = e.target.value === '' ? 0 : Number(e.target.value);
+                                    const raw = Math.floor(num);
                                     const rem = Math.max(0, Math.min(upc - 1, Number.isFinite(raw) ? raw : 0));
                                     next[idx] = { ...next[idx], remainderPieces: rem };
                                     return { ...prev, packagingLines: next };

@@ -1352,47 +1352,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     ]);
 
     const today = getOperationalDateString(8);
-    const { start: monthStart, end: monthEnd } = getMonthDateRange();
-    const [todayReports, monthlyReports, lineStatuses] = await Promise.all([
+    const [todayReports, lineStatuses] = await Promise.all([
       reportService.getByDateRange(today, today),
-      reportService.getByDateRange(monthStart, monthEnd),
       lineStatusService.getAll(),
     ]);
     const rangeCacheNow = Date.now();
     const rkToday = getProductionReportsRangeCacheKey(today, today);
-    const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
 
-    const activePlans = productionPlans.filter(
-      (p) => p.status === 'in_progress' || p.status === 'planned'
-    );
+    /** Filled after idle — keeps first paint after login lighter. */
     const planReports: Record<string, ProductionReport[]> = {};
-    const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
-    const planReportResults = await Promise.allSettled(
-      activePlans.map(async (plan) => {
-        const key = `${plan.lineId}_${plan.productId}`;
-        const reports = await reportService.getByLineAndProduct(
-          plan.lineId,
-          plan.productId,
-          plan.startDate,
-        );
-        return { plan, key, reports };
-      }),
-    );
-    planReportResults.forEach((result) => {
-      if (result.status !== 'fulfilled') return;
-      const { plan, key, reports } = result.value;
-      planReports[key] = reports;
-      if (!plan.id) return;
-      const patch = deriveProductionPlanAutoPatch(plan, reports);
-      if (!patch) return;
-      planAutoPatches.push({ id: plan.id, patch });
-      Object.assign(plan, patch);
-    });
-    if (planAutoPatches.length > 0) {
-      await Promise.allSettled(
-        planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
-      );
-    }
 
     const mergedSettings = systemSettingsRaw
       ? {
@@ -1451,12 +1419,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       routingTargetUnitSecondsByProduct,
       routingProductTargetUnitSecondsByProduct,
       todayReports,
-      monthlyReports,
+      monthlyReports: [],
       productionReports: [],
       productionReportsRangeCache: {
         ...get().productionReportsRangeCache,
         [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-        [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
       },
       lineStatuses,
       productionPlans,
@@ -1499,6 +1466,78 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     set({ products, productionLines, employees });
+
+    const scheduleDeferredBootstrap = () => {
+      const idle =
+        typeof requestIdleCallback !== 'undefined'
+          ? (cb: IdleRequestCallback) => requestIdleCallback(cb, { timeout: 4500 })
+          : (cb: IdleRequestCallback) =>
+              window.setTimeout(
+                () => cb({ didTimeout: true, timeRemaining: () => 0 } as IdleDeadline),
+                50,
+              );
+
+      idle(() => {
+        void (async () => {
+          try {
+            const { start: ms, end: me } = getMonthDateRange();
+            const monthly = await reportService.getByDateRange(ms, me);
+            const rkMonth = getProductionReportsRangeCacheKey(ms, me);
+            set((st) => ({
+              monthlyReports: monthly,
+              productionReportsRangeCache: {
+                ...st.productionReportsRangeCache,
+                [rkMonth]: { rows: monthly, fetchedAt: Date.now() },
+              },
+            }));
+            get()._rebuildProducts();
+            get()._rebuildLines();
+          } catch (err) {
+            console.warn('_loadAppData: deferred monthly reports failed', err);
+          }
+
+          try {
+            const plans = get().productionPlans;
+            const activePlans = plans.filter(
+              (p) => p.status === 'in_progress' || p.status === 'planned',
+            );
+            const nextPlanReports: Record<string, ProductionReport[]> = {};
+            const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
+            const planReportResults = await Promise.allSettled(
+              activePlans.map(async (plan) => {
+                const key = `${plan.lineId}_${plan.productId}`;
+                const reports = await reportService.getByLineAndProduct(
+                  plan.lineId,
+                  plan.productId,
+                  plan.startDate,
+                );
+                return { plan, key, reports };
+              }),
+            );
+            planReportResults.forEach((result) => {
+              if (result.status !== 'fulfilled') return;
+              const { plan, key, reports } = result.value;
+              nextPlanReports[key] = reports;
+              if (!plan.id) return;
+              const patch = deriveProductionPlanAutoPatch(plan, reports);
+              if (!patch) return;
+              planAutoPatches.push({ id: plan.id, patch });
+              Object.assign(plan, patch);
+            });
+            if (planAutoPatches.length > 0) {
+              await Promise.allSettled(
+                planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
+              );
+            }
+            set({ planReports: nextPlanReports, productionPlans: [...plans] });
+            get()._rebuildLines();
+          } catch (err) {
+            console.warn('_loadAppData: deferred plan reports failed', err);
+          }
+        })();
+      });
+    };
+    scheduleDeferredBootstrap();
   },
 
   // ── Role Switching ─────────────────────────────────────────────────────────

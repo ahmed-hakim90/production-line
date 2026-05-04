@@ -11,6 +11,7 @@ import { getReportDuplicateMessage } from '../../../modules/production/utils/rep
 import { resolveReportType, workOrderMatchesReportType } from '../../../modules/production/utils/reportTypes';
 import { canonicalPackagingLine } from '../../../modules/production/utils/packagingLine';
 import { cn } from '@/lib/utils';
+import { hideZeroForInput } from '@/lib/inputDisplayValue';
 import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
 import { ProductionLineStatus, type PackagingReportLine, type ReportComponentScrapItem } from '../../../types';
 import { useTranslation } from 'react-i18next';
@@ -702,13 +703,14 @@ export const GlobalCreateReportModal: React.FC = () => {
                             type="number"
                             min={0}
                             className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                            value={row.quantityCartons ?? 0}
+                            value={hideZeroForInput(row.quantityCartons ?? 0) as number | string}
                             onChange={(e) => {
                               setForm((prev) => {
                                 const next = [...(prev.packagingLines || [])];
+                                const raw = e.target.value === '' ? 0 : Number(e.target.value);
                                 next[idx] = {
                                   ...next[idx],
-                                  quantityCartons: Math.max(0, Math.floor(Number(e.target.value))),
+                                  quantityCartons: Math.max(0, Math.floor(Number.isFinite(raw) ? raw : 0)),
                                 };
                                 return { ...prev, packagingLines: next };
                               });
@@ -729,11 +731,12 @@ export const GlobalCreateReportModal: React.FC = () => {
                               min={0}
                               max={upc - 1}
                               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                              value={row.remainderPieces ?? 0}
+                              value={hideZeroForInput(row.remainderPieces ?? 0) as number | string}
                               onChange={(e) => {
                                 setForm((prev) => {
                                   const next = [...(prev.packagingLines || [])];
-                                  const raw = Math.floor(Number(e.target.value));
+                                  const num = e.target.value === '' ? 0 : Number(e.target.value);
+                                  const raw = Math.floor(num);
                                   const rem = Math.max(0, Math.min(upc - 1, Number.isFinite(raw) ? raw : 0));
                                   next[idx] = { ...next[idx], remainderPieces: rem };
                                   return { ...prev, packagingLines: next };
