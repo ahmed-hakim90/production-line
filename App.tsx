@@ -53,6 +53,7 @@ import {
   setLastVisitedTenantSlug,
 } from './lib/lastTenantSlugStorage';
 import { tenantService } from './services/tenantService';
+import { hardClientReload } from './utils/hardClientReload';
 import { setAppLanguage, type SupportedLanguage } from './src/i18n';
 import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
 import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
@@ -91,6 +92,23 @@ const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
 const DAILY_WELCOME_STORAGE_PREFIX = 'daily_welcome_seen';
 const LEGACY_MODAL_WORKSPACE_LS = 'global_modal_workspace_v1';
 const MODAL_WORKSPACE_CLEARED_FLAG = 'erp_modal_workspace_cleared_v1';
+
+/** One recovery reload per tab session when a lazy chunk 404s (stale SW / cache after deploy). */
+const DYNAMIC_IMPORT_RELOAD_KEY = 'erp_dynamic_import_recovery_v1';
+
+const isDynamicImportLoadFailure = (reason: unknown): boolean => {
+  const msg =
+    typeof reason === 'string'
+      ? reason
+      : (reason as { message?: string })?.message || '';
+  const lower = msg.toLowerCase();
+  return (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('error loading dynamically imported module') ||
+    lower.includes('importing a module script failed') ||
+    (lower.includes('loading chunk') && lower.includes('failed'))
+  );
+};
 
 const buildCurrentPath = (location: { pathname: string; search: string }) =>
   `${location.pathname}${location.search}`;
@@ -826,6 +844,13 @@ const App: React.FC = () => {
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
+      if (isDynamicImportLoadFailure(reason) && !sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY)) {
+        sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, '1');
+        event.preventDefault();
+        toast.error('تعذّر تحميل جزء من التطبيق (غالباً نسخة مخزّنة قديمة). جارٍ التحديث…');
+        void hardClientReload();
+        return;
+      }
       const message = typeof reason === 'string'
         ? reason
         : (reason?.message || 'حدث خطأ غير متوقع');

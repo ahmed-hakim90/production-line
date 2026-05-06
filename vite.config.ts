@@ -74,6 +74,9 @@ export default defineConfig(({ mode }) => {
           // the chunk exists in the current deployment output.
           workbox: {
             navigateFallback: '/index.html',
+            cleanupOutdatedCaches: true,
+            skipWaiting: true,
+            clientsClaim: true,
             // Skip precaching very large hashed chunks; they are still fetched at runtime.
             maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
             globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
