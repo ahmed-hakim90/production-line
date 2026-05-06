@@ -303,17 +303,28 @@ export const useProductDetail = (id?: string) => {
             })()
           : null;
 
-      const periodFrom = reports[0]?.date || toDateInputValue(new Date());
-      const periodTo = reports[reports.length - 1]?.date || periodFrom;
+      const manufacturingSorted = manufacturingReports
+        .slice()
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const periodFrom =
+        manufacturingSorted[0]?.date || reports[0]?.date || toDateInputValue(new Date());
+      const periodTo =
+        manufacturingSorted[manufacturingSorted.length - 1]?.date
+        || reports[reports.length - 1]?.date
+        || periodFrom;
       const lineOptions = [
         "كل الخطوط",
-        ...Array.from(new Set(reports.map((row) => parseLineName(row.lineId, lineNameMap)).filter(Boolean))),
+        ...Array.from(
+          new Set(
+            manufacturingReports.map((row) => parseLineName(row.lineId, lineNameMap)).filter(Boolean),
+          ),
+        ),
       ];
       const supervisorOptions = [
         "كل المشرفين",
         ...Array.from(
           new Set(
-            reports
+            manufacturingReports
               .map((row) => parseEmployeeName(row.employeeId, employeeNameMap))
               .filter((name) => name && name !== "—"),
           ),
@@ -463,7 +474,7 @@ export const useProductDetail = (id?: string) => {
           monthlyTotal: Number(monthlyTotal),
         }));
 
-      const detailedReports = reports
+      const detailedReports = manufacturingReports
         .slice()
         .sort((a, b) => b.date.localeCompare(a.date))
         .map((row: ProductionReport, idx) => ({
@@ -594,7 +605,7 @@ export const useProductDetail = (id?: string) => {
             isBest: bestCostLine?.lineId === row.lineId,
           })),
         unitCostTrend: costHistory.map((row) => ({ date: row.date, value: Number(row.costPerUnit || 0) })),
-        productionLog: groupReportsByDate(reports).map((row) => ({
+        productionLog: groupReportsByDate(manufacturingReports).map((row) => ({
           date: row.date,
           production: Number(row.produced || 0),
           waste: Number(row.waste || 0),
