@@ -42,6 +42,10 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
+import {
+  isInjectionCategory,
+  parseInjectionCategoryTokens,
+} from '../utils/injectionMaterialFilter';
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
   productId: '',
@@ -49,30 +53,6 @@ const newEmptyPackagingLine = (): PackagingReportLine => ({
   quantityCartons: 0,
   remainderPieces: 0,
 });
-
-const normalizeArabic = (value: string) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, '')
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/\s+/g, ' ');
-
-const parseInjectionCategoryTokens = (value?: string) =>
-  String(value || 'حقن')
-    .split(',')
-    .map((part) => normalizeArabic(part))
-    .filter(Boolean);
-
-const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
-  const normalized = normalizeArabic(value || '');
-  if (!normalized) return false;
-  const strictTokens = tokens.filter((token) => token.includes('حقن'));
-  const effectiveTokens = strictTokens.length > 0 ? strictTokens : ['حقن'];
-  return effectiveTokens.some((token) => normalized.includes(token));
-};
 
 export const QuickAction: React.FC = () => {
   const { can } = usePermission();
@@ -213,11 +193,10 @@ export const QuickAction: React.FC = () => {
     return ids;
   }, [_rawLines, lineStatuses]);
 
-  const injectionRawMaterialOptions = useMemo(() => {
-    const categoryMatched = rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens));
-    const injCodeOnly = categoryMatched.filter((row) => /^INJ[-_]?/i.test(String(row.code || '').trim()));
-    return injCodeOnly.length > 0 ? injCodeOnly : categoryMatched;
-  }, [rawMaterialOptions, injectionCategoryTokens]);
+  const injectionRawMaterialOptions = useMemo(
+    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
+    [rawMaterialOptions, injectionCategoryTokens],
+  );
 
   const selectableProducts = useMemo(() => (
     reportType === 'component_injection'

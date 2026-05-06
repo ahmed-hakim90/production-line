@@ -97,6 +97,10 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
+import {
+  isInjectionCategory,
+  parseInjectionCategoryTokens,
+} from '../utils/injectionMaterialFilter';
 import { effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
 import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
@@ -327,28 +331,6 @@ function ReportCostBreakdownPanel({
 }
 
 type ReportGroupBy = 'none' | 'supervisor' | 'line' | 'product';
-
-const normalizeArabic = (value: string) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, '')
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/\s+/g, ' ');
-
-const parseInjectionCategoryTokens = (value?: string) =>
-  String(value || 'حقن')
-    .split(',')
-    .map((part) => normalizeArabic(part))
-    .filter(Boolean);
-
-const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
-  const normalized = normalizeArabic(value || '');
-  if (!normalized) return false;
-  return tokens.some((token) => normalized.includes(token));
-};
 
 type FactoryGeneralRow = {
   key: string;

@@ -219,6 +219,12 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   averageProductionMode: 'daily',
   injectionRawMaterialCategoryKeywords: 'حقن',
   supplyCycleBatchCodePrefix: 'SC',
+  productCodePrefix: 'PRD',
+  productCodePadding: 5,
+  rawMaterialCodePrefix: 'RM',
+  rawMaterialCodePadding: 4,
+  categoryCodePrefix: 'CAT',
+  categoryCodePadding: 4,
 };
 
 export const DEFAULT_BRANDING: BrandingSettings = {

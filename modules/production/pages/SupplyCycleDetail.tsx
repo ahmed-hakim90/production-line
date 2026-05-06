@@ -173,6 +173,20 @@ export const SupplyCycleDetail: React.FC = () => {
     [rawMaterials, _rawProducts],
   );
 
+  const resolveItemCategory = useCallback(
+    (c: SupplyCycle) => {
+      if (c.kind === 'raw_material') {
+        const rm = rawMaterials.find((r) => r.id === c.itemId);
+        const label = String(rm?.categoryName || '').trim();
+        return label || '—';
+      }
+      const p = _rawProducts.find((x) => x.id === c.itemId);
+      const label = String(p?.model || '').trim();
+      return label || '—';
+    },
+    [rawMaterials, _rawProducts],
+  );
+
   const resolveLineName = useCallback(
     (lineId: string) => {
       const L = _rawLines.find((l) => l.id === lineId);
@@ -335,6 +349,7 @@ export const SupplyCycleDetail: React.FC = () => {
       'كود الباتش': cycle.batchCode,
       النوع: KIND_LABEL[cycle.kind],
       الصنف: resolveItemName(cycle),
+      التصنيف: resolveItemCategory(cycle),
       'تسمية خارجية': cycle.externalLabel || '—',
       الحالة: STATUS_LABEL[cycle.status],
       'من تاريخ': cycle.periodStart,
@@ -498,6 +513,10 @@ export const SupplyCycleDetail: React.FC = () => {
           <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">الصنف</dt>
             <dd className="font-medium text-end">{resolveItemName(cycle)}</dd>
+          </div>
+          <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+            <dt className="text-muted-foreground">التصنيف</dt>
+            <dd className="text-sm font-medium text-end">{resolveItemCategory(cycle)}</dd>
           </div>
           <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">الفترة</dt>

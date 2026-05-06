@@ -3,14 +3,27 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   updateDoc,
   where,
+  runTransaction,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { productService } from '../../production/services/productService';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { getMergedPlanSettings } from '../../shared/services/entityCodePlanSettings';
+import {
+  DUPLICATE_ENTITY_CODE,
+  ENTITY_CODE_COUNTER_KEYS,
+  allocateNextCodeInTransaction,
+  normalizeEntityCodePrefix,
+  peekNextCode as peekNextEntityCode,
+  seedMaxCategoryCodes,
+  seedMaxCategoryCodesInTransaction,
+  clampPadding,
+} from '../../shared/services/entityCodeSequenceService';
 
 export type CategoryType = 'product' | 'raw_material';
 
@@ -51,21 +64,105 @@ export const categoryService = {
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
   },
 
+  async isCodeTaken(code: string, type: CategoryType, excludeId?: string): Promise<boolean> {
+    if (!isConfigured) return false;
+    const want = String(code || '').trim().toUpperCase();
+    if (!want) return false;
+    const rows = await categoryService.getAll();
+    return rows.some((r) => {
+      if (excludeId && r.id === excludeId) return false;
+      if (getEffectiveCategoryType(r) !== type) return false;
+      return String(r.code ?? '')
+        .trim()
+        .toUpperCase() === want;
+    });
+  },
+
+  async peekNextCode(type: CategoryType): Promise<string> {
+    const plan = await getMergedPlanSettings();
+    const prefix = normalizeEntityCodePrefix(plan.categoryCodePrefix ?? 'CAT', 'CAT');
+    const padding = clampPadding(Number(plan.categoryCodePadding ?? 4), 4);
+    const entityKey =
+      type === 'raw_material'
+        ? ENTITY_CODE_COUNTER_KEYS.categoryRawMaterial
+        : ENTITY_CODE_COUNTER_KEYS.categoryProduct;
+    const seedType = type === 'raw_material' ? ('raw_material' as const) : ('product' as const);
+    return peekNextEntityCode(entityKey, prefix, padding, () => seedMaxCategoryCodes(prefix, seedType));
+  },
+
   async create(payload: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<string | null> {
     if (!isConfigured) return null;
     const tenantId = getCurrentTenantId();
-    const ref = await addDoc(collection(db, COLLECTION), {
-      ...payload,
-      type: payload.type === 'raw_material' ? 'raw_material' : 'product',
-      tenantId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    const effType = payload.type === 'raw_material' ? 'raw_material' : 'product';
+    const entityKey =
+      effType === 'raw_material'
+        ? ENTITY_CODE_COUNTER_KEYS.categoryRawMaterial
+        : ENTITY_CODE_COUNTER_KEYS.categoryProduct;
+    const plan = await getMergedPlanSettings();
+    const prefix = normalizeEntityCodePrefix(plan.categoryCodePrefix ?? 'CAT', 'CAT');
+    const padding = clampPadding(Number(plan.categoryCodePadding ?? 4), 4);
+    const trimmed = String(payload.code ?? '').trim();
+
+    if (trimmed) {
+      const upper = trimmed.toUpperCase();
+      if (await categoryService.isCodeTaken(upper, effType)) {
+        const err = new Error(DUPLICATE_ENTITY_CODE);
+        (err as Error & { code?: string }).code = DUPLICATE_ENTITY_CODE;
+        throw err;
+      }
+      const ref = await addDoc(collection(db, COLLECTION), {
+        ...payload,
+        code: upper,
+        type: effType,
+        tenantId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return ref.id;
+    }
+
+    const seedType = effType === 'raw_material' ? ('raw_material' as const) : ('product' as const);
+    const id = await runTransaction(db, async (transaction) => {
+      const code = await allocateNextCodeInTransaction(
+        transaction,
+        entityKey,
+        prefix,
+        padding,
+        (tx) => seedMaxCategoryCodesInTransaction(tx, prefix, seedType),
+      );
+      const newRef = doc(collection(db, COLLECTION));
+      transaction.set(newRef, {
+        ...payload,
+        code,
+        type: effType,
+        tenantId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return newRef.id;
     });
-    return ref.id;
+    return id;
   },
 
   async update(id: string, payload: Partial<ProductCategory>): Promise<void> {
     if (!isConfigured || !id) return;
+    const snap = await getDoc(doc(db, COLLECTION, id));
+    const row = snap.exists() ? ({ id: snap.id, ...snap.data() } as ProductCategory) : null;
+    const effType =
+      payload.type !== undefined
+        ? getEffectiveCategoryType(payload)
+        : getEffectiveCategoryType(row ?? { type: 'product' });
+
+    if (payload.code !== undefined) {
+      const upper = String(payload.code ?? '').trim().toUpperCase();
+      if (upper && (await categoryService.isCodeTaken(upper, effType, id))) {
+        const err = new Error(DUPLICATE_ENTITY_CODE);
+        (err as Error & { code?: string }).code = DUPLICATE_ENTITY_CODE;
+        throw err;
+      }
+      if (upper) (payload as Partial<ProductCategory>).code = upper;
+    }
+
     const { id: _id, ...data } = payload as ProductCategory;
     await updateDoc(doc(db, COLLECTION, id), {
       ...data,
@@ -107,8 +204,8 @@ export const categoryService = {
         skipped += 1;
         continue;
       }
-      const id = await this.create({ name, type: 'product', isActive: true });
-      if (id) {
+      const catId = await this.create({ name, type: 'product', isActive: true });
+      if (catId) {
         created += 1;
       } else {
         skipped += 1;

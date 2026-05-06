@@ -12,6 +12,13 @@
     "cancel": "إلغاء",
     "close": "إغلاق"
   },
+  "entityCode": {
+    "duplicateError": "هذا الكود مستخدم بالفعل. استخدم كوداً مختلفاً.",
+    "lockHint": "سيُولَّد الكود تلقائياً عند الحفظ. اضغط أيقونة القفل للتعديل اليدوي.",
+    "unlockedHint": "أدخل كوداً فريداً يدوياً (يُنصح بالتأكد من عدم التكرار).",
+    "lockTitle": "الكود تلقائي (مقفل)",
+    "unlockTitle": "تعديل الكود يدوياً"
+  },
   "shared": {
     "back": "رجوع",
     "clearSelection": "مسح الاختيار",
@@ -828,6 +835,8 @@
       "saveRules": "حفظ قواعد الوردية"
     },
     "createRawMaterial": {
+      "requiredNameError": "اسم المادة الخام مطلوب.",
+      "manualCodeRequired": "أدخل كوداً للمادة أو أعد قفل الحقل للتوليد التلقائي.",
       "requiredFieldsError": "اسم المادة الخام والكود مطلوبان.",
       "updateError": "تعذر تعديل المادة الخام. حاول مرة أخرى.",
       "createError": "تعذر إضافة المادة الخام. حاول مرة أخرى.",
@@ -841,12 +850,19 @@
       "saveChanges": "حفظ التعديلات",
       "addRawMaterial": "إضافة مادة خام"
     },
+    "categories": {
+      "codePlaceholder": "الكود",
+      "codeRequired": "الكود مطلوب.",
+      "manualCodeRequired": "أدخل كود الفئة أو أعد قفل الحقل للتوليد التلقائي."
+    },
     "createProduct": {
+      "manualCodeRequired": "أدخل كود المنتج أو أعد قفل الحقل للتوليد التلقائي.",
       "createSuccess": "تم إضافة المنتج بنجاح",
       "saveError": "تعذر حفظ المنتج. حاول مرة أخرى.",
       "title": "إضافة منتج جديد",
       "productNameRequired": "اسم المنتج *",
       "productNamePlaceholder": "مثال: محرك هيدروليكي H-400",
+      "codeLabel": "كود المنتج",
       "codeRequired": "الكود *",
       "categoryModelRequired": "الفئة / الموديل *",
       "categoryModelPlaceholder": "اختر أو اكتب فئة",

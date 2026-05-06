@@ -91,6 +91,7 @@ import { catalogRawMaterialService as rawMaterialService } from '../modules/cata
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
 import { productMaterialService } from '../modules/production/services/productMaterialService';
 import { categoryService } from '../modules/catalog/services/categoryService';
+import { DUPLICATE_ENTITY_CODE } from '../modules/shared/services/entityCodeSequenceService';
 import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
@@ -547,6 +548,13 @@ async function syncProductAvgDailyProduction(productId: string): Promise<void> {
     : 0;
 
   await productService.update(productId, { avgDailyProduction });
+}
+
+function isDuplicateEntityCodeError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message === DUPLICATE_ENTITY_CODE || (error as { code?: string }).code === DUPLICATE_ENTITY_CODE)
+  );
 }
 
 async function ensureCategoryFromModel(model: string | undefined): Promise<void> {
@@ -2726,6 +2734,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (id) await get().fetchProducts();
       return id;
     } catch (error) {
+      if (isDuplicateEntityCodeError(error)) throw error;
       set({ error: (error as Error).message });
       return null;
     }

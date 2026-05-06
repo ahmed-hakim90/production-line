@@ -15,6 +15,10 @@ import { hideZeroForInput } from '@/lib/inputDisplayValue';
 import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
 import { ProductionLineStatus, type PackagingReportLine, type ReportComponentScrapItem } from '../../../types';
 import { useTranslation } from 'react-i18next';
+import {
+  isInjectionCategory,
+  parseInjectionCategoryTokens,
+} from '@/modules/production/utils/injectionMaterialFilter';
 
 type ReportFormState = {
   reportType: 'finished_product' | 'component_injection' | 'packaging';
@@ -67,30 +71,6 @@ const emptyForm = (): ReportFormState => ({
   notes: '',
   packagingLines: [],
 });
-
-const normalizeArabic = (value: string) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, '')
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/\s+/g, ' ');
-
-const parseInjectionCategoryTokens = (value?: string) =>
-  String(value || 'حقن')
-    .split(',')
-    .map((part) => normalizeArabic(part))
-    .filter(Boolean);
-
-const isInjectionCategory = (value: string | undefined, tokens: string[]) => {
-  const normalized = normalizeArabic(value || '');
-  if (!normalized) return false;
-  const strictTokens = tokens.filter((token) => token.includes('حقن'));
-  const effectiveTokens = strictTokens.length > 0 ? strictTokens : ['حقن'];
-  return effectiveTokens.some((token) => normalized.includes(token));
-};
 
 export const GlobalCreateReportModal: React.FC = () => {
   const { t } = useTranslation();
@@ -206,11 +186,10 @@ export const GlobalCreateReportModal: React.FC = () => {
     return lines;
   }, [form.reportType, lines, injectionLineIds]);
 
-  const injectionRawMaterialOptions = useMemo(() => {
-    const categoryMatched = rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens));
-    const injCodeOnly = categoryMatched.filter((row) => /^INJ[-_]?/i.test(String(row.code || '').trim()));
-    return injCodeOnly.length > 0 ? injCodeOnly : categoryMatched;
-  }, [rawMaterialOptions, injectionCategoryTokens]);
+  const injectionRawMaterialOptions = useMemo(
+    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
+    [rawMaterialOptions, injectionCategoryTokens],
+  );
 
   const selectableProducts = useMemo(
     () => (

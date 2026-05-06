@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { Lock, Loader2, Unlock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { Card, Button } from '../../production/components/UI';
@@ -13,10 +15,11 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import type { RawMaterial } from '../../inventory/types';
+import { useAutoEntityCode } from '../../shared/hooks/useAutoEntityCode';
+import { DUPLICATE_ENTITY_CODE } from '../../shared/services/entityCodeSequenceService';
 
 type CategoryForm = {
   name: string;
-  code: string;
   type: CategoryType;
   isActive: boolean;
 };
@@ -33,12 +36,19 @@ const normalizeCategoryName = (value: string) =>
 
 const buildEmptyForm = (type: CategoryType): CategoryForm => ({
   name: '',
-  code: '',
   type,
   isActive: true,
 });
 
+function isDuplicateEntityCodeError(e: unknown): boolean {
+  return (
+    e instanceof Error &&
+    (e.message === DUPLICATE_ENTITY_CODE || (e as Error & { code?: string }).code === DUPLICATE_ENTITY_CODE)
+  );
+}
+
 export const Categories: React.FC = () => {
+  const { t } = useTranslation();
   const { can } = usePermission();
   const location = useLocation();
   const navigate = useTenantNavigate();
@@ -56,6 +66,29 @@ export const Categories: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CategoryForm>(buildEmptyForm('product'));
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const editingCategory = useMemo(
+    () => (editId ? items.find((i) => i.id === editId) : undefined),
+    [editId, items],
+  );
+
+  const peekCategory = useCallback(
+    () => categoryService.peekNextCode(form.type),
+    [form.type],
+  );
+
+  const {
+    code: categoryCode,
+    setCode: setCategoryCode,
+    locked: categoryCodeLocked,
+    toggleLock: toggleCategoryCodeLock,
+    isLoading: categoryCodeLoading,
+  } = useAutoEntityCode({
+    enabled: canView && (canCreate || canEdit),
+    isEditMode: Boolean(editId),
+    initialCode: editingCategory?.code ?? '',
+    peek: peekCategory,
+  });
 
   const loadData = async () => {
     setLoading(true);
@@ -127,21 +160,38 @@ export const Categories: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!form.name.trim()) return;
+    const nameTrim = form.name.trim();
+    let codePayload = '';
+    if (editId) {
+      codePayload = categoryCode.trim().toUpperCase();
+      if (!codePayload) {
+        setMessage({ type: 'error', text: t('modalManager.categories.codeRequired') });
+        return;
+      }
+    } else if (categoryCodeLocked) {
+      codePayload = '';
+    } else {
+      codePayload = categoryCode.trim().toUpperCase();
+      if (!codePayload) {
+        setMessage({ type: 'error', text: t('modalManager.categories.manualCodeRequired') });
+        return;
+      }
+    }
     setSaving(true);
     setMessage(null);
     try {
       if (editId) {
         await categoryService.update(editId, {
-          name: form.name.trim(),
-          code: form.code.trim(),
+          name: nameTrim,
+          code: codePayload,
           type: form.type,
           isActive: form.isActive,
         });
         setMessage({ type: 'success', text: 'تم تحديث الفئة بنجاح.' });
       } else {
         await categoryService.create({
-          name: form.name.trim(),
-          code: form.code.trim(),
+          name: nameTrim,
+          code: codePayload,
           type: form.type,
           isActive: form.isActive,
         });
@@ -150,8 +200,12 @@ export const Categories: React.FC = () => {
       setEditId(null);
       setForm(buildEmptyForm(form.type));
       await loadData();
-    } catch {
-      setMessage({ type: 'error', text: 'تعذر حفظ الفئة. حاول مرة أخرى.' });
+    } catch (e) {
+      if (isDuplicateEntityCodeError(e)) {
+        setMessage({ type: 'error', text: t('entityCode.duplicateError') });
+      } else {
+        setMessage({ type: 'error', text: 'تعذر حفظ الفئة. حاول مرة أخرى.' });
+      }
     } finally {
       setSaving(false);
     }
@@ -163,7 +217,6 @@ export const Categories: React.FC = () => {
     setEditId(item.id || null);
     setForm({
       name: item.name || '',
-      code: item.code || '',
       type,
       isActive: item.isActive !== false,
     });
@@ -261,12 +314,33 @@ export const Categories: React.FC = () => {
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
             />
-            <input
-              className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm"
-              placeholder="الكود (اختياري)"
-              value={form.code}
-              onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
-            />
+            <div className="space-y-1">
+              <div className="flex gap-2 items-center">
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    readOnly={categoryCodeLocked}
+                    className={`w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm font-mono ${categoryCodeLocked ? 'opacity-90' : ''}`}
+                    placeholder={t('modalManager.categories.codePlaceholder')}
+                    value={categoryCode}
+                    onChange={(e) => setCategoryCode(e.target.value.toUpperCase())}
+                  />
+                  {categoryCodeLoading && !editId && (
+                    <Loader2 className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-[var(--color-text-muted)]" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 p-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+                  onClick={toggleCategoryCodeLock}
+                  title={categoryCodeLocked ? t('entityCode.unlockTitle') : t('entityCode.lockTitle')}
+                >
+                  {categoryCodeLocked ? <Lock size={18} /> : <Unlock size={18} />}
+                </button>
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)] px-0.5">
+                {categoryCodeLocked ? t('entityCode.lockHint') : t('entityCode.unlockedHint')}
+              </p>
+            </div>
             <select
               className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm bg-white"
               value={form.type}
@@ -289,7 +363,13 @@ export const Categories: React.FC = () => {
               <Button
                 variant="primary"
                 onClick={handleSubmit}
-                disabled={saving || !form.name.trim() || (!editId && !canCreate) || (editId !== null && !canEdit)}
+                disabled={
+                  saving ||
+                  !form.name.trim() ||
+                  (!editId && !canCreate) ||
+                  (editId !== null && !canEdit) ||
+                  (!editId && !categoryCodeLocked && !categoryCode.trim())
+                }
               >
                 <span className="material-icons-round text-sm">{editId ? 'save' : 'add'}</span>
                 {editId ? 'حفظ التعديلات' : 'إضافة فئة'}

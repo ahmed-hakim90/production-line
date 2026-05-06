@@ -24,7 +24,7 @@ import { rawMaterialService } from '../../inventory/services/rawMaterialService'
 import type { RawMaterial } from '../../inventory/types';
 import { exportSupplyCyclesListExcel } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { Loader2, Package, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, Loader2, Package, Plus, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -467,16 +467,16 @@ export const SupplyCyclesList: React.FC = () => {
       </Card>
 
       <Dialog open={showModal} onOpenChange={(o) => !saving && setShowModal(o)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto sm:max-w-lg" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-right">
-              <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Plus className="size-5" />
+        <DialogContent className="gap-0" dir="rtl">
+          <DialogHeader className="space-y-0 text-right sm:text-right">
+            <DialogTitle className="flex w-full min-w-0 flex-wrap items-center gap-2.5 pe-10 text-right text-base font-semibold sm:pe-11">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-400">
+                <Plus className="size-5" strokeWidth={2.25} />
               </span>
               دورة توريد جديدة
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label>النوع</Label>
               <Select
@@ -516,27 +516,39 @@ export const SupplyCyclesList: React.FC = () => {
                 className={cn('text-right', FIELD_ON_PANEL)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>من تاريخ</Label>
-                <Input
-                  type="date"
-                  value={form.periodStart}
-                  onChange={(e) => setForm((f) => ({ ...f, periodStart: e.target.value }))}
-                  className={FIELD_ON_PANEL}
-                />
+                <div className="relative">
+                  <CalendarDays
+                    className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <Input
+                    type="date"
+                    value={form.periodStart}
+                    onChange={(e) => setForm((f) => ({ ...f, periodStart: e.target.value }))}
+                    className={cn(FIELD_ON_PANEL, 'ps-10')}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>إلى تاريخ</Label>
-                <Input
-                  type="date"
-                  value={form.periodEnd}
-                  onChange={(e) => setForm((f) => ({ ...f, periodEnd: e.target.value }))}
-                  className={FIELD_ON_PANEL}
-                />
+                <div className="relative">
+                  <CalendarDays
+                    className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <Input
+                    type="date"
+                    value={form.periodEnd}
+                    onChange={(e) => setForm((f) => ({ ...f, periodEnd: e.target.value }))}
+                    className={cn(FIELD_ON_PANEL, 'ps-10')}
+                  />
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-2">
               <div className="space-y-2">
                 <Label>أول مدة</Label>
                 <Input
@@ -571,7 +583,7 @@ export const SupplyCyclesList: React.FC = () => {
                 value={form.status}
                 onValueChange={(v) => setForm((f) => ({ ...f, status: v as SupplyCycleStatus }))}
               >
-                <SelectTrigger className={FIELD_ON_PANEL}>
+                <SelectTrigger className={cn('text-right', FIELD_ON_PANEL)}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -586,12 +598,30 @@ export const SupplyCyclesList: React.FC = () => {
               </p>
             )}
           </div>
-          <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse">
-            <Button type="button" variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
+          <DialogFooter className="mt-2 flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row-reverse sm:gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowModal(false)}
+              disabled={saving}
+              className="w-full sm:w-auto"
+            >
               إلغاء
             </Button>
-            <Button type="button" onClick={() => void handleCreate()} disabled={saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : 'حفظ وإنشاء'}
+            <Button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={saving}
+              className="min-w-[88px] w-full gap-2 sm:w-auto"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="size-4 shrink-0 animate-spin" />
+                  جاري الحفظ
+                </>
+              ) : (
+                'حفظ'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

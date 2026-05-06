@@ -124,6 +124,102 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
           />
         </div>
 
+        <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="material-icons-round text-primary text-lg">qr_code_2</span>
+            <p className="text-sm font-bold text-[var(--color-text)]">بادئات الأكواد التلقائية</p>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            تُستخدم عند إنشاء منتج أو مادة خام أو تصنيف بدون إدخال كود يدوي. الصيغة PREFIX-NNNN (البادئة حروف/أرقام إنجليزية، الخانات عدد الأرقام في التسلسل).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-[var(--color-text-muted)]">منتجات — بادئة</p>
+              <input
+                type="text"
+                maxLength={8}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none font-mono uppercase"
+                value={localPlanSettings.productCodePrefix ?? 'PRD'}
+                onChange={(e) => {
+                  const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+                  setLocalPlanSettings((p) => ({ ...p, productCodePrefix: v || 'PRD' }));
+                }}
+                placeholder="PRD"
+              />
+              <p className="text-xs font-bold text-[var(--color-text-muted)]">عدد الخانات</p>
+              <input
+                type="number"
+                min={2}
+                max={12}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none"
+                value={localPlanSettings.productCodePadding ?? 5}
+                onChange={(e) =>
+                  setLocalPlanSettings((p) => ({
+                    ...p,
+                    productCodePadding: Math.min(12, Math.max(2, Math.floor(Number(e.target.value) || 5))),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-[var(--color-text-muted)]">مواد خام — بادئة</p>
+              <input
+                type="text"
+                maxLength={8}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none font-mono uppercase"
+                value={localPlanSettings.rawMaterialCodePrefix ?? 'RM'}
+                onChange={(e) => {
+                  const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+                  setLocalPlanSettings((p) => ({ ...p, rawMaterialCodePrefix: v || 'RM' }));
+                }}
+                placeholder="RM"
+              />
+              <p className="text-xs font-bold text-[var(--color-text-muted)]">عدد الخانات</p>
+              <input
+                type="number"
+                min={2}
+                max={12}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none"
+                value={localPlanSettings.rawMaterialCodePadding ?? 4}
+                onChange={(e) =>
+                  setLocalPlanSettings((p) => ({
+                    ...p,
+                    rawMaterialCodePadding: Math.min(12, Math.max(2, Math.floor(Number(e.target.value) || 4))),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-[var(--color-text-muted)]">تصنيفات — بادئة</p>
+              <input
+                type="text"
+                maxLength={8}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none font-mono uppercase"
+                value={localPlanSettings.categoryCodePrefix ?? 'CAT'}
+                onChange={(e) => {
+                  const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+                  setLocalPlanSettings((p) => ({ ...p, categoryCodePrefix: v || 'CAT' }));
+                }}
+                placeholder="CAT"
+              />
+              <p className="text-xs font-bold text-[var(--color-text-muted)]">عدد الخانات</p>
+              <input
+                type="number"
+                min={2}
+                max={12}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none"
+                value={localPlanSettings.categoryCodePadding ?? 4}
+                onChange={(e) =>
+                  setLocalPlanSettings((p) => ({
+                    ...p,
+                    categoryCodePadding: Math.min(12, Math.max(2, Math.floor(Number(e.target.value) || 4))),
+                  }))
+                }
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">warehouse</span>

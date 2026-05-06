@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Plus, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Loader2, Lock, Plus, Unlock, X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -12,6 +12,16 @@ import {
   chineseUnitCostEgpFromYuanUnitPrice,
 } from '../../../utils/chineseUnitCostCny';
 import { formatCost } from '../../../utils/costCalculations';
+import { productService } from '../../../modules/production/services/productService';
+import { useAutoEntityCode } from '../../../modules/shared/hooks/useAutoEntityCode';
+import { DUPLICATE_ENTITY_CODE } from '../../../modules/shared/services/entityCodeSequenceService';
+
+function isDuplicateEntityCodeError(e: unknown): boolean {
+  return (
+    e instanceof Error &&
+    (e.message === DUPLICATE_ENTITY_CODE || (e as Error & { code?: string }).code === DUPLICATE_ENTITY_CODE)
+  );
+}
 
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
   name: '',
@@ -39,6 +49,21 @@ export const GlobalCreateProductModal: React.FC = () => {
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const peekProduct = useCallback(() => productService.peekNextCode(), []);
+
+  const {
+    code: productCode,
+    setCode: setProductCode,
+    locked: codeLocked,
+    toggleLock: toggleCodeLock,
+    isLoading: codePreviewLoading,
+  } = useAutoEntityCode({
+    enabled: isOpen,
+    isEditMode: false,
+    initialCode: '',
+    peek: peekProduct,
+  });
 
   const fallbackCategoryOptions = useMemo(() => {
     const unique = new Set<string>();
@@ -95,11 +120,16 @@ export const GlobalCreateProductModal: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.name || !form.code || !form.model) return;
+    if (!form.name || !form.model) return;
+    const codeToSend = codeLocked ? '' : productCode.trim().toUpperCase();
+    if (!codeLocked && !codeToSend) {
+      setMessage({ type: 'error', text: t('modalManager.createProduct.manualCodeRequired') });
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {
-      const createData: Omit<FirestoreProduct, 'id'> = { ...form };
+      const createData: Omit<FirestoreProduct, 'id'> = { ...form, code: codeToSend };
       if (canViewCosts) {
         if (cnyToEgpRate > 0) {
           const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
@@ -121,8 +151,12 @@ export const GlobalCreateProductModal: React.FC = () => {
       setMessage({ type: 'success', text: t('modalManager.createProduct.createSuccess') });
       setForm(emptyForm);
       setChineseUnitPriceYuan('');
-    } catch {
-      setMessage({ type: 'error', text: t('modalManager.createProduct.saveError') });
+    } catch (e) {
+      if (isDuplicateEntityCodeError(e)) {
+        setMessage({ type: 'error', text: t('entityCode.duplicateError') });
+      } else {
+        setMessage({ type: 'error', text: t('modalManager.createProduct.saveError') });
+      }
     } finally {
       setSaving(false);
     }
@@ -166,13 +200,32 @@ export const GlobalCreateProductModal: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.codeRequired')}</label>
-              <input
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
-                value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value })}
-                placeholder="PRD-00001"
-              />
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.codeLabel')}</label>
+              <div className="flex gap-2 items-start">
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    readOnly={codeLocked}
+                    className={`w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium font-mono ${codeLocked ? 'opacity-90' : ''}`}
+                    value={productCode}
+                    onChange={(e) => setProductCode(e.target.value.toUpperCase())}
+                    placeholder="PRD-00001"
+                  />
+                  {codePreviewLoading && (
+                    <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-[var(--color-text-muted)]" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]"
+                  onClick={toggleCodeLock}
+                  title={codeLocked ? t('entityCode.unlockTitle') : t('entityCode.lockTitle')}
+                >
+                  {codeLocked ? <Lock size={18} /> : <Unlock size={18} />}
+                </button>
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)]">
+                {codeLocked ? t('entityCode.lockHint') : t('entityCode.unlockedHint')}
+              </p>
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.categoryModelRequired')}</label>
@@ -299,7 +352,16 @@ export const GlobalCreateProductModal: React.FC = () => {
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
-          <Button variant="primary" onClick={handleSave} disabled={saving || !form.name || !form.code || !form.model}>
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            disabled={
+              saving ||
+              !form.name ||
+              !form.model ||
+              (!codeLocked && !productCode.trim())
+            }
+          >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             {t('modalManager.createProduct.addProduct')}
           </Button>

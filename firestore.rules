@@ -293,7 +293,8 @@ service cloud.firestore {
         'quality_inspections', 'quality_defects', 'quality_rework_orders', 'quality_capa', 'quality_print_logs',
         'production_report_uniques', 'product_categories', 'automation_runs', 'backups',
         'production_routing_plans', 'production_routing_steps',
-        'supply_cycles', 'supply_cycle_waste_lines'
+        'supply_cycles', 'supply_cycle_waste_lines',
+        'entity_code_counters', 'inventory_counters'
       ];
     }
 

@@ -12,6 +12,13 @@
     "cancel": "Cancel",
     "close": "Close"
   },
+  "entityCode": {
+    "duplicateError": "This code is already in use. Choose a different code.",
+    "lockHint": "The code will be generated automatically when you save. Unlock to enter a code manually.",
+    "unlockedHint": "Enter a unique code manually.",
+    "lockTitle": "Automatic code (locked)",
+    "unlockTitle": "Edit code manually"
+  },
   "shared": {
     "back": "Back",
     "clearSelection": "Clear selection",
@@ -828,6 +835,8 @@
       "saveRules": "Save shift rules"
     },
     "createRawMaterial": {
+      "requiredNameError": "Raw material name is required.",
+      "manualCodeRequired": "Enter a code or lock the field again for automatic generation.",
       "requiredFieldsError": "Raw material name and code are required.",
       "updateError": "Unable to update raw material. Please try again.",
       "createError": "Unable to add raw material. Please try again.",
@@ -841,12 +850,19 @@
       "saveChanges": "Save changes",
       "addRawMaterial": "Add raw material"
     },
+    "categories": {
+      "codePlaceholder": "Code",
+      "codeRequired": "Code is required.",
+      "manualCodeRequired": "Enter a category code or lock the field again for automatic generation."
+    },
     "createProduct": {
+      "manualCodeRequired": "Enter a product code or lock the field again for automatic generation.",
       "createSuccess": "Product added successfully",
       "saveError": "Unable to save product. Please try again.",
       "title": "Add New Product",
       "productNameRequired": "Product name *",
       "productNamePlaceholder": "Example: Hydraulic Motor H-400",
+      "codeLabel": "Product code",
       "codeRequired": "Code *",
       "categoryModelRequired": "Category / model *",
       "categoryModelPlaceholder": "Select or type a category",

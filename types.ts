@@ -891,6 +891,14 @@ export interface PlanSettings {
   injectionRawMaterialCategoryKeywords: string;
   /** بادئة كود دورة التوريد (مثال SC) — الصيغة PREFIX-YYYY-NNNN */
   supplyCycleBatchCodePrefix?: string;
+
+  /** بادئة وأطوال الأكواد التلقائية للمنتجات / المواد الخام / التصنيفات */
+  productCodePrefix?: string;
+  productCodePadding?: number;
+  rawMaterialCodePrefix?: string;
+  rawMaterialCodePadding?: number;
+  categoryCodePrefix?: string;
+  categoryCodePadding?: number;
 }
 
 // â”€â”€â”€ General Settings (Branding, Theme, Dashboard Display, Alert Toggles) â”€â”€â”€â”€
