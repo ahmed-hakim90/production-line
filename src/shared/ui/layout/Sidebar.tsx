@@ -82,13 +82,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const userEmail          = useAppStore((s) => s.userEmail);
   const logout             = useAppStore((s) => s.logout);
   const sidebarIconStyle   = useAppStore((s) => (s.systemSettings?.theme?.sidebarIconStyle ?? 'colorful') as SidebarIconStyle);
-  const sidebarCompanyTitle = useAppStore((s) => {
-    const t = s.tenantCompanyName?.trim();
-    if (t) return t;
-    const f = s.systemSettings?.branding?.factoryName?.trim();
-    if (f) return f;
-    return t('sidebar.defaultCompanyName');
+  const sidebarCompanyTitleRaw = useAppStore((s) => {
+    const tenantName = s.tenantCompanyName?.trim();
+    if (tenantName) return tenantName;
+    const factory = s.systemSettings?.branding?.factoryName?.trim();
+    return factory || '';
   });
+  const sidebarCompanyTitle = sidebarCompanyTitleRaw || t('sidebar.defaultCompanyName');
   const location        = useLocation();
 
   const [openGroup,   setOpenGroup]   = useState<string | null>(null);
@@ -98,6 +98,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const { collapsed, toggleCollapse } = useSidebar();
   const badgeCounts   = useSidebarBadges();
   const { isActiveItem, isActiveGroup, activeGroupKey } = useSidebarActiveRoute();
+
+  /**
+   * وضع الاختصار (أيقونات فقط) مخصص لسطح المكتب (lg+). على الموبايل، درج القائمة المفتوح
+   * يجب أن يعرض الأسماء دائمًا — وإلا يبقى collapsed=true من localStorage فيُخفى النص.
+   */
+  const navCollapsed = collapsed && !open;
 
   const visibleGroups = useMemo(
     () =>
@@ -117,8 +123,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   useEffect(() => { onClose(); setProfileOpen(false); }, [location.pathname]);
 
   useEffect(() => {
-    if (activeGroupKey && !collapsed) setOpenGroup(activeGroupKey);
-  }, [activeGroupKey, collapsed]);
+    if (activeGroupKey && !navCollapsed) setOpenGroup(activeGroupKey);
+  }, [activeGroupKey, navCollapsed]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -166,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className={[
           'shrink-0 flex items-center border-b border-[var(--color-sidebar-border)]',
-          collapsed ? 'justify-center h-[52px] px-0 lg:px-0' : 'h-[52px] px-3 gap-2.5',
+          navCollapsed ? 'justify-center h-[52px] px-0 lg:px-0' : 'h-[52px] px-3 gap-2.5',
         ].join(' ')}>
 
           {/* Logo icon */}
@@ -209,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         </div>
 
         {/* ── Read-only notice ─────────────────────────────────────── */}
-        {isReadOnly && !collapsed && (
+        {isReadOnly && !navCollapsed && (
           <div className="mx-2 mt-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-sm)] flex items-center gap-1.5 shrink-0">
             <Eye size={14} className="text-amber-500" />
             <span className="text-[11px] font-semibold text-amber-700">{t('sidebar.readOnlyMode')}</span>
@@ -217,7 +223,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         )}
 
         {/* ── Navigation ───────────────────────────────────────────── */}
-        <nav className={['flex-1 overflow-y-auto overflow-x-hidden py-2', collapsed ? 'px-1.5' : 'px-2'].join(' ')}>
+        <nav className={['flex-1 overflow-y-auto overflow-x-hidden py-2', navCollapsed ? 'px-1.5' : 'px-2'].join(' ')}>
           {visibleGroups.map((group, gIdx) => {
             const active = isActiveGroup(group.key);
             const isOpen = alwaysExpandAccordions || openGroup === group.key;
@@ -226,7 +232,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
             /* ── Flat group: direct links (no accordion header) ── */
             if (group.flat) {
-              if (collapsed) {
+              if (navCollapsed) {
                 return (
                   <React.Fragment key={group.key}>
                     {group.children.map((item) => {
@@ -297,7 +303,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             }
 
             /* ── Collapsed: icon-only pill ── */
-            if (collapsed) {
+            if (navCollapsed) {
               return (
                 <div key={group.key} className="relative mb-0.5 group/nav">
                   <button
@@ -412,7 +418,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           ref={profileRef}
           className="shrink-0 border-t border-[var(--color-sidebar-border)]"
         >
-          {collapsed ? (
+          {navCollapsed ? (
             <div className="p-1.5 flex justify-center">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}

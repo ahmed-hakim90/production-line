@@ -74,6 +74,7 @@ import { useManagedPrint } from '../../../utils/printManager';
 import { shareToWhatsApp, waitForExportPaint } from '../../../utils/reportExport';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { deleteField } from 'firebase/firestore';
+import { countsTowardProductManufacturingVolume } from '../utils/reportTypes';
 
 type ProductTableColumnKey =
   | 'openingStock'
@@ -179,7 +180,7 @@ function buildProductExportColumnOrder(
   }
   if (prefs.openingStock) labels.push('رصيد مفكك');
   if (prefs.totalProduction) labels.push('ما تم إنتاجه');
-  if (prefs.monthlyProductionQty) labels.push('كمية الإنتاج (الشهر الحالي)');
+  if (prefs.monthlyProductionQty) labels.push('كمية الإنتاج (شهر التصدير)');
   if (prefs.wasteUnits) labels.push('الهالك');
   if (prefs.stockLevel) labels.push('منتج تام');
   if (viewCosts) {
@@ -319,6 +320,8 @@ export const Products: React.FC = () => {
   const [exportWarehouseId, setExportWarehouseId] = useState('');
   const [exportMonth, setExportMonth] = useState(getCurrentMonth());
   const [exportMonthReports, setExportMonthReports] = useState<ProductionReport[]>([]);
+  /** منتجات لها سجل تكلفة شهرية محفوظ بكمية > 0 (نفس مصدر صفحة التكلفة الشهرية) */
+  const [exportMonthSavedActiveProductIds, setExportMonthSavedActiveProductIds] = useState<string[]>([]);
   const [exportMonthLoading, setExportMonthLoading] = useState(false);
   const [exportingProducts, setExportingProducts] = useState(false);
 
@@ -389,6 +392,7 @@ export const Products: React.FC = () => {
         if (cancelled) return;
         const next: Record<string, number> = {};
         for (const r of reports) {
+          if (!countsTowardProductManufacturingVolume(r)) continue;
           const pid = String(r.productId || '').trim();
           if (!pid) continue;
           next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
@@ -431,6 +435,7 @@ export const Products: React.FC = () => {
   const monthlyQtyByProductId = useMemo(() => {
     const next: Record<string, number> = {};
     for (const r of monthlyReports) {
+      if (!countsTowardProductManufacturingVolume(r)) continue;
       const pid = String(r.productId || '').trim();
       if (!pid) continue;
       next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
@@ -441,6 +446,7 @@ export const Products: React.FC = () => {
   const exportMonthQtyByProductId = useMemo(() => {
     const next: Record<string, number> = {};
     for (const r of exportMonthReports) {
+      if (!countsTowardProductManufacturingVolume(r)) continue;
       const pid = String(r.productId || '').trim();
       if (!pid) continue;
       next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
@@ -451,7 +457,7 @@ export const Products: React.FC = () => {
   useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [search, categoryFilter, stockFilter]);
 
   useEffect(() => {
-    if (!showWarehouseExportModal || exportScope !== 'current_month') return;
+    if (!showWarehouseExportModal) return;
     const monthKey = /^\d{4}-\d{2}$/.test(exportMonth) ? exportMonth : getCurrentMonth();
     const [yearText, monthText] = monthKey.split('-');
     const year = Number(yearText);
@@ -460,7 +466,30 @@ export const Products: React.FC = () => {
     const monthEnd = `${monthKey}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
     let cancelled = false;
     setExportMonthLoading(true);
-    void ensureProductionReportsForRange(monthStart, monthEnd, { maxAgeMs: 5 * 60 * 1000 })
+    setExportMonthSavedActiveProductIds([]);
+
+    const savedRowsPromise =
+      exportScope === 'current_month'
+        ? monthlyProductionCostService.getByMonth(monthKey).then((rows) => {
+            if (cancelled) return;
+            const ids = Array.from(
+              new Set(
+                rows
+                  .filter((r) => Number(r.totalProducedQty || 0) > 0)
+                  .map((r) => String(r.productId || '').trim())
+                  .filter(Boolean),
+              ),
+            );
+            setExportMonthSavedActiveProductIds(ids);
+          }).catch(() => {
+            if (!cancelled) setExportMonthSavedActiveProductIds([]);
+          })
+        : Promise.resolve();
+
+    const reportsPromise = ensureProductionReportsForRange(monthStart, monthEnd, {
+      maxAgeMs: 5 * 60 * 1000,
+      force: true,
+    })
       .then((rows) => {
         if (cancelled) return;
         setExportMonthReports(rows);
@@ -468,11 +497,12 @@ export const Products: React.FC = () => {
       .catch(() => {
         if (cancelled) return;
         setExportMonthReports([]);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setExportMonthLoading(false);
       });
+
+    void Promise.all([savedRowsPromise, reportsPromise]).finally(() => {
+      if (cancelled) return;
+      setExportMonthLoading(false);
+    });
     return () => { cancelled = true; };
   }, [showWarehouseExportModal, exportScope, exportMonth, ensureProductionReportsForRange]);
 
@@ -701,10 +731,17 @@ export const Products: React.FC = () => {
     return () => { cancelled = true; };
   }, [canViewCosts]);
 
-  const monthExportProductCount = useMemo(
-    () => productsForTable.filter((p) => (exportMonthQtyByProductId[p.id] ?? 0) > 0).length,
-    [productsForTable, exportMonthQtyByProductId],
-  );
+  const monthExportProductCount = useMemo(() => {
+    const idSet = new Set<string>();
+    for (const p of productsForTable) {
+      if ((exportMonthQtyByProductId[p.id] ?? 0) > 0) idSet.add(p.id);
+    }
+    const productIdSet = new Set(productsForTable.map((p) => p.id));
+    for (const id of exportMonthSavedActiveProductIds) {
+      if (productIdSet.has(id)) idSet.add(id);
+    }
+    return idSet.size;
+  }, [productsForTable, exportMonthQtyByProductId, exportMonthSavedActiveProductIds]);
 
   const openCreate = () => {
     openModal(MODAL_KEYS.PRODUCTS_CREATE, { source: 'products.page' });
@@ -939,6 +976,78 @@ export const Products: React.FC = () => {
   const doExportProducts = async (warehouseId?: string) => {
     setExportingProducts(true);
     try {
+    let monthExportSavedMap: Record<string, ProductCostData> = {};
+    /** كميات مسجّلة في monthly_production_costs (نفس الجدول في صفحة التكلفة الشهرية) */
+    const monthlyRecordQtyByProductId: Record<string, number> = {};
+    const exportMonthProductIdSet = new Set<string>();
+
+    if (exportScope === 'current_month') {
+      const monthKeyNorm = /^\d{4}-\d{2}$/.test(exportMonth) ? exportMonth : getCurrentMonth();
+      try {
+        const rows = await monthlyProductionCostService.getByMonth(monthKeyNorm);
+        for (const row of rows) {
+          const pid = String(row.productId || '').trim();
+          if (!pid) continue;
+          const qty = Number(row.totalProducedQty || 0);
+          monthlyRecordQtyByProductId[pid] = qty;
+          if (qty > 0) exportMonthProductIdSet.add(pid);
+          if (canViewCosts) {
+            const labor = Number(row.directCost || 0);
+            const indirect = Number(row.indirectCost || 0);
+            const total = Number(row.totalProductionCost || (labor + indirect));
+            monthExportSavedMap[pid] = {
+              laborCost: labor,
+              indirectCost: indirect,
+              totalCost: total,
+              quantityProduced: qty,
+              costPerUnit: qty > 0 ? total / qty : Number(row.averageUnitCost || 0),
+            };
+          }
+        }
+      } catch {
+        monthExportSavedMap = {};
+      }
+      for (const [pid, qty] of Object.entries(exportMonthQtyByProductId)) {
+        if (Number(qty) > 0) exportMonthProductIdSet.add(pid);
+      }
+    }
+
+    const monthExportDisplayQty = (productId: string): number => {
+      if (exportScope === 'current_month') {
+        if (Object.prototype.hasOwnProperty.call(monthlyRecordQtyByProductId, productId)) {
+          return monthlyRecordQtyByProductId[productId] ?? 0;
+        }
+        return exportMonthQtyByProductId[productId] ?? 0;
+      }
+      /** تصدير كل المنتجات: عمود الكمية من تقارير الشهر المختار في النافذة */
+      return exportMonthQtyByProductId[productId] ?? 0;
+    };
+
+    const hourlyRateExport = Number(laborSettings?.hourlyRate ?? 0);
+    const resolveExportCostData = (productId: string): ProductCostData => {
+      if (exportScope !== 'current_month') {
+        return (
+          productCosts[productId] ?? {
+            laborCost: 0,
+            indirectCost: 0,
+            totalCost: 0,
+            quantityProduced: 0,
+            costPerUnit: 0,
+          }
+        );
+      }
+      const saved = monthExportSavedMap[productId];
+      if (saved) return saved;
+      return buildProductAvgCost(
+        productId,
+        exportMonthReports,
+        hourlyRateExport,
+        costCenters,
+        costCenterValues,
+        costAllocations,
+      );
+    };
+
     const prefs = exportColumnPrefs;
     const extras = exportCostExtras;
     const stock =
@@ -982,10 +1091,13 @@ export const Products: React.FC = () => {
     const selectedWarehouse = warehouseId
       ? warehouses.find((w) => w.id === warehouseId)
       : undefined;
-    const monthlyQtyMap = exportScope === 'current_month' ? exportMonthQtyByProductId : monthlyQtyByProductId;
     const sourceProducts =
       exportScope === 'current_month'
-        ? productsForTable.filter((p) => (monthlyQtyMap[p.id] ?? 0) > 0)
+        ? productsForTable.filter((p) =>
+            exportMonthProductIdSet.size > 0
+              ? exportMonthProductIdSet.has(p.id)
+              : (exportMonthQtyByProductId[p.id] ?? 0) > 0,
+          )
         : productsForTable;
 
     const data = sourceProducts.map((p) => {
@@ -1005,12 +1117,13 @@ export const Products: React.FC = () => {
         waste: productWarehouseBalances.getValue(planSettings?.wasteReceiveWarehouseId, pid),
         finished: productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, pid),
       };
+      const costData = resolveExportCostData(pid);
       const monthlyCostRow = canViewCosts
         ? {
-            laborCost: productCosts[pid]?.laborCost ?? 0,
-            indirectCost: productCosts[pid]?.indirectCost ?? 0,
-            totalCost: productCosts[pid]?.totalCost ?? 0,
-            costPerUnit: productCosts[pid]?.costPerUnit ?? 0,
+            laborCost: costData.laborCost,
+            indirectCost: costData.indirectCost,
+            totalCost: costData.totalCost,
+            costPerUnit: costData.costPerUnit,
           }
         : null;
       const raw = _rawProducts.find((r) => r.id === p.id);
@@ -1023,13 +1136,13 @@ export const Products: React.FC = () => {
           warehouseName: selectedWarehouse?.name,
           warehouseStock,
           displayBalances,
-          monthlyProductionQty: monthlyQtyMap[p.id] ?? 0,
+          monthlyProductionQty: monthExportDisplayQty(p.id),
           monthlyCost: monthlyCostRow,
         };
       }
 
       const materials = raw.id ? (materialsByProduct.get(raw.id) ?? []) : [];
-      const breakdown = calculateProductCostBreakdown(raw, materials, productCosts[p.id]?.costPerUnit ?? 0);
+      const breakdown = calculateProductCostBreakdown(raw, materials, costData.costPerUnit ?? 0);
       const rawMaterialsDetails = materials.length > 0
         ? materials
           .map((m) => `${m.materialName} (${m.quantityUsed} أ— ${formatCost(m.unitCost)} = ${formatCost((m.quantityUsed || 0) * (m.unitCost || 0))})`)
@@ -1044,7 +1157,7 @@ export const Products: React.FC = () => {
         warehouseName: selectedWarehouse?.name,
         warehouseStock,
         displayBalances,
-        monthlyProductionQty: monthlyQtyMap[p.id] ?? 0,
+        monthlyProductionQty: monthExportDisplayQty(p.id),
         monthlyCost: monthlyCostRow,
       };
     });
@@ -1058,11 +1171,14 @@ export const Products: React.FC = () => {
     );
 
     const date = new Date().toISOString().slice(0, 10);
-    const monthKey = exportScope === 'current_month' ? exportMonth : getCurrentMonth();
+    const monthKeyNorm = /^\d{4}-\d{2}$/.test(exportMonth) ? exportMonth : getCurrentMonth();
     const fileMeta =
       exportScope === 'current_month'
-        ? { sheetName: `منتجات ${monthKey}`, fileBaseName: `المنتجات-شهر-${monthKey}` }
-        : { sheetName: 'المنتجات', fileBaseName: `المنتجات-${date}` };
+        ? { sheetName: `منتجات ${monthKeyNorm}`, fileBaseName: `المنتجات-شهر-${monthKeyNorm}` }
+        : {
+            sheetName: `المنتجات ${monthKeyNorm}`,
+            fileBaseName: `المنتجات-${date}-انتاج-${monthKeyNorm}`,
+          };
 
     exportAllProducts(
       data,
@@ -1137,17 +1253,19 @@ export const Products: React.FC = () => {
             hidden: !canExportFromPage || products.length === 0,
             onClick: () => {
               setExportScope('all');
+              setExportMonth(getCurrentMonth());
               setExportColumnPrefs({ ...visibleColumns });
               setShowWarehouseExportModal(true);
             },
           },
           {
-            label: 'تصدير منتجات الشهر (Excel)',
+            label: 'شيت منتجات اشتغلت هذا الشهر (Excel)',
             icon: 'table_chart',
             group: 'تصدير',
             hidden: !canExportFromPage || products.length === 0,
             onClick: () => {
               setExportScope('current_month');
+              setExportMonth(getCurrentMonth());
               setExportColumnPrefs({ ...visibleColumns });
               setShowWarehouseExportModal(true);
             },
@@ -2133,7 +2251,9 @@ export const Products: React.FC = () => {
               <div className="flex items-center gap-2">
                 <ProductIcon name="warehouse" className="text-primary" />
                 <h3 className="text-lg font-bold">
-                  {exportScope === 'current_month' ? 'تصدير منتجات الشهر الحالي' : 'تصدير المنتجات'}
+                  {exportScope === 'current_month'
+                    ? 'تصدير منتجات بإنتاج تصنيع في الشهر'
+                    : 'تصدير المنتجات'}
                 </h3>
               </div>
               <button type="button" onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
@@ -2141,33 +2261,42 @@ export const Products: React.FC = () => {
               </button>
             </div>
             <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
-              {exportScope === 'current_month' && exportMonthReports.length === 0 && !exportMonthLoading && (
-                <p className="text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-[var(--border-radius-lg)] px-3 py-2">
-                  لا توجد تقارير إنتاج في الشهر المحدد حالياً.
-                </p>
-              )}
-              {exportScope === 'current_month' && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر الشهر</label>
-                  <input
-                    type="month"
-                    value={exportMonth}
-                    onChange={(e) => setExportMonth(e.target.value)}
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 font-medium bg-transparent"
-                  />
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">شهر التصدير</label>
+                <input
+                  type="month"
+                  value={exportMonth}
+                  onChange={(e) => setExportMonth(e.target.value)}
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 font-medium bg-transparent"
+                />
+                {exportScope === 'all' ? (
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    يتم تصدير المنتجات التي لها كمية إنتاج أكبر من صفر في تقارير الشهر المختار.
+                    يُصدَّر <strong>كل المنتجات</strong>؛ عمود <strong>كمية الإنتاج (شهر التصدير)</strong> يعرض مجموع تقارير التصنيع للشهر المختار (بدون تعبئة/هدر مكوّنات فقط). أعمدة التكلفة ما زالت من منطق الشهر الحالي في الصفحة كالسابق.
                   </p>
-                </div>
+                ) : (
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    يُجمَع المنتج من: (١) سجلات <strong>التكلفة الإنتاجية الشهرية</strong> المحفوظة لذلك الشهر بكمية إنتاج أكبر من صفر — كما في صفحة التكلفة الشهرية، و(٢) أي منتج له تقارير تصنيع حيّة بنفس المنطق. عمود الكمية يعرض السجل الشهري إن وُجد، وإلا التقارير.
+                  </p>
+                )}
+              </div>
+              {exportScope === 'current_month'
+                && exportMonthReports.length === 0
+                && exportMonthSavedActiveProductIds.length === 0
+                && !exportMonthLoading && (
+                <p className="text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-[var(--border-radius-lg)] px-3 py-2">
+                  لا توجد تقارير إنتاج في الشهر المحدد ولا سجلات تكلفة شهرية بكمية إنتاج — قد لا يظهر أي منتج في التصدير حتى يُحسب الشهر من صفحة التكلفة الشهرية.
+                </p>
               )}
               {exportScope === 'current_month' && monthExportProductCount === 0 && !exportMonthLoading && (
                 <p className="text-xs font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-[var(--border-radius-lg)] px-3 py-2">
                   لا يوجد منتج بكمية إنتاج مسجّلة في الشهر المحدد.
                 </p>
               )}
-              {exportScope === 'current_month' && exportMonthLoading && (
+              {exportMonthLoading && (
                 <p className="text-xs font-bold text-sky-700 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-[var(--border-radius-lg)] px-3 py-2">
-                  جاري تحميل تقارير الشهر المحدد...
+                  {exportScope === 'current_month'
+                    ? 'جاري تحميل تقارير الشهر وسجلات التكلفة الشهرية...'
+                    : 'جاري تحميل تقارير الشهر المختار...'}
                 </p>
               )}
               <div className="space-y-2">
@@ -2190,11 +2319,11 @@ export const Products: React.FC = () => {
 
               <div className="space-y-2">
                 <p className="text-sm font-bold text-[var(--color-text-muted)]">أعمدة التصدير</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[200px] overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[min(50vh,320px)] overflow-y-auto pr-1">
                   {[
                     { key: 'openingStock' as const, label: 'رصيد مفكك' },
                     { key: 'totalProduction' as const, label: 'ما تم إنتاجه' },
-                    { key: 'monthlyProductionQty' as const, label: 'كمية الإنتاج (الشهر)' },
+                    { key: 'monthlyProductionQty' as const, label: 'كمية الإنتاج (شهر التصدير)' },
                     { key: 'wasteUnits' as const, label: 'الهالك' },
                     { key: 'stockLevel' as const, label: 'منتج تام' },
                     ...(canViewSellingPrice ? [{ key: 'sellingPrice' as const, label: 'سعر البيع' }] : []),

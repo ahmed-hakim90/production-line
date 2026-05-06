@@ -419,7 +419,7 @@ export const exportAllProducts = (
     if (options.stock) {
       base['رصيد مفكك'] = Number(bal.decomposed);
       base['ما تم إنتاجه'] = Number(d.product.totalProduction);
-      base['كمية الإنتاج (الشهر الحالي)'] = Number(d.monthlyProductionQty);
+      base['كمية الإنتاج (شهر التصدير)'] = Number(d.monthlyProductionQty);
       base['الهالك'] = Number(bal.waste);
       base['منتج تام'] = Number(bal.finished);
     }
