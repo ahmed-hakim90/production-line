@@ -15,4 +15,4 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx firebase-tools emulators:exec --only firestore "npm run test:rules"
+      - run: npm run test:rules

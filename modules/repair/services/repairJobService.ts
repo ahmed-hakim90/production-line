@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -11,12 +10,24 @@ import {
   runTransaction,
   updateDoc,
   where,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
-import { REPAIR_JOBS_COLLECTION } from '../collections';
+import { REPAIR_JOBS_COLLECTION, REPAIR_SERVICE_EVENTS_SUBCOLLECTION } from '../collections';
+import { appendRepairServiceEvent, appendRepairServiceEventTx } from './repairServiceEventService';
+import { REPAIR_DOMAIN_EVENT_VERSION, resolveDomainEventForStatusChange } from '../utils/repairDomainEvents';
+import {
+  isCancelledStatus,
+  isDeliveredStatus,
+  isUnrepairableStatus,
+  mapLegacyRepairStatus,
+  statusSetsAssignedAt,
+  isTerminalFromSettings,
+} from '../utils/repairWorkflowNormalize';
+import { generateApprovalToken, sha256Hex } from '../utils/repairApprovalToken';
 import type { RepairJob, RepairJobProduct, RepairJobStatus, RepairPartUsage, RepairStatusHistoryItem } from '../types';
 import { repairReceiptService } from './repairReceiptService';
 import { sparePartsService } from './sparePartsService';
@@ -54,8 +65,10 @@ const normalizeJob = (job: RepairJob): RepairJob => {
         inWarranty: (job.warranty || 'none') !== 'none',
       }];
   const lead = normalizedProducts[0];
+  const mappedStatus = mapLegacyRepairStatus(job.status);
   return {
     ...job,
+    status: mappedStatus,
     jobProducts: normalizedProducts,
     productId: lead?.productId || job.productId,
     productName: lead?.productName || job.productName,
@@ -71,7 +84,7 @@ const normalizeJob = (job: RepairJob): RepairJob => {
 type NewRepairJobInput = Omit<
   RepairJob,
   'id' | 'tenantId' | 'receiptNo' | 'createdAt' | 'updatedAt' | 'statusHistory'
-> & { receiptNo?: string };
+> & { receiptNo?: string; serviceEventActor?: { uid: string; name: string } };
 
 export type RepairJobCreateResult = {
   id: string | null;
@@ -85,6 +98,46 @@ export type RemoveRepairJobWithRollbackInput = {
 };
 
 export const repairJobService = {
+  /** للواجهة بعد قراءة لقطة مباشرة — يطبّق توحيد الحالات القديمة */
+  normalizeRead(job: RepairJob): RepairJob {
+    return normalizeJob(job);
+  },
+
+  /** يولّد توكن موافقة عميل ويخزّن الهاش فقط — الرابط الكامل في الواجهة */
+  async requestCustomerApproval(input: { jobId: string; actorUid: string; actorName: string }): Promise<{ token: string } | null> {
+    if (!isConfigured) return null;
+    const job = await this.getById(input.jobId);
+    if (!job) throw new Error('طلب الصيانة غير موجود.');
+    const token = generateApprovalToken();
+    const hash = await sha256Hex(token);
+    const at = nowIso();
+    const exp = new Date(Date.now() + 7 * 86400000).toISOString();
+    const jobRef = doc(db, REPAIR_JOBS_COLLECTION, input.jobId);
+    const evRef = doc(collection(jobRef, REPAIR_SERVICE_EVENTS_SUBCOLLECTION));
+    const batch = writeBatch(db);
+    batch.update(jobRef, withDefined({
+      approvalStatus: 'pending',
+      approvalRequestedAt: at,
+      approvalTokenHash: hash,
+      approvalTokenExpiresAt: exp,
+      updatedAt: at,
+    }) as Record<string, unknown>);
+    batch.set(evRef, {
+      tenantId: job.tenantId,
+      branchId: job.branchId,
+      jobId: input.jobId,
+      at,
+      actorUid: input.actorUid,
+      actorName: input.actorName,
+      action: 'approval_requested',
+      domainEvent: 'customer.approval_requested',
+      eventSchemaVersion: REPAIR_DOMAIN_EVENT_VERSION,
+      note: 'طلب موافقة عميل على التقدير',
+    });
+    await batch.commit();
+    return { token };
+  },
+
   async listByBranch(branchId: string): Promise<RepairJob[]> {
     if (!isConfigured || !branchId) return [];
     const q = tenantQuery(
@@ -235,61 +288,83 @@ export const repairJobService = {
 
   async create(input: NewRepairJobInput): Promise<RepairJobCreateResult> {
     if (!isConfigured) return { id: null, usedFallbackReceipt: false };
+    const { serviceEventActor, ...inputRest } = input;
     const settings = resolveRepairSettings(await systemSettingsService.get());
-    const receiptResult = input.receiptNo
-      ? { receiptNo: input.receiptNo, usedFallback: false }
+    const receiptResult = inputRest.receiptNo
+      ? { receiptNo: inputRest.receiptNo, usedFallback: false }
       : await repairReceiptService.getNextReceipt();
     const at = nowIso();
     const tenantId = getCurrentTenantId();
+    const initialCanon = mapLegacyRepairStatus(inputRest.status || settings.workflow.initialStatusId);
     const history: RepairStatusHistoryItem[] = [withDefined({
-      status: input.status,
+      status: initialCanon,
       at,
-      technicianId: input.technicianId,
+      technicianId: inputRest.technicianId,
     }) as RepairStatusHistoryItem];
 
-    const incomingProducts = Array.isArray(input.jobProducts) ? input.jobProducts : [];
+    const incomingProducts = Array.isArray(inputRest.jobProducts) ? inputRest.jobProducts : [];
     const normalizedProducts: RepairJobProduct[] = incomingProducts.length > 0
       ? incomingProducts.map((item, idx) => ({
           ...item,
           itemId: String(item?.itemId || `item-${idx + 1}`),
-          accessories: String(item?.accessories || (idx === 0 ? input.accessories || '' : '')),
+          accessories: String(item?.accessories || (idx === 0 ? inputRest.accessories || '' : '')),
         }))
       : [{
           itemId: makeItemId(),
-          productId: input.productId,
-          productName: String(input.productName || input.deviceBrand || 'منتج'),
-          deviceType: input.deviceType,
-          deviceBrand: input.deviceBrand,
-          deviceModel: input.deviceModel,
-          accessories: String(input.accessories || ''),
-          diagnosis: input.problemDescription || '',
-          estimatedCost: Number(input.estimatedCost || 0),
-          finalCost: Number(input.finalCost || 0),
-          inWarranty: (input.warranty || 'none') !== 'none',
+          productId: inputRest.productId,
+          productName: String(inputRest.productName || inputRest.deviceBrand || 'منتج'),
+          deviceType: inputRest.deviceType,
+          deviceBrand: inputRest.deviceBrand,
+          deviceModel: inputRest.deviceModel,
+          accessories: String(inputRest.accessories || ''),
+          diagnosis: inputRest.problemDescription || '',
+          estimatedCost: Number(inputRest.estimatedCost || 0),
+          finalCost: Number(inputRest.finalCost || 0),
+          inWarranty: (inputRest.warranty || 'none') !== 'none',
         }];
     const lead = normalizedProducts[0];
-    const ref = await addDoc(collection(db, REPAIR_JOBS_COLLECTION), withDefined({
-      ...withDefined(input),
-      jobProducts: normalizedProducts,
-      productId: lead?.productId || input.productId,
-      productName: lead?.productName || input.productName,
-      deviceType: lead?.deviceType || input.deviceType,
-      deviceBrand: lead?.deviceBrand || input.deviceBrand,
-      deviceModel: lead?.deviceModel || input.deviceModel,
-      problemDescription: input.problemDescription || lead?.diagnosis || '',
-      estimatedCost: Number(input.estimatedCost || normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0)),
-      finalCost: Number(input.finalCostOverride ?? input.finalCost ?? normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0)),
+    const jobRef = doc(collection(db, REPAIR_JOBS_COLLECTION));
+    const batch = writeBatch(db);
+    batch.set(
+      jobRef,
+      withDefined({
+        ...withDefined(inputRest),
+        jobProducts: normalizedProducts,
+        productId: lead?.productId || inputRest.productId,
+        productName: lead?.productName || inputRest.productName,
+        deviceType: lead?.deviceType || inputRest.deviceType,
+        deviceBrand: lead?.deviceBrand || inputRest.deviceBrand,
+        deviceModel: lead?.deviceModel || inputRest.deviceModel,
+        problemDescription: inputRest.problemDescription || lead?.diagnosis || '',
+        estimatedCost: Number(inputRest.estimatedCost || normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0)),
+        finalCost: Number(inputRest.finalCostOverride ?? inputRest.finalCost ?? normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0)),
+        tenantId,
+        receiptNo: receiptResult.receiptNo,
+        createdAt: at,
+        updatedAt: at,
+        statusHistory: history,
+        status: initialCanon,
+        warranty: inputRest.warranty || settings.defaults.defaultWarranty,
+        slaHours: typeof inputRest.slaHours === 'number' ? inputRest.slaHours : settings.defaults.defaultSlaHours,
+        isClosed: false,
+      }),
+    );
+    const evRef = doc(collection(jobRef, REPAIR_SERVICE_EVENTS_SUBCOLLECTION));
+    batch.set(evRef, {
       tenantId,
-      receiptNo: receiptResult.receiptNo,
-      createdAt: at,
-      updatedAt: at,
-      statusHistory: history,
-      status: input.status || settings.workflow.initialStatusId,
-      warranty: input.warranty || settings.defaults.defaultWarranty,
-      slaHours: typeof input.slaHours === 'number' ? input.slaHours : settings.defaults.defaultSlaHours,
-      isClosed: false,
-    }));
-    return { id: ref.id, usedFallbackReceipt: receiptResult.usedFallback };
+      branchId: inputRest.branchId,
+      jobId: jobRef.id,
+      at,
+      actorUid: String(serviceEventActor?.uid || 'unknown'),
+      actorName: String(serviceEventActor?.name || 'نظام'),
+      action: 'job_created',
+      domainEvent: 'job.created',
+      eventSchemaVersion: REPAIR_DOMAIN_EVENT_VERSION,
+      statusAfter: initialCanon,
+      note: `إنشاء طلب صيانة — إيصال ${receiptResult.receiptNo}`,
+    });
+    await batch.commit();
+    return { id: jobRef.id, usedFallbackReceipt: receiptResult.usedFallback };
   },
 
   async update(id: string, patch: Partial<RepairJob>): Promise<void> {
@@ -319,10 +394,29 @@ export const repairJobService = {
     } as Record<string, unknown>));
   },
 
-  async assignTechnician(id: string, technicianId: string): Promise<void> {
+  async assignTechnician(
+    id: string,
+    technicianId: string,
+    actor?: { uid: string; name: string },
+  ): Promise<void> {
     if (!isConfigured) return;
+    const existing = await this.getById(id);
+    if (!existing) return;
     const at = nowIso();
-    await this.update(id, { technicianId, assignedAt: at });
+    const next = String(technicianId ?? '').trim();
+    const prev = String(existing.technicianId || '').trim();
+    await this.update(id, { technicianId: next, assignedAt: at });
+    if (!next || prev === next) return;
+    await appendRepairServiceEvent(id, {
+      tenantId: existing.tenantId,
+      branchId: existing.branchId,
+      at,
+      actorUid: String(actor?.uid || 'unknown'),
+      actorName: String(actor?.name || 'مستخدم'),
+      action: 'technician_assigned',
+      domainEvent: 'technician.assigned',
+      payload: { technicianId: next, previousTechnicianId: prev || null },
+    });
   },
 
   async changeStatus(input: {
@@ -332,55 +426,113 @@ export const repairJobService = {
     reason?: string;
     finalCost?: number;
     warranty?: RepairJob['warranty'];
+    actorUid?: string;
+    actorName?: string;
   }): Promise<void> {
     if (!isConfigured) return;
+    const settings = resolveRepairSettings(await systemSettingsService.get());
+    const existing = await this.getById(input.jobId);
+    const beforeCanon = mapLegacyRepairStatus(existing?.status || '');
     const ref = doc(db, REPAIR_JOBS_COLLECTION, input.jobId);
+    const nextCanon = mapLegacyRepairStatus(input.status);
+    const actorUid = String(input.actorUid || 'unknown');
+    const actorName = String(input.actorName || 'مستخدم');
+
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists()) throw new Error('طلب الصيانة غير موجود.');
-      const job = { id: snap.id, ...snap.data() } as RepairJob;
+      const job = normalizeJob({ id: snap.id, ...snap.data() } as RepairJob);
+      const beforeCanon = mapLegacyRepairStatus(job.status);
       const at = nowIso();
       const history = Array.isArray(job.statusHistory) ? [...job.statusHistory] : [];
       const lastHistory = history[history.length - 1];
       const sameStatusSameUtcDay = Boolean(
         lastHistory
-        && String(lastHistory.status || '') === String(input.status || '')
+        && mapLegacyRepairStatus(String(lastHistory.status || '')) === nextCanon
         && isoUtcDay(lastHistory.at) === isoUtcDay(at),
       );
       if (!sameStatusSameUtcDay) {
         history.push(withDefined({
-          status: input.status,
+          status: nextCanon,
           at,
           technicianId: input.technicianId,
           reason: input.reason,
         }) as RepairStatusHistoryItem);
       }
 
+      const setsAssigned = statusSetsAssignedAt(nextCanon, settings.workflow.assignmentTriggerStatusIds);
+      const terminal = isTerminalFromSettings(nextCanon, settings.statusMap);
+      const resolutionMins = job.assignedAt
+        ? Math.max(0, Math.round((Date.parse(at) - Date.parse(String(job.assignedAt || at))) / 60000))
+        : undefined;
+
+      const domainEvent = resolveDomainEventForStatusChange(beforeCanon, nextCanon);
+      appendRepairServiceEventTx(tx, input.jobId, {
+        tenantId: job.tenantId,
+        branchId: job.branchId,
+        at,
+        actorUid,
+        actorName,
+        action: 'status_change',
+        domainEvent,
+        statusBefore: beforeCanon,
+        statusAfter: nextCanon,
+        note: input.reason,
+      });
+
+      const shouldBreachSla = Boolean(
+        job.dueAt && Date.parse(at) > Date.parse(String(job.dueAt)) && !job.breachedAt,
+      );
+      if (shouldBreachSla) {
+        appendRepairServiceEventTx(tx, input.jobId, {
+          tenantId: job.tenantId,
+          branchId: job.branchId,
+          at,
+          actorUid,
+          actorName,
+          action: 'sla_breached',
+          domainEvent: 'sla.breached',
+          payload: { dueAt: job.dueAt },
+        });
+      }
+
       tx.update(ref, {
-        status: input.status,
+        status: nextCanon,
         statusHistory: history,
         updatedAt: at,
         technicianId: input.technicianId ?? job.technicianId ?? '',
-        ...(input.status === 'repair' && !job.assignedAt ? { assignedAt: at } : {}),
-        ...(input.status === 'delivered'
+        ...(setsAssigned && !job.assignedAt ? { assignedAt: at } : {}),
+        ...(isDeliveredStatus(nextCanon)
           ? {
               deliveredAt: at,
               isClosed: true,
               finalCost: Number(input.finalCost ?? job.finalCost ?? 0),
               warranty: input.warranty ?? job.warranty ?? 'none',
               resolvedAt: at,
-              resolutionMinutes: job.assignedAt
-                ? Math.max(0, Math.round((Date.parse(at) - Date.parse(String(job.assignedAt || at))) / 60000))
-                : undefined,
+              resolutionMinutes: resolutionMins,
             }
           : {}),
-        ...(input.status === 'unrepairable'
+        ...(isUnrepairableStatus(nextCanon)
           ? {
               notes: input.reason || job.notes || '',
               resolvedAt: at,
-              resolutionMinutes: job.assignedAt
-                ? Math.max(0, Math.round((Date.parse(at) - Date.parse(String(job.assignedAt || at))) / 60000))
-                : undefined,
+              isClosed: true,
+              resolutionMinutes: resolutionMins,
+            }
+          : {}),
+        ...(isCancelledStatus(nextCanon)
+          ? {
+              notes: input.reason || job.notes || '',
+              resolvedAt: at,
+              isClosed: true,
+              resolutionMinutes: resolutionMins,
+            }
+          : {}),
+        ...(terminal && !isDeliveredStatus(nextCanon) && !isUnrepairableStatus(nextCanon) && !isCancelledStatus(nextCanon)
+          ? {
+              resolvedAt: at,
+              isClosed: true,
+              resolutionMinutes: resolutionMins,
             }
           : {}),
         ...(job.dueAt && Date.parse(at) > Date.parse(String(job.dueAt)) && !job.breachedAt
@@ -388,6 +540,23 @@ export const repairJobService = {
           : {}),
       });
     });
+
+    try {
+      if (
+        isDeliveredStatus(nextCanon)
+        || isCancelledStatus(nextCanon)
+        || isUnrepairableStatus(nextCanon)
+      ) {
+        await sparePartsService.releaseAllActiveForJob(input.jobId, actorName);
+      } else if (
+        beforeCanon === 'waiting_parts'
+        && !['waiting_parts', 'repairing', 'testing', 'ready'].includes(nextCanon)
+      ) {
+        await sparePartsService.releaseAllActiveForJob(input.jobId, actorName);
+      }
+    } catch (err) {
+      console.warn('repairJobService.changeStatus: release reservations', err);
+    }
   },
 
   async createLinkedReopenJob(input: {
@@ -456,12 +625,20 @@ export const repairJobService = {
     notes?: string;
   }): Promise<void> {
     if (!isConfigured) return;
-    for (const part of input.partsUsed) {
+    const consumedLines = input.partsUsed.filter((p) => Number(p.quantity || 0) > 0);
+    for (const part of consumedLines) {
+      const q = Number(part.quantity || 0);
+      await sparePartsService.consumeActiveReservationForJob({
+        jobId: input.jobId,
+        partId: part.partId,
+        quantity: q,
+        updatedBy: input.createdBy,
+      });
       await sparePartsService.deductPart(
         input.branchId,
         part.partId,
         part.partName,
-        Number(part.quantity || 0),
+        q,
         input.createdBy,
         input.jobId,
       );
@@ -471,15 +648,52 @@ export const repairJobService = {
       partsUsed: input.partsUsed,
       notes: input.notes,
     });
+
+    if (consumedLines.length === 0) return;
+    const jobAfter = await this.getById(input.jobId);
+    if (jobAfter?.tenantId) {
+      const at = nowIso();
+      await appendRepairServiceEvent(input.jobId, {
+        tenantId: jobAfter.tenantId,
+        branchId: jobAfter.branchId,
+        at,
+        actorUid: input.createdBy,
+        actorName: input.createdBy,
+        action: 'parts_consumed',
+        domainEvent: 'part.consumed',
+        payload: {
+          parts: consumedLines.map((p) => ({
+            partId: p.partId,
+            partName: p.partName,
+            quantity: p.quantity,
+          })),
+        },
+      });
+    }
+  },
+
+  async listByTechnicianIds(technicianIds: string[]): Promise<RepairJob[]> {
+    if (!isConfigured) return [];
+    const normalized = Array.from(
+      new Set(technicianIds.filter((id) => typeof id === 'string' && id.trim().length > 0).map((id) => id.trim())),
+    );
+    if (normalized.length === 0) return [];
+    if (normalized.length === 1) return this.listByTechnician(normalized[0]);
+    const chunks = await Promise.all(normalized.map((tid) => this.listByTechnician(tid)));
+    const byId = new Map<string, RepairJob>();
+    chunks.flat().forEach((j) => {
+      if (j.id) byId.set(j.id, j);
+    });
+    return Array.from(byId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   },
 
   async remove(id: string): Promise<void> {
     if (!isConfigured || !id) return;
     const row = await this.getById(id);
     if (!row) throw new Error('طلب الصيانة غير موجود.');
-    const normalizedStatus = String(row.status || '').trim().toLowerCase();
-    if (normalizedStatus === 'delivered' || Boolean(row.isClosed)) {
-      throw new Error('لا يمكن حذف طلب صيانة مُسلَّم أو مُقفل.');
+    const s = mapLegacyRepairStatus(String(row.status || '')).toLowerCase();
+    if (s === 'delivered' || s === 'cancelled' || s === 'unrepairable' || Boolean(row.isClosed)) {
+      throw new Error('لا يمكن حذف طلب صيانة مُسلَّم أو مُقفل أو ملغى.');
     }
     await deleteDoc(doc(db, REPAIR_JOBS_COLLECTION, id));
   },

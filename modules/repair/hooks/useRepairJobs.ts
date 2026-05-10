@@ -1,6 +1,8 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import type { RepairJob } from '../types';
 import { repairJobService } from '../services/repairJobService';
+import { customerPhonesMatch, normalizeCustomerPhoneDigits } from '../utils/customerPhone';
 
 const searchFields = (job: RepairJob): string =>
   [
@@ -9,6 +11,7 @@ const searchFields = (job: RepairJob): string =>
     job.receiptNo,
     job.deviceBrand,
     job.deviceModel,
+    job.deviceSerial,
   ]
     .filter(Boolean)
     .join(' ')
@@ -19,12 +22,13 @@ export function useRepairJobs(params: {
   branchIds?: string[];
   canViewAllBranches?: boolean;
   searchText?: string;
-  /** فني صيانة: طلبات مسندة فقط (technicianId) */
+  /** فلترة مرنة على رقم العميل (أرقام فقط أو مع فواصل) */
+  phoneDigitsFilter?: string;
+  /** إن وُجد: لا يُجلب من الشبكة إلا عندما يصل طول الأرقام لهذا الحد (مثلاً شاشة كول سنتر) */
+  minPhoneDigitsForQuery?: number;
   technicianOnly?: boolean;
   technicianIds?: string[];
 }) {
-  const [jobs, setJobs] = useState<RepairJob[]>([]);
-  const [loading, setLoading] = useState(true);
   const [debouncedSearch, setDebouncedSearch] = useState(params.searchText || '');
 
   useEffect(() => {
@@ -34,62 +38,97 @@ export function useRepairJobs(params: {
     return () => window.clearTimeout(timer);
   }, [params.searchText]);
 
-  useEffect(() => {
-    setLoading(true);
-    if (params.technicianOnly) {
-      const techIds = Array.from(
+  const technicianIdsKey = useMemo(
+    () =>
+      Array.from(
         new Set(
           (params.technicianIds || []).filter((id) => typeof id === 'string' && id.trim().length > 0).map((id) => id.trim()),
         ),
-      );
-      if (techIds.length === 0) {
-        setJobs([]);
-        setLoading(false);
-        return () => {};
-      }
-      const unsub = repairJobService.subscribeByTechnicianIds(techIds, (rows) => {
-        setJobs(rows);
-        setLoading(false);
-      });
-      return () => unsub();
-    }
+      ).sort(),
+    [params.technicianIds],
+  );
 
-    const normalizedBranchIds = Array.isArray(params.branchIds)
-      ? Array.from(new Set(params.branchIds.filter((id) => typeof id === 'string' && id.trim().length > 0)))
-      : [];
-    if (!params.canViewAllBranches && normalizedBranchIds.length === 0 && !params.branchId) {
-      setJobs([]);
-      setLoading(false);
-      return () => {};
+  const branchIdsKey = useMemo(
+    () =>
+      Array.from(new Set((params.branchIds || []).filter((id) => typeof id === 'string' && id.trim().length > 0))).sort(),
+    [params.branchIds],
+  );
+
+  const phoneFilterRaw = String(params.phoneDigitsFilter || '').trim();
+  const phoneDigitsLen = normalizeCustomerPhoneDigits(phoneFilterRaw).length;
+  const phoneQueryGate =
+    params.minPhoneDigitsForQuery != null ? phoneDigitsLen >= params.minPhoneDigitsForQuery : true;
+
+  const enabled = useMemo(() => {
+    if (!phoneQueryGate) return false;
+    if (params.technicianOnly) {
+      return technicianIdsKey.length > 0;
     }
-    const unsub = params.canViewAllBranches
-      ? repairJobService.subscribeAll((rows) => {
-          setJobs(rows);
-          setLoading(false);
-        })
-      : normalizedBranchIds.length > 1
-        ? repairJobService.subscribeByBranches(normalizedBranchIds, (rows) => {
-            setJobs(rows);
-            setLoading(false);
-          })
-      : repairJobService.subscribeByBranch(params.branchId || normalizedBranchIds[0] || '', (rows) => {
-          setJobs(rows);
-          setLoading(false);
-        });
-    return () => unsub();
+    if (params.canViewAllBranches) return true;
+    if (branchIdsKey.length > 1) return true;
+    if (branchIdsKey.length === 1) return true;
+    return Boolean(params.branchId && params.branchId.trim().length > 0);
   }, [
-    params.branchId,
-    params.canViewAllBranches,
+    phoneQueryGate,
     params.technicianOnly,
-    JSON.stringify(params.branchIds || []),
-    JSON.stringify(params.technicianIds || []),
+    params.canViewAllBranches,
+    params.branchId,
+    branchIdsKey.length,
+    technicianIdsKey.length,
   ]);
 
-  const filteredJobs = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return jobs;
-    return jobs.filter((j) => searchFields(j).includes(q));
-  }, [jobs, debouncedSearch]);
+  const { data: jobs = [], isLoading, refetch, isFetching } = useQuery({
+    queryKey: [
+      'repairJobs',
+      params.canViewAllBranches ? 'all' : 'scoped',
+      params.branchId || '',
+      branchIdsKey.join('|'),
+      params.technicianOnly ? 'tech' : 'desk',
+      technicianIdsKey.join('|'),
+      params.minPhoneDigitsForQuery ?? '',
+      phoneFilterRaw,
+    ],
+    queryFn: async (): Promise<RepairJob[]> => {
+      if (params.technicianOnly) {
+        if (technicianIdsKey.length === 0) return [];
+        return repairJobService.listByTechnicianIds(technicianIdsKey);
+      }
+      if (params.canViewAllBranches) {
+        return repairJobService.listAllBranches();
+      }
+      if (branchIdsKey.length > 1) {
+        const chunks = await Promise.all(branchIdsKey.map((bid) => repairJobService.listByBranch(bid)));
+        const byId = new Map<string, RepairJob>();
+        chunks.flat().forEach((j) => {
+          if (j.id) byId.set(j.id, j);
+        });
+        return Array.from(byId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      }
+      const single = params.branchId || branchIdsKey[0] || '';
+      if (!single) return [];
+      return repairJobService.listByBranch(single);
+    },
+    enabled,
+    refetchInterval: 45_000,
+    staleTime: 20_000,
+  });
 
-  return { jobs: filteredJobs, rawJobs: jobs, loading };
+  const phoneFilter = phoneFilterRaw;
+
+  const filteredJobs = useMemo(() => {
+    if (params.minPhoneDigitsForQuery != null && phoneDigitsLen < params.minPhoneDigitsForQuery) {
+      return [];
+    }
+    let rows = jobs;
+    const q = debouncedSearch.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((j) => searchFields(j).includes(q));
+    }
+    if (phoneFilter) {
+      rows = rows.filter((j) => customerPhonesMatch(j.customerPhone, phoneFilter));
+    }
+    return rows;
+  }, [jobs, debouncedSearch, phoneFilter, params.minPhoneDigitsForQuery, phoneDigitsLen]);
+
+  return { jobs: filteredJobs, rawJobs: jobs, loading: isLoading, refetch, isFetching };
 }

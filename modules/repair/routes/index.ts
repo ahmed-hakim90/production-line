@@ -5,8 +5,10 @@ const RepairDashboard = lazyNamed(() => import('../pages/RepairDashboard'), 'Rep
 const RepairAdminDashboard = lazyNamed(() => import('../pages/RepairAdminDashboard'), 'RepairAdminDashboard');
 const RepairAdminOrders = lazyNamed(() => import('../pages/RepairAdminOrders'), 'RepairAdminOrders');
 const RepairJobs = lazyNamed(() => import('../pages/RepairJobs'), 'RepairJobs');
+const RepairCallCenter = lazyNamed(() => import('../pages/RepairCallCenter'), 'RepairCallCenter');
 const NewRepairJob = lazyNamed(() => import('../pages/NewRepairJob'), 'NewRepairJob');
 const RepairJobDetail = lazyNamed(() => import('../pages/RepairJobDetail'), 'RepairJobDetail');
+const RepairJobWorkspace = lazyNamed(() => import('../pages/RepairJobWorkspace'), 'RepairJobWorkspace');
 const SparePartsInventory = lazyNamed(() => import('../pages/SparePartsInventory'), 'SparePartsInventory');
 const RepairBranches = lazyNamed(() => import('../pages/RepairBranches'), 'RepairBranches');
 const RepairTechnicianKPIs = lazyNamed(() => import('../pages/RepairTechnicianKPIs'), 'RepairTechnicianKPIs');
@@ -21,8 +23,10 @@ export const REPAIR_ROUTES: AppRouteDef[] = [
   // Keep as internal admin flow; intentionally hidden from sidebar menu.
   { path: '/repair/admin-orders', permission: 'repair.adminDashboard.view', component: RepairAdminOrders },
   { path: '/repair/jobs', permission: 'repair.view', component: RepairJobs },
+  { path: '/repair/call-center', permission: 'repair.view', component: RepairCallCenter },
   { path: '/repair/jobs/new', permission: 'repair.jobs.create', component: NewRepairJob },
   { path: '/repair/jobs/:jobId', permission: 'repair.view', component: RepairJobDetail },
+  { path: '/repair/jobs/:jobId/workspace', permission: 'repair.view', component: RepairJobWorkspace },
   { path: '/repair/parts', permission: 'repair.parts.view', component: SparePartsInventory },
   { path: '/repair/branches', permission: 'repair.branches.manage', component: RepairBranches },
   { path: '/repair/technician-kpis', permission: 'repair.technician.view', component: RepairTechnicianKPIs },

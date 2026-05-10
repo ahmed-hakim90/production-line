@@ -846,6 +846,9 @@
       "codePlaceholder": "Code",
       "unitPlaceholder": "Unit",
       "categoryOptional": "Raw material category (optional)",
+      "categorySelectPlaceholder": "Select raw material category",
+      "requiredCategoryAutoCodeError": "Select a raw material category to generate the code automatically.",
+      "categoryMissingCodeError": "This category has no business code. Set a code for it in Catalog → Categories first.",
       "minStockPlaceholder": "Minimum stock",
       "saveChanges": "Save changes",
       "addRawMaterial": "Add raw material"

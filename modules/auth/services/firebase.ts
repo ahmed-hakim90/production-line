@@ -1,10 +1,10 @@
 import { initializeApp, deleteApp, FirebaseApp } from 'firebase/app';
 import {
   Firestore,
-  getFirestore,
   initializeFirestore,
+  memoryLocalCache,
   persistentLocalCache,
-  persistentMultipleTabManager,
+  persistentSingleTabManager,
 } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import {
@@ -37,25 +37,67 @@ let auth: Auth;
 let storage: FirebaseStorage;
 let functionsClient: Functions;
 
-/** True when IndexedDB persistence (multi-tab) initialized successfully. */
+/** True when IndexedDB persistence (single-tab) initialized successfully. */
 export let firestoreOfflinePersistenceEnabled = false;
+
+/**
+ * Keys written by `WebStorageSharedClientState` (multi-tab manager) into
+ * `localStorage`. Once the app switches to single-tab persistence, no new
+ * entries are produced, but legacy entries can still occupy the ~5 MB origin
+ * quota and trip Firestore's INTERNAL ASSERTION (b815) on `setItem`.
+ */
+const FIRESTORE_LS_PREFIXES = [
+  'firestore_clients_',
+  'firestore_targets_',
+  'firestore_mutations_',
+  'firestore_online_state',
+  'firestore_sequence_number_',
+];
+
+const purgeLeakedFirestoreLocalStorage = (): void => {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const ls = window.localStorage;
+    const toRemove: string[] = [];
+    for (let i = 0; i < ls.length; i += 1) {
+      const k = ls.key(i);
+      if (k && FIRESTORE_LS_PREFIXES.some((p) => k.startsWith(p))) {
+        toRemove.push(k);
+      }
+    }
+    toRemove.forEach((k) => {
+      try {
+        ls.removeItem(k);
+      } catch {
+        /* ignore individual key removal failures */
+      }
+    });
+  } catch {
+    /* localStorage unavailable (private mode, disabled storage) — safe to skip */
+  }
+};
 
 if (isConfigured) {
   app = initializeApp(firebaseConfig);
+  purgeLeakedFirestoreLocalStorage();
   try {
     db = initializeFirestore(app, {
       experimentalAutoDetectLongPolling: true,
       localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
+        tabManager: persistentSingleTabManager({ forceOwnership: true }),
       }),
     });
     firestoreOfflinePersistenceEnabled = true;
   } catch (err) {
     console.warn(
-      'Firestore: persistent cache unavailable, using default instance.',
+      'Firestore: persistent cache unavailable, falling back to memory cache.',
       err,
     );
-    db = getFirestore(app);
+    db = initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+      localCache: memoryLocalCache(),
+    });
+    firestoreOfflinePersistenceEnabled = false;
   }
   auth = getAuth(app);
   storage = getStorage(app);
@@ -324,6 +366,32 @@ export const trackRepairJobPublicCallable = async (input: {
       tenantSlug: input.tenantSlug.trim().toLowerCase(),
       receiptNo: input.receiptNo.trim(),
       phone: input.phone.trim(),
+    });
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const submitRepairApprovalPublicCallable = async (input: {
+  tenantSlug: string;
+  jobId: string;
+  token: string;
+  decision: 'approved' | 'rejected';
+  note?: string;
+}): Promise<{ ok: true; status: string }> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { tenantSlug: string; jobId: string; token: string; decision: 'approved' | 'rejected'; note?: string },
+    { ok: true; status: string }
+  >(functionsClient, 'submitRepairApprovalPublic');
+  try {
+    const result = await callable({
+      tenantSlug: input.tenantSlug.trim().toLowerCase(),
+      jobId: input.jobId.trim(),
+      token: input.token.trim(),
+      decision: input.decision,
+      note: input.note?.trim(),
     });
     return result.data;
   } catch (error: any) {

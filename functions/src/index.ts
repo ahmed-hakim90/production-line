@@ -5,6 +5,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { createHash } from 'node:crypto';
 import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
@@ -1746,6 +1747,99 @@ export const trackRepairJobPublic = onCall(
         updatedAtMs: toEpochMs(data.updatedAt),
       },
     };
+  },
+);
+
+/** Public: customer approval / rejection via signed link (token hashed in Firestore). */
+export const submitRepairApprovalPublic = onCall(
+  {
+    region: 'us-central1',
+    memory: '128MiB',
+    cors: true,
+    invoker: 'public',
+  },
+  async (request) => {
+    const data = (request.data || {}) as {
+      tenantSlug?: string;
+      jobId?: string;
+      token?: string;
+      decision?: 'approved' | 'rejected';
+      note?: string;
+    };
+    const tenantSlug = sanitizeTrackSlug(data.tenantSlug);
+    const jobId = String(data.jobId || '').trim();
+    const token = String(data.token || '').trim();
+    const decision = data.decision;
+    const note = String(data.note || '').trim().slice(0, 2000);
+    if (!tenantSlug || !jobId || !token || (decision !== 'approved' && decision !== 'rejected')) {
+      throw new HttpsError('invalid-argument', 'بيانات غير كافية.');
+    }
+
+    const slugSnap = await db.collection(TENANT_SLUGS_COLLECTION).doc(tenantSlug).get();
+    const tenantId = String((slugSnap.data() as { tenantId?: string } | undefined)?.tenantId || '').trim();
+    if (!slugSnap.exists || !tenantId) {
+      throw new HttpsError('not-found', 'الشركة غير موجودة.');
+    }
+    const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+    if (!tenantSnap.exists || String((tenantSnap.data() as { status?: string } | undefined)?.status || '') !== 'active') {
+      throw new HttpsError('failed-precondition', 'الشركة غير متاحة.');
+    }
+
+    const jobRef = db.collection(REPAIR_JOBS_COLLECTION).doc(jobId);
+    const jobSnap = await jobRef.get();
+    if (!jobSnap.exists) {
+      throw new HttpsError('not-found', 'الطلب غير موجود.');
+    }
+    const job = jobSnap.data() as Record<string, unknown>;
+    if (String(job.tenantId || '') !== tenantId) {
+      throw new HttpsError('permission-denied', 'لا يتطابق الطلب مع الشركة.');
+    }
+    const hash = createHash('sha256').update(token, 'utf8').digest('hex');
+    if (String(job.approvalTokenHash || '') !== hash) {
+      throw new HttpsError('permission-denied', 'رابط الموافقة غير صالح.');
+    }
+    if (String(job.approvalStatus || '') !== 'pending') {
+      throw new HttpsError('failed-precondition', 'لا يوجد طلب موافقة نشط.');
+    }
+    const expRaw = job.approvalTokenExpiresAt as { toDate?: () => Date } | string | undefined;
+    const expMs =
+      expRaw && typeof expRaw === 'object' && typeof (expRaw as { toDate?: () => Date }).toDate === 'function'
+        ? (expRaw as { toDate: () => Date }).toDate().getTime()
+        : expRaw
+          ? Date.parse(String(expRaw))
+          : 0;
+    if (expMs && Date.now() > expMs) {
+      throw new HttpsError('failed-precondition', 'انتهت صلاحية الرابط.');
+    }
+
+    const at = new Date().toISOString();
+    const prevStatus = String(job.status || '');
+    const patch: Record<string, unknown> = {
+      approvalResolvedAt: at,
+      approvalNote: note,
+      approvalStatus: decision === 'approved' ? 'approved' : 'rejected',
+      updatedAt: at,
+    };
+    if (decision === 'approved' && prevStatus === 'waiting_approval') {
+      patch.status = 'waiting_parts';
+    }
+    await jobRef.update(patch);
+    const afterStatus = String(patch.status || prevStatus);
+    await jobRef.collection('service_events').add({
+      tenantId: job.tenantId,
+      branchId: job.branchId,
+      jobId,
+      at,
+      actorUid: 'public_customer',
+      actorName: 'العميل — رابط عام',
+      action: 'approval_resolved',
+      domainEvent: decision === 'approved' ? 'customer.approved' : 'customer.rejected',
+      eventSchemaVersion: 1,
+      statusBefore: prevStatus,
+      statusAfter: afterStatus,
+      note: decision === 'approved' ? 'موافقة عبر الرابط العام' : `رفض عبر الرابط: ${note || '—'}`,
+    });
+    return { ok: true as const, status: afterStatus };
   },
 );
 

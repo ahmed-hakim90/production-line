@@ -12,23 +12,32 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { RawMaterial } from '../types';
 import { getMergedPlanSettings } from '../../shared/services/entityCodePlanSettings';
 import {
   DUPLICATE_ENTITY_CODE,
   ENTITY_CODE_COUNTER_KEYS,
   allocateNextCodeInTransaction,
+  allocateNextSequentialSuffixInTransaction,
   normalizeEntityCodePrefix,
   peekNextCode as peekNextEntityCode,
+  peekNextSequentialSuffixCode,
   seedMaxRawMaterialCodes,
   txGetTenantDocs,
   maxSeqFromCodes,
+  maxSeqFromCategoryPrefixedCodes,
   clampPadding,
 } from '../../shared/services/entityCodeSequenceService';
 
 const COLLECTION = 'raw_materials';
 const PRODUCT_MATERIALS_COLLECTION = 'product_materials';
 const RM_CODE_REGEX = /^RM-(\d+)$/i;
+
+export type RawMaterialCreateOptions = {
+  /** When code is auto-generated (empty), scope sequence by category code + name. */
+  autoFromCategory?: { categoryCode: string; categoryName: string };
+};
 
 const normalizeRawMaterialName = (value: string) =>
   value
@@ -42,6 +51,14 @@ const normalizeRawMaterialName = (value: string) =>
 
 const formatRawMaterialCode = (seq: number) => `RM-${String(Math.max(1, Math.floor(seq))).padStart(4, '0')}`;
 
+function rawMaterialCategoryCounterEntityKey(categoryCode: string): string {
+  return `raw_material_by_category:${String(categoryCode).trim().toUpperCase()}`;
+}
+
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
 async function mergedPlanForCodes() {
   const plan = await getMergedPlanSettings();
   const prefix = normalizeEntityCodePrefix(plan.rawMaterialCodePrefix ?? 'RM', 'RM');
@@ -53,6 +70,30 @@ async function seedMaxRawMaterialCodesInTx(tx: Transaction, prefix: string): Pro
   const snap = await txGetTenantDocs(tx, db, COLLECTION);
   const codes = snap.docs.map((d) => String(d.data()?.code ?? '').trim());
   return maxSeqFromCodes(codes, prefix);
+}
+
+async function seedMaxCategoryRawMaterialCodesInTx(
+  tx: Transaction,
+  categoryCode: string,
+  categoryName: string,
+): Promise<number> {
+  const snap = await txGetTenantDocs(tx, db, COLLECTION);
+  const want = String(categoryName || '').trim();
+  const cc = String(categoryCode || '').trim().toUpperCase();
+  const codes = snap.docs
+    .filter((d) => String(d.data()?.categoryName ?? '').trim() === want)
+    .map((d) => String(d.data()?.code ?? '').trim());
+  return maxSeqFromCategoryPrefixedCodes(codes, cc);
+}
+
+async function seedMaxCategoryRawMaterialCodesAsync(categoryCode: string, categoryName: string): Promise<number> {
+  const snap = await getDocs(tenantQuery(db, COLLECTION));
+  const want = String(categoryName || '').trim();
+  const cc = String(categoryCode || '').trim().toUpperCase();
+  const codes = snap.docs
+    .filter((d) => String(d.data()?.categoryName ?? '').trim() === want)
+    .map((d) => String(d.data()?.code ?? '').trim());
+  return maxSeqFromCategoryPrefixedCodes(codes, cc);
 }
 
 export const rawMaterialService = {
@@ -82,17 +123,38 @@ export const rawMaterialService = {
     });
   },
 
-  async peekNextCode(): Promise<string> {
+  /**
+   * Next display code for raw materials.
+   * With `scope`, uses `{categoryCode}-{seq}` per category; otherwise legacy global `RM-` sequence.
+   */
+  async peekNextCode(scope?: { categoryCode: string; categoryName: string }): Promise<string> {
     const { prefix, padding } = await mergedPlanForCodes();
-    return peekNextEntityCode(ENTITY_CODE_COUNTER_KEYS.rawMaterial, prefix, padding, () =>
-      seedMaxRawMaterialCodes(prefix),
+    if (!scope?.categoryCode?.trim() || !scope?.categoryName?.trim()) {
+      return '';
+    }
+    const cc = scope.categoryCode.trim().toUpperCase();
+    const entityKey = rawMaterialCategoryCounterEntityKey(cc);
+    const catName = scope.categoryName.trim();
+    return peekNextSequentialSuffixCode(entityKey, cc, padding, () =>
+      seedMaxCategoryRawMaterialCodesAsync(cc, catName),
     );
   },
 
-  async create(payload: Omit<RawMaterial, 'id' | 'createdAt'>): Promise<string | null> {
+  async create(
+    payload: Omit<RawMaterial, 'id' | 'createdAt'>,
+    options?: RawMaterialCreateOptions,
+  ): Promise<string | null> {
     if (!isConfigured) return null;
     const { prefix, padding } = await mergedPlanForCodes();
     const trimmed = String(payload.code ?? '').trim();
+    const tenantId = getCurrentTenantId();
+
+    const autoCat = options?.autoFromCategory;
+    const useCategoryAuto =
+      !trimmed &&
+      autoCat &&
+      String(autoCat.categoryCode || '').trim() &&
+      String(autoCat.categoryName || '').trim();
 
     if (trimmed) {
       const upper = trimmed.toUpperCase();
@@ -101,17 +163,46 @@ export const rawMaterialService = {
         (err as Error & { code?: string }).code = DUPLICATE_ENTITY_CODE;
         throw err;
       }
-      const tenantId = getCurrentTenantId();
-      const ref = await addDoc(collection(db, COLLECTION), {
-        ...payload,
-        code: upper,
-        tenantId,
-        createdAt: new Date().toISOString(),
-      });
+      const ref = await addDoc(
+        collection(db, COLLECTION),
+        stripUndefined({
+          ...payload,
+          code: upper,
+          tenantId,
+          createdAt: new Date().toISOString(),
+        }) as Record<string, unknown>,
+      );
       return ref.id;
     }
 
-    const tenantId = getCurrentTenantId();
+    if (useCategoryAuto) {
+      const cc = autoCat.categoryCode.trim().toUpperCase();
+      const catName = autoCat.categoryName.trim();
+      const entityKey = rawMaterialCategoryCounterEntityKey(cc);
+      const id = await runTransaction(db, async (transaction) => {
+        const code = await allocateNextSequentialSuffixInTransaction(
+          transaction,
+          entityKey,
+          cc,
+          padding,
+          (tx) => seedMaxCategoryRawMaterialCodesInTx(tx, cc, catName),
+        );
+        const newRef = doc(collection(db, COLLECTION));
+        transaction.set(
+          newRef,
+          stripUndefined({
+            ...payload,
+            code,
+            categoryName: payload.categoryName ?? catName,
+            tenantId,
+            createdAt: new Date().toISOString(),
+          }) as Record<string, unknown>,
+        );
+        return newRef.id;
+      });
+      return id;
+    }
+
     const id = await runTransaction(db, async (transaction) => {
       const code = await allocateNextCodeInTransaction(
         transaction,
@@ -121,12 +212,15 @@ export const rawMaterialService = {
         (tx) => seedMaxRawMaterialCodesInTx(tx, prefix),
       );
       const newRef = doc(collection(db, COLLECTION));
-      transaction.set(newRef, {
-        ...payload,
-        code,
-        tenantId,
-        createdAt: new Date().toISOString(),
-      });
+      transaction.set(
+        newRef,
+        stripUndefined({
+          ...payload,
+          code,
+          tenantId,
+          createdAt: new Date().toISOString(),
+        }) as Record<string, unknown>,
+      );
       return newRef.id;
     });
     return id;
@@ -144,7 +238,7 @@ export const rawMaterialService = {
       if (upper) (payload as Partial<RawMaterial>).code = upper as any;
     }
     const { id: _id, ...data } = payload as RawMaterial;
-    await updateDoc(doc(db, COLLECTION, id), data as any);
+    await updateDoc(doc(db, COLLECTION, id), stripUndefined(data as Record<string, unknown>) as any);
   },
 
   async delete(id: string): Promise<void> {
@@ -152,6 +246,10 @@ export const rawMaterialService = {
     await deleteDoc(doc(db, COLLECTION, id));
   },
 
+  /**
+   * Legacy bulk sync: assigns sequential `RM-####` codes without category context.
+   * UI-driven creates use category-scoped `{CAT-####}-{seq}` when a category is chosen.
+   */
   async syncFromProductMaterials(): Promise<{ created: number; linked: number; skipped: number }> {
     if (!isConfigured) return { created: 0, linked: 0, skipped: 0 };
     const tenantId = getCurrentTenantId();

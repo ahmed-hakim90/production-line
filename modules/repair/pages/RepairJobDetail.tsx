@@ -42,7 +42,13 @@ import {
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
+import { effectiveSparePartUnitCost } from '../utils/sparePartPricing';
 import { resolveRepairSettings } from '../config/repairSettings';
+import {
+  isCancelledStatus,
+  isDeliveredStatus,
+  isUnrepairableStatus,
+} from '../utils/repairWorkflowNormalize';
 
 const toNumber = (value: string | number | undefined | null) => Number(value || 0);
 const sumProductFinalCosts = (items: RepairJobProduct[]) => items.reduce((sum, item) => sum + toNumber(item.finalCost), 0);
@@ -289,9 +295,9 @@ export const RepairJobDetail: React.FC = () => {
     try {
       await persistProducts(jobProducts, serviceOnly);
       const finalCostNumber = effectiveFinalCost;
-      const needsTreasuryPosting = status === 'delivered'
+      const needsTreasuryPosting = isDeliveredStatus(status)
         && finalCostNumber > 0
-        && job?.status !== 'delivered';
+        && !isDeliveredStatus(job?.status || '');
       if (needsTreasuryPosting) {
         await repairTreasuryService.ensureOpenSession(job?.branchId || '');
       }
@@ -299,9 +305,11 @@ export const RepairJobDetail: React.FC = () => {
         jobId,
         status,
         technicianId: userProfile?.id,
-        reason: status === 'unrepairable' ? reason : undefined,
-        finalCost: status === 'delivered' ? finalCostNumber : undefined,
-        warranty: status === 'delivered' ? warranty : undefined,
+        reason: isUnrepairableStatus(status) || isCancelledStatus(status) ? reason : undefined,
+        finalCost: isDeliveredStatus(status) ? finalCostNumber : undefined,
+        warranty: isDeliveredStatus(status) ? warranty : undefined,
+        actorUid: userProfile?.id || '',
+        actorName: userProfile?.displayName || userProfile?.email || 'مستخدم',
       });
       if (needsTreasuryPosting) {
         await repairTreasuryService.addEntry({
@@ -329,7 +337,10 @@ export const RepairJobDetail: React.FC = () => {
     }
     if (!userProfile?.id) return;
     try {
-      await repairJobService.assignTechnician(jobId, userProfile.id);
+      await repairJobService.assignTechnician(jobId, userProfile.id, {
+        uid: userProfile.id,
+        name: userProfile.displayName || userProfile.email || 'مستخدم',
+      });
       setJob(await repairJobService.getById(jobId));
       toast.success('تم إسناد الطلب لك.');
     } catch (e: any) {
@@ -353,7 +364,10 @@ export const RepairJobDetail: React.FC = () => {
       return;
     }
     try {
-      await repairJobService.assignTechnician(jobId, technicianId);
+      await repairJobService.assignTechnician(jobId, technicianId, {
+        uid: userProfile?.id || '',
+        name: userProfile?.displayName || userProfile?.email || 'مستخدم',
+      });
       setJob(await repairJobService.getById(jobId));
       toast.success('تم إسناد الطلب للفني المختار.');
     } catch (e: any) {
@@ -390,7 +404,7 @@ export const RepairJobDetail: React.FC = () => {
       partId: part.id || '',
       partName: part.name,
       quantity: qty,
-      unitCost: 0,
+      unitCost: effectiveSparePartUnitCost(part),
       scope: partScope,
       productItemId: partScope === 'product' ? partProductItemId : undefined,
       productName: partScope === 'product'
@@ -398,6 +412,13 @@ export const RepairJobDetail: React.FC = () => {
         : undefined,
     }];
     try {
+      const actor = userProfile?.displayName || userProfile?.email || 'system';
+      await sparePartsService.consumeActiveReservationForJob({
+        jobId,
+        partId: part.id || '',
+        quantity: qty,
+        updatedBy: actor,
+      });
       await sparePartsService.adjustStock({
         branchId: job.branchId,
         warehouseId: branchWarehouseId,
@@ -406,7 +427,7 @@ export const RepairJobDetail: React.FC = () => {
         partName: part.name,
         quantity: qty,
         type: 'OUT',
-        createdBy: userProfile?.displayName || userProfile?.email || 'system',
+        createdBy: actor,
         jobId,
         notes: 'استهلاك قطع غيار في طلب صيانة',
       });
@@ -494,7 +515,7 @@ export const RepairJobDetail: React.FC = () => {
 
   const createReopenRepair = async () => {
     if (!job?.id) return;
-    if (job.status !== 'delivered') {
+    if (!isDeliveredStatus(job.status)) {
       toast.error('يمكن إعادة الفتح فقط بعد التسليم.');
       return;
     }
@@ -573,7 +594,7 @@ export const RepairJobDetail: React.FC = () => {
   }, [job?.technicianId, technicianIds]);
   const canEditThisJob = can('repair.jobs.edit') || (repairCtx.isRepairTechnician && isAssignedToCurrentTechnician);
   const canViewThisJob = !repairCtx.jobsTechnicianOnly || isAssignedToCurrentTechnician;
-  const canDeleteJob = Boolean(job) && String(job?.status || '') !== 'delivered' && !Boolean(job?.isClosed) && canEditThisJob;
+  const canDeleteJob = Boolean(job) && !isDeliveredStatus(job?.status || '') && !Boolean(job?.isClosed) && canEditThisJob;
 
   const deleteJob = async () => {
     if (!job?.id) return;
@@ -616,7 +637,7 @@ export const RepairJobDetail: React.FC = () => {
       </Card>
 
       <div className="no-print flex items-center gap-2 flex-wrap">
-        {job.status === 'delivered' && (
+        {isDeliveredStatus(job.status) && (
           <Button variant="secondary" onClick={() => setShowReopenOptions((v) => !v)}>
             {showReopenOptions ? 'إخفاء خيارات إعادة الإصلاح' : 'فتح إعادة الإصلاح'}
           </Button>
@@ -627,7 +648,7 @@ export const RepairJobDetail: React.FC = () => {
           </Button>
         )} */}
       </div>
-      {job.status === 'delivered' && showReopenOptions && (
+      {isDeliveredStatus(job.status) && showReopenOptions && (
         <Card className="no-print">
           <CardHeader>
             <CardTitle className="text-lg">إعادة إصلاح</CardTitle>
@@ -917,7 +938,7 @@ export const RepairJobDetail: React.FC = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                    {status === 'unrepairable' && (
+                    {isUnrepairableStatus(status) && (
                       <div className="space-y-1">
                         <Label htmlFor="unrepairable-reason">سبب عدم إمكانية الإصلاح</Label>
                         <textarea
@@ -929,7 +950,19 @@ export const RepairJobDetail: React.FC = () => {
                         />
                       </div>
                     )}
-                    {status === 'delivered' && (
+                    {isCancelledStatus(status) && (
+                      <div className="space-y-1">
+                        <Label htmlFor="cancel-reason">سبب الإلغاء</Label>
+                        <textarea
+                          id="cancel-reason"
+                          placeholder="مثال: رفض العميل التكلفة، سحب الجهاز..."
+                          className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                        />
+                      </div>
+                    )}
+                    {isDeliveredStatus(status) && (
                       <div className="space-y-2">
                         <label className="inline-flex items-center gap-2 text-sm">
                           <input

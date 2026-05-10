@@ -26,7 +26,7 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
   const { can } = usePermission();
   const [name, setName] = useState('');
   const [categoryName, setCategoryName] = useState('');
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [categoriesMeta, setCategoriesMeta] = useState<Array<{ name: string; code: string }>>([]);
   const [unit, setUnit] = useState('kg');
   const [minStock, setMinStock] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -40,7 +40,17 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
   const editingRawMaterial = rawPayload.mode === 'edit' ? rawPayload.rawMaterial : undefined;
   const isEditMode = useMemo(() => Boolean(editingRawMaterial?.id), [editingRawMaterial?.id]);
 
-  const peekRm = useCallback(() => rawMaterialService.peekNextCode(), []);
+  const selectedCategoryMeta = useMemo(
+    () => categoriesMeta.find((c) => c.name === categoryName.trim()),
+    [categoriesMeta, categoryName],
+  );
+
+  const peekRm = useCallback(() => {
+    const code = selectedCategoryMeta?.code?.trim();
+    const n = categoryName.trim();
+    if (!code || !n) return Promise.resolve('');
+    return rawMaterialService.peekNextCode({ categoryCode: code, categoryName: n });
+  }, [selectedCategoryMeta, categoryName]);
 
   const {
     code,
@@ -78,14 +88,23 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
       try {
         const rows = await categoryService.getByType('raw_material');
         if (cancelled) return;
-        const names = rows
+        const meta = rows
           .filter((row) => row.isActive !== false)
-          .map((row) => String(row.name || '').trim())
-          .filter(Boolean);
-        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
+          .map((row) => ({
+            name: String(row.name || '').trim(),
+            code: String(row.code || '').trim(),
+          }))
+          .filter((row) => row.name);
+        const byName = new Map<string, { name: string; code: string }>();
+        for (const row of meta) {
+          if (!byName.has(row.name)) byName.set(row.name, row);
+        }
+        setCategoriesMeta(
+          Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, 'ar')),
+        );
       } catch {
         if (cancelled) return;
-        setCategoryOptions([]);
+        setCategoriesMeta([]);
       }
     };
     void loadCategoryOptions();
@@ -120,6 +139,14 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
         return;
       }
     } else if (codeLocked) {
+      if (!cleanCategoryName) {
+        setMessage({ type: 'error', text: t('modalManager.createRawMaterial.requiredCategoryAutoCodeError') });
+        return;
+      }
+      if (!selectedCategoryMeta?.code?.trim()) {
+        setMessage({ type: 'error', text: t('modalManager.createRawMaterial.categoryMissingCodeError') });
+        return;
+      }
       cleanCode = '';
     } else {
       cleanCode = code.trim().toUpperCase();
@@ -141,14 +168,24 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
           minStock: Number(minStock || 0),
         });
       } else {
-        const id = await rawMaterialService.create({
-          name: cleanName,
-          code: cleanCode,
-          categoryName: cleanCategoryName || undefined,
-          unit: cleanUnit,
-          minStock: Number(minStock || 0),
-          isActive: true,
-        });
+        const id = await rawMaterialService.create(
+          {
+            name: cleanName,
+            code: cleanCode,
+            categoryName: cleanCategoryName || undefined,
+            unit: cleanUnit,
+            minStock: Number(minStock || 0),
+            isActive: true,
+          },
+          codeLocked
+            ? {
+                autoFromCategory: {
+                  categoryCode: selectedCategoryMeta!.code.trim(),
+                  categoryName: cleanCategoryName,
+                },
+              }
+            : undefined,
+        );
         if (!id) throw new Error('create failed');
       }
       rawPayload.onSaved?.();
@@ -170,8 +207,18 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
   };
 
   const canSubmitCreate =
-    !!name.trim() && (codeLocked || (!codeLocked && !!code.trim()));
+    !!name.trim() &&
+    (codeLocked
+      ? !!categoryName.trim() &&
+        !!selectedCategoryMeta?.code?.trim() &&
+        !!code.trim() &&
+        !codePreviewLoading
+      : !!code.trim());
   const canSubmit = isEditMode ? !!name.trim() && !!code.trim() : canSubmitCreate;
+
+  const categoryPlaceholder = isEditMode
+    ? t('modalManager.createRawMaterial.categoryOptional')
+    : t('modalManager.createRawMaterial.categorySelectPlaceholder');
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
@@ -195,6 +242,18 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+          <select
+            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"
+            value={categoryName}
+            onChange={(e) => setCategoryName(e.target.value)}
+          >
+            <option value="">{categoryPlaceholder}</option>
+            {categoriesMeta.map((c) => (
+              <option key={`${c.name}|${c.code}`} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <div className="flex gap-2 items-center">
@@ -231,18 +290,6 @@ export const GlobalCreateRawMaterialModal: React.FC = () => {
               onChange={(e) => setUnit(e.target.value)}
             />
           </div>
-          <select
-            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"
-            value={categoryName}
-            onChange={(e) => setCategoryName(e.target.value)}
-          >
-            <option value="">{t('modalManager.createRawMaterial.categoryOptional')}</option>
-            {categoryOptions.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
           <input
             type="number"
             className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none"

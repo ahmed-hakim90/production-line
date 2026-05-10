@@ -12,6 +12,7 @@ export interface LowStockEntry {
 export function useLowStockAlert(branchId?: string) {
   const [parts, setParts] = useState<RepairSparePart[]>([]);
   const [stock, setStock] = useState<RepairSparePartStock[]>([]);
+  const [reservedByPart, setReservedByPart] = useState<Record<string, number>>({});
   const [dismissed, setDismissed] = useState(false);
   const hasPlayedRef = useRef(false);
 
@@ -19,6 +20,15 @@ export function useLowStockAlert(branchId?: string) {
     if (!branchId) return;
     void sparePartsService.listParts(branchId).then(setParts);
     void sparePartsService.listStock(branchId).then(setStock);
+    void sparePartsService.listActiveReservationsForBranch(branchId).then((rows) => {
+      const m: Record<string, number> = {};
+      rows.forEach((r) => {
+        const pid = String(r.partId || '').trim();
+        if (!pid) return;
+        m[pid] = (m[pid] || 0) + Number(r.quantity || 0);
+      });
+      setReservedByPart(m);
+    });
   }, [branchId]);
 
   const lowStockEntries = useMemo<LowStockEntry[]>(() => {
@@ -30,8 +40,13 @@ export function useLowStockAlert(branchId?: string) {
         quantity: Number(s.quantity || 0),
         minStock: Number(minByPart.get(s.partId) || 0),
       }))
+      .map((s) => {
+        const reserved = reservedByPart[s.partId] || 0;
+        const effective = Math.max(0, s.quantity - reserved);
+        return { ...s, quantity: effective };
+      })
       .filter((s) => s.minStock > 0 && s.quantity <= s.minStock);
-  }, [parts, stock]);
+  }, [parts, stock, reservedByPart]);
 
   const shouldOpen = lowStockEntries.length > 0 && !dismissed;
 

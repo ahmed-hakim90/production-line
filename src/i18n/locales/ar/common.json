@@ -846,6 +846,9 @@
       "codePlaceholder": "الكود",
       "unitPlaceholder": "الوحدة",
       "categoryOptional": "فئة المادة الخام (اختياري)",
+      "categorySelectPlaceholder": "اختر فئة المواد الخام",
+      "requiredCategoryAutoCodeError": "اختر فئة مواد خام لتوليد الكود تلقائياً.",
+      "categoryMissingCodeError": "لا يوجد كود معرّف لهذه الفئة. عيّن كوداً لها من الكتالوج ← الفئات أولاً.",
       "minStockPlaceholder": "الحد الأدنى",
       "saveChanges": "حفظ التعديلات",
       "addRawMaterial": "إضافة مادة خام"

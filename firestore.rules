@@ -505,6 +505,36 @@ service cloud.firestore {
       allow create: if hasPermission('repair.jobs.create') && canCreateRepairBranchScoped();
       allow update: if hasPermission('repair.jobs.edit') && canUpdateRepairBranchScoped();
       allow delete: if hasPermission('repair.jobs.delete') && canReadRepairBranchScoped();
+
+      match /service_events/{eventId} {
+        allow read: if hasPermission('repair.view')
+          && exists(/databases/$(database)/documents/repair_jobs/$(id))
+          && (
+            !('tenantId' in get(/databases/$(database)/documents/repair_jobs/$(id)).data)
+            || get(/databases/$(database)/documents/repair_jobs/$(id)).data.tenantId == currentUserDoc().data.tenantId
+          )
+          && (
+            isRepairBranchAdmin()
+            || canAccessBranch(get(/databases/$(database)/documents/repair_jobs/$(id)).data.branchId)
+          );
+        allow create: if hasPermission('repair.jobs.edit')
+          && exists(/databases/$(database)/documents/repair_jobs/$(id))
+          && request.resource.data.tenantId == currentUserDoc().data.tenantId
+          && request.resource.data.jobId == id
+          && request.resource.data.branchId == get(/databases/$(database)/documents/repair_jobs/$(id)).data.branchId
+          && (
+            isRepairBranchAdmin()
+            || canAccessBranch(request.resource.data.branchId)
+          );
+        allow update, delete: if false;
+      }
+    }
+
+    match /repair_part_reservations/{rid} {
+      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
+      allow create: if (hasPermission('repair.parts.manage') || hasPermission('repair.jobs.edit')) && canCreateRepairBranchScoped();
+      allow update: if (hasPermission('repair.parts.manage') || hasPermission('repair.jobs.edit')) && canUpdateRepairBranchScoped();
+      allow delete: if false;
     }
 
     match /repair_spare_parts/{id} {

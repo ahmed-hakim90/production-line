@@ -25,7 +25,7 @@ import { Separator } from '@/components/ui/separator';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
-import { resolveRepairSettings } from '../config/repairSettings';
+import { resolveRepairSettings, type ResolvedRepairStatus } from '../config/repairSettings';
 import { repairBranchService } from '../services/repairBranchService';
 import { employeeService } from '../../hr/employeeService';
 import type { RepairBranch } from '../types';
@@ -49,7 +49,7 @@ export const RepairSettings: React.FC = () => {
   const fp = useMemo(() => repairSettingsFingerprint(systemSettings), [systemSettings]);
 
   const [saving, setSaving] = useState(false);
-  const [statuses, setStatuses] = useState(() => resolved.workflow.statuses);
+  const [statuses, setStatuses] = useState<ResolvedRepairStatus[]>(() => resolved.workflow.statuses);
   const [initialStatusId, setInitialStatusId] = useState(resolved.workflow.initialStatusId);
   const [openStatusIds, setOpenStatusIds] = useState<string[]>(resolved.workflow.openStatusIds);
   const [managerScope, setManagerScope] = useState<'branch' | 'centers'>(resolved.access.managerScope);

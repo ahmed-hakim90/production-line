@@ -53,6 +53,22 @@ export function maxSeqFromCodes(codes: readonly string[], prefix: string): numbe
   return max;
 }
 
+/**
+ * Max numeric suffix for compound raw-material codes like `CAT-0001-0010`
+ * where `categoryCode` is the full category business code (e.g. CAT-0001).
+ */
+export function maxSeqFromCategoryPrefixedCodes(codes: readonly string[], categoryCode: string): number {
+  const cc = String(categoryCode || '').trim().toUpperCase();
+  if (!cc) return 0;
+  const re = new RegExp(`^${escapeRegExp(cc)}-(\\d+)$`, 'i');
+  let max = 0;
+  for (const c of codes) {
+    const m = String(c || '').trim().match(re);
+    if (m) max = Math.max(max, Number(m[1] || 0));
+  }
+  return max;
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -98,6 +114,69 @@ export async function allocateNextCodeInTransaction(
   );
 
   return formatEntityCode(p, nextSeq, pad);
+}
+
+/**
+ * Reserve the next `{literalPrefix}-{seq}` code (prefix kept as-is, e.g. CAT-0001 → CAT-0001-0007).
+ */
+export async function allocateNextSequentialSuffixInTransaction(
+  t: Transaction,
+  entityKey: string,
+  literalPrefix: string,
+  padding: number,
+  seedMaxFromTransaction: (tx: Transaction) => Promise<number>,
+): Promise<string> {
+  const tenantId = getCurrentTenantId();
+  const cref = counterDocRef(db, tenantId, entityKey);
+  const cSnap = await t.get(cref);
+  const pad = clampPadding(padding, 4);
+  const p = String(literalPrefix || '').trim().toUpperCase();
+
+  let nextSeq: number;
+  if (cSnap.exists()) {
+    nextSeq = Math.max(1, Math.floor(Number(cSnap.data()?.lastSeq || 0))) + 1;
+  } else {
+    const seeded = await seedMaxFromTransaction(t);
+    nextSeq = Math.max(1, seeded + 1);
+  }
+
+  t.set(
+    cref,
+    {
+      tenantId,
+      entityKey,
+      lastSeq: nextSeq,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
+
+  return `${p}-${String(nextSeq).padStart(pad, '0')}`;
+}
+
+/** Peek next `{literalPrefix}-{seq}` without reserving. */
+export async function peekNextSequentialSuffixCode(
+  entityKey: string,
+  literalPrefix: string,
+  padding: number,
+  seedMaxFromAsync: () => Promise<number>,
+): Promise<string> {
+  const tenantId = getCurrentTenantId();
+  const cref = counterDocRef(db, tenantId, entityKey);
+  const snap = await getDoc(cref);
+  const pad = clampPadding(padding, 4);
+  const p = String(literalPrefix || '').trim().toUpperCase();
+  if (!p) return '';
+
+  let nextSeq: number;
+  if (snap.exists()) {
+    nextSeq = Math.max(1, Math.floor(Number(snap.data()?.lastSeq || 0))) + 1;
+  } else {
+    const seeded = await seedMaxFromAsync();
+    nextSeq = Math.max(1, seeded + 1);
+  }
+
+  return `${p}-${String(nextSeq).padStart(pad, '0')}`;
 }
 
 /** Peek next code without reserving (display only in forms). */

@@ -1,32 +1,55 @@
 import type { FirestoreUser } from '../../types';
 
+/** حالات افتراضية للفلاتر عندما الإعدادات لسه فاضية — الموديول الفعلي بياخد الحالة من systemSettings */
 export const REPAIR_JOB_STATUSES = [
   'received',
-  'inspection',
-  'repair',
+  'diagnosing',
+  'waiting_approval',
+  'waiting_parts',
+  'repairing',
+  'testing',
   'ready',
   'delivered',
+  'cancelled',
   'unrepairable',
+  'inspection',
+  'repair',
 ] as const;
 
 export type RepairJobStatus = string;
 export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
   received: 'وارد',
-  inspection: 'فحص',
-  repair: 'إصلاح',
+  diagnosing: 'تشخيص',
+  waiting_approval: 'بانتظار موافقة العميل',
+  waiting_parts: 'بانتظار قطع الغيار',
+  repairing: 'إصلاح',
+  testing: 'اختبار',
   ready: 'جاهز للتسليم',
   delivered: 'تم التسليم',
+  cancelled: 'ملغى',
   unrepairable: 'غير قابل للإصلاح',
+  inspection: 'فحص (قديم)',
+  repair: 'إصلاح (قديم)',
 };
 export const REPAIR_JOB_STATUS_COLORS: Record<string, string> = {
   received: '#64748b',
-  inspection: '#f59e0b',
-  repair: '#0ea5e9',
+  diagnosing: '#f59e0b',
+  waiting_approval: '#a855f7',
+  waiting_parts: '#ea580c',
+  repairing: '#0ea5e9',
+  testing: '#6366f1',
   ready: '#22c55e',
   delivered: '#16a34a',
+  cancelled: '#78716c',
   unrepairable: '#ef4444',
+  inspection: '#f59e0b',
+  repair: '#0ea5e9',
 };
 export type RepairWarranty = 'none' | '3months' | '6months';
+export type RepairJobPriority = 'normal' | 'urgent';
+/** ضمان الجهاز عند الاستلام (مختلف عن ضمان الورشة بعد الإصلاح) */
+export type RepairWarrantyScope = 'none' | 'manufacturer' | 'in_store';
+export type RepairApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
 export type RepairPartTransactionType = 'IN' | 'OUT';
 export type RepairTreasuryEntryType = 'OPENING' | 'INCOME' | 'EXPENSE' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'CLOSING';
 
@@ -85,12 +108,15 @@ export interface RepairJob {
   productId?: string;
   productName?: string;
   technicianId?: string;
+  customerId?: string;
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
   deviceType: string;
   deviceBrand: string;
   deviceModel: string;
+  /** رقم سريال سريع للبحث — غالبًا نفس أول صنف في jobProducts */
+  deviceSerial?: string;
   deviceColor?: string;
   devicePassword?: string;
   problemDescription: string;
@@ -102,7 +128,21 @@ export interface RepairJob {
   estimatedCost?: number;
   finalCostOverride?: number;
   finalCost?: number;
+  laborCost?: number;
   warranty: RepairWarranty;
+  warrantyScope?: RepairWarrantyScope;
+  /** تاريخ انتهاء ضمان الجهاز (ISO) — للتحليلات */
+  warrantyExpiresAt?: string;
+  priority?: RepairJobPriority;
+  intakePhotoUrls?: string[];
+  repairPhotoUrls?: string[];
+  approvalStatus?: RepairApprovalStatus;
+  approvalRequestedAt?: string;
+  approvalResolvedAt?: string;
+  approvalNote?: string;
+  /** SHA-256 hex للتوكن — التوكن نفسه بس في الرابط العام */
+  approvalTokenHash?: string;
+  approvalTokenExpiresAt?: string;
   notes?: string;
   partsUsed: RepairPartUsage[];
   statusHistory?: RepairStatusHistoryItem[];
@@ -112,6 +152,7 @@ export interface RepairJob {
   assignedAt?: string;
   resolvedAt?: string;
   slaHours?: number;
+  /** تاريخ الاستحقاق المتوقع — نفس «الموعد المتوقع للتسليم» */
   dueAt?: string;
   breachedAt?: string;
   resolutionMinutes?: number;
@@ -121,6 +162,89 @@ export interface RepairJob {
   closedAt?: string;
   reopenedFromJobId?: string;
   parentJobId?: string;
+}
+
+export type RepairServiceEventAction =
+  | 'status_change'
+  | 'note'
+  | 'job_created'
+  | 'parts_reserved'
+  | 'parts_consumed'
+  | 'parts_released'
+  | 'parts_released_all'
+  | 'approval_requested'
+  | 'approval_resolved'
+  | 'photo_added'
+  | 'field_update'
+  | 'sla_breached'
+  | 'technician_assigned';
+
+/**
+ * أسماء أحداث نطاقية (نمط resource.action) للأتمتة ولوحات المراقبة.
+ * تُخزَّن في `service_events.domainEvent` مع الإبقاء على `action` للتوافق مع البيانات القديمة.
+ */
+export type RepairDomainEventName =
+  | 'job.created'
+  | 'job.status_changed'
+  | 'job.ready'
+  | 'job.delivered'
+  | 'job.cancelled'
+  | 'job.unrepairable'
+  | 'job.waiting_parts'
+  | 'job.waiting_approval'
+  | 'diagnosis.started'
+  | 'diagnosis.completed'
+  | 'customer.approval_requested'
+  | 'customer.approved'
+  | 'customer.rejected'
+  | 'part.reserved'
+  | 'part.consumed'
+  | 'parts.released_all'
+  | 'technician.assigned'
+  | 'repair.started'
+  | 'repair.finished'
+  | 'testing.started'
+  | 'testing.completed'
+  | 'job.photo_added'
+  | 'sla.breached';
+
+export interface RepairServiceEvent {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  at: string;
+  actorUid: string;
+  actorName: string;
+  action: RepairServiceEventAction;
+  /** إصدار مخطط الحمولة الاختيارية للمستهلكين الخارجيين */
+  eventSchemaVersion?: number;
+  domainEvent?: RepairDomainEventName;
+  statusBefore?: string;
+  statusAfter?: string;
+  note?: string;
+  payload?: Record<string, unknown>;
+}
+
+export type RepairPartReservationStatus = 'active' | 'consumed' | 'released';
+
+export interface RepairPartReservation {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  partId: string;
+  partName: string;
+  quantity: number;
+  warehouseId?: string;
+  warehouseName?: string;
+  status: RepairPartReservationStatus;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  releasedBy?: string;
+  consumedBy?: string;
+  partiallyConsumedBy?: string;
 }
 
 export interface PreventiveMaintenancePlan {
@@ -147,6 +271,14 @@ export interface RepairSparePart {
   category: string;
   unit: string;
   minStock: number;
+  /** تكلفة شراء الوحدة (لحساب تكلفة الصيانة / الهامش) */
+  purchaseUnitCost?: number;
+  /** سعر بيع افتراضي للقطعة (مرجعي — الفواتير قد تعدّل السعر) */
+  defaultSalePrice?: number;
+  /** خصم تلقائي من المخزن كنسبة مئوية من تكلفة الشراء عند احتساب تكلفة الوحدة للطلب */
+  warehouseDiscountPercent?: number;
+  /** اختياري: ربط تقريري بمادة خام في مخزون الإنتاج */
+  rawMaterialId?: string;
   createdAt: string;
 }
 
@@ -317,6 +449,16 @@ export interface RepairJobFilters {
   toDate?: string;
   statuses?: RepairJobStatus[];
 }
+
+/** حالة التنقل من شاشة مركز الاتصال إلى «جهاز جديد» */
+export type RepairCallCenterPrefill = {
+  customerName?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  branchId?: string;
+  productId?: string;
+  diagnosis?: string;
+};
 
 export type FirestoreUserWithRepair = FirestoreUser & {
   repairBranchId?: string;

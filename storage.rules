@@ -10,7 +10,7 @@ service firebase.storage {
     match /company/{module}/{documentId}/{fileName} {
       allow read: if isSignedIn();
       allow write: if isSignedIn()
-        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents'];
+        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents', 'repair_jobs'];
     }
 
     // Reserved for future multi-company isolation:
@@ -18,7 +18,7 @@ service firebase.storage {
     match /company/{companyId}/{module}/{documentId}/{fileName} {
       allow read: if isSignedIn();
       allow write: if isSignedIn()
-        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents'];
+        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents', 'repair_jobs'];
     }
   }
 }

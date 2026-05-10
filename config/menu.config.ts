@@ -235,6 +235,7 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'build_circle',
     children: [
       { key: 'repair-dashboard', label: 'لوحة الصيانة', icon: 'dashboard', path: '/repair', permission: 'repair.dashboard.view' },
+      { key: 'repair-call-center', label: 'مركز الاتصال', icon: 'call', path: '/repair/call-center', permission: 'repair.view' },
       { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
       { key: 'repair-new', label: 'جهاز جديد', icon: 'add_circle', path: '/repair/jobs/new', permission: 'repair.jobs.create' },
       { key: 'repair-parts', label: 'قطع الغيار', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },

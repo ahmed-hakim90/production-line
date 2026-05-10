@@ -1011,6 +1011,8 @@ export interface RepairWorkflowSettings {
   initialStatusId?: string;
   /** ط­ط§ظ„ط§طھ طھط¹طھط¨ط± ظ…ظپطھظˆط­ط© ظپظٹ ط§ظ„طھظ‚ط§ط±ظٹط± ظˆط§ظ„ط¥ط­طµط§ط¦ظٹط§طھ */
   openStatusIds?: string[];
+  /** Optional: which status ids set assignedAt; if omitted, client uses built-in defaults */
+  assignmentTriggerStatusIds?: string[];
 }
 
 export interface RepairDefaultsSettings {

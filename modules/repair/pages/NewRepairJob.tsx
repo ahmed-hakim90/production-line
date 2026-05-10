@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import {
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairJob,
+  type RepairCallCenterPrefill,
   type RepairJobProduct,
 } from '../types';
 import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
@@ -37,6 +38,7 @@ export const NewRepairJob: React.FC = () => {
   const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const systemSettings = useAppStore((s) => s.systemSettings);
@@ -108,6 +110,29 @@ export const NewRepairJob: React.FC = () => {
     }
   }, [allowedBranches, form.branchId]);
 
+  const callCenterAppliedRef = React.useRef(false);
+  useEffect(() => {
+    const prefill = (location.state as { callCenterPrefill?: RepairCallCenterPrefill } | null)?.callCenterPrefill;
+    if (!prefill || callCenterAppliedRef.current || allowedBranches.length === 0) return;
+    callCenterAppliedRef.current = true;
+    setForm((prev) => ({
+      ...prev,
+      branchId: prefill.branchId && allowedBranches.some((b) => String(b.id) === prefill.branchId)
+        ? prefill.branchId
+        : prev.branchId,
+      customerName: prefill.customerName ?? prev.customerName,
+      customerPhone: prefill.customerPhone ?? prev.customerPhone,
+      customerAddress: prefill.customerAddress ?? prev.customerAddress,
+    }));
+    if (prefill.productId) {
+      setJobProducts((prev) =>
+        prev.map((row, idx) => (idx === 0 ? { ...row, productId: prefill.productId || '', diagnosis: prefill.diagnosis || row.diagnosis } : row)),
+      );
+    } else if (prefill.diagnosis) {
+      setJobProducts((prev) => prev.map((row, idx) => (idx === 0 ? { ...row, diagnosis: prefill.diagnosis || row.diagnosis } : row)));
+    }
+  }, [location.state, allowedBranches]);
+
   useEffect(() => {
     if (!form.branchId) {
       setOpenBranchJobs([]);
@@ -169,6 +194,10 @@ export const NewRepairJob: React.FC = () => {
     setLoading(true);
     try {
       const result = await repairJobService.create({
+        serviceEventActor: {
+          uid: String(user?.id || ''),
+          name: String(user?.displayName || user?.email || 'مستخدم'),
+        },
         branchId: form.branchId,
         productId: leadProduct?.productId,
         productName: leadProduct?.productName || 'منتج',

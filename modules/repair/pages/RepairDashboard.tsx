@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,11 +31,12 @@ import {
   type RepairJob,
   type RepairJobStatus,
 } from '../types';
-import { repairJobService } from '../services/repairJobService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import type { RepairSalesInvoice } from '../types';
 import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { useRepairJobs } from '../hooks/useRepairJobs';
+import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
 
 const num = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const shortDay = (isoDate: string) =>
@@ -65,8 +67,6 @@ export const RepairDashboard: React.FC = () => {
     [userProfile, currentEmployee?.id],
   );
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
-  const [jobs, setJobs] = useState<RepairJob[]>([]);
-  const [salesInvoices, setSalesInvoices] = useState<RepairSalesInvoice[]>([]);
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const userBranchIds = useMemo(() => {
     const base = resolveUserRepairBranchIds(userProfile);
@@ -92,47 +92,50 @@ export const RepairDashboard: React.FC = () => {
     });
   }, [can, userProfile?.id, currentEmployee?.id]);
 
-  useEffect(() => {
-    let unsub: () => void = () => {};
-    if (repairCtx.canViewAllBranches) {
-      unsub = repairJobService.subscribeAll(setJobs);
-    } else if (repairCtx.jobsTechnicianOnly) {
-      unsub = repairJobService.subscribeByTechnicianIds(technicianIds, setJobs);
-    } else if (userBranchIds.length > 1) {
-      unsub = repairJobService.subscribeByBranches(userBranchIds, setJobs);
-    } else {
-      unsub = repairJobService.subscribeByBranch(userBranchIds[0] || '', setJobs);
-    }
-    return () => unsub();
-  }, [repairCtx.canViewAllBranches, repairCtx.jobsTechnicianOnly, JSON.stringify(userBranchIds), JSON.stringify(technicianIds)]);
+  const { rawJobs: jobs, refetch: refetchJobs } = useRepairJobs({
+    branchId: userBranchIds[0],
+    branchIds: userBranchIds,
+    canViewAllBranches: repairCtx.canViewAllBranches,
+    technicianOnly: repairCtx.jobsTechnicianOnly,
+    technicianIds,
+  });
 
-  useEffect(() => {
-    let unsub: () => void = () => {};
-    if (repairCtx.canViewAllBranches) {
-      unsub = repairSalesInvoiceService.subscribeAll(setSalesInvoices);
-    } else if (userBranchIds.length > 1) {
-      unsub = repairSalesInvoiceService.subscribeByBranches(userBranchIds, setSalesInvoices);
-    } else {
-      unsub = repairSalesInvoiceService.subscribeByBranch(userBranchIds[0] || '', setSalesInvoices);
-    }
-    return () => unsub();
-  }, [repairCtx.canViewAllBranches, JSON.stringify(userBranchIds)]);
+  const { data: salesInvoices = [], refetch: refetchInvoices } = useQuery({
+    queryKey: ['repairSalesInvoices', repairCtx.canViewAllBranches, userBranchIds.join('|')],
+    queryFn: async (): Promise<RepairSalesInvoice[]> => {
+      if (repairCtx.canViewAllBranches) {
+        return repairSalesInvoiceService.list();
+      }
+      if (userBranchIds.length > 1) {
+        const chunks = await Promise.all(userBranchIds.map((bid) => repairSalesInvoiceService.list(bid)));
+        const byId = new Map<string, RepairSalesInvoice>();
+        chunks.flat().forEach((inv) => {
+          if (inv.id) byId.set(inv.id, inv);
+        });
+        return Array.from(byId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      }
+      return repairSalesInvoiceService.list(userBranchIds[0]);
+    },
+    enabled: repairCtx.canViewAllBranches || userBranchIds.length > 0,
+    refetchInterval: 60_000,
+    staleTime: 25_000,
+  });
 
   const kpis = useMemo(() => {
     const openJobs = jobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
     const pendingDelivery = jobs.filter((j) => j.status === 'ready').length;
     const repairRevenue = jobs
-      .filter((j) => j.status === 'delivered')
+      .filter((j) => isDeliveredStatus(j.status))
       .reduce((sum, j) => sum + Number(j.finalCost || 0), 0);
     const partsRevenue = salesInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
     const totalRevenue = repairRevenue + partsRevenue;
     const all = jobs.length || 1;
-    const successRate = (jobs.filter((j) => j.status === 'delivered').length / all) * 100;
+    const successRate = (jobs.filter((j) => isDeliveredStatus(j.status)).length / all) * 100;
     return { openJobs, pendingDelivery, repairRevenue, partsRevenue, totalRevenue, successRate };
   }, [jobs, salesInvoices, repairSettings.workflow.openStatusIds]);
   const recent = useMemo(() => jobs.slice(0, 6), [jobs]);
   const avgTicket = useMemo(() => {
-    const delivered = jobs.filter((job) => job.status === 'delivered');
+    const delivered = jobs.filter((job) => isDeliveredStatus(job.status));
     if (delivered.length === 0) return 0;
     const total = delivered.reduce((sum, row) => sum + Number(row.finalCost || 0), 0);
     return total / delivered.length;
@@ -172,7 +175,7 @@ export const RepairDashboard: React.FC = () => {
     });
     const monthMap = new Map(months.map((m) => [m.key, m]));
     jobs
-      .filter((job) => job.status === 'delivered')
+      .filter((job) => isDeliveredStatus(job.status))
       .forEach((job) => {
         const key = String(job.createdAt || '').slice(0, 7);
         const row = monthMap.get(key);
@@ -181,6 +184,78 @@ export const RepairDashboard: React.FC = () => {
         row.revenue += Number(job.finalCost || 0);
       });
     return months;
+  }, [jobs]);
+
+  const delayedCount = useMemo(() => {
+    const now = Date.now();
+    return jobs.filter(
+      (j) =>
+        repairSettings.workflow.openStatusIds.includes(j.status)
+        && j.dueAt
+        && Date.parse(String(j.dueAt)) < now,
+    ).length;
+  }, [jobs, repairSettings.workflow.openStatusIds]);
+
+  const workloadRows = useMemo(() => {
+    const m = new Map<string, number>();
+    jobs.forEach((j) => {
+      if (!repairSettings.workflow.openStatusIds.includes(j.status)) return;
+      const key = String(j.technicianId || '').trim() || 'غير_مسند';
+      m.set(key, (m.get(key) || 0) + 1);
+    });
+    return Array.from(m.entries())
+      .map(([id, count]) => ({ id, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 14);
+  }, [jobs, repairSettings.workflow.openStatusIds]);
+
+  const avgResolutionHours = useMemo(() => {
+    const rows = jobs.filter((j) => isDeliveredStatus(j.status) && typeof j.resolutionMinutes === 'number');
+    if (rows.length === 0) return 0;
+    const sum = rows.reduce((s, j) => s + Number(j.resolutionMinutes || 0), 0);
+    return sum / rows.length / 60;
+  }, [jobs]);
+
+  const topModels = useMemo(() => {
+    const m = new Map<string, number>();
+    const hot = new Set(['repairing', 'testing', 'ready', 'delivered', 'unrepairable']);
+    jobs.forEach((j) => {
+      if (!hot.has(j.status)) return;
+      const key = `${j.deviceBrand} ${j.deviceModel}`.trim() || 'غير محدد';
+      m.set(key, (m.get(key) || 0) + 1);
+    });
+    return Array.from(m.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [jobs]);
+
+  const profitabilityRows = useMemo(() => {
+    return jobs
+      .filter((j) => isDeliveredStatus(j.status))
+      .map((j) => {
+        const parts = (j.partsUsed || []).reduce((s, p) => s + Number(p.quantity || 0) * Number(p.unitCost || 0), 0);
+        const rev = Number(j.finalCost || 0);
+        const labor = Number(j.laborCost || 0);
+        return { rev, profit: rev - parts - labor };
+      });
+  }, [jobs]);
+
+  const avgProfit = useMemo(() => {
+    if (profitabilityRows.length === 0) return 0;
+    return profitabilityRows.reduce((s, r) => s + r.profit, 0) / profitabilityRows.length;
+  }, [profitabilityRows]);
+
+  const warrantyPartsCost = useMemo(() => {
+    let sum = 0;
+    jobs.forEach((j) => {
+      const w = j.warrantyScope === 'manufacturer' || (j.jobProducts || []).some((p) => p.inWarranty);
+      if (!w) return;
+      (j.partsUsed || []).forEach((p) => {
+        sum += Number(p.quantity || 0) * Number(p.unitCost || 0);
+      });
+    });
+    return sum;
   }, [jobs]);
 
   return (
@@ -193,8 +268,21 @@ export const RepairDashboard: React.FC = () => {
               <p className="text-sm text-muted-foreground mt-1">متابعة حالة الطلبات، الأداء، والإيرادات في مكان واحد.</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => {
+                  void refetchJobs();
+                  void refetchInvoices();
+                }}
+              >
+                تحديث
+              </Button>
               <Link to={withTenantPath(tenantSlug, '/repair/jobs/new')}>
                 <Button>جهاز جديد</Button>
+              </Link>
+              <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
+                <Button variant="outline">مركز الاتصال</Button>
               </Link>
               <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
                 <Button variant="outline">عرض الطلبات</Button>
@@ -206,10 +294,14 @@ export const RepairDashboard: React.FC = () => {
           </div>
         </CardContent>
       </Card>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">طلبات مفتوحة</CardTitle></CardHeader>
           <CardContent><p className="text-3xl font-bold">{num(kpis.openJobs)}</p></CardContent>
+        </Card>
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader><CardTitle className="text-sm text-amber-900">متأخرة عن الموعد</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold text-amber-800">{num(delayedCount)}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">بانتظار التسليم</CardTitle></CardHeader>
@@ -240,6 +332,48 @@ export const RepairDashboard: React.FC = () => {
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط قيمة الطلب المنجز</CardTitle></CardHeader>
           <CardContent><p className="text-2xl font-semibold text-primary">{num(Math.round(avgTicket))}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط مدة الإصلاح (ساعة)</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{avgResolutionHours.toFixed(1)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">تكلفة قطع (ضمان)</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold text-orange-700">{num(Math.round(warrantyPartsCost))}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط ربحية التسليم</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold text-emerald-800">{num(Math.round(avgProfit))}</p></CardContent>
+        </Card>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <Card>
+          <CardHeader><CardTitle>عبء الفنيين (طلبات مفتوحة)</CardTitle></CardHeader>
+          <CardContent className="h-64 min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={workloadRows} layout="vertical" margin={{ left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="id" width={88} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => num(v)} />
+                <Bar dataKey="count" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>أكثر الموديلات ظهورًا في الورشة</CardTitle></CardHeader>
+          <CardContent className="h-64 min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topModels}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" interval={0} angle={-18} textAnchor="end" height={70} tick={{ fontSize: 10 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip formatter={(v: number) => num(v)} />
+                <Bar dataKey="count" fill="#6366f1" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
         </Card>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">

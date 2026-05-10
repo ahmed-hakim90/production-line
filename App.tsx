@@ -82,6 +82,7 @@ const TenantLoginGateway = lazyNamed(
   'TenantLoginGateway',
 );
 const RepairTrackPublic = lazyNamed(() => import('./modules/repair/pages/RepairTrackPublic'), 'RepairTrackPublic');
+const RepairApprovalPublic = lazyNamed(() => import('./modules/repair/pages/RepairApprovalPublic'), 'RepairApprovalPublic');
 const CompanyNotApprovedPage = lazyNamed(() => import('./modules/auth/pages/CompanyNotApprovedPage'), 'CompanyNotApprovedPage');
 const SuperAdminShell = lazyNamed(() => import('./modules/super-admin/SuperAdminShell'), 'SuperAdminShell');
 const TenantsApproval = lazyNamed(() => import('./modules/super-admin/pages/TenantsApproval'), 'TenantsApproval');
@@ -938,6 +939,14 @@ const App: React.FC = () => {
             element={
               <Suspense fallback={<PageRouteFallback />}>
                 <RepairTrackPublic />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/track/:tenantSlug/approve"
+            element={
+              <Suspense fallback={<PageRouteFallback />}>
+                <RepairApprovalPublic />
               </Suspense>
             }
           />

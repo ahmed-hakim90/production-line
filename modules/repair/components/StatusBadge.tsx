@@ -4,11 +4,17 @@ import { REPAIR_JOB_STATUS_LABELS, type RepairJobStatus } from '../types';
 
 const classMap: Record<string, string> = {
   received: 'bg-slate-100 text-slate-800',
-  inspection: 'bg-amber-100 text-amber-800',
-  repair: 'bg-sky-100 text-sky-800',
+  diagnosing: 'bg-amber-100 text-amber-800',
+  waiting_approval: 'bg-violet-100 text-violet-900',
+  waiting_parts: 'bg-orange-100 text-orange-900',
+  repairing: 'bg-sky-100 text-sky-800',
+  testing: 'bg-indigo-100 text-indigo-900',
   ready: 'bg-emerald-100 text-emerald-800',
   delivered: 'bg-green-100 text-green-800',
+  cancelled: 'bg-stone-200 text-stone-800',
   unrepairable: 'bg-rose-100 text-rose-800',
+  inspection: 'bg-amber-100 text-amber-800',
+  repair: 'bg-sky-100 text-sky-800',
 };
 
 export const StatusBadge: React.FC<{ status: RepairJobStatus }> = ({ status }) => {

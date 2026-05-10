@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 type WhatsAppShareProps = {
   text: string;
   phone?: string;
+  /** نص الزر — افتراضيًا «إرسال واتساب» */
+  label?: string;
 };
 
 const normalizeWhatsAppPhone = (phone?: string): string => {
@@ -13,7 +15,7 @@ const normalizeWhatsAppPhone = (phone?: string): string => {
   return digitsOnly.startsWith('00') ? digitsOnly.slice(2) : digitsOnly;
 };
 
-export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({ text, phone }) => {
+export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({ text, phone, label }) => {
   const share = () => {
     const encoded = encodeURIComponent(text);
     const normalizedPhone = normalizeWhatsAppPhone(phone);
@@ -24,8 +26,8 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({ text, phone }) => 
   };
 
   return (
-    <Button type="button" variant="outline" onClick={share}>
-      إرسال واتساب
+    <Button type="button" variant="outline" size="sm" onClick={share}>
+      {label || 'إرسال واتساب'}
     </Button>
   );
 };
