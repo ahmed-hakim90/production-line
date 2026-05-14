@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { FirestoreProduct } from '../../../types';
-import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { getCurrentTenantId, getCurrentTenantIdOrNull } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { getMergedPlanSettings } from '../../shared/services/entityCodePlanSettings';
 import {
@@ -50,7 +50,27 @@ export const productService = {
       const snap = await getDocs(tenantQuery(db, COLLECTION));
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreProduct));
     } catch (error) {
+      const tenantId = getCurrentTenantIdOrNull();
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String((error as { code?: string }).code)
+          : '';
+      console.error('[products] getDocs(tenantQuery products) failed', {
+        tenantId: tenantId ?? '(tenant context unset)',
+        code,
+        message: error instanceof Error ? error.message : String(error),
+      });
       console.error('productService.getAll error:', error);
+      if (code === 'permission-denied') {
+        console.error(
+          '[products] Diagnosis: Firestore denied list/read on `products`. Verify deployed rules for `products`, `pl_isActiveUser`, and `tenantId` on documents vs current tenant.',
+        );
+      }
+      if (tenantId == null || tenantId === '') {
+        console.error(
+          '[products] Diagnosis: `getCurrentTenantId()` was not set before getAll(); products query uses tenantId filter — fix login/bootstrap order if this appears after sign-in.',
+        );
+      }
       throw error;
     }
   },

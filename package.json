@@ -19,10 +19,11 @@
     "text:arabic:apply": "node scripts/fix-mojibake.mjs --apply-arabic",
     "push": "git push",
     "backup:sanitize": "node scripts/sanitize-backup.mjs",
-    "test:rules": "npx firebase-tools emulators:exec --only firestore \"node tests/firestore.rules.test.mjs\"",
+    "compose:firestore-rules": "node scripts/compose-firestore-rules.mjs",
+    "test:rules": "npm run compose:firestore-rules && npx firebase-tools emulators:exec --only firestore \"node tests/firestore.rules.test.mjs\"",
     "verify:firebase-env": "node scripts/verify-firebase-env.mjs",
     "verify:firestore-rules-deploy": "node scripts/verify-firestore-rules-deploy.mjs",
-    "verify:firebase": "npm run verify:firebase-env && npm run verify:firestore-rules-deploy"
+    "verify:firebase": "npm run verify:firebase-env && npm run compose:firestore-rules && npm run verify:firestore-rules-deploy"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

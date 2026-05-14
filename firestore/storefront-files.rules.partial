@@ -1,0 +1,67 @@
+    // دا لسوكاني ستور 
+     function isStoreAdmin() {
+      return request.auth != null &&
+        (request.auth.token.admin == true || request.auth.token.role == "admin");
+    }
+
+    // عملاء المتجر (Phone Auth) — يبقى الوصول كما ضبطته سابقاً
+    match /storefront_customers/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // محتوى CMS: القراءة للعموم غير مطلوبة — التطبيق يقرأ عبر Admin SDK فقط.
+    match /storefront_cms/{docId} {
+      allow read, write: if false;
+    }
+
+    // نماذج المنتجات ثلاثية الأبعاد: القراءة عامة حتى تظهر أزرار 360°،
+    // والكتابة المباشرة من العميل مقصورة على حسابات Firebase ذات custom claims إدارية.
+    // مسارات API في Next.js تستخدم Admin SDK وتتجاوز هذه القواعد.
+    match /product_3d_assets/{sku} {
+      allow read: if true;
+      allow create, update, delete: if isStoreAdmin();
+    }
+
+    //دا للملفات 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isFilesAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    match /fileCards/{cardId} {
+      // Cards under a deactivated folder are hidden from the public.
+      // Cards without a folder default to folderIsActive == true.
+      allow read: if (
+        resource.data.isActive == true &&
+        resource.data.get('folderIsActive', true) == true
+      ) || isFilesAdmin();
+      allow create, update, delete: if isFilesAdmin();
+    }
+
+    match /fileFolders/{folderId} {
+      allow read: if resource.data.isActive == true || isFilesAdmin();
+      allow create, update, delete: if isFilesAdmin();
+    }
+
+    match /file_settings/{docId} {
+      allow read: if true;
+      allow write: if isFilesAdmin();
+    }
+
+    match /adminUsers/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if isFilesAdmin();
+    }
+
+    match /fcmTokens/{tokenId} {
+      allow create, update: if true;
+      allow read, delete: if isFilesAdmin();
+    }
+
+    match /file_notifications/{id} {
+      allow read, write: if isFilesAdmin();
+    }
+
