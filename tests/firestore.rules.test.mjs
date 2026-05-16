@@ -54,6 +54,7 @@ const seed = async () => {
   await set('users', 'userAAdmin', {
     tenantId: 'tenantA',
     isActive: true,
+    isSuperAdmin: false,
     roleId: 'tenantA-admin-role',
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
@@ -61,6 +62,7 @@ const seed = async () => {
   await set('users', 'userAOperator', {
     tenantId: 'tenantA',
     isActive: true,
+    isSuperAdmin: false,
     roleId: 'tenantA-operator-role',
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
@@ -68,6 +70,7 @@ const seed = async () => {
   await set('users', 'userBAdmin', {
     tenantId: 'tenantB',
     isActive: true,
+    isSuperAdmin: false,
     roleId: 'tenantB-admin-role',
     repairBranchId: 'branchB',
     repairBranchIds: ['branchB'],
@@ -169,6 +172,47 @@ await seed();
   await assertFails(
     operatorDb.collection('repair_jobs').doc('job_branchB').collection('service_events').doc('ev_branchB').get(),
   );
+}
+
+// 5) Production report create transaction may read/write the unique guard doc.
+{
+  const adminDb = testEnv.authenticatedContext('userAAdmin').firestore();
+  const uniqueId = '2026-05-14__line-a__emp-a__product-a__finished_product';
+  await assertSucceeds(adminDb.runTransaction(async (tx) => {
+    const uniqueRef = adminDb.collection('production_report_uniques').doc(uniqueId);
+    const reportRef = adminDb.collection('production_reports').doc('reportA');
+    const uniqueSnap = await tx.get(uniqueRef);
+    if (uniqueSnap.exists) throw new Error('unexpected duplicate');
+    tx.set(reportRef, {
+      tenantId: 'tenantA',
+      reportCode: 'PR-2026-0001',
+      date: '2026-05-14',
+      lineId: 'line-a',
+      employeeId: 'emp-a',
+      productId: 'product-a',
+      reportType: 'finished_product',
+      quantityProduced: 10,
+      workersCount: 1,
+      workHours: 8,
+      createdAt: new Date(),
+    });
+    tx.set(uniqueRef, {
+      tenantId: 'tenantA',
+      reportId: reportRef.id,
+      date: '2026-05-14',
+      lineId: 'line-a',
+      employeeId: 'emp-a',
+      productId: 'product-a',
+      reportType: 'finished_product',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }));
+
+  await assertFails(adminDb.collection('production_report_uniques').doc('tenantB-unique').set({
+    tenantId: 'tenantB',
+    reportId: 'foreign-report',
+  }));
 }
 
 await testEnv.cleanup();

@@ -861,6 +861,10 @@
     "createProduct": {
       "manualCodeRequired": "Enter a product code or lock the field again for automatic generation.",
       "createSuccess": "Product added successfully",
+      "editTitle": "Edit product",
+      "editSuccess": "Product changes saved",
+      "editNotFound": "Product not found. Refresh the page or return to the product list.",
+      "saveEdits": "Save changes",
       "saveError": "Unable to save product. Please try again.",
       "title": "Add New Product",
       "productNameRequired": "Product name *",

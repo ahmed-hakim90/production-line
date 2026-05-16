@@ -124,7 +124,8 @@
     function pl_sameTenantOrLegacyRead() {
       return pl_isActiveUser()
         && (
-          !('tenantId' in resource.data)
+          resource == null
+          || !('tenantId' in resource.data)
           || resource.data.tenantId == pl_currentUserDoc().data.tenantId
         );
     }
@@ -286,6 +287,26 @@
         'supply_cycles', 'supply_cycle_waste_lines',
         'entity_code_counters', 'inventory_counters'
       ];
+    }
+
+    /**
+     * Super admins may work inside another company via /t/{slug}/… while their users/{uid}.tenantId
+     * stays on a home tenant. Generic business rules must still allow tenant-scoped docs.
+     */
+    function pl_superAdminTenantScopedCreateOk() {
+      return pl_isSuperAdmin()
+        && request.resource.data.keys().hasAll(['tenantId'])
+        && request.resource.data.tenantId is string
+        && request.resource.data.tenantId != '';
+    }
+
+    function pl_superAdminTenantScopedUpdateOk() {
+      return pl_isSuperAdmin()
+        && (
+          !('tenantId' in resource.data)
+          || !('tenantId' in request.resource.data)
+          || request.resource.data.tenantId == resource.data.tenantId
+        );
     }
 
     function pl_isPresenceOwner(userId) {
@@ -715,9 +736,29 @@
         && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
+    match /production_report_uniques/{docId} {
+      allow read: if pl_isActiveUser()
+        && (
+          !exists(/databases/$(database)/documents/production_report_uniques/$(docId))
+          || !('tenantId' in resource.data)
+          || resource.data.tenantId == pl_currentUserDoc().data.tenantId
+          || pl_isSuperAdmin()
+        );
+      allow create: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+    }
+
     match /{coll}/{docId} {
-      allow read: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyRead();
-      allow create: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyWrite();
-      allow update: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyUpdate();
-      allow delete: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyRead();
+      allow read: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }

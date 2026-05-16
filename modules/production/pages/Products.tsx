@@ -37,11 +37,7 @@ import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/u
 import { Card, Button, Badge } from '../components/UI';
 import { formatNumber } from '../../../utils/calculations';
 import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
-import {
-  chineseUnitCostEgpFromYuanUnitPrice,
-  yuanUnitPriceInputFromChineseUnitCostEgp,
-} from '../../../utils/chineseUnitCostCny';
-import type { Product, FirestoreProduct, ProductionReport } from '../../../types';
+import type { Product, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
 import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
@@ -73,7 +69,6 @@ import {
 import { useManagedPrint } from '../../../utils/printManager';
 import { shareToWhatsApp, waitForExportPaint } from '../../../utils/reportExport';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { deleteField } from 'firebase/firestore';
 import { countsTowardProductManufacturingVolume } from '../utils/reportTypes';
 
 type ProductTableColumnKey =
@@ -214,19 +209,6 @@ const shortProductName = (name: string): string => {
   return `${parts[0]} ${parts[1]}`;
 };
 
-const emptyForm: Omit<FirestoreProduct, 'id'> = {
-  name: '',
-  model: '',
-  code: '',
-  openingBalance: 0,
-  chineseUnitCost: 0,
-  innerBoxCost: 0,
-  outerCartonCost: 0,
-  unitsPerCarton: 0,
-  sellingPrice: 0,
-  autoDeductComponentScrapFromDecomposed: false,
-};
-
 export const Products: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
@@ -264,12 +246,6 @@ export const Products: React.FC = () => {
   const canImportFromPage = can('import') && pageControl.importEnabled;
   const navigate = useTenantNavigate();
 
-  const [showModal, setShowModal] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  /** CNY ¥/unit when exchange rate is set; maps to chineseUnitCost on save */
-  const [chineseUnitPriceYuan, setChineseUnitPriceYuan] = useState('');
-  const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [bulkToggleSaving, setBulkToggleSaving] = useState(false);
@@ -758,83 +734,14 @@ export const Products: React.FC = () => {
   useEffect(() => {
     const editProductId = (location.state as { editProductId?: string } | null)?.editProductId;
     if (!editProductId) return;
-    openEdit(editProductId);
+    if (!can('products.edit')) return;
+    openModal(MODAL_KEYS.PRODUCTS_CREATE, { mode: 'edit', productId: editProductId });
     navigate('/products', { replace: true, state: null });
-  }, [location.state, navigate, products, _rawProducts]);
+  }, [location.state, navigate, can, openModal]);
 
   const openEdit = (id: string) => {
-    const product = products.find((p) => p.id === id);
-    if (!product) return;
-    const raw = _rawProducts.find((p) => p.id === id);
-    setEditId(id);
-    const rate = Number(laborSettings?.cnyToEgpRate ?? 0);
-    setForm({
-      name: product.name,
-      model: product.category,
-      code: product.code,
-      openingBalance: product.openingStock,
-      chineseUnitCost: raw?.chineseUnitCost ?? 0,
-      innerBoxCost: raw?.innerBoxCost ?? 0,
-      outerCartonCost: raw?.outerCartonCost ?? 0,
-      unitsPerCarton: raw?.unitsPerCarton ?? 0,
-      sellingPrice: raw?.sellingPrice ?? 0,
-      autoDeductComponentScrapFromDecomposed: raw?.autoDeductComponentScrapFromDecomposed === true,
-      routingTargetUnitSeconds:
-        raw?.routingTargetUnitSeconds != null && Number(raw.routingTargetUnitSeconds) > 0
-          ? Math.round(Number(raw.routingTargetUnitSeconds))
-          : undefined,
-    });
-    setChineseUnitPriceYuan(
-      yuanUnitPriceInputFromChineseUnitCostEgp(raw?.chineseUnitCost ?? 0, rate),
-    );
-    setSaveMsg(null);
-    setShowModal(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.name || !form.code) return;
-    if (!form.model) return;
-    setSaving(true);
-    setSaveMsg(null);
-    const cnyRate = Number(laborSettings?.cnyToEgpRate ?? 0);
-    const resolveChineseUnitCost = (): number => {
-      if (!canViewCosts) return form.chineseUnitCost ?? 0;
-      if (cnyRate > 0) {
-        const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
-        return chineseUnitCostEgpFromYuanUnitPrice(yuan, cnyRate);
-      }
-      return form.chineseUnitCost ?? 0;
-    };
-    try {
-      if (editId) {
-        const t = form.routingTargetUnitSeconds;
-        const hasTarget = typeof t === 'number' && Number.isFinite(t) && t > 0;
-        const payload: Record<string, unknown> = { ...form };
-        payload.chineseUnitCost = resolveChineseUnitCost();
-        payload.routingTargetUnitSeconds = hasTarget ? Math.round(t) : deleteField();
-        await updateProduct(editId, payload as Partial<FirestoreProduct>);
-        setSaveMsg({ type: 'success', text: 'تم حفظ تعديلات المنتج بنجاح' });
-      } else {
-        const createData: Omit<FirestoreProduct, 'id'> = { ...form, chineseUnitCost: resolveChineseUnitCost() };
-        if (
-          typeof createData.routingTargetUnitSeconds !== 'number' ||
-          !Number.isFinite(createData.routingTargetUnitSeconds) ||
-          createData.routingTargetUnitSeconds <= 0
-        ) {
-          delete (createData as { routingTargetUnitSeconds?: number }).routingTargetUnitSeconds;
-        } else {
-          createData.routingTargetUnitSeconds = Math.round(createData.routingTargetUnitSeconds);
-        }
-        await createProduct(createData);
-        setSaveMsg({ type: 'success', text: 'تم إضافة المنتج بنجاح' });
-        setForm(emptyForm);
-        setChineseUnitPriceYuan('');
-      }
-    } catch {
-      setSaveMsg({ type: 'error', text: 'تعذر حفظ المنتج. حاول مرة أخرى.' });
-    } finally {
-      setSaving(false);
-    }
+    if (!can('products.edit')) return;
+    openModal(MODAL_KEYS.PRODUCTS_CREATE, { mode: 'edit', productId: id });
   };
 
   const handleDelete = async (id: string) => {
@@ -1293,6 +1200,22 @@ export const Products: React.FC = () => {
           },
         ]}
       />
+
+      {saveMsg && (
+        <div
+          className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold border ${
+            saveMsg.type === 'success'
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-rose-50 text-rose-700 border-rose-200'
+          }`}
+        >
+          <ProductIcon name={saveMsg.type === 'success' ? 'check_circle' : 'error'} className="text-base shrink-0" />
+          <p className="flex-1">{saveMsg.text}</p>
+          <button type="button" onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors shrink-0">
+            <ProductIcon name="close" className="text-base" />
+          </button>
+        </div>
+      )}
 
       {/* â”€â”€ Search & Filters â”€â”€ */}
       <SmartFilterBar
@@ -1860,207 +1783,6 @@ export const Products: React.FC = () => {
         );
       })()}
 
-      {/* â”€â”€ Add / Edit Modal â”€â”€ */}
-      {showModal && (can("products.create") || can("products.edit")) && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); setChineseUnitPriceYuan(''); }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-              <h3 className="text-lg font-bold">{editId ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h3>
-              <button onClick={() => { setShowModal(false); setSaveMsg(null); setChineseUnitPriceYuan(''); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-                <ProductIcon name="close" />
-              </button>
-            </div>
-            <div className="p-6 space-y-5 overflow-y-auto flex-1">
-              {saveMsg && (
-                <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                  <ProductIcon name={saveMsg.type === 'success' ? 'check_circle' : 'error'} className="text-base" />
-                  <p className="flex-1">{saveMsg.text}</p>
-                  <button onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
-                    <ProductIcon name="close" className="text-base" />
-                  </button>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">اسم المنتج *</label>
-                <input
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="مثال: محرك هيدروليكي H-400"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكود *</label>
-                  <input
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                    placeholder="PRD-00001"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">الفئة / الموديل</label>
-                  <input
-                    list="products-category-options"
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    value={form.model}
-                    onChange={(e) => setForm({ ...form, model: e.target.value })}
-                    placeholder="اختر أو اكتب فئة"
-                  />
-                  <datalist id="products-category-options">
-                    {mergedCategoryOptions.map((category) => (
-                      <option key={category} value={category} />
-                    ))}
-                  </datalist>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">سعر البيع (ج.م)</label>
-                <input
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={form.sellingPrice ?? ''}
-                  placeholder="0"
-                  onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-bold text-[var(--color-text-muted)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.autoDeductComponentScrapFromDecomposed === true}
-                    onChange={(e) => setForm({ ...form, autoDeductComponentScrapFromDecomposed: e.target.checked })}
-                  />
-                  خصم هالك المكونات تلقائياً من مخزن المفكك أثناء تقرير الإنتاج
-                </label>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-                  تارجت المتوقع في التقارير (ثانية/وحدة)
-                </label>
-                <input
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={form.routingTargetUnitSeconds ?? ''}
-                  placeholder="اختياري — يُستخدم عند عدم وجود مسار نشط (أو يكمّل عند غياب أساس من المسار)"
-                  onChange={(e) => {
-                    const v = e.target.value.trim();
-                    if (v === '') setForm({ ...form, routingTargetUnitSeconds: undefined });
-                    else setForm({ ...form, routingTargetUnitSeconds: Math.round(Number(v)) });
-                  }}
-                />
-                <p className="text-xs text-[var(--color-text-muted)]">
-                  عند وجود مسار نشط بزمن خطوات أو بتارجت مسار، يُعتمد المسار أولاً. بدون مسار، يُحسب انحراف الكمية في التقرير من هذا الحقل.
-                </p>
-              </div>
-
-              {/* Cost breakdown (costs permission) */}
-              {canViewCosts && (
-                <>
-                  <div className="border-t border-[var(--color-border)] pt-4">
-                    <h4 className="text-sm font-bold text-[var(--color-text-muted)] mb-3 flex items-center gap-2">
-                      <ProductIcon name="receipt_long" className="text-teal-500 text-base" />
-                      تفصيل التكلفة
-                    </h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2 sm:col-span-2">
-                      {Number(laborSettings?.cnyToEgpRate ?? 0) > 0 ? (
-                        <>
-                          <label className="block text-sm font-bold text-[var(--color-text-muted)]">سعر الوحدة باليوان (¥)</label>
-                          <input
-                            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                            type="number"
-                            min={0}
-                            step="any"
-                            value={chineseUnitPriceYuan}
-                            placeholder="0"
-                            onChange={(e) => setChineseUnitPriceYuan(e.target.value)}
-                          />
-                          <p className="text-xs text-[var(--color-text-muted)]">
-                            سيتم حفظ تكلفة الوحدة الصينية ≈{' '}
-                            {formatCost(
-                              chineseUnitCostEgpFromYuanUnitPrice(
-                                Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0,
-                                Number(laborSettings?.cnyToEgpRate ?? 0),
-                              ),
-                            )}{' '}
-                            ج.م (معامل الصرف {formatCost(Number(laborSettings?.cnyToEgpRate ?? 0))} ج.م لكل ¥)
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-3 py-2">
-                            لم يُضبط معامل تحويل اليوان في إعدادات التكاليف. أدخل تكلفة الوحدة الصينية بالجنيه أدناه، أو اضبط المعامل أولاً.
-                          </p>
-                          <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة الوحدة الصينية (ج.م) — إدخال يدوي</label>
-                          <input
-                            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                            type="number"
-                            min={0}
-                            step="any"
-                            value={form.chineseUnitCost ?? ''}
-                            placeholder="0"
-                            onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })}
-                          />
-                        </>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة العلبة الداخلية (ج.م)</label>
-                      <input
-                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                        type="number" min={0} step="any"
-                        value={form.innerBoxCost ?? ''}
-                        placeholder="0"
-                        onChange={(e) => setForm({ ...form, innerBoxCost: Number(e.target.value) })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">تكلفة الكرتونة الخارجية (ج.م)</label>
-                      <input
-                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                        type="number" min={0} step="any"
-                        value={form.outerCartonCost ?? ''}
-                        placeholder="0"
-                        onChange={(e) => setForm({ ...form, outerCartonCost: Number(e.target.value) })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-[var(--color-text-muted)]">عدد الوحدات في الكرتونة</label>
-                      <input
-                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                        type="number" min={0} step="1"
-                        value={form.unitsPerCarton ?? ''}
-                        placeholder="0"
-                        onChange={(e) => setForm({ ...form, unitsPerCarton: Number(e.target.value) })}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-              <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); setChineseUnitPriceYuan(''); }}>إلغاء</Button>
-              <Button variant="primary" onClick={handleSave} disabled={saving || !form.name || !form.code}>
-                {saving ? (
-                  <ProductIcon name="refresh" className="animate-spin text-sm" />
-                ) : (
-                  <ProductIcon name={editId ? 'save' : 'add'} className="text-sm" />
-                )}
-                {editId ? 'حفظ التعديلات' : 'إضافة المنتج'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && can("products.delete") && (

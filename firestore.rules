@@ -1,78 +1,149 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+    // دا لسوكاني ستور 
+     function isStoreAdmin() {
+      return request.auth != null &&
+        (request.auth.token.admin == true || request.auth.token.role == "admin");
+    }
 
-    function isAuthenticated() {
+    // عملاء المتجر (Phone Auth) — يبقى الوصول كما ضبطته سابقاً
+    match /storefront_customers/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // محتوى CMS: القراءة للعموم غير مطلوبة — التطبيق يقرأ عبر Admin SDK فقط.
+    match /storefront_cms/{docId} {
+      allow read, write: if false;
+    }
+
+    // نماذج المنتجات ثلاثية الأبعاد: القراءة عامة حتى تظهر أزرار 360°،
+    // والكتابة المباشرة من العميل مقصورة على حسابات Firebase ذات custom claims إدارية.
+    // مسارات API في Next.js تستخدم Admin SDK وتتجاوز هذه القواعد.
+    match /product_3d_assets/{sku} {
+      allow read: if true;
+      allow create, update, delete: if isStoreAdmin();
+    }
+
+    //دا للملفات 
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function currentUserDoc() {
+    function isFilesAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    match /fileCards/{cardId} {
+      // Cards under a deactivated folder are hidden from the public.
+      // Cards without a folder default to folderIsActive == true.
+      allow read: if (
+        resource.data.isActive == true &&
+        resource.data.get('folderIsActive', true) == true
+      ) || isFilesAdmin();
+      allow create, update, delete: if isFilesAdmin();
+    }
+
+    match /fileFolders/{folderId} {
+      allow read: if resource.data.isActive == true || isFilesAdmin();
+      allow create, update, delete: if isFilesAdmin();
+    }
+
+    match /file_settings/{docId} {
+      allow read: if true;
+      allow write: if isFilesAdmin();
+    }
+
+    match /adminUsers/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if isFilesAdmin();
+    }
+
+    match /fcmTokens/{tokenId} {
+      allow create, update: if true;
+      allow read, delete: if isFilesAdmin();
+    }
+
+    match /file_notifications/{id} {
+      allow read, write: if isFilesAdmin();
+    }
+
+    // Fragment: ERP multi-tenant rules only (Sokany store / files collections excluded). Paste inside `match /databases/{database}/documents { ... }`.
+    // Helpers use the `pl_` prefix for safe merge into a central rules file.
+    // No rules_version / service wrapper / match databases wrapper / deny-all catch-all in this file.
+
+    function pl_authSignedIn() {
+      return request.auth != null;
+    }
+
+    function pl_currentUserDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function currentUserPath() {
+    function pl_currentUserPath() {
       return /databases/$(database)/documents/users/$(request.auth.uid);
     }
 
-    function currentRolePath() {
-      return /databases/$(database)/documents/roles/$(currentUserDoc().data.roleId);
+    function pl_currentRolePath() {
+      return /databases/$(database)/documents/roles/$(pl_currentUserDoc().data.roleId);
     }
 
-    function currentRoleDoc() {
-      return get(currentRolePath());
+    function pl_currentRoleDoc() {
+      return get(pl_currentRolePath());
     }
 
-    function isSuperAdmin() {
-      return isAuthenticated()
-        && exists(currentUserPath())
-        && currentUserDoc().data.isSuperAdmin == true;
+    function pl_isSuperAdmin() {
+      return pl_authSignedIn()
+        && exists(pl_currentUserPath())
+        && pl_currentUserDoc().data.isSuperAdmin == true;
     }
 
-    function roleBelongsToTenant() {
-      let rid = currentUserDoc().data.roleId;
+    function pl_roleBelongsToTenant() {
+      let rid = pl_currentUserDoc().data.roleId;
       return rid != null && rid != ''
         && exists(/databases/$(database)/documents/roles/$(rid))
         && get(/databases/$(database)/documents/roles/$(rid)).data.tenantId
-          == currentUserDoc().data.tenantId;
+          == pl_currentUserDoc().data.tenantId;
     }
 
-    function hasPermission(permissionKey) {
-      return isAuthenticated()
-        && exists(currentUserPath())
-        && exists(currentRolePath())
-        && roleBelongsToTenant()
-        && currentRoleDoc().data.permissions[permissionKey] == true;
+    function pl_hasErpPermission(permissionKey) {
+      return pl_authSignedIn()
+        && exists(pl_currentUserPath())
+        && exists(pl_currentRolePath())
+        && pl_roleBelongsToTenant()
+        && pl_currentRoleDoc().data.permissions[permissionKey] == true;
     }
 
-    function customerDepositsReadPerm() {
-      return isSuperAdmin()
-        || hasPermission('customerDeposits.view')
-        || hasPermission('customerDeposits.create')
-        || hasPermission('customerDeposits.confirm')
-        || hasPermission('customerDeposits.manage');
+    function pl_customerDepositsReadPerm() {
+      return pl_isSuperAdmin()
+        || pl_hasErpPermission('customerDeposits.view')
+        || pl_hasErpPermission('customerDeposits.create')
+        || pl_hasErpPermission('customerDeposits.confirm')
+        || pl_hasErpPermission('customerDeposits.manage');
     }
 
     /** تسجيل إيداع معلق أو تحديث مسلسل الإيداعات — يشمل المشرف العام (الواجهة قد تعتمد على دور غير مزامن مع القواعد). */
-    function customerDepositsCanCreatePendingEntry() {
-      return hasPermission('customerDeposits.create')
-        || hasPermission('customerDeposits.manage')
-        || isSuperAdmin();
+    function pl_customerDepositsCanCreatePendingEntry() {
+      return pl_hasErpPermission('customerDeposits.create')
+        || pl_hasErpPermission('customerDeposits.manage')
+        || pl_isSuperAdmin();
     }
 
-    function depositEntryAmountOk() {
+    function pl_depositEntryAmountOk() {
       return request.resource.data.amount is int
         || request.resource.data.amount is float
         || request.resource.data.amount is number;
     }
 
-    function depositEntryTenantOk() {
-      return isActiveUser()
-        && resource.data.tenantId == currentUserDoc().data.tenantId
+    function pl_depositEntryTenantOk() {
+      return pl_isActiveUser()
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.tenantId == resource.data.tenantId;
     }
 
-    function depositEntryConfirmUpdate() {
-      return (hasPermission('customerDeposits.confirm') || hasPermission('customerDeposits.manage'))
+    function pl_depositEntryConfirmUpdate() {
+      return (pl_hasErpPermission('customerDeposits.confirm') || pl_hasErpPermission('customerDeposits.manage'))
         && resource.data.status == 'pending'
         && request.resource.data.status == 'confirmed'
         && request.resource.data.amount == resource.data.amount
@@ -89,91 +160,82 @@ service cloud.firestore {
         && request.resource.data.confirmedAt is timestamp;
     }
 
-    function depositEntryCreatorPendingUpdate() {
-      return hasPermission('customerDeposits.create')
-        && !(hasPermission('customerDeposits.manage'))
+    function pl_depositEntryCreatorPendingUpdate() {
+      return pl_hasErpPermission('customerDeposits.create')
+        && !(pl_hasErpPermission('customerDeposits.manage'))
         && resource.data.status == 'pending'
         && request.resource.data.status == 'pending'
         && resource.data.createdByUid == request.auth.uid;
     }
 
     /** المسلسل لا يُغيّر بعد الإنشاء (سجلات بلا حقل تبقى قابلة للتحديث دون إضافة مسلسل من العميل). */
-    function depositEntrySerialUnchanged() {
+    function pl_depositEntrySerialUnchanged() {
       return !('depositSerial' in resource.data)
         || request.resource.data.depositSerial == resource.data.depositSerial;
     }
 
-    function isActiveUser() {
-      return isAuthenticated()
-        && exists(currentUserPath())
-        && currentUserDoc().data.isActive == true;
+    function pl_isActiveUser() {
+      return pl_authSignedIn()
+        && exists(pl_currentUserPath())
+        && pl_currentUserDoc().data.isActive == true;
     }
 
-    function isBootstrap() {
-      return isAuthenticated() && !exists(currentUserPath());
+    function pl_sameTenantWrite() {
+      return pl_isActiveUser()
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
-    function sameTenant() {
-      return isActiveUser()
-        && resource.data.tenantId == currentUserDoc().data.tenantId;
-    }
-
-    function sameTenantWrite() {
-      return isActiveUser()
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
-    }
-
-    function sameTenantUpdate() {
-      return isActiveUser()
-        && resource.data.tenantId == currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+    function pl_sameTenantUpdate() {
+      return pl_isActiveUser()
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
     /** During migration, docs may lack tenantId; treat as single-tenant legacy (backfill tenantId for strict multi-tenant isolation). */
-    function sameTenantOrLegacyRead() {
-      return isActiveUser()
+    function pl_sameTenantOrLegacyRead() {
+      return pl_isActiveUser()
         && (
           resource == null
           || !('tenantId' in resource.data)
-          || resource.data.tenantId == currentUserDoc().data.tenantId
+          || resource.data.tenantId == pl_currentUserDoc().data.tenantId
         );
     }
 
-    function sameTenantOrLegacyWrite() {
-      return isActiveUser()
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+    function pl_sameTenantOrLegacyWrite() {
+      return pl_isActiveUser()
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
-    function sameTenantOrLegacyUpdate() {
-      return isActiveUser()
+    function pl_sameTenantOrLegacyUpdate() {
+      return pl_isActiveUser()
         && (!('tenantId' in resource.data)
-          || resource.data.tenantId == currentUserDoc().data.tenantId)
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+          || resource.data.tenantId == pl_currentUserDoc().data.tenantId)
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
-    function isRepairBranchAdmin() {
-      return hasPermission('repair.branches.manage');
+    function pl_isRepairBranchAdmin() {
+      return pl_hasErpPermission('repair.branches.manage');
     }
 
-    function currentUserRepairBranchId() {
-      return currentUserDoc().data.repairBranchId;
+    function pl_currentUserRepairBranchId() {
+      return pl_currentUserDoc().data.repairBranchId;
     }
 
-    function currentUserRepairBranchIds() {
-      return currentUserDoc().data.repairBranchIds;
+    function pl_currentUserRepairBranchIds() {
+      return pl_currentUserDoc().data.repairBranchIds;
     }
 
-    function currentUserHasRepairBranch(branchId) {
+    function pl_currentUserHasRepairBranch(branchId) {
       return (
-        (currentUserRepairBranchId() != null
-          && currentUserRepairBranchId() != ''
-          && branchId == currentUserRepairBranchId())
-        || (currentUserRepairBranchIds() is list
-          && branchId in currentUserRepairBranchIds())
+        (pl_currentUserRepairBranchId() != null
+          && pl_currentUserRepairBranchId() != ''
+          && branchId == pl_currentUserRepairBranchId())
+        || (pl_currentUserRepairBranchIds() is list
+          && branchId in pl_currentUserRepairBranchIds())
       );
     }
 
-    function isTechnicianAssignedToBranch(branchId) {
+    function pl_isTechnicianAssignedToBranch(branchId) {
       return branchId != null
         && branchId != ''
         && exists(/databases/$(database)/documents/repair_branches/$(branchId))
@@ -183,7 +245,7 @@ service cloud.firestore {
         );
     }
 
-    function isBranchManager(branchId) {
+    function pl_isBranchManager(branchId) {
       return branchId != null
         && branchId != ''
         && exists(/databases/$(database)/documents/repair_branches/$(branchId))
@@ -201,48 +263,48 @@ service cloud.firestore {
         );
     }
 
-    function canAccessBranch(branchId) {
-      return currentUserHasRepairBranch(branchId)
-        || isTechnicianAssignedToBranch(branchId)
-        || isBranchManager(branchId);
+    function pl_canAccessRepairBranch(branchId) {
+      return pl_currentUserHasRepairBranch(branchId)
+        || pl_isTechnicianAssignedToBranch(branchId)
+        || pl_isBranchManager(branchId);
     }
 
-    function canReadRepairBranchScoped() {
-      return sameTenantOrLegacyRead()
+    function pl_canReadRepairBranchScoped() {
+      return pl_sameTenantOrLegacyRead()
         && (
-          isRepairBranchAdmin()
+          pl_isRepairBranchAdmin()
           || (
             'branchId' in resource.data
-            && canAccessBranch(resource.data.branchId)
+            && pl_canAccessRepairBranch(resource.data.branchId)
           )
         );
     }
 
-    function canCreateRepairBranchScoped() {
-      return sameTenantOrLegacyWrite()
+    function pl_canCreateRepairBranchScoped() {
+      return pl_sameTenantOrLegacyWrite()
         && (
-          isRepairBranchAdmin()
+          pl_isRepairBranchAdmin()
           || (
             'branchId' in request.resource.data
-            && canAccessBranch(request.resource.data.branchId)
+            && pl_canAccessRepairBranch(request.resource.data.branchId)
           )
         );
     }
 
-    function canUpdateRepairBranchScoped() {
-      return sameTenantOrLegacyUpdate()
+    function pl_canUpdateRepairBranchScoped() {
+      return pl_sameTenantOrLegacyUpdate()
         && (
-          isRepairBranchAdmin()
+          pl_isRepairBranchAdmin()
           || (
             'branchId' in resource.data
             && 'branchId' in request.resource.data
-            && canAccessBranch(resource.data.branchId)
-            && canAccessBranch(request.resource.data.branchId)
+            && pl_canAccessRepairBranch(resource.data.branchId)
+            && pl_canAccessRepairBranch(request.resource.data.branchId)
           )
         );
     }
 
-    function canCreateRepairTreasuryEntryForOpenSession() {
+    function pl_canCreateRepairTreasuryEntryForOpenSession() {
       return (
         'sessionId' in request.resource.data
         && exists(
@@ -268,12 +330,12 @@ service cloud.firestore {
     /**
      * Gradual hardening (after backfillTenantId / data audit):
      * 1. Ensure all business docs in production have tenantId set.
-     * 2. Replace sameTenantOrLegacyRead with sameTenant on read for isBusinessCollection.
-     * 3. Replace sameTenantOrLegacyUpdate with sameTenantUpdate where legacy reads are no longer needed.
+     * 2. Replace pl_sameTenantOrLegacyRead with sameTenant on read for pl_isErpBusinessCollection.
+     * 3. Replace pl_sameTenantOrLegacyUpdate with pl_sameTenantUpdate where legacy reads are no longer needed.
      * 4. Keep payroll_* on legacy helpers until those collections are fully migrated.
      */
 
-    function isBusinessCollection(coll) {
+    function pl_isErpBusinessCollection(coll) {
       return coll in [
         'products', 'production_lines', 'productionLines', 'employees', 'production_reports',
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
@@ -298,382 +360,389 @@ service cloud.firestore {
       ];
     }
 
-    function isPresenceOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    /**
+     * Super admins may work inside another company via /t/{slug}/… while their users/{uid}.tenantId
+     * stays on a home tenant. Generic business rules must still allow tenant-scoped docs.
+     */
+    function pl_superAdminTenantScopedCreateOk() {
+      return pl_isSuperAdmin()
+        && request.resource.data.keys().hasAll(['tenantId'])
+        && request.resource.data.tenantId is string
+        && request.resource.data.tenantId != '';
+    }
+
+    function pl_superAdminTenantScopedUpdateOk() {
+      return pl_isSuperAdmin()
+        && (
+          !('tenantId' in resource.data)
+          || !('tenantId' in request.resource.data)
+          || request.resource.data.tenantId == resource.data.tenantId
+        );
+    }
+
+    function pl_isPresenceOwner(userId) {
+      return pl_authSignedIn() && request.auth.uid == userId;
     }
 
     match /tenant_slugs/{slug} {
-      allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
+      allow read: if pl_authSignedIn();
+      allow write: if pl_isSuperAdmin();
     }
 
     match /tenants/{tenantId} {
-      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
-      allow read: if isSuperAdmin();
-      allow create, delete: if isSuperAdmin();
-      allow update: if isSuperAdmin()
-        || (isActiveUser()
-          && currentUserDoc().data.tenantId == tenantId
-          && hasPermission('settings.edit')
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
+      allow read: if pl_isSuperAdmin();
+      allow create, delete: if pl_isSuperAdmin();
+      allow update: if pl_isSuperAdmin()
+        || (pl_isActiveUser()
+          && pl_currentUserDoc().data.tenantId == tenantId
+          && pl_hasErpPermission('settings.edit')
           && request.resource.data.slug == resource.data.slug
           && request.resource.data.status == resource.data.status);
     }
 
     match /pending_tenants/{id} {
-      allow create: if isAuthenticated();
-      allow read, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow create: if pl_authSignedIn();
+      allow read, update: if pl_isSuperAdmin();
+      allow delete: if pl_isSuperAdmin();
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == userId
-        || isSuperAdmin()
-        || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
-          && (hasPermission('users.manage') || hasPermission('roles.manage')))
+      allow get: if pl_authSignedIn() && request.auth.uid == userId;
+      allow get: if pl_authSignedIn() && (
+        pl_isSuperAdmin()
+        || (pl_isActiveUser() && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+          && (pl_hasErpPermission('users.manage') || pl_hasErpPermission('roles.manage')))
       );
-      allow create: if (isAuthenticated()
+      allow list: if pl_authSignedIn() && (
+        pl_isSuperAdmin()
+        || (pl_isActiveUser() && (pl_hasErpPermission('users.manage') || pl_hasErpPermission('roles.manage')))
+      );
+      allow create: if (pl_authSignedIn()
         && request.auth.uid == userId
         && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']))
-        || (isSuperAdmin()
+        || (pl_isSuperAdmin()
         && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']));
-      allow update: if isAuthenticated() && (
-        (request.auth.uid == userId && resource.data.tenantId == currentUserDoc().data.tenantId)
-        || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
-          && (hasPermission('users.manage') || hasPermission('roles.manage')))
-        || isSuperAdmin()
+      allow update: if pl_authSignedIn() && (
+        (request.auth.uid == userId && resource.data.tenantId == pl_currentUserDoc().data.tenantId)
+        || (pl_isActiveUser() && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+          && (pl_hasErpPermission('users.manage') || pl_hasErpPermission('roles.manage')))
+        || pl_isSuperAdmin()
       );
-      allow delete: if isSuperAdmin()
-        || (isActiveUser() && resource.data.tenantId == currentUserDoc().data.tenantId
-          && hasPermission('users.manage'));
+      allow delete: if pl_isSuperAdmin()
+        || (pl_isActiveUser() && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+          && pl_hasErpPermission('users.manage'));
     }
 
     match /users/{userId}/fcmTokens/{tokenId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read, write: if pl_authSignedIn() && request.auth.uid == userId;
     }
 
     match /users/{userId}/preferences/{prefId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read, write: if pl_authSignedIn() && request.auth.uid == userId;
     }
 
     match /roles/{roleId} {
-      allow read: if isAuthenticated() && (
-        isSuperAdmin()
-        || (exists(currentUserPath()) && resource.data.tenantId == currentUserDoc().data.tenantId)
+      allow read: if pl_authSignedIn() && (
+        pl_isSuperAdmin()
+        || (exists(pl_currentUserPath()) && resource.data.tenantId == pl_currentUserDoc().data.tenantId)
       );
       /* Super-admin approves pending companies: seedIfEmpty() creates roles for the NEW tenantId â€” tenant admins use roles.manage on their own tenant. */
-      allow create: if isSuperAdmin()
-        || (isActiveUser() && hasPermission('roles.manage') && sameTenantWrite());
-      /* Updates must keep tenantId stable. Deletes have no request.resource â€” sameTenantUpdate() always fails for delete. */
-      allow update: if isSuperAdmin()
-        || (isActiveUser() && hasPermission('roles.manage') && sameTenantUpdate());
-      allow delete: if isSuperAdmin()
-        || (isActiveUser() && hasPermission('roles.manage')
-          && resource.data.tenantId == currentUserDoc().data.tenantId);
+      allow create: if pl_isSuperAdmin()
+        || (pl_isActiveUser() && pl_hasErpPermission('roles.manage') && pl_sameTenantWrite());
+      /* Updates must keep tenantId stable. Deletes have no request.resource â€” pl_sameTenantUpdate() always fails for delete. */
+      allow update: if pl_isSuperAdmin()
+        || (pl_isActiveUser() && pl_hasErpPermission('roles.manage') && pl_sameTenantUpdate());
+      allow delete: if pl_isSuperAdmin()
+        || (pl_isActiveUser() && pl_hasErpPermission('roles.manage')
+          && resource.data.tenantId == pl_currentUserDoc().data.tenantId);
     }
 
     match /dashboardStats/{tenantId}/daily/{dayId} {
-      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
       allow write: if false;
     }
 
     match /dashboardStats/{tenantId}/monthly/{monthId} {
-      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
       allow write: if false;
     }
 
     // Alias hardening for snake_case naming in old docs/references.
     match /dashboard_stats/{tenantId}/{docId} {
-      allow read: if isActiveUser() && currentUserDoc().data.tenantId == tenantId;
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
       allow write: if false;
     }
 
     match /audit_logs/{docId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
       // auditQueue.service + audit.service create tenant-scoped logs from the client.
-      allow create: if isActiveUser()
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId;
+      allow create: if pl_isActiveUser()
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
       allow update, delete: if false;
     }
 
     match /audit_logs/{docId}/{subPath=**} {
-      allow read: if isActiveUser();
+      allow read: if pl_isActiveUser();
       allow write: if false;
     }
 
-    // Same tenant isolation as isBusinessCollection writes, but NOT listed there so
+    // Same tenant isolation as pl_isErpBusinessCollection writes, but NOT listed there so
     // generic delete (open on many collections) does not apply to financial snapshots.
     match /monthly_production_costs/{docId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow create: if isActiveUser() && sameTenantOrLegacyWrite();
-      allow update: if isActiveUser() && sameTenantOrLegacyUpdate();
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow create: if pl_isActiveUser() && pl_sameTenantOrLegacyWrite();
+      allow update: if pl_isActiveUser() && pl_sameTenantOrLegacyUpdate();
       allow delete: if false;
     }
 
     // Alias for requested monthly_costs naming.
     match /monthly_costs/{docId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow create: if isActiveUser() && sameTenantOrLegacyWrite();
-      allow update: if isActiveUser() && sameTenantOrLegacyUpdate();
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow create: if pl_isActiveUser() && pl_sameTenantOrLegacyWrite();
+      allow update: if pl_isActiveUser() && pl_sameTenantOrLegacyUpdate();
       allow delete: if false;
     }
 
     match /user_presence/{userId} {
-      allow read: if hasPermission('activityLog.view') || hasPermission('roles.manage');
-      allow create, update, delete: if isPresenceOwner(userId);
+      allow read: if pl_hasErpPermission('activityLog.view') || pl_hasErpPermission('roles.manage');
+      allow create, update, delete: if pl_isPresenceOwner(userId);
     }
 
     match /user_devices/{tokenId} {
-      allow read: if isAuthenticated()
-        && (resource.data.userId == request.auth.uid || hasPermission('roles.manage'));
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated()
-        && (resource.data.userId == request.auth.uid || hasPermission('roles.manage'));
+      allow read: if pl_authSignedIn()
+        && (resource.data.userId == request.auth.uid || pl_hasErpPermission('roles.manage'));
+      allow create: if pl_authSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if pl_authSignedIn()
+        && (resource.data.userId == request.auth.uid || pl_hasErpPermission('roles.manage'));
     }
 
     match /payroll_months/{monthId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow create: if hasPermission('payroll.generate') && sameTenantOrLegacyWrite();
-      allow delete: if hasPermission('payroll.generate') && sameTenantOrLegacyRead();
-      allow update: if (hasPermission('payroll.generate')
-        || hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock'))
-        && sameTenantOrLegacyUpdate();
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow create: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyWrite();
+      allow delete: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyRead();
+      allow update: if (pl_hasErpPermission('payroll.generate')
+        || pl_hasErpPermission('payroll.finalize')
+        || pl_hasErpPermission('payroll.lock'))
+        && pl_sameTenantOrLegacyUpdate();
     }
 
     match /payroll_records/{recordId} {
-      allow read: if (hasPermission('payroll.view')
-        || hasPermission('payroll.generate')
-        || hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock')
-        || hasPermission('payroll.accounts.view')
-        || hasPermission('payroll.accounts.disburse'))
-        && sameTenantOrLegacyRead();
-      allow create: if hasPermission('payroll.generate') && sameTenantOrLegacyWrite();
-      allow delete: if hasPermission('payroll.generate') && sameTenantOrLegacyRead();
+      allow read: if (pl_hasErpPermission('payroll.view')
+        || pl_hasErpPermission('payroll.generate')
+        || pl_hasErpPermission('payroll.finalize')
+        || pl_hasErpPermission('payroll.lock')
+        || pl_hasErpPermission('payroll.accounts.view')
+        || pl_hasErpPermission('payroll.accounts.disburse'))
+        && pl_sameTenantOrLegacyRead();
+      allow create: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyWrite();
+      allow delete: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyRead();
       allow update: if (
-          hasPermission('payroll.generate')
-          || hasPermission('payroll.finalize')
-          || hasPermission('payroll.lock')
-          || hasPermission('payroll.accounts.disburse')
+          pl_hasErpPermission('payroll.generate')
+          || pl_hasErpPermission('payroll.finalize')
+          || pl_hasErpPermission('payroll.lock')
+          || pl_hasErpPermission('payroll.accounts.disburse')
         )
-        && sameTenantOrLegacyUpdate();
+        && pl_sameTenantOrLegacyUpdate();
     }
 
     match /payroll_audit_logs/{logId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow create: if (hasPermission('payroll.generate')
-        || hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock'))
-        && sameTenantOrLegacyWrite();
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow create: if (pl_hasErpPermission('payroll.generate')
+        || pl_hasErpPermission('payroll.finalize')
+        || pl_hasErpPermission('payroll.lock'))
+        && pl_sameTenantOrLegacyWrite();
     }
 
     match /payroll_cost_summary/{summaryId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow create, update: if (hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock'))
-        && sameTenantOrLegacyWrite();
-      allow delete: if (hasPermission('payroll.finalize')
-        || hasPermission('payroll.lock'))
-        && sameTenantOrLegacyRead();
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow create, update: if (pl_hasErpPermission('payroll.finalize')
+        || pl_hasErpPermission('payroll.lock'))
+        && pl_sameTenantOrLegacyWrite();
+      allow delete: if (pl_hasErpPermission('payroll.finalize')
+        || pl_hasErpPermission('payroll.lock'))
+        && pl_sameTenantOrLegacyRead();
     }
 
     match /payroll_distributions/{distributionId} {
-      allow read: if (hasPermission('payroll.view') || hasPermission('payroll.accounts.view')) && sameTenantOrLegacyRead();
-      allow create, update: if hasPermission('payroll.accounts.disburse') && sameTenantOrLegacyWrite();
-      allow delete: if hasPermission('payroll.accounts.disburse') && sameTenantOrLegacyRead();
+      allow read: if (pl_hasErpPermission('payroll.view') || pl_hasErpPermission('payroll.accounts.view')) && pl_sameTenantOrLegacyRead();
+      allow create, update: if pl_hasErpPermission('payroll.accounts.disburse') && pl_sameTenantOrLegacyWrite();
+      allow delete: if pl_hasErpPermission('payroll.accounts.disburse') && pl_sameTenantOrLegacyRead();
     }
 
     match /repair_branches/{id} {
-      allow read: if sameTenantOrLegacyRead() && (
-        isRepairBranchAdmin()
-        || hasPermission('repair.view')
-        || hasPermission('repair.dashboard.view')
-        || hasPermission('repair.parts.view')
-        || hasPermission('repair.parts.manage')
-        || hasPermission('repair.treasury.view')
-        || hasPermission('repair.treasury.manage')
-        || hasPermission('repair.salesInvoice.create')
-        || hasPermission('repair.salesInvoice.view')
+      allow read: if pl_sameTenantOrLegacyRead() && (
+        pl_isRepairBranchAdmin()
+        || pl_hasErpPermission('repair.view')
+        || pl_hasErpPermission('repair.dashboard.view')
+        || pl_hasErpPermission('repair.parts.view')
+        || pl_hasErpPermission('repair.parts.manage')
+        || pl_hasErpPermission('repair.treasury.view')
+        || pl_hasErpPermission('repair.treasury.manage')
+        || pl_hasErpPermission('repair.salesInvoice.create')
+        || pl_hasErpPermission('repair.salesInvoice.view')
       );
-      allow create, update: if isRepairBranchAdmin() && sameTenantOrLegacyWrite();
-      allow delete: if isRepairBranchAdmin() && sameTenantOrLegacyRead();
+      allow create, update: if pl_isRepairBranchAdmin() && pl_sameTenantOrLegacyWrite();
+      allow delete: if pl_isRepairBranchAdmin() && pl_sameTenantOrLegacyRead();
     }
 
     match /repair_jobs/{id} {
-      allow read: if hasPermission('repair.view') && canReadRepairBranchScoped();
-      allow create: if hasPermission('repair.jobs.create') && canCreateRepairBranchScoped();
-      allow update: if hasPermission('repair.jobs.edit') && canUpdateRepairBranchScoped();
-      allow delete: if hasPermission('repair.jobs.delete') && canReadRepairBranchScoped();
-
-      match /service_events/{eventId} {
-        allow read: if hasPermission('repair.view')
-          && exists(/databases/$(database)/documents/repair_jobs/$(id))
-          && (
-            !('tenantId' in get(/databases/$(database)/documents/repair_jobs/$(id)).data)
-            || get(/databases/$(database)/documents/repair_jobs/$(id)).data.tenantId == currentUserDoc().data.tenantId
-          )
-          && (
-            isRepairBranchAdmin()
-            || canAccessBranch(get(/databases/$(database)/documents/repair_jobs/$(id)).data.branchId)
-          );
-        allow create: if hasPermission('repair.jobs.edit')
-          && exists(/databases/$(database)/documents/repair_jobs/$(id))
-          && request.resource.data.tenantId == currentUserDoc().data.tenantId
-          && request.resource.data.jobId == id
-          && request.resource.data.branchId == get(/databases/$(database)/documents/repair_jobs/$(id)).data.branchId
-          && (
-            isRepairBranchAdmin()
-            || canAccessBranch(request.resource.data.branchId)
-          );
-        allow update, delete: if false;
-      }
+      allow read: if pl_hasErpPermission('repair.view') && pl_canReadRepairBranchScoped();
+      allow create: if pl_hasErpPermission('repair.jobs.create') && pl_canCreateRepairBranchScoped();
+      allow update: if pl_hasErpPermission('repair.jobs.edit') && pl_canUpdateRepairBranchScoped();
+      allow delete: if pl_hasErpPermission('repair.jobs.delete') && pl_canReadRepairBranchScoped();
     }
 
-    match /repair_part_reservations/{rid} {
-      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
-      allow create: if (hasPermission('repair.parts.manage') || hasPermission('repair.jobs.edit')) && canCreateRepairBranchScoped();
-      allow update: if (hasPermission('repair.parts.manage') || hasPermission('repair.jobs.edit')) && canUpdateRepairBranchScoped();
-      allow delete: if false;
+    match /repair_jobs/{jobId}/service_events/{eventId} {
+      allow read: if pl_hasErpPermission('repair.view') && pl_canReadRepairBranchScoped();
+      allow create: if pl_hasErpPermission('repair.jobs.create') && pl_canCreateRepairBranchScoped();
+      allow update: if pl_hasErpPermission('repair.jobs.edit') && pl_canUpdateRepairBranchScoped();
+      allow delete: if pl_hasErpPermission('repair.jobs.delete') && pl_canReadRepairBranchScoped();
+    }
+
+    match /repair_part_reservations/{id} {
+      allow read: if pl_hasErpPermission('repair.parts.view') && pl_canReadRepairBranchScoped();
+      allow create, update: if pl_hasErpPermission('repair.parts.manage') && pl_canCreateRepairBranchScoped();
+      allow delete: if pl_hasErpPermission('repair.parts.manage') && pl_canReadRepairBranchScoped();
     }
 
     match /repair_spare_parts/{id} {
-      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
-      allow create, update: if hasPermission('repair.parts.manage') && canCreateRepairBranchScoped();
-      allow delete: if hasPermission('repair.parts.manage') && canReadRepairBranchScoped();
+      allow read: if pl_hasErpPermission('repair.parts.view') && pl_canReadRepairBranchScoped();
+      allow create, update: if pl_hasErpPermission('repair.parts.manage') && pl_canCreateRepairBranchScoped();
+      allow delete: if pl_hasErpPermission('repair.parts.manage') && pl_canReadRepairBranchScoped();
     }
 
     match /repair_spare_parts_stock/{id} {
-      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
-      allow create, update: if hasPermission('repair.parts.manage') && canCreateRepairBranchScoped();
-      allow delete: if hasPermission('repair.parts.manage') && canReadRepairBranchScoped();
+      allow read: if pl_hasErpPermission('repair.parts.view') && pl_canReadRepairBranchScoped();
+      allow create, update: if pl_hasErpPermission('repair.parts.manage') && pl_canCreateRepairBranchScoped();
+      allow delete: if pl_hasErpPermission('repair.parts.manage') && pl_canReadRepairBranchScoped();
     }
 
     match /repair_parts_transactions/{id} {
-      allow read: if hasPermission('repair.parts.view') && canReadRepairBranchScoped();
-      allow create: if hasPermission('repair.parts.manage') && canCreateRepairBranchScoped();
+      allow read: if pl_hasErpPermission('repair.parts.view') && pl_canReadRepairBranchScoped();
+      allow create: if pl_hasErpPermission('repair.parts.manage') && pl_canCreateRepairBranchScoped();
       allow update, delete: if false;
     }
 
     match /repair_treasury_sessions/{id} {
       allow read: if (
-          hasPermission('repair.treasury.view')
-          || hasPermission('repair.treasury.manage')
-        ) && canReadRepairBranchScoped();
-      allow create: if hasPermission('repair.treasury.manage') && canCreateRepairBranchScoped();
-      allow update: if hasPermission('repair.treasury.manage') && canUpdateRepairBranchScoped();
+          pl_hasErpPermission('repair.treasury.view')
+          || pl_hasErpPermission('repair.treasury.manage')
+        ) && pl_canReadRepairBranchScoped();
+      allow create: if pl_hasErpPermission('repair.treasury.manage') && pl_canCreateRepairBranchScoped();
+      allow update: if pl_hasErpPermission('repair.treasury.manage') && pl_canUpdateRepairBranchScoped();
       allow delete: if false;
     }
 
     match /repair_treasury_entries/{id} {
       allow read: if (
-          hasPermission('repair.treasury.view')
-          || hasPermission('repair.treasury.manage')
-        ) && canReadRepairBranchScoped();
-      allow create: if hasPermission('repair.treasury.manage')
-        && canCreateRepairBranchScoped()
-        && canCreateRepairTreasuryEntryForOpenSession();
+          pl_hasErpPermission('repair.treasury.view')
+          || pl_hasErpPermission('repair.treasury.manage')
+        ) && pl_canReadRepairBranchScoped();
+      allow create: if pl_hasErpPermission('repair.treasury.manage')
+        && pl_canCreateRepairBranchScoped()
+        && pl_canCreateRepairTreasuryEntryForOpenSession();
       allow update, delete: if false;
     }
 
     match /repair_sales_invoices/{id} {
       allow read: if (
-          hasPermission('repair.salesInvoice.view')
-          || hasPermission('repair.salesInvoice.create')
-        ) && canReadRepairBranchScoped();
-      allow create: if hasPermission('repair.salesInvoice.create') && canCreateRepairBranchScoped();
+          pl_hasErpPermission('repair.salesInvoice.view')
+          || pl_hasErpPermission('repair.salesInvoice.create')
+        ) && pl_canReadRepairBranchScoped();
+      allow create: if pl_hasErpPermission('repair.salesInvoice.create') && pl_canCreateRepairBranchScoped();
       allow update: if (
-          hasPermission('repair.salesInvoice.edit')
-          || hasPermission('repair.salesInvoice.cancel')
-        ) && canUpdateRepairBranchScoped();
+          pl_hasErpPermission('repair.salesInvoice.edit')
+          || pl_hasErpPermission('repair.salesInvoice.cancel')
+        ) && pl_canUpdateRepairBranchScoped();
       allow delete: if false;
     }
 
     match /_counters/{id} {
-      allow read: if isActiveUser()
-        && resource.data.tenantId == currentUserDoc().data.tenantId
-        && hasPermission('repair.jobs.create');
-      allow create: if isActiveUser()
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
-        && hasPermission('repair.jobs.create');
-      allow update: if isActiveUser()
-        && resource.data.tenantId == currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
-        && hasPermission('repair.jobs.create');
+      allow read: if pl_isActiveUser()
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && pl_hasErpPermission('repair.jobs.create');
+      allow create: if pl_isActiveUser()
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && pl_hasErpPermission('repair.jobs.create');
+      allow update: if pl_isActiveUser()
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && pl_hasErpPermission('repair.jobs.create');
       allow delete: if false;
     }
 
 
     match /production_routing_executions/{docId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow create: if isActiveUser() && sameTenantOrLegacyWrite();
-      allow update: if isActiveUser() && sameTenantOrLegacyUpdate()
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow create: if pl_isActiveUser() && pl_sameTenantOrLegacyWrite();
+      allow update: if pl_isActiveUser() && pl_sameTenantOrLegacyUpdate()
         && resource.data.status != 'completed';
-      allow delete: if isActiveUser() && sameTenantOrLegacyRead() && hasPermission('routing.manage');
+      allow delete: if pl_isActiveUser() && pl_sameTenantOrLegacyRead() && pl_hasErpPermission('routing.manage');
     }
 
     match /production_routing_execution_steps/{docId} {
-      allow read: if isActiveUser() && sameTenantOrLegacyRead();
-      allow create: if isActiveUser() && sameTenantOrLegacyWrite()
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow create: if pl_isActiveUser() && pl_sameTenantOrLegacyWrite()
         && get(/databases/$(database)/documents/production_routing_executions/$(request.resource.data.executionId)).data.status != 'completed';
-      allow update: if isActiveUser() && sameTenantOrLegacyUpdate()
+      allow update: if pl_isActiveUser() && pl_sameTenantOrLegacyUpdate()
         && get(/databases/$(database)/documents/production_routing_executions/$(resource.data.executionId)).data.status != 'completed';
-      allow delete: if isActiveUser() && sameTenantOrLegacyRead()
+      allow delete: if pl_isActiveUser() && pl_sameTenantOrLegacyRead()
         && (
           get(/databases/$(database)/documents/production_routing_executions/$(resource.data.executionId)).data.status != 'completed'
-          || hasPermission('routing.manage')
+          || pl_hasErpPermission('routing.manage')
         );
     }
 
     match /customer_deposit_customers/{docId} {
-      allow read: if isActiveUser()
-        && customerDepositsReadPerm()
-        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
-      allow create: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+      allow read: if pl_isActiveUser()
+        && pl_customerDepositsReadPerm()
+        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
+      allow create: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.code is string
         && request.resource.data.codeNormalized is string
         && request.resource.data.name is string
         && request.resource.data.openingBalance is number
         && request.resource.data.isActive is bool;
-      allow update: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && resource.data.tenantId == currentUserDoc().data.tenantId
+      allow update: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && resource.data.tenantId == currentUserDoc().data.tenantId;
+      allow delete: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
     match /customer_deposit_company_bank_accounts/{docId} {
-      allow read: if isActiveUser()
-        && customerDepositsReadPerm()
-        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
-      allow create: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+      allow read: if pl_isActiveUser()
+        && pl_customerDepositsReadPerm()
+        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
+      allow create: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.accountNumber is string
         && request.resource.data.accountNumberNormalized is string
         && request.resource.data.bankLabel is string
         && request.resource.data.openingBalance is number
         && request.resource.data.isActive is bool;
-      allow update: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && resource.data.tenantId == currentUserDoc().data.tenantId
+      allow update: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && resource.data.tenantId == currentUserDoc().data.tenantId;
+      allow delete: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
     match /customer_deposit_adjustments/{docId} {
-      allow read: if isActiveUser()
-        && customerDepositsReadPerm()
-        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
-      allow create: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+      allow read: if pl_isActiveUser()
+        && pl_customerDepositsReadPerm()
+        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
+      allow create: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.effectiveDate is string
         && request.resource.data.signedAmount is number
         && request.resource.data.note is string
@@ -682,41 +751,41 @@ service cloud.firestore {
           (request.resource.data.customerId is string && request.resource.data.customerId != '')
           || (request.resource.data.companyBankAccountId is string && request.resource.data.companyBankAccountId != '')
         );
-      allow update: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && resource.data.tenantId == currentUserDoc().data.tenantId
+      allow update: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && resource.data.tenantId == currentUserDoc().data.tenantId;
+      allow delete: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
     match /customer_deposit_entry_sequences/{tenantDocId} {
-      allow read: if isActiveUser()
-        && customerDepositsReadPerm()
-        && tenantDocId == currentUserDoc().data.tenantId
-        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
-      allow create, update: if isActiveUser()
-        && tenantDocId == currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
-        && customerDepositsCanCreatePendingEntry()
+      allow read: if pl_isActiveUser()
+        && pl_customerDepositsReadPerm()
+        && tenantDocId == pl_currentUserDoc().data.tenantId
+        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
+      allow create, update: if pl_isActiveUser()
+        && tenantDocId == pl_currentUserDoc().data.tenantId
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && pl_customerDepositsCanCreatePendingEntry()
         && request.resource.data.nextSeq is int
         && request.resource.data.nextSeq >= 1
         && request.resource.data.freeSerials is list;
     }
 
     match /customer_deposit_entries/{docId} {
-      allow read: if isActiveUser()
-        && customerDepositsReadPerm()
-        && (resource == null || resource.data.tenantId == currentUserDoc().data.tenantId);
-      allow create: if isActiveUser()
-        && customerDepositsCanCreatePendingEntry()
-        && request.resource.data.tenantId == currentUserDoc().data.tenantId
+      allow read: if pl_isActiveUser()
+        && pl_customerDepositsReadPerm()
+        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
+      allow create: if pl_isActiveUser()
+        && pl_customerDepositsCanCreatePendingEntry()
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
         && request.resource.data.status == 'pending'
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.depositSerial is int
         && request.resource.data.depositSerial >= 1
-        && depositEntryAmountOk()
+        && pl_depositEntryAmountOk()
         && request.resource.data.depositorName is string
         && request.resource.data.depositorAccountNumber is string
         && request.resource.data.customerId is string
@@ -725,24 +794,45 @@ service cloud.firestore {
         && request.resource.data.companyBankAccountId is string
         && request.resource.data.bankLabelSnapshot is string
         && request.resource.data.depositDate is string;
-      allow update: if isActiveUser()
-        && depositEntryTenantOk()
-        && depositEntrySerialUnchanged()
+      allow update: if pl_isActiveUser()
+        && pl_depositEntryTenantOk()
+        && pl_depositEntrySerialUnchanged()
         && (
-          (hasPermission('customerDeposits.manage'))
-          || (depositEntryConfirmUpdate())
-          || (depositEntryCreatorPendingUpdate())
+          (pl_hasErpPermission('customerDeposits.manage'))
+          || (pl_depositEntryConfirmUpdate())
+          || (pl_depositEntryCreatorPendingUpdate())
         );
-      allow delete: if isActiveUser()
-        && hasPermission('customerDeposits.manage')
-        && resource.data.tenantId == currentUserDoc().data.tenantId;
+      allow delete: if pl_isActiveUser()
+        && pl_hasErpPermission('customerDeposits.manage')
+        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
+    }
+
+    match /production_report_uniques/{docId} {
+      allow read: if pl_isActiveUser()
+        && (
+          !exists(/databases/$(database)/documents/production_report_uniques/$(docId))
+          || !('tenantId' in resource.data)
+          || resource.data.tenantId == pl_currentUserDoc().data.tenantId
+          || pl_isSuperAdmin()
+        );
+      allow create: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }
 
     match /{coll}/{docId} {
-      allow read: if isBusinessCollection(coll) && sameTenantOrLegacyRead();
-      allow create: if isBusinessCollection(coll) && sameTenantOrLegacyWrite();
-      allow update: if isBusinessCollection(coll) && sameTenantOrLegacyUpdate();
-      allow delete: if isBusinessCollection(coll) && sameTenantOrLegacyRead();
+      allow read: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }
+
   }
 }

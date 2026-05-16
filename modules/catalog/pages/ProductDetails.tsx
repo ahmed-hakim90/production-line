@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useTenantNavigate } from "@/lib/useTenantNavigate";
 import {
   BarChart3,
   Boxes,
@@ -171,7 +170,6 @@ const resolveIndirectIconType = (label: string): IndirectCostItem["iconType"] =>
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useTenantNavigate();
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const canManageMaterials = can("costs.manage") || can("products.edit");
@@ -613,7 +611,8 @@ export const ProductDetails: React.FC = () => {
 
   const onEditProduct = () => {
     if (!data?.id) return;
-    navigate("/products", { state: { editProductId: data.id } });
+    if (!can("products.edit")) return;
+    openModal(MODAL_KEYS.PRODUCTS_CREATE, { mode: "edit", productId: data.id });
   };
 
   const applyPeriod = (period: string) => {
@@ -681,7 +680,11 @@ export const ProductDetails: React.FC = () => {
             subtitle={`${data.header.breadcrumb} آ· الكود: ${data.header.code} آ· الفئة: ${data.header.category}`}
             icon="package"
             backAction={{ to: "/products", label: "رجوع" }}
-            primaryAction={{ label: "تعديل المنتج", icon: "edit", onClick: onEditProduct }}
+            primaryAction={
+              can("products.edit")
+                ? { label: "تعديل المنتج", icon: "edit", onClick: onEditProduct }
+                : undefined
+            }
             moreActions={[
               { label: "تصدير", icon: "print", onClick: onExport, group: "تصدير" },
               { label: "تقارير Excel", icon: "file_download", onClick: onExcel, group: "تصدير" },

@@ -65,8 +65,9 @@ export const ProductModalMaterialsSection: React.FC<ProductModalMaterialsSection
 
   useEffect(() => {
     if (!enabled || !canManageMaterials) return;
+    if (!productId) return;
     void loadCatalog();
-  }, [enabled, canManageMaterials, loadCatalog]);
+  }, [enabled, canManageMaterials, productId, loadCatalog]);
 
   useEffect(() => {
     if (!enabled || !canManageMaterials || !productId) {
@@ -183,7 +184,60 @@ export const ProductModalMaterialsSection: React.FC<ProductModalMaterialsSection
     [productId, loadRows],
   );
 
-  if (!enabled || !productId || !canManageMaterials) return null;
+  if (!enabled || !canManageMaterials) return null;
+
+  /** لا يوجد productId بعد — الربط يحتاج منتجاً محفوظاً؛ نعرض نفس الإطار معطّلاً كما في التعديل */
+  if (!productId) {
+    const saveFirstTitle = 'احفظ المنتج أولاً لتفعيل ربط المواد وتعريف مادة جديدة من هنا.';
+    return (
+      <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-bold text-[var(--color-text)]">المواد الخام للمنتج</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {canCreateRawMaterial && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1 text-xs"
+                disabled
+                title={saveFirstTitle}
+              >
+                <Plus size={14} />
+                تعريف مادة جديدة
+              </Button>
+            )}
+            <Button type="button" variant="secondary" size="sm" className="gap-1 text-xs" disabled title={saveFirstTitle}>
+              <Plus size={14} />
+              ربط مادة
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+          ربط المواد الخام يتطلب حفظ المنتج أولاً. بعد الضغط على «إضافة المنتج» سيُفعّل الجدول هنا مثل وضع التعديل.
+        </p>
+        <div className="overflow-x-auto rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-card)]/50">
+          <table className="w-full min-w-[320px] text-right text-xs">
+            <thead className="bg-[var(--color-bg)] border-b border-[var(--color-border)]">
+              <tr>
+                <th className="px-2 py-2 font-bold text-[var(--color-text-muted)]">المادة</th>
+                <th className="px-2 py-2 font-bold text-[var(--color-text-muted)]">الكمية</th>
+                <th className="px-2 py-2 font-bold text-[var(--color-text-muted)]">سعر الوحدة</th>
+                <th className="px-2 py-2 font-bold text-[var(--color-text-muted)] w-[72px]">إجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-[var(--color-text-muted)] font-medium">
+                  لم يُحفظ المنتج بعد — لا توجد مواد مربوطة
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4">

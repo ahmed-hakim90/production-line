@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Lock, Plus, Unlock, X } from 'lucide-react';
+import { deleteField } from 'firebase/firestore';
+import { AlertCircle, CheckCircle2, Loader2, Lock, Plus, Save, Unlock, X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -10,11 +11,13 @@ import { categoryService } from '../../../modules/catalog/services/categoryServi
 import { useTranslation } from 'react-i18next';
 import {
   chineseUnitCostEgpFromYuanUnitPrice,
+  yuanUnitPriceInputFromChineseUnitCostEgp,
 } from '../../../utils/chineseUnitCostCny';
 import { formatCost } from '../../../utils/costCalculations';
 import { productService } from '../../../modules/production/services/productService';
 import { useAutoEntityCode } from '../../../modules/shared/hooks/useAutoEntityCode';
 import { DUPLICATE_ENTITY_CODE } from '../../../modules/shared/services/entityCodeSequenceService';
+import { ProductModalMaterialsSection } from '../../../modules/production/components/ProductModalMaterialsSection';
 
 function isDuplicateEntityCodeError(e: unknown): boolean {
   return (
@@ -36,19 +39,54 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
   autoDeductComponentScrapFromDecomposed: false,
 };
 
+async function ensureProductCategoryFromModel(model: string | undefined): Promise<void> {
+  const name = String(model || '').trim();
+  if (!name) return;
+  try {
+    const categories = await categoryService.getByType('product');
+    const exists = categories.some((c) => String(c.name || '').trim() === name);
+    if (!exists) {
+      await categoryService.create({ name, type: 'product', isActive: true });
+    }
+  } catch {
+    /* keep save resilient */
+  }
+}
+
 export const GlobalCreateProductModal: React.FC = () => {
   const { t } = useTranslation();
-  const { isOpen, close } = useManagedModalController(MODAL_KEYS.PRODUCTS_CREATE);
+  const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.PRODUCTS_CREATE);
   const { can } = usePermission();
+  const canCreate = can('products.create');
+  const canEditPerm = can('products.edit');
   const canViewCosts = can('costs.view');
   const createProduct = useAppStore((s) => s.createProduct);
+  const fetchProducts = useAppStore((s) => s.fetchProducts);
+  const products = useAppStore((s) => s.products);
+  const productsLoading = useAppStore((s) => s.productsLoading);
   const rawProducts = useAppStore((s) => s._rawProducts);
   const laborSettings = useAppStore((s) => s.laborSettings);
+
+  const modalPayload = payload as { mode?: string; productId?: string; source?: string } | undefined;
+  const isEditFlow = modalPayload?.mode === 'edit' && typeof modalPayload?.productId === 'string';
+  const editProductId = isEditFlow ? String(modalPayload!.productId) : null;
+
+  const editingProduct = useMemo(
+    () => (editProductId ? products.find((p) => p.id === editProductId) : null),
+    [editProductId, products],
+  );
+  const editingRaw = useMemo(
+    () => (editProductId ? rawProducts.find((p) => p.id === editProductId) : null),
+    [editProductId, rawProducts],
+  );
+
   const [form, setForm] = useState(emptyForm);
   const [chineseUnitPriceYuan, setChineseUnitPriceYuan] = useState('');
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  /** بعد حفظ منتج جديد — لربط المواد الخام داخل نفس المودال */
+  const [justCreatedProductId, setJustCreatedProductId] = useState<string | null>(null);
 
   const peekProduct = useCallback(() => productService.peekNextCode(), []);
 
@@ -60,8 +98,8 @@ export const GlobalCreateProductModal: React.FC = () => {
     isLoading: codePreviewLoading,
   } = useAutoEntityCode({
     enabled: isOpen,
-    isEditMode: false,
-    initialCode: '',
+    isEditMode: isEditFlow,
+    initialCode: editingProduct?.code ?? '',
     peek: peekProduct,
   });
 
@@ -104,53 +142,124 @@ export const GlobalCreateProductModal: React.FC = () => {
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isEditFlow) return;
+    setForm(emptyForm);
+    setJustCreatedProductId(null);
+    setMessage(null);
     setChineseUnitPriceYuan('');
+  }, [isOpen, isEditFlow]);
+
+  useEffect(() => {
+    if (!isOpen || !isEditFlow || !editProductId || !editingProduct || !editingRaw) return;
+    setForm({
+      name: editingProduct.name,
+      model: editingProduct.category,
+      code: editingProduct.code,
+      openingBalance: editingProduct.openingStock,
+      chineseUnitCost: editingRaw.chineseUnitCost ?? 0,
+      innerBoxCost: editingRaw.innerBoxCost ?? 0,
+      outerCartonCost: editingRaw.outerCartonCost ?? 0,
+      unitsPerCarton: editingRaw.unitsPerCarton ?? 0,
+      sellingPrice: editingRaw.sellingPrice ?? 0,
+      autoDeductComponentScrapFromDecomposed: editingRaw.autoDeductComponentScrapFromDecomposed === true,
+      routingTargetUnitSeconds:
+        editingRaw.routingTargetUnitSeconds != null && Number(editingRaw.routingTargetUnitSeconds) > 0
+          ? Math.round(Number(editingRaw.routingTargetUnitSeconds))
+          : undefined,
+    });
+    const rate = Number(laborSettings?.cnyToEgpRate ?? 0);
+    setChineseUnitPriceYuan(yuanUnitPriceInputFromChineseUnitCostEgp(editingRaw.chineseUnitCost ?? 0, rate));
+  }, [isOpen, isEditFlow, editProductId, editingProduct, editingRaw, laborSettings?.cnyToEgpRate]);
+
+  useEffect(() => {
+    if (!isOpen) setJustCreatedProductId(null);
   }, [isOpen]);
 
   const cnyToEgpRate = Number(laborSettings?.cnyToEgpRate ?? 0);
 
   if (!isOpen) return null;
-  if (!can('products.create')) return null;
+  if (isEditFlow) {
+    if (!canEditPerm) return null;
+  } else if (!canCreate) {
+    return null;
+  }
+
+  const materialsProductId = justCreatedProductId ?? (isEditFlow ? editProductId : null);
+
+  const resolveChineseUnitCost = (): number => {
+    if (!canViewCosts) return form.chineseUnitCost ?? 0;
+    if (cnyToEgpRate > 0) {
+      const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
+      return chineseUnitCostEgpFromYuanUnitPrice(yuan, cnyToEgpRate);
+    }
+    return form.chineseUnitCost ?? 0;
+  };
 
   const handleClose = () => {
     if (saving) return;
     setMessage(null);
+    setJustCreatedProductId(null);
+    setForm(emptyForm);
     close();
   };
 
   const handleSave = async () => {
     if (!form.name || !form.model) return;
-    const codeToSend = codeLocked ? '' : productCode.trim().toUpperCase();
-    if (!codeLocked && !codeToSend) {
-      setMessage({ type: 'error', text: t('modalManager.createProduct.manualCodeRequired') });
-      return;
-    }
     setSaving(true);
     setMessage(null);
     try {
-      const createData: Omit<FirestoreProduct, 'id'> = { ...form, code: codeToSend };
-      if (canViewCosts) {
-        if (cnyToEgpRate > 0) {
-          const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
-          createData.chineseUnitCost = chineseUnitCostEgpFromYuanUnitPrice(yuan, cnyToEgpRate);
+      if (isEditFlow && editProductId) {
+        const codeForSave = productCode.trim().toUpperCase();
+        if (!codeForSave) {
+          setMessage({ type: 'error', text: t('modalManager.createProduct.manualCodeRequired') });
+          setSaving(false);
+          return;
         }
-        /* else: keep form.chineseUnitCost from manual EGP field */
-      }
-      if (
-        typeof createData.routingTargetUnitSeconds !== 'number' ||
-        !Number.isFinite(createData.routingTargetUnitSeconds) ||
-        createData.routingTargetUnitSeconds <= 0
-      ) {
-        delete (createData as { routingTargetUnitSeconds?: number }).routingTargetUnitSeconds;
+        const tSec = form.routingTargetUnitSeconds;
+        const hasTarget = typeof tSec === 'number' && Number.isFinite(tSec) && tSec > 0;
+        const payloadUpdate: Record<string, unknown> = {
+          ...form,
+          code: codeForSave,
+          chineseUnitCost: resolveChineseUnitCost(),
+        };
+        payloadUpdate.routingTargetUnitSeconds = hasTarget ? Math.round(tSec) : deleteField();
+        await ensureProductCategoryFromModel(form.model);
+        await productService.update(editProductId, payloadUpdate as Partial<FirestoreProduct>);
+        await fetchProducts();
+        setMessage({ type: 'success', text: t('modalManager.createProduct.editSuccess') });
       } else {
-        createData.routingTargetUnitSeconds = Math.round(createData.routingTargetUnitSeconds);
+        const codeToSend = codeLocked ? '' : productCode.trim().toUpperCase();
+        if (!codeLocked && !codeToSend) {
+          setMessage({ type: 'error', text: t('modalManager.createProduct.manualCodeRequired') });
+          setSaving(false);
+          return;
+        }
+        const createData: Omit<FirestoreProduct, 'id'> = { ...form, code: codeToSend };
+        if (canViewCosts) {
+          if (cnyToEgpRate > 0) {
+            const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
+            createData.chineseUnitCost = chineseUnitCostEgpFromYuanUnitPrice(yuan, cnyToEgpRate);
+          }
+        }
+        if (
+          typeof createData.routingTargetUnitSeconds !== 'number' ||
+          !Number.isFinite(createData.routingTargetUnitSeconds) ||
+          createData.routingTargetUnitSeconds <= 0
+        ) {
+          delete (createData as { routingTargetUnitSeconds?: number }).routingTargetUnitSeconds;
+        } else {
+          createData.routingTargetUnitSeconds = Math.round(createData.routingTargetUnitSeconds);
+        }
+        const id = await createProduct(createData);
+        if (!id) throw new Error('create failed');
+        setJustCreatedProductId(id);
+        setMessage({
+          type: 'success',
+          text: `${t('modalManager.createProduct.createSuccess')} — يمكنك أدناه ربط المواد الخام والكمية وسعر الوحدة، أو تعريف مادة جديدة من نفس المودال.`,
+        });
+        setForm(emptyForm);
+        setChineseUnitPriceYuan('');
       }
-      const id = await createProduct(createData);
-      if (!id) throw new Error('create failed');
-      setMessage({ type: 'success', text: t('modalManager.createProduct.createSuccess') });
-      setForm(emptyForm);
-      setChineseUnitPriceYuan('');
     } catch (e) {
       if (isDuplicateEntityCodeError(e)) {
         setMessage({ type: 'error', text: t('entityCode.duplicateError') });
@@ -162,6 +271,9 @@ export const GlobalCreateProductModal: React.FC = () => {
     }
   };
 
+  const editMissing =
+    isEditFlow && editProductId && !productsLoading && (!editingProduct || !editingRaw);
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div
@@ -169,7 +281,9 @@ export const GlobalCreateProductModal: React.FC = () => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">{t('modalManager.createProduct.title')}</h3>
+          <h3 className="text-lg font-bold">
+            {isEditFlow ? t('modalManager.createProduct.editTitle') : t('modalManager.createProduct.title')}
+          </h3>
           <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
@@ -188,6 +302,22 @@ export const GlobalCreateProductModal: React.FC = () => {
             </div>
           )}
 
+          {editMissing && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 text-rose-700 border border-rose-200">
+              <AlertCircle size={16} />
+              <p>{t('modalManager.createProduct.editNotFound')}</p>
+            </div>
+          )}
+
+          {isEditFlow && !editingProduct && productsLoading && !editMissing && (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-[var(--color-text-muted)]">
+              <Loader2 className="w-8 h-8 animate-spin" />
+              <p className="text-sm font-bold">جاري التحميل...</p>
+            </div>
+          )}
+
+          {!editMissing && !(isEditFlow && !editingProduct && productsLoading) && (
+            <>
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.productNameRequired')}</label>
             <input
@@ -348,22 +478,44 @@ export const GlobalCreateProductModal: React.FC = () => {
               </div>
             </div>
           )}
+
+            {(!isEditFlow || (editingProduct && editingRaw)) && (
+              <ProductModalMaterialsSection
+                productId={materialsProductId}
+                enabled={isOpen && !editMissing}
+              />
+            )}
+            </>
+          )}
         </div>
 
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
+        <div className="px-6 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-3">
+          {justCreatedProductId && !isEditFlow && (
+            <Button type="button" variant="outline" className="ml-auto sm:ml-0" onClick={() => setJustCreatedProductId(null)}>
+              إخفاء قسم المواد
+            </Button>
+          )}
           <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}
             disabled={
               saving ||
+              editMissing ||
+              (isEditFlow && (!editingProduct || !editingRaw)) ||
               !form.name ||
               !form.model ||
-              (!codeLocked && !productCode.trim())
+              (!isEditFlow && !codeLocked && !productCode.trim())
             }
           >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            {t('modalManager.createProduct.addProduct')}
+            {saving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : isEditFlow ? (
+              <Save size={14} />
+            ) : (
+              <Plus size={14} />
+            )}
+            {isEditFlow ? t('modalManager.createProduct.saveEdits') : t('modalManager.createProduct.addProduct')}
           </Button>
         </div>
       </div>
