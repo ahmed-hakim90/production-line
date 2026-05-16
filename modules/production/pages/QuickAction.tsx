@@ -32,7 +32,6 @@ import {
 import { reportService } from '../services/reportService';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
-import { ComponentScrapModal } from '../components/ComponentScrapModal';
 import {
   Select,
   SelectContent,
@@ -87,7 +86,6 @@ export const QuickAction: React.FC = () => {
   const [hours, setHours] = useState('');
   const [notes, setNotes] = useState('');
   const [componentScrapItems, setComponentScrapItems] = useState<ReportComponentScrapItem[]>([]);
-  const [componentScrapModalOpen, setComponentScrapModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1059,11 +1057,10 @@ export const QuickAction: React.FC = () => {
                 </div>
               </>
             )}
-            {reportType !== 'packaging' && (
+            {reportType === 'component_injection' && (
             <div>
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">هالك المكونات</label>
-              {reportType === 'component_injection' ? (
-                <input
+              <input
                   type="number"
                   min="0"
                   value={totalComponentScrapQty || ''}
@@ -1078,24 +1075,6 @@ export const QuickAction: React.FC = () => {
                   className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                   placeholder="0"
                 />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!productId) return;
-                    setComponentScrapModalOpen(true);
-                  }}
-                  disabled={!productId}
-                  className="w-full px-4 py-2.5 bg-[#f8f9fa] hover:bg-[#f0f2f5] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between gap-2"
-                >
-                  <span className="truncate text-right">
-                    {totalComponentScrapQty > 0
-                      ? `إجمالي الهالك: ${totalComponentScrapQty}`
-                      : (productId ? 'تحديد هالك المكونات' : 'اختر المنتج أولاً')}
-                  </span>
-                  <span className="material-icons-round text-base">open_in_new</span>
-                </button>
-              )}
             </div>
             )}
             <div>
@@ -1483,13 +1462,6 @@ export const QuickAction: React.FC = () => {
         <SingleReportPrint ref={printRef} report={printReport} printSettings={printTemplate} />
       </div>
 
-      <ComponentScrapModal
-        open={componentScrapModalOpen}
-        onClose={() => setComponentScrapModalOpen(false)}
-        productId={productId}
-        initialItems={componentScrapItems}
-        onSave={setComponentScrapItems}
-      />
     </div>
   );
 };

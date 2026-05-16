@@ -37,7 +37,6 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
-import { ComponentScrapModal } from '../components/ComponentScrapModal';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
 import {
   buildShareStandardVarianceBanner,
@@ -520,7 +519,6 @@ export const Reports: React.FC = () => {
   const canImportFromPage = can('import') && pageControl.importEnabled;
 
   const [showModal, setShowModal] = useState(false);
-  const [componentScrapModalOpen, setComponentScrapModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const formWorkersTotal = useMemo(() => (
@@ -721,10 +719,6 @@ export const Reports: React.FC = () => {
   const openImport = useCallback(() => {
     openModal(MODAL_KEYS.REPORTS_IMPORT, { source: 'reports.page' });
   }, [openModal]);
-
-  useEffect(() => {
-    if (!showModal) setComponentScrapModalOpen(false);
-  }, [showModal]);
 
   // Employee-only filter: basic employees see only their own reports
   const myEmployeeId = useMemo(() => {
@@ -4276,7 +4270,7 @@ export const Reports: React.FC = () => {
                   ) : null}
                 </div>
                 )}
-                {form.reportType !== 'packaging' && (form.reportType === 'component_injection' ? (
+                {form.reportType === 'component_injection' && (
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
                     <input
@@ -4298,27 +4292,7 @@ export const Reports: React.FC = () => {
                       placeholder="0"
                     />
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">هالك المكونات</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!form.productId) return;
-                        setComponentScrapModalOpen(true);
-                      }}
-                      disabled={!form.productId}
-                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa] hover:bg-[#f0f2f5] disabled:opacity-60 disabled:cursor-not-allowed text-sm p-3.5 outline-none font-bold transition-all flex items-center justify-between gap-2"
-                    >
-                      <span className="truncate text-right">
-                        {totalComponentScrapQty > 0
-                          ? `إجمالي الهالك: ${totalComponentScrapQty}`
-                          : (form.productId ? 'تحديد هالك المكونات' : 'اختر المنتج أولاً')}
-                      </span>
-                      <ReportIcon name="open_in_new" className="text-base" />
-                    </button>
-                  </div>
-                ))}
+                )}
               </div>
               {form.reportType === 'component_injection' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -5402,13 +5376,6 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-      <ComponentScrapModal
-        open={componentScrapModalOpen}
-        onClose={() => setComponentScrapModalOpen(false)}
-        productId={form.productId}
-        initialItems={form.componentScrapItems}
-        onSave={(items) => setForm((prev) => ({ ...prev, componentScrapItems: items }))}
-      />
     </div>
   );
 };

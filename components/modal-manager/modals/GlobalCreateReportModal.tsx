@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ExternalLink, Info, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { AlertCircle, Info, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
-import { ComponentScrapModal } from '../../../modules/production/components/ComponentScrapModal';
 import { useAppStore } from '../../../store/useAppStore';
 import { getOperationalDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
@@ -86,7 +85,6 @@ export const GlobalCreateReportModal: React.FC = () => {
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const workOrders = useAppStore((s) => s.workOrders);
   const [form, setForm] = useState<ReportFormState>(emptyForm());
-  const [componentScrapModalOpen, setComponentScrapModalOpen] = useState(false);
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
@@ -303,10 +301,6 @@ export const GlobalCreateReportModal: React.FC = () => {
         }
     ));
   }, [isOpen, payload?.reportType, availableReportTypes]);
-
-  useEffect(() => {
-    if (!isOpen) setComponentScrapModalOpen(false);
-  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || form.reportType !== 'packaging') return;
@@ -804,7 +798,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 </p>
               ) : null}
             </div>
-            {form.reportType === 'component_injection' ? (
+            {form.reportType === 'component_injection' && (
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.componentScrap')}</label>
                 <input
@@ -825,26 +819,6 @@ export const GlobalCreateReportModal: React.FC = () => {
                   }}
                   placeholder="0"
                 />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.componentScrap')}</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!form.productId) return;
-                    setComponentScrapModalOpen(true);
-                  }}
-                  disabled={!form.productId}
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa] hover:bg-[#f0f2f5] disabled:opacity-60 disabled:cursor-not-allowed text-sm p-3.5 outline-none font-bold transition-all flex items-center justify-between gap-2"
-                >
-                  <span className="truncate text-right">
-                    {totalComponentScrapQty > 0
-                      ? t('modalManager.createReport.totalScrap', { value: totalComponentScrapQty })
-                      : (form.productId ? t('modalManager.createReport.defineComponentScrap') : t('modalManager.createReport.selectProductFirst'))}
-                  </span>
-                  <ExternalLink size={16} />
-                </button>
               </div>
             )}
           </div>
@@ -1024,13 +998,6 @@ export const GlobalCreateReportModal: React.FC = () => {
         </div>
       </div>
     </div>
-    <ComponentScrapModal
-      open={componentScrapModalOpen}
-      onClose={() => setComponentScrapModalOpen(false)}
-      productId={form.productId}
-      initialItems={form.componentScrapItems}
-      onSave={(items) => setForm((prev) => ({ ...prev, componentScrapItems: items }))}
-    />
     </>
   );
 };
