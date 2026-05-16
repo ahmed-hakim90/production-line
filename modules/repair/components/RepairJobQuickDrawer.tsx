@@ -13,6 +13,7 @@ import { withTenantPath } from '@/lib/tenantPaths';
 import { REPAIR_JOB_STATUS_LABELS, type RepairJob } from '../types';
 import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
 import { WhatsAppShare } from './WhatsAppShare';
+import { computeRepairJobCost } from '../utils/repairBusinessLogic';
 
 type RepairJobQuickDrawerProps = {
   open: boolean;
@@ -106,6 +107,7 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
   const partsText = Array.isArray(job.partsUsed) && job.partsUsed.length > 0
     ? job.partsUsed.map((part) => `${part.partName} x${part.quantity}`).join(' | ')
     : '—';
+  const cost = computeRepairJobCost(job);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,7 +129,9 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
             <div className="rounded border p-2"><span className="text-muted-foreground">الفرع: </span>{branchName || '—'}</div>
             <div className="rounded border p-2"><span className="text-muted-foreground">الفني: </span>{technicianName || (job.technicianId ? `ID: ${job.technicianId}` : 'غير مسند')}</div>
             <div className="rounded border p-2 col-span-2"><span className="text-muted-foreground">الجهاز: </span>{`${job.deviceBrand || ''} ${job.deviceModel || ''}`.trim() || '—'}</div>
-            <div className="rounded border p-2 col-span-2"><span className="text-muted-foreground">التكلفة النهائية: </span>{Number(job.finalCostOverride ?? job.finalCost ?? 0).toLocaleString('ar-EG')}</div>
+            <div className="rounded border p-2"><span className="text-muted-foreground">قطع الغيار: </span>{cost.partsCost.toLocaleString('ar-EG')}</div>
+            <div className="rounded border p-2"><span className="text-muted-foreground">عمالة/خدمة: </span>{(cost.laborCost + cost.serviceOnlyCost).toLocaleString('ar-EG')}</div>
+            <div className="rounded border p-2 col-span-2"><span className="text-muted-foreground">التكلفة النهائية: </span>{cost.finalCost.toLocaleString('ar-EG')}</div>
             <div className="rounded border p-2 col-span-2"><span className="text-muted-foreground">العطل: </span>{job.problemDescription || '—'}</div>
             <div className="rounded border p-2 col-span-2"><span className="text-muted-foreground">قطع الغيار: </span>{partsText}</div>
           </div>

@@ -76,6 +76,7 @@ export interface FirestoreProduct {
   id?: string;
   name: string;
   model: string;
+  category?: string;
   code: string;
   openingBalance: number;
   avgDailyProduction?: number;

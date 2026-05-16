@@ -11,7 +11,7 @@ import jsPDF from 'jspdf';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
-import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairSalesInvoice, type RepairSalesInvoiceLine, type RepairSparePart } from '../types';
+import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairSalesInvoice, type RepairSalesInvoiceLine, type RepairSparePart, type RepairSparePartStock } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { repairBranchService } from '../services/repairBranchService';
 import { sparePartsService } from '../services/sparePartsService';
@@ -44,6 +44,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [branchId, setBranchId] = useState('');
   const [parts, setParts] = useState<RepairSparePart[]>([]);
+  const [stockRows, setStockRows] = useState<RepairSparePartStock[]>([]);
   const [selectedPartId, setSelectedPartId] = useState('');
   const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('0');
@@ -99,8 +100,9 @@ export const RepairSalesInvoicePage: React.FC = () => {
   useEffect(() => {
     if (!branchId) return;
     void sparePartsService.listParts(branchId).then(setParts);
+    void sparePartsService.listStock(branchId, activeBranch?.warehouseId || undefined).then(setStockRows);
     void repairSalesInvoiceService.list(branchId).then(setLatestInvoices);
-  }, [branchId]);
+  }, [branchId, activeBranch?.warehouseId]);
 
   const total = useMemo(
     () => lines.reduce((sum, line) => sum + Number(line.lineTotal || 0), 0),
@@ -110,6 +112,11 @@ export const RepairSalesInvoicePage: React.FC = () => {
     () => parts.find((part) => part.id === selectedPartId) || null,
     [parts, selectedPartId],
   );
+  const stockByPartId = useMemo(() => {
+    const map = new Map<string, number>();
+    stockRows.forEach((row) => map.set(String(row.partId || ''), Number(row.quantity || 0)));
+    return map;
+  }, [stockRows]);
   const filteredInvoices = useMemo(() => {
     const invoiceNoQuery = invoiceNoFilter.trim().toLowerCase();
     const customerQuery = customerNameFilter.trim().toLowerCase();
@@ -153,6 +160,14 @@ export const RepairSalesInvoicePage: React.FC = () => {
     const part = parts.find((p) => p.id === selectedPartId);
     if (!part?.id) return;
     const quantity = Math.max(1, Number(qty || 0));
+    const alreadyInDraft = lines
+      .filter((line) => line.partId === part.id)
+      .reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+    const available = stockByPartId.get(String(part.id || '')) || 0;
+    if (quantity + alreadyInDraft > available) {
+      toast.error('الكمية المطلوبة أكبر من الرصيد المتاح لهذه القطعة.');
+      return;
+    }
     const unitPrice = Math.max(0, Number(price || 0));
     const lineTotal = quantity * unitPrice;
     setLines((prev) => [
@@ -487,7 +502,11 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 <Select value={selectedPartId} onValueChange={setSelectedPartId}>
                   <SelectTrigger><SelectValue placeholder="اختر قطعة" /></SelectTrigger>
                   <SelectContent>
-                    {parts.map((part) => <SelectItem key={part.id} value={part.id || ''}>{part.name}</SelectItem>)}
+                    {parts.map((part) => (
+                      <SelectItem key={part.id} value={part.id || ''}>
+                        {part.name} - رصيد {fmt(stockByPartId.get(String(part.id || '')) || 0)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -498,7 +517,11 @@ export const RepairSalesInvoicePage: React.FC = () => {
             </CardContent>
             {selectedPart && (
               <CardContent className="pt-0 pb-4">
-                <p className="text-xs text-muted-foreground">القطعة المختارة: <span className="font-medium text-foreground">{selectedPart.name}</span></p>
+                <p className="text-xs text-muted-foreground">
+                  القطعة المختارة: <span className="font-medium text-foreground">{selectedPart.name}</span>
+                  <span className="mx-2">|</span>
+                  الرصيد المتاح: <span className="font-medium text-foreground">{fmt(stockByPartId.get(String(selectedPart.id || '')) || 0)}</span>
+                </p>
               </CardContent>
             )}
           </Card>

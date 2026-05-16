@@ -419,6 +419,7 @@ export interface LiveCostComputationResult {
   byProduct: Record<string, ProductCostData>;
   byProductCenter: Record<string, Record<string, number>>;
   reportUnitCost: Map<string, number>;
+  centerSnapshots: ProductionCostCenterSnapshot[];
 }
 
 const getCenterResolvedAmount = (
@@ -450,14 +451,41 @@ const getCenterResolvedAmount = (
   return { resolvedAmount, workingDays: getWorkingDaysForMonth(value, month, workingDaysByMonth) };
 };
 
-export const computeLiveProductCosts = (
-  reports: ProductionReport[],
-  hourlyRate: number,
-  costCenters: CostCenter[],
-  costCenterValues: CostCenterValue[],
-  costAllocations: CostAllocation[],
-  options: LiveCostComputationOptions = {},
-): LiveCostComputationResult => {
+export interface ProductionCostCenterSnapshot {
+  costCenterId: string;
+  centerName: string;
+  valueSource: 'manual' | 'salaries' | 'combined';
+  allocationBasis: 'line_percentage' | 'by_qty';
+  productScope: 'all' | 'selected' | 'category';
+  productIds: string[];
+  productCategories: string[];
+  employeeScope: 'selected' | 'department';
+  employeeIds: string[];
+  employeeDepartmentIds: string[];
+  manualAmount: number;
+  salariesAmount: number;
+  resolvedAmount: number;
+}
+
+export interface ProductionCostEngineInput {
+  reports: ProductionReport[];
+  hourlyRate: number;
+  costCenters: CostCenter[];
+  costCenterValues: CostCenterValue[];
+  costAllocations: CostAllocation[];
+  options?: LiveCostComputationOptions;
+}
+
+export type ProductionCostEngineResult = LiveCostComputationResult;
+
+export const computeProductionCostEngine = ({
+  reports,
+  hourlyRate,
+  costCenters,
+  costCenterValues,
+  costAllocations,
+  options = {},
+}: ProductionCostEngineInput): ProductionCostEngineResult => {
   const assets = options.assets || [];
   const assetDepreciations = options.assetDepreciations || [];
   const productCategoryById = options.productCategoryById || new Map<string, string>();
@@ -469,6 +497,7 @@ export const computeLiveProductCosts = (
     byProduct: {},
     byProductCenter: {},
     reportUnitCost: new Map<string, number>(),
+    centerSnapshots: [],
   };
   if (reports.length === 0) return result;
 
@@ -497,6 +526,53 @@ export const computeLiveProductCosts = (
   }
 
   const activeIndirectCenters = costCenters.filter((center) => center.type === 'indirect' && center.isActive && center.id);
+  const monthsInScope = new Set<string>();
+  reports.forEach((report) => {
+    const month = String(report.date?.slice(0, 7) || '');
+    if (month) monthsInScope.add(month);
+  });
+
+  monthsInScope.forEach((month) => {
+    activeIndirectCenters.forEach((center) => {
+      const centerId = String(center.id || '');
+      if (!centerId) return;
+      const value = valueByCenterMonth.get(`${centerId}__${month}`);
+      const valueSource = value?.valueSource || center.valueSource || 'manual';
+      const hasSavedBreakdown = value?.manualAmount !== undefined || value?.salariesAmount !== undefined;
+      const manualAmount = hasSavedBreakdown
+        ? Number(value?.manualAmount || 0)
+        : valueSource === 'manual' || valueSource === 'combined'
+          ? Number(value?.amount || 0)
+          : 0;
+      const salariesAmount = hasSavedBreakdown
+        ? Number(value?.salariesAmount || 0)
+        : valueSource === 'salaries'
+          ? Number(value?.amount || 0)
+          : 0;
+      const { resolvedAmount } = getCenterResolvedAmount(
+        center,
+        month,
+        valueByCenterMonth,
+        depreciationByMonthCenter,
+        options.workingDaysByMonth,
+      );
+      result.centerSnapshots.push({
+        costCenterId: centerId,
+        centerName: String(center.name || ''),
+        valueSource,
+        allocationBasis: center.allocationBasis || 'line_percentage',
+        productScope: center.productScope || 'all',
+        productIds: center.productIds || [],
+        productCategories: center.productCategories || [],
+        employeeScope: center.employeeScope || 'selected',
+        employeeIds: center.employeeIds || [],
+        employeeDepartmentIds: center.employeeDepartmentIds || [],
+        manualAmount,
+        salariesAmount,
+        resolvedAmount,
+      });
+    });
+  });
 
   const monthProductQtyTotals = new Map<string, Map<string, number>>();
   const lineDateQtyTotals = new Map<string, number>();
@@ -678,6 +754,22 @@ export const computeLiveProductCosts = (
   result.totalCost = result.totalLaborCost + result.totalIndirectCost;
   return result;
 };
+
+export const computeLiveProductCosts = (
+  reports: ProductionReport[],
+  hourlyRate: number,
+  costCenters: CostCenter[],
+  costCenterValues: CostCenterValue[],
+  costAllocations: CostAllocation[],
+  options: LiveCostComputationOptions = {},
+): LiveCostComputationResult => computeProductionCostEngine({
+  reports,
+  hourlyRate,
+  costCenters,
+  costCenterValues,
+  costAllocations,
+  options,
+});
 
 export const buildSupervisorHourlyRatesMap = (
   employees: FirestoreEmployee[]
@@ -866,7 +958,8 @@ function ensureLineMonthIndirectCached(
 
 function computeReportCostParts(
   r: ProductionReport,
-  lineDateTotals: Map<string, number>,
+  lineDateQtyTotals: Map<string, number>,
+  lineDateHoursTotals: Map<string, number>,
   indirectCache: Map<string, number>,
   supervisorShareMap: Map<string, number>,
   hourlyRate: number,
@@ -896,8 +989,15 @@ function computeReportCostParts(
   );
   const lineIndirect = indirectCache.get(`${r.lineId}_${month}`) || 0;
   const lineDateKey = `${r.lineId}_${r.date}`;
-  const lineDateTotal = lineDateTotals.get(lineDateKey) || 0;
-  const indirectShare = lineDateTotal > 0 ? lineIndirect * (qty / lineDateTotal) : 0;
+  const lineDateTotal = lineDateQtyTotals.get(lineDateKey) || 0;
+  const lineDateTotalHours = lineDateHoursTotals.get(lineDateKey) || 0;
+  const reportHours = Math.max(0, Number(r.workHours || 0));
+  const shareRatio = lineDateTotalHours > 0 && reportHours > 0
+    ? reportHours / lineDateTotalHours
+    : lineDateTotal > 0
+      ? qty / lineDateTotal
+      : 0;
+  const indirectShare = lineIndirect * shareRatio;
 
   let byQtyIndirectShare = 0;
   const rules = byQtyRulesByMonth?.get(month);
@@ -1026,10 +1126,12 @@ export const getProductionReportCostBreakdown = (
     productCategoryById,
   );
 
-  const lineDateTotals = new Map<string, number>();
+  const lineDateQtyTotals = new Map<string, number>();
+  const lineDateHoursTotals = new Map<string, number>();
   manufacturingContext.forEach((r) => {
     const key = `${r.lineId}_${r.date}`;
-    lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
+    lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + (r.quantityProduced || 0));
+    lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, Number(r.workHours || 0)));
   });
 
   const indirectCache = new Map<string, number>();
@@ -1041,7 +1143,8 @@ export const getProductionReportCostBreakdown = (
 
   const parts = computeReportCostParts(
     report,
-    lineDateTotals,
+    lineDateQtyTotals,
+    lineDateHoursTotals,
     indirectCache,
     supervisorShareMap,
     hourlyRate,
@@ -1067,8 +1170,14 @@ export const getProductionReportCostBreakdown = (
     activeReportDaysByLineMonth,
   );
 
-  const qtyRatio =
-    parts.lineDateTotal > 0 ? parts.qty / parts.lineDateTotal : 0;
+  const lineDateKey = `${report.lineId}_${report.date}`;
+  const totalHours = lineDateHoursTotals.get(lineDateKey) || 0;
+  const reportHours = Math.max(0, Number(report.workHours || 0));
+  const qtyRatio = totalHours > 0 && reportHours > 0
+    ? reportHours / totalHours
+    : parts.lineDateTotal > 0
+      ? parts.qty / parts.lineDateTotal
+      : 0;
   const indirectCenters: ProductionReportIndirectCenterRow[] = lineAllocated.centers.map((c) => ({
     costCenterId: c.costCenterId,
     costCenterName: c.costCenterName,
@@ -1130,58 +1239,19 @@ export const buildReportsCosts = (
   workingDaysByMonth?: Record<string, number>,
   productCategoryById?: Map<string, string>,
 ): Map<string, number> => {
-  const result = new Map<string, number>();
-  if (hourlyRate <= 0 && costCenters.length === 0) return result;
-
-  const manufacturingContext = reports.filter(countsTowardProductManufacturingVolume);
-  const activeReportDaysByLineMonth = buildActiveReportDaysByLineMonthMap(manufacturingContext);
-  const byQtyRulesByMonth = buildByQtyRulesByMonthFromReports(
-    manufacturingContext,
+  if (hourlyRate <= 0 && costCenters.length === 0) return new Map<string, number>();
+  return computeProductionCostEngine({
+    reports,
+    hourlyRate,
     costCenters,
     costCenterValues,
     costAllocations,
-    workingDaysByMonth,
-    productCategoryById,
-  );
-
-  const lineDateTotals = new Map<string, number>();
-  manufacturingContext.forEach((r) => {
-    const key = `${r.lineId}_${r.date}`;
-    lineDateTotals.set(key, (lineDateTotals.get(key) || 0) + (r.quantityProduced || 0));
-  });
-
-  const indirectCache = new Map<string, number>();
-
-  const supervisorShareMap = buildSupervisorIndirectShareMap(
-    manufacturingContext,
-    supervisorHourlyRates,
-    hourlyRate
-  );
-
-  for (const r of manufacturingContext) {
-    const parts = computeReportCostParts(
-      r,
-      lineDateTotals,
-      indirectCache,
-      supervisorShareMap,
-      hourlyRate,
-      costCenters,
-      costCenterValues,
-      costAllocations,
+    options: {
+      supervisorHourlyRates,
       workingDaysByMonth,
-      activeReportDaysByLineMonth,
-      byQtyRulesByMonth,
-    );
-    if (!parts) continue;
-    const total =
-      parts.laborCost
-      + parts.indirectShare
-      + parts.byQtyIndirectShare
-      + parts.supervisorIndirectCost;
-    result.set(r.id!, total / parts.qty);
-  }
-
-  return result;
+      productCategoryById,
+    },
+  }).reportUnitCost;
 };
 
 /**

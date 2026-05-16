@@ -18,6 +18,8 @@ export interface ProductionRoutingPlan {
    * When set, overrides totalTimeSeconds for that calculation; display standard still uses step sum.
    */
   routingTargetUnitSeconds?: number;
+  calculationVersion?: number;
+  validationWarnings?: string[];
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -54,6 +56,9 @@ export interface ProductionRoutingExecution {
   totalCost?: number;
   costPerUnit?: number;
   workerHourRateUsed?: number;
+  calculationVersion?: number;
+  validationWarnings?: string[];
+  completedBy?: string;
   createdAt?: unknown;
 }
 

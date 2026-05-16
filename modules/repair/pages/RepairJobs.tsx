@@ -21,10 +21,13 @@ import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS, resolveUserRepairBranchI
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { computeRepairJobCost, summarizeRepairJobs } from '../utils/repairBusinessLogic';
 
 function RepairKanbanCard({ job, tenantSlug }: { job: RepairJob; tenantSlug?: string }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: job.id || '' });
   const style = { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.55 : 1 };
+  const cost = computeRepairJobCost(job);
+  const overdue = job.dueAt && Date.parse(String(job.dueAt)) < Date.now();
   return (
     <div
       ref={setNodeRef}
@@ -34,8 +37,14 @@ function RepairKanbanCard({ job, tenantSlug }: { job: RepairJob; tenantSlug?: st
       className="rounded-lg border bg-background p-2 shadow-sm touch-none cursor-grab active:cursor-grabbing"
     >
       <div className="text-xs font-mono text-muted-foreground">#{job.receiptNo}</div>
-      <div className="text-sm font-medium leading-snug">{job.customerName}</div>
+      <div className="text-sm font-medium leading-snug truncate">{job.customerName}</div>
       <div className="text-xs text-muted-foreground">{job.deviceBrand} {job.deviceModel}</div>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+        <span className={overdue ? 'text-red-600 font-semibold' : 'text-muted-foreground'}>
+          {job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : 'بدون موعد'}
+        </span>
+        <span className="font-semibold">{cost.finalCost.toLocaleString('ar-EG')} ج.م</span>
+      </div>
       <Link
         className="text-xs text-primary underline mt-1 inline-block"
         to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
@@ -112,15 +121,21 @@ export const RepairJobs: React.FC = () => {
   }, [userProfile, assignedBranchIds]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<RepairJobStatus | 'all'>('all');
+  const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [boardView, setBoardView] = useState<'kanban' | 'table'>('kanban');
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  useEffect(() => {
+    void repairBranchService.list().then(setBranches);
+  }, []);
+
   useEffect(() => {
     if (can('repair.branches.manage') || !userProfile?.id) {
       setAssignedBranchIds([]);
       return;
     }
     void repairBranchService.list().then((branchRows) => {
-      setBranches(branchRows);
       const uid = String(userProfile.id || '').trim();
       const eid = String(currentEmployee?.id || '').trim();
       const ids = branchRows
@@ -148,19 +163,31 @@ export const RepairJobs: React.FC = () => {
     [repairSettings.workflow.statuses],
   );
 
+  const visibleJobs = useMemo(() => {
+    const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
+    const to = toDate ? new Date(`${toDate}T23:59:59`).getTime() : Number.POSITIVE_INFINITY;
+    return jobs.filter((job) => {
+      if (statusFilter !== 'all' && job.status !== statusFilter) return false;
+      if (branchFilter !== 'all' && String(job.branchId || '') !== branchFilter) return false;
+      const created = Date.parse(String(job.createdAt || ''));
+      if (Number.isFinite(created) && (created < from || created > to)) return false;
+      return true;
+    });
+  }, [jobs, statusFilter, branchFilter, fromDate, toDate]);
+
   const kanbanGroups = useMemo(() => {
     const g: Record<string, RepairJob[]> = {};
     statusColumns.forEach((s) => {
       g[s.id] = [];
     });
     const fallback = statusColumns[0]?.id || 'received';
-    jobs.forEach((job) => {
+    visibleJobs.forEach((job) => {
       const key = statusColumns.some((s) => s.id === job.status) ? job.status : fallback;
       if (!g[key]) g[key] = [];
       g[key].push(job);
     });
     return g;
-  }, [jobs, statusColumns]);
+  }, [visibleJobs, statusColumns]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -188,10 +215,6 @@ export const RepairJobs: React.FC = () => {
       toast.error(err?.message || 'تعذر تحديث الحالة.');
     }
   };
-  const visibleJobs = useMemo(
-    () => (statusFilter === 'all' ? jobs : jobs.filter((job) => job.status === statusFilter)),
-    [jobs, statusFilter],
-  );
   const jobsByStatus = useMemo(
     () =>
       jobs.reduce<Record<string, number>>((acc, job) => {
@@ -200,9 +223,9 @@ export const RepairJobs: React.FC = () => {
       }, {}),
     [jobs],
   );
-  const openJobs = useMemo(
-    () => jobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length,
-    [jobs, repairSettings.workflow.openStatusIds],
+  const summary = useMemo(
+    () => summarizeRepairJobs(visibleJobs, repairSettings.workflow.openStatusIds),
+    [visibleJobs, repairSettings.workflow.openStatusIds],
   );
   const branchNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -215,12 +238,12 @@ export const RepairJobs: React.FC = () => {
 
   return (
     <div className="space-y-4" dir={dir}>
-      <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
+      <Card className="border-primary/20 bg-background">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
               <h1 className="text-2xl font-bold">طلبات الصيانة</h1>
-              <p className="text-sm text-muted-foreground mt-1">متابعة جميع الطلبات وحالاتها وتفاصيل العملاء.</p>
+              <p className="text-sm text-muted-foreground mt-1">تشغيل الورشة، متابعة الحالات، ومراجعة التكلفة من شاشة واحدة.</p>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
               <Button variant="outline" type="button" size="sm" onClick={() => void refetch()} disabled={isFetching}>
@@ -257,18 +280,30 @@ export const RepairJobs: React.FC = () => {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">إجمالي الطلبات</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{jobs.length}</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{summary.total}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">طلبات مفتوحة</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{openJobs}</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{summary.open}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">جاهز للتسليم</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{jobsByStatus.ready || 0}</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{summary.ready}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">متأخر SLA</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold text-red-600">{summary.overdue}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">جديد اليوم</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold">{summary.createdToday}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">قيمة ظاهرة</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-bold">{summary.revenue.toLocaleString('ar-EG')}</p></CardContent>
         </Card>
       </div>
 
@@ -278,7 +313,21 @@ export const RepairJobs: React.FC = () => {
           <CardDescription>فلترة الطلبات حسب الحالة أو البحث بالكود والعميل والجهاز.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث سريع: الاسم، الهاتف، الإيصال، نوع الجهاز..." />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث سريع: الاسم، الهاتف، الإيصال، نوع الجهاز..." />
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+            >
+              <option value="all">كل الفروع</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+              ))}
+            </select>
+            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant={statusFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter('all')}>
               الكل
@@ -336,43 +385,55 @@ export const RepairJobs: React.FC = () => {
                     <th className="p-2 text-right">الإيصال</th>
                     <th className="p-2 text-right">العميل</th>
                     <th className="p-2 text-right">الجهاز</th>
+                    <th className="p-2 text-right">الفرع</th>
                     <th className="p-2 text-right">الحالة</th>
+                    <th className="p-2 text-right">التكلفة</th>
+                    <th className="p-2 text-right">الاستحقاق</th>
                     <th className="p-2 text-right">ورشة</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {loading ? <tr><td className="p-3" colSpan={5}><span role="status" aria-live="polite">جاري التحميل...</span></td></tr> : visibleJobs.map((job) => (
-                    <tr
-                      key={job.id}
-                      className="border-t hover:bg-muted/40 cursor-pointer"
-                      onClick={() => setSelectedJob(job)}
-                    >
-                      <td className="p-2">
-                        <Link
-                          className="text-primary underline"
-                          to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {job.receiptNo}
-                        </Link>
-                      </td>
-                      <td className="p-2">{job.customerName} - {job.customerPhone}</td>
-                      <td className="p-2">{job.deviceBrand} {job.deviceModel}</td>
-                      <td className="p-2"><StatusBadge status={job.status} /></td>
-                      <td className="p-2">
-                        <Link
-                          className="text-primary underline text-xs"
-                          to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          فتح
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {loading ? <tr><td className="p-3" colSpan={8}><span role="status" aria-live="polite">جاري التحميل...</span></td></tr> : visibleJobs.map((job) => {
+                    const cost = computeRepairJobCost(job);
+                    const overdue = job.dueAt && Date.parse(String(job.dueAt)) < Date.now() && repairSettings.workflow.openStatusIds.includes(job.status);
+                    return (
+                      <tr
+                        key={job.id}
+                        className="border-t hover:bg-muted/40 cursor-pointer"
+                        onClick={() => setSelectedJob(job)}
+                      >
+                        <td className="p-2">
+                          <Link
+                            className="text-primary underline"
+                            to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {job.receiptNo}
+                          </Link>
+                        </td>
+                        <td className="p-2">{job.customerName} - {job.customerPhone}</td>
+                        <td className="p-2">{job.deviceBrand} {job.deviceModel}</td>
+                        <td className="p-2">{branchNameById.get(String(job.branchId || '')) || '—'}</td>
+                        <td className="p-2"><StatusBadge status={job.status} /></td>
+                        <td className="p-2 font-semibold">{cost.finalCost.toLocaleString('ar-EG')}</td>
+                        <td className={cn('p-2', overdue && 'text-red-600 font-semibold')}>
+                          {job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : '—'}
+                        </td>
+                        <td className="p-2">
+                          <Link
+                            className="text-primary underline text-xs"
+                            to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            فتح
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {!loading && visibleJobs.length === 0 && (
                     <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                      <td className="p-4 text-center text-muted-foreground" colSpan={8}>
                         لا توجد طلبات مطابقة للفلاتر الحالية.
                       </td>
                     </tr>

@@ -31,7 +31,7 @@ export class ProductionAdapter implements IProductionProvider {
     const productCategoryById = new Map<string, string>();
     products.forEach((product) => {
       if (!product.id) return;
-      productCategoryById.set(String(product.id), String(product.model || '').trim());
+      productCategoryById.set(String(product.id), String(product.category || '').trim());
     });
 
     const allowedLineIds = new Set((lineIds || []).map((id) => String(id || '')).filter(Boolean));

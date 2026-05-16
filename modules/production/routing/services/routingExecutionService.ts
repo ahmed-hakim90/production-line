@@ -21,7 +21,11 @@ import type {
   ProductionRoutingExecutionStep,
   ProductionRoutingStep,
 } from '../types';
-import { computeExecutionKpis } from '../domain/calculations';
+import {
+  ROUTING_CALCULATION_VERSION,
+  computeRoutingCalculation,
+  routingWarningLabel,
+} from '../domain/calculations';
 
 const EXEC_COL = 'production_routing_executions';
 const EXEC_STEP_COL = 'production_routing_execution_steps';
@@ -77,6 +81,7 @@ export const routingExecutionService = {
       quantity: Math.max(1, params.quantity),
       supervisorId: params.supervisorId,
       status: 'draft',
+      calculationVersion: ROUTING_CALCULATION_VERSION,
       createdAt: serverTimestamp(),
     });
     const batch = writeBatch(db);
@@ -116,40 +121,45 @@ export const routingExecutionService = {
     });
   },
 
-  async completeExecution(executionId: string, workerHourRate: number): Promise<void> {
+  async completeExecution(executionId: string, workerHourRate: number, completedBy?: string): Promise<void> {
     if (!isConfigured) return;
     const execSnap = await getDoc(doc(db, EXEC_COL, executionId));
     if (!execSnap.exists()) throw new Error('Execution not found');
     const exec = { id: execSnap.id, ...execSnap.data() } as ProductionRoutingExecution;
     if (exec.status === 'completed') return;
     const steps = await routingExecutionService.getExecutionSteps(executionId);
-    const standardSteps = steps.map((s) => ({
-      durationSeconds: s.standardDurationSeconds,
-      workersCount: s.standardWorkersCount,
-    }));
-    const actualSteps = steps.map((s) => ({
-      actualDurationSeconds: s.actualDurationSeconds ?? 0,
-      actualWorkersCount: s.actualWorkersCount ?? 0,
-    }));
-    const kpis = computeExecutionKpis({
+    const calculation = computeRoutingCalculation({
+      productId: exec.productId,
       quantity: exec.quantity,
       workerHourRate,
-      standardSteps,
-      actualSteps,
+      steps: steps.map((s) => ({
+        name: s.name,
+        durationSeconds: s.standardDurationSeconds,
+        workersCount: s.standardWorkersCount,
+        actualDurationSeconds: s.actualDurationSeconds ?? 0,
+        actualWorkersCount: s.actualWorkersCount ?? 0,
+      })),
     });
+    const blockingWarnings = calculation.warnings.filter((w) => w === 'execution_incomplete');
+    if (blockingWarnings.length > 0) {
+      throw new Error(blockingWarnings.map(routingWarningLabel).join(' '));
+    }
     const batch = writeBatch(db);
     batch.update(doc(db, EXEC_COL, executionId), {
       status: 'completed',
       finishedAt: serverTimestamp(),
-      standardTotalTimeSeconds: kpis.standardTotalTimeSeconds,
-      actualTotalTimeSeconds: kpis.actualTotalTimeSeconds,
-      standardManTimeSeconds: kpis.standardManTimeSeconds,
-      actualManTimeSeconds: kpis.actualManTimeSeconds,
-      timeEfficiency: kpis.timeEfficiency,
-      laborEfficiency: kpis.laborEfficiency,
-      totalCost: kpis.totalCost,
-      costPerUnit: kpis.costPerUnit,
-      workerHourRateUsed: kpis.workerHourRateUsed,
+      standardTotalTimeSeconds: calculation.standardTotalTimeSeconds,
+      actualTotalTimeSeconds: calculation.actualTotalTimeSeconds,
+      standardManTimeSeconds: calculation.standardManTimeSeconds,
+      actualManTimeSeconds: calculation.actualManTimeSeconds,
+      timeEfficiency: calculation.timeEfficiency,
+      laborEfficiency: calculation.laborEfficiency,
+      totalCost: calculation.totalCost,
+      costPerUnit: calculation.costPerUnit,
+      workerHourRateUsed: calculation.workerHourRateUsed,
+      calculationVersion: calculation.calculationVersion,
+      validationWarnings: calculation.warnings,
+      ...(completedBy ? { completedBy } : {}),
     });
     await batch.commit();
   },

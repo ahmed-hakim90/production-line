@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,7 +28,7 @@ import {
   formatRepairIntakeConfirmationMessage,
   formatRepairReadyMessage,
 } from '../utils/whatsappRepairMessage';
-import type { FirestoreUserWithRepair, RepairBranch, RepairJob, RepairServiceEvent, RepairSparePart } from '../types';
+import type { FirestoreUserWithRepair, RepairBranch, RepairPartReservation, RepairServiceEvent, RepairSparePart, RepairSparePartStock } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
@@ -38,6 +39,7 @@ import {
   isDeliveredStatus,
   isUnrepairableStatus,
 } from '../utils/repairWorkflowNormalize';
+import { computeRepairJobCost, resolveRepairJobActionState } from '../utils/repairBusinessLogic';
 
 export const RepairJobWorkspace: React.FC = () => {
   const { dir } = useAppDirection();
@@ -67,6 +69,8 @@ export const RepairJobWorkspace: React.FC = () => {
   const { job, loading } = useRepairJobDoc(jobId);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [parts, setParts] = useState<RepairSparePart[]>([]);
+  const [stockRows, setStockRows] = useState<RepairSparePartStock[]>([]);
+  const [reservations, setReservations] = useState<RepairPartReservation[]>([]);
   const [events, setEvents] = useState<RepairServiceEvent[]>([]);
   const [laborCost, setLaborCost] = useState('');
   const [notes, setNotes] = useState('');
@@ -105,11 +109,36 @@ export const RepairJobWorkspace: React.FC = () => {
   const branchWarehouseId = String(branch?.warehouseId || '').trim();
   const branchWarehouseName = branch?.name ? `مخزن ${branch.name}` : String(branch?.warehouseCode || '').trim();
 
-  const isAssignedToCurrentTechnician = useMemo(() => {
-    const assigned = String(job?.technicianId || '').trim();
-    return assigned.length > 0 && technicianIds.includes(assigned);
-  }, [job?.technicianId, technicianIds]);
-  const canEditThisJob = can('repair.jobs.edit') || (repairCtx.isRepairTechnician && isAssignedToCurrentTechnician);
+  useEffect(() => {
+    if (!job?.branchId) return;
+    void sparePartsService.listStock(job.branchId, branchWarehouseId || undefined).then(setStockRows);
+  }, [job?.branchId, branchWarehouseId]);
+
+  useEffect(() => {
+    if (!job?.id) return;
+    void sparePartsService.listActiveReservationsForJob(job.id).then(setReservations);
+  }, [job?.id, job?.updatedAt]);
+
+  const actionState = useMemo(
+    () =>
+      job
+        ? resolveRepairJobActionState({
+            job,
+            access: repairCtx,
+            technicianIds,
+            canEditByPermission: can('repair.jobs.edit'),
+            canCreatePartsUsage: can('repair.parts.view'),
+          })
+        : null,
+    [job, repairCtx, technicianIds, can],
+  );
+  const canEditThisJob = Boolean(actionState?.canEdit);
+  const costSummary = useMemo(() => (job ? computeRepairJobCost(job) : null), [job]);
+  const stockByPartId = useMemo(() => {
+    const map = new Map<string, number>();
+    stockRows.forEach((row) => map.set(String(row.partId || ''), Number(row.quantity || 0)));
+    return map;
+  }, [stockRows]);
 
   const persistFields = async () => {
     if (!job?.id || !canEditThisJob) return;
@@ -135,7 +164,7 @@ export const RepairJobWorkspace: React.FC = () => {
         status,
         technicianId: userProfile?.id,
         reason: isUnrepairableStatus(status) || isCancelledStatus(status) ? reason : undefined,
-        finalCost: isDeliveredStatus(status) ? Number(job.finalCost || 0) : undefined,
+        finalCost: isDeliveredStatus(status) ? Number(costSummary?.finalCost || job.finalCost || 0) : undefined,
         warranty: isDeliveredStatus(status) ? job.warranty : undefined,
         actorUid: userProfile?.id || '',
         actorName: userProfile?.displayName || userProfile?.email || 'مستخدم',
@@ -247,19 +276,28 @@ export const RepairJobWorkspace: React.FC = () => {
   const waApproval = formatRepairApprovalRequestMessage(job, approvalUrl || '(أنشئ الرابط أولاً)');
 
   return (
-    <div className="pb-28 space-y-4 px-3 max-w-3xl mx-auto" dir={dir}>
-      <div className="flex items-start justify-between gap-2 flex-wrap pt-2">
+    <div className="pb-28 space-y-4 px-3 max-w-7xl mx-auto" dir={dir}>
+      <div className="flex items-start justify-between gap-3 flex-wrap pt-2">
         <div>
           <h1 className="text-xl font-bold">ورشة الإصلاح #{job.receiptNo}</h1>
           <p className="text-sm text-muted-foreground">{job.customerName} — {job.customerPhone}</p>
         </div>
-        <StatusBadge status={job.status} />
+        <div className="flex items-center gap-2 flex-wrap">
+          {actionState?.isClosed && <Badge variant="secondary">مغلق</Badge>}
+          {job.approvalStatus && job.approvalStatus !== 'not_required' && <Badge variant="outline">موافقة: {job.approvalStatus}</Badge>}
+          <StatusBadge status={job.status} />
+        </div>
       </div>
+      {actionState?.blockedReason && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {actionState.blockedReason}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 items-center">
         <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}>
           <Button variant="outline" size="sm">تفاصيل / إيصال</Button>
         </Link>
-        <Button variant="secondary" size="sm" type="button" disabled={!canEditThisJob} onClick={() => void generateApprovalLink()}>
+        <Button variant="secondary" size="sm" type="button" disabled={!actionState?.canRequestApproval} onClick={() => void generateApprovalLink()}>
           إنشاء رابط موافقة
         </Button>
         <WhatsAppShare phone={job.customerPhone} text={waIntake} label="واتساب استلام" />
@@ -272,99 +310,139 @@ export const RepairJobWorkspace: React.FC = () => {
         <Input readOnly className="text-xs font-mono" value={approvalUrl} onFocus={(e) => e.target.select()} />
       )}
 
-      <Card>
-        <CardHeader><CardTitle>الحالة السريعة</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <Label>تغيير الحالة</Label>
-          <Select value={status} onValueChange={(v) => setStatus(v)}>
-            <SelectTrigger className="min-h-12 text-base"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {repairSettings.workflow.statuses.map((s) => (
-                <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {(isUnrepairableStatus(status) || isCancelledStatus(status)) && (
-            <div className="space-y-1">
-              <Label>السبب</Label>
-              <textarea
-                className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-2 text-base"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader><CardTitle>الحالة والتشغيل</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>تغيير الحالة</Label>
+                <Select value={status} onValueChange={(v) => setStatus(v)}>
+                  <SelectTrigger className="min-h-12 text-base"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {repairSettings.workflow.statuses.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>موعد الاستحقاق</Label>
+                <div className="min-h-12 rounded-md border px-3 py-2 text-sm flex items-center">
+                  {job.dueAt ? new Date(job.dueAt).toLocaleString('ar-EG') : 'غير محدد'}
+                </div>
+              </div>
+              {(isUnrepairableStatus(status) || isCancelledStatus(status)) && (
+                <div className="space-y-1 md:col-span-2">
+                  <Label>سبب الإغلاق</Label>
+                  <textarea
+                    className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-2 text-base"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                </div>
+              )}
+              <Button className="w-full min-h-12 text-base md:col-span-2" disabled={!actionState?.canChangeStatus} onClick={() => void applyStatus()}>
+                تطبيق الحالة
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>تشخيص وتكلفة يدوية</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <Label>أجور يدوية / عمالة (ج.م)</Label>
+              <Input
+                className="min-h-12 text-base"
+                inputMode="decimal"
+                value={laborCost}
+                onChange={(e) => setLaborCost(e.target.value)}
               />
-            </div>
-          )}
-          <Button className="w-full min-h-12 text-base" disabled={!canEditThisJob} onClick={() => void applyStatus()}>
-            تطبيق الحالة
-          </Button>
-        </CardContent>
-      </Card>
+              <Label>ملاحظات الورشة</Label>
+              <textarea
+                className="w-full min-h-28 rounded-md border border-input bg-background px-3 py-2 text-base"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+              <Button className="w-full min-h-12" disabled={!canEditThisJob || saving} onClick={() => void persistFields()}>
+                حفظ الملاحظات والأجور
+              </Button>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader><CardTitle>تشخيص وتكلفة يدوية</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <Label>أجور يدوية / عمالة (ج.م)</Label>
-          <Input
-            className="min-h-12 text-base"
-            inputMode="decimal"
-            value={laborCost}
-            onChange={(e) => setLaborCost(e.target.value)}
-          />
-          <Label>ملاحظات الورشة</Label>
-          <textarea
-            className="w-full min-h-28 rounded-md border border-input bg-background px-3 py-2 text-base"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-          <Button className="w-full min-h-12" disabled={!canEditThisJob || saving} onClick={() => void persistFields()}>
-            حفظ الملاحظات والأجور
-          </Button>
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader><CardTitle>حجز قطع الغيار</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                الحجز يقلل المتاح بدون صرف فعلي من المخزون حتى يتم الاستهلاك.
+              </p>
+              <Select value={resPartId} onValueChange={setResPartId}>
+                <SelectTrigger className="min-h-12"><SelectValue placeholder="اختر قطعة" /></SelectTrigger>
+                <SelectContent>
+                  {parts.map((p) => {
+                    const available = stockByPartId.get(String(p.id || '')) || 0;
+                    return (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.name} - رصيد {available.toLocaleString('ar-EG')}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <Input className="min-h-12" inputMode="numeric" value={resQty} onChange={(e) => setResQty(e.target.value)} />
+              <Button className="w-full min-h-12" disabled={!actionState?.canUseParts} onClick={() => void addReservation()}>
+                حجز للطلب
+              </Button>
+              <div className="rounded-md border divide-y">
+                {reservations.length === 0 && <p className="p-3 text-sm text-muted-foreground">لا توجد حجوزات نشطة.</p>}
+                {reservations.map((row) => (
+                  <div key={row.id} className="p-3 flex items-center justify-between gap-2 text-sm">
+                    <span>{row.partName}</span>
+                    <Badge variant="outline">{Number(row.quantity || 0).toLocaleString('ar-EG')}</Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader><CardTitle>حجز قطع (waiting_parts)</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            الحجز يقلل «المتاح» بدون صرف فعلي من المخزون لحد ما يتم الصرف من شاشة التفاصيل أو الاستهلاك.
-          </p>
-          <Select value={resPartId} onValueChange={setResPartId}>
-            <SelectTrigger className="min-h-12"><SelectValue placeholder="اختر قطعة" /></SelectTrigger>
-            <SelectContent>
-              {parts.map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input className="min-h-12" inputMode="numeric" value={resQty} onChange={(e) => setResQty(e.target.value)} />
-          <Button className="w-full min-h-12" disabled={!canEditThisJob} onClick={() => void addReservation()}>
-            حجز للطلب
-          </Button>
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader><CardTitle>صور سريعة</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-col gap-2">
+                <Label>صورة ورشة</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  className="min-h-12"
+                  disabled={!canEditThisJob}
+                  onChange={(e) => void uploadPhoto(e.target.files, 'repair')}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(job.repairPhotoUrls || []).map((u, index) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer" className="rounded border px-2 py-1 text-xs text-primary underline">
+                    صورة {index + 1}
+                  </a>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      <Card>
-        <CardHeader><CardTitle>صور سريعة</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-col gap-2">
-            <Label>صورة ورشة</Label>
-            <Input
-              type="file"
-              accept="image/*"
-              className="min-h-12"
-              disabled={!canEditThisJob}
-              onChange={(e) => void uploadPhoto(e.target.files, 'repair')}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(job.repairPhotoUrls || []).map((u) => (
-              <a key={u} href={u} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
-                صورة
-              </a>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+        <div className="space-y-4 lg:sticky lg:top-4">
+          <Card>
+            <CardHeader><CardTitle>ملخص التكلفة</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">قطع الغيار</span><strong>{costSummary?.partsCost.toLocaleString('ar-EG') || 0}</strong></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">عمالة</span><strong>{costSummary?.laborCost.toLocaleString('ar-EG') || 0}</strong></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">خدمة</span><strong>{costSummary?.serviceOnlyCost.toLocaleString('ar-EG') || 0}</strong></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">منتجات/بنود</span><strong>{costSummary?.productsFinalCost.toLocaleString('ar-EG') || 0}</strong></div>
+              <div className="border-t pt-2 flex justify-between text-base"><span>الإجمالي النهائي</span><strong>{costSummary?.finalCost.toLocaleString('ar-EG') || 0} ج.م</strong></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">حالة الدفع</span><Badge variant="outline">{costSummary?.paymentStatus || 'unpaid'}</Badge></div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       <Card>
         <CardHeader><CardTitle>سجل الأحداث</CardTitle></CardHeader>

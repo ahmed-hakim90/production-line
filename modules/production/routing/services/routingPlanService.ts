@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   doc,
   getDocs,
@@ -16,7 +15,11 @@ import { db, isConfigured } from '../../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../../lib/currentTenant';
 import { tenantQuery } from '../../../../lib/tenantFirestore';
 import type { ProductionRoutingPlan } from '../types';
-import { totalManTimeSecondsFromSteps, totalTimeSecondsFromSteps } from '../domain/calculations';
+import {
+  ROUTING_CALCULATION_VERSION,
+  computeRoutingCalculation,
+  routingWarningLabel,
+} from '../domain/calculations';
 
 const COLLECTION = 'production_routing_plans';
 
@@ -80,48 +83,67 @@ export const routingPlanService = {
     const tenantId = getCurrentTenantId();
     const maxV = await routingPlanService.getMaxVersionForProduct(params.productId);
     const version = maxV + 1;
-    const totals = {
-      totalTimeSeconds: totalTimeSecondsFromSteps(params.stepRows),
-      totalManTimeSeconds: totalManTimeSecondsFromSteps(params.stepRows),
-    };
-    const targetSec =
-      typeof params.routingTargetUnitSeconds === 'number' &&
-      Number.isFinite(params.routingTargetUnitSeconds) &&
-      params.routingTargetUnitSeconds > 0
-        ? Math.round(params.routingTargetUnitSeconds)
-        : undefined;
+    const productId = String(params.productId || '').trim();
+    const validRows = params.stepRows
+      .map((row) => ({
+        name: String(row.name || '').trim(),
+        durationSeconds: Math.max(0, Number(row.durationSeconds) || 0),
+        workersCount: Math.max(0, Number(row.workersCount) || 0),
+      }))
+      .filter((row) => row.name || row.durationSeconds > 0 || row.workersCount > 0);
 
+    const calculation = computeRoutingCalculation({
+      productId,
+      quantity: 1,
+      workerHourRate: 0,
+      routingTargetUnitSeconds: params.routingTargetUnitSeconds,
+      validateActualSteps: false,
+      steps: validRows,
+    });
+    const blockingWarnings = calculation.warnings.filter((w) =>
+      w === 'missing_product' ||
+      w === 'missing_steps' ||
+      w === 'step_missing_name' ||
+      w === 'step_zero_duration' ||
+      w === 'step_zero_workers' ||
+      w === 'invalid_target_seconds'
+    );
+    if (blockingWarnings.length > 0) {
+      throw new Error(blockingWarnings.map(routingWarningLabel).join(' '));
+    }
+
+    const planRef = doc(collection(db, COLLECTION));
+    const STEP_COL = 'production_routing_steps';
+    const batch = writeBatch(db);
     if (params.deactivatePlanId) {
-      await updateDoc(doc(db, COLLECTION, params.deactivatePlanId), {
+      batch.update(doc(db, COLLECTION, params.deactivatePlanId), {
         isActive: false,
         updatedAt: serverTimestamp(),
       });
     }
-
-    const planRef = await addDoc(collection(db, COLLECTION), {
+    batch.set(planRef, {
       tenantId,
-      productId: params.productId,
+      productId,
       version,
       isActive: true,
       isDeleted: false,
-      totalTimeSeconds: totals.totalTimeSeconds,
-      totalManTimeSeconds: totals.totalManTimeSeconds,
-      ...(targetSec != null ? { routingTargetUnitSeconds: targetSec } : {}),
+      totalTimeSeconds: calculation.standardTotalTimeSeconds,
+      totalManTimeSeconds: calculation.standardManTimeSeconds,
+      ...(calculation.routingTargetUnitSeconds != null ? { routingTargetUnitSeconds: calculation.routingTargetUnitSeconds } : {}),
+      calculationVersion: ROUTING_CALCULATION_VERSION,
+      validationWarnings: calculation.warnings,
       createdBy: params.createdBy,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-
-    const STEP_COL = 'production_routing_steps';
-    const batch = writeBatch(db);
-    params.stepRows.forEach((row, orderIndex) => {
+    validRows.forEach((row, orderIndex) => {
       const stepRef = doc(collection(db, STEP_COL));
       batch.set(stepRef, {
         tenantId,
         planId: planRef.id,
-        name: row.name.trim() || `خطوة ${orderIndex + 1}`,
-        durationSeconds: Math.max(0, row.durationSeconds),
-        workersCount: Math.max(0, row.workersCount),
+        name: row.name,
+        durationSeconds: row.durationSeconds,
+        workersCount: row.workersCount,
         orderIndex,
         createdAt: serverTimestamp(),
       });

@@ -36,6 +36,7 @@ import { repairSalesInvoiceService } from './repairSalesInvoiceService';
 import { repairBranchService } from './repairBranchService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { computeRepairJobCost, normalizePaymentStatus } from '../utils/repairBusinessLogic';
 
 const nowIso = () => new Date().toISOString();
 const isoUtcDay = (isoLike: string | undefined | null): string => String(isoLike || '').slice(0, 10);
@@ -66,7 +67,7 @@ const normalizeJob = (job: RepairJob): RepairJob => {
       }];
   const lead = normalizedProducts[0];
   const mappedStatus = mapLegacyRepairStatus(job.status);
-  return {
+  const normalizedJob = {
     ...job,
     status: mappedStatus,
     jobProducts: normalizedProducts,
@@ -78,6 +79,12 @@ const normalizeJob = (job: RepairJob): RepairJob => {
     problemDescription: job.problemDescription || lead?.diagnosis || '',
     estimatedCost: Number(job.estimatedCost || normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0)),
     finalCost: Number(job.finalCostOverride ?? job.finalCost ?? normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0)),
+  };
+  const cost = computeRepairJobCost(normalizedJob);
+  return {
+    ...normalizedJob,
+    finalCost: cost.finalCost,
+    paymentStatus: normalizePaymentStatus(normalizedJob.paymentStatus, cost.finalCost),
   };
 };
 
@@ -323,6 +330,11 @@ export const repairJobService = {
           inWarranty: (inputRest.warranty || 'none') !== 'none',
         }];
     const lead = normalizedProducts[0];
+    const cost = computeRepairJobCost({
+      ...inputRest,
+      jobProducts: normalizedProducts,
+      finalCost: Number(inputRest.finalCostOverride ?? inputRest.finalCost ?? normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0)),
+    } as RepairJob);
     const jobRef = doc(collection(db, REPAIR_JOBS_COLLECTION));
     const batch = writeBatch(db);
     batch.set(
@@ -337,7 +349,8 @@ export const repairJobService = {
         deviceModel: lead?.deviceModel || inputRest.deviceModel,
         problemDescription: inputRest.problemDescription || lead?.diagnosis || '',
         estimatedCost: Number(inputRest.estimatedCost || normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0)),
-        finalCost: Number(inputRest.finalCostOverride ?? inputRest.finalCost ?? normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0)),
+        finalCost: cost.finalCost,
+        paymentStatus: normalizePaymentStatus(inputRest.paymentStatus, cost.finalCost),
         tenantId,
         receiptNo: receiptResult.receiptNo,
         createdAt: at,
@@ -387,6 +400,21 @@ export const repairJobService = {
       }
       const productsTotal = normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0);
       nextPatch.finalCost = Number(nextPatch.finalCostOverride ?? nextPatch.finalCost ?? productsTotal);
+    }
+    if (
+      nextPatch.partsUsed !== undefined
+      || nextPatch.laborCost !== undefined
+      || nextPatch.serviceOnlyCost !== undefined
+      || nextPatch.jobProducts !== undefined
+      || nextPatch.finalCostOverride !== undefined
+      || nextPatch.finalCost !== undefined
+      || nextPatch.paymentStatus !== undefined
+    ) {
+      const existing = await this.getById(id);
+      const merged = { ...(existing || {}), ...nextPatch } as RepairJob;
+      const cost = computeRepairJobCost(merged);
+      nextPatch.finalCost = cost.finalCost;
+      nextPatch.paymentStatus = normalizePaymentStatus(nextPatch.paymentStatus ?? existing?.paymentStatus, cost.finalCost);
     }
     await updateDoc(doc(db, REPAIR_JOBS_COLLECTION, id), withDefined({
       ...nextPatch,
@@ -507,14 +535,17 @@ export const repairJobService = {
               deliveredAt: at,
               isClosed: true,
               finalCost: Number(input.finalCost ?? job.finalCost ?? 0),
+              paymentStatus: normalizePaymentStatus(job.paymentStatus, Number(input.finalCost ?? job.finalCost ?? 0)),
               warranty: input.warranty ?? job.warranty ?? 'none',
               resolvedAt: at,
               resolutionMinutes: resolutionMins,
+              closedReason: input.reason || job.closedReason || 'delivered',
             }
           : {}),
         ...(isUnrepairableStatus(nextCanon)
           ? {
               notes: input.reason || job.notes || '',
+              closedReason: input.reason || job.closedReason || 'unrepairable',
               resolvedAt: at,
               isClosed: true,
               resolutionMinutes: resolutionMins,
@@ -523,6 +554,7 @@ export const repairJobService = {
         ...(isCancelledStatus(nextCanon)
           ? {
               notes: input.reason || job.notes || '',
+              closedReason: input.reason || job.closedReason || 'cancelled',
               resolvedAt: at,
               isClosed: true,
               resolutionMinutes: resolutionMins,
@@ -533,6 +565,7 @@ export const repairJobService = {
               resolvedAt: at,
               isClosed: true,
               resolutionMinutes: resolutionMins,
+              closedReason: input.reason || job.closedReason || 'terminal_status',
             }
           : {}),
         ...(job.dueAt && Date.parse(at) > Date.parse(String(job.dueAt)) && !job.breachedAt

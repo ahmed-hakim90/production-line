@@ -864,7 +864,7 @@ export const Reports: React.FC = () => {
     const unique = new Set<string>();
     categoryOptions.forEach((category) => unique.add(category));
     _rawProducts.forEach((p: any) => {
-      const category = String(p?.model ?? '').trim();
+      const category = String(p?.category ?? '').trim();
       if (category) unique.add(category);
     });
     return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
@@ -873,7 +873,7 @@ export const Reports: React.FC = () => {
     const map = new Map<string, string>();
     _rawProducts.forEach((p: any) => {
       if (!p?.id) return;
-      map.set(String(p.id), String(p.model ?? '').trim());
+      map.set(String(p.id), String(p.category ?? '').trim());
     });
     return map;
   }, [_rawProducts]);
@@ -989,7 +989,7 @@ export const Reports: React.FC = () => {
   const productCategoryById = useMemo(() => {
     const m = new Map<string, string>();
     _rawProducts.forEach((prod) => {
-      if (prod.id) m.set(String(prod.id), String(prod.model || ''));
+      if (prod.id) m.set(String(prod.id), String(prod.category || ''));
     });
     return m;
   }, [_rawProducts]);
@@ -5379,6 +5379,5 @@ export const Reports: React.FC = () => {
     </div>
   );
 };
-
 
 

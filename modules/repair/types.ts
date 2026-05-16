@@ -128,6 +128,8 @@ export interface RepairJob {
   estimatedCost?: number;
   finalCostOverride?: number;
   finalCost?: number;
+  paymentStatus?: 'unpaid' | 'partial' | 'paid';
+  closedReason?: string;
   laborCost?: number;
   warranty: RepairWarranty;
   warrantyScope?: RepairWarrantyScope;

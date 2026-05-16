@@ -28,9 +28,8 @@ import {
 import { routingExecutionService } from '../services/routingExecutionService';
 import type { ProductionRoutingExecution } from '../types';
 import {
+  computeRoutingCalculation,
   formatDurationSeconds,
-  timeVarianceRatio,
-  workerVarianceRatio,
 } from '../domain/calculations';
 import { formatRoutingFirestoreInstant } from '../domain/formatFirestore';
 
@@ -43,6 +42,20 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
       <CardContent className="p-4 sm:p-6">{children}</CardContent>
     </Card>
   );
+}
+
+function routingInstantDateKey(value: unknown): string {
+  let date: Date | null = null;
+  if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate?: () => Date }).toDate === 'function') {
+    date = (value as { toDate: () => Date }).toDate();
+  } else if (value && typeof value === 'object' && 'seconds' in value) {
+    const seconds = Number((value as { seconds: number }).seconds);
+    if (Number.isFinite(seconds)) date = new Date(seconds * 1000);
+  } else if (value != null && value !== '') {
+    date = new Date(value as string | number);
+  }
+  if (!date || !Number.isFinite(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
 }
 
 export const RoutingAnalyticsPage: React.FC = () => {
@@ -58,6 +71,9 @@ export const RoutingAnalyticsPage: React.FC = () => {
   const { data: completed = [], isLoading } = useCompletedRoutingExecutionsQuery(completedLimit);
   const deleteExecutionMut = useDeleteCompletedRoutingExecutionMutation(completedLimit);
   const [filterProductId, setFilterProductId] = useState('');
+  const [filterSupervisorId, setFilterSupervisorId] = useState('');
+  const [filterFromDate, setFilterFromDate] = useState('');
+  const [filterToDate, setFilterToDate] = useState('');
   const [selectedId, setSelectedId] = useState<string>('');
 
   const resolveSupervisorLabel = useCallback(
@@ -73,9 +89,15 @@ export const RoutingAnalyticsPage: React.FC = () => {
   );
 
   const filteredExecutions = useMemo(() => {
-    if (!filterProductId) return completed;
-    return completed.filter((e) => e.productId === filterProductId);
-  }, [completed, filterProductId]);
+    return completed.filter((e) => {
+      if (filterProductId && e.productId !== filterProductId) return false;
+      if (filterSupervisorId && e.supervisorId !== filterSupervisorId) return false;
+      const isoDate = routingInstantDateKey(e.finishedAt);
+      if (filterFromDate && isoDate && isoDate < filterFromDate) return false;
+      if (filterToDate && isoDate && isoDate > filterToDate) return false;
+      return true;
+    });
+  }, [completed, filterFromDate, filterProductId, filterSupervisorId, filterToDate]);
 
   const productsWithRouting = useMemo(
     () => products.filter((p) => (routingTotalTimeSecondsByProduct[p.id] ?? 0) > 0),
@@ -89,6 +111,13 @@ export const RoutingAnalyticsPage: React.FC = () => {
     ],
     [productsWithRouting],
   );
+  const supervisorFilterOptions = useMemo(() => {
+    const ids = Array.from(new Set(completed.map((e) => e.supervisorId).filter(Boolean))).sort();
+    return [
+      { value: '', label: 'كل المشرفين' },
+      ...ids.map((id) => ({ value: id, label: resolveSupervisorLabel(id) })),
+    ];
+  }, [completed, resolveSupervisorLabel]);
 
   useEffect(() => {
     if (!filterProductId) return;
@@ -137,6 +166,30 @@ export const RoutingAnalyticsPage: React.FC = () => {
 
   const execution = execQuery.data;
   const steps = stepsQuery.data ?? [];
+  const selectedCalculation = useMemo(() => {
+    if (!execution) return null;
+    return computeRoutingCalculation({
+      productId: execution.productId,
+      quantity: execution.quantity,
+      workerHourRate: Number(execution.workerHourRateUsed ?? 0),
+      steps: steps.map((s) => ({
+        name: s.name,
+        durationSeconds: s.standardDurationSeconds,
+        workersCount: s.standardWorkersCount,
+        actualDurationSeconds: s.actualDurationSeconds ?? 0,
+        actualWorkersCount: s.actualWorkersCount ?? 0,
+      })),
+    });
+  }, [execution, steps]);
+  const analyticsKpis = useMemo(() => {
+    const count = filteredExecutions.length;
+    const totalCost = filteredExecutions.reduce((sum, e) => sum + Number(e.totalCost || 0), 0);
+    const avgTimeEfficiency = count > 0
+      ? filteredExecutions.reduce((sum, e) => sum + Number(e.timeEfficiency || 0), 0) / count
+      : 0;
+    const totalQty = filteredExecutions.reduce((sum, e) => sum + Number(e.quantity || 0), 0);
+    return { count, totalCost, avgTimeEfficiency, totalQty };
+  }, [filteredExecutions]);
 
   useEffect(() => {
     setSelectedId((prev) => {
@@ -157,40 +210,36 @@ export const RoutingAnalyticsPage: React.FC = () => {
   );
 
   const chartCost = useMemo(() => {
-    const rate = Number(execution?.workerHourRateUsed ?? 0);
-    const cps = rate > 0 ? rate / 3600 : 0;
-    return steps.map((s) => ({
+    return selectedCalculation?.stepVariances.map((s) => ({
       name: s.name.slice(0, 14),
-      cost:
-        cps * (s.actualDurationSeconds ?? 0) * (s.actualWorkersCount ?? 0),
-    }));
-  }, [execution, steps]);
+      cost: s.laborCost,
+    })) ?? [];
+  }, [selectedCalculation]);
 
   const chartVar = useMemo(
     () =>
-      steps.map((s) => ({
+      selectedCalculation?.stepVariances.map((s) => ({
         name: s.name.slice(0, 12),
-        timeVar: timeVarianceRatio(s.standardDurationSeconds, s.actualDurationSeconds ?? 0) * 100,
-        workerVar: workerVarianceRatio(s.standardWorkersCount, s.actualWorkersCount ?? 0) * 100,
-      })),
-    [steps],
+        timeVar: s.timeVarianceRatio * 100,
+        workerVar: s.workerVarianceRatio * 100,
+      })) ?? [],
+    [selectedCalculation],
   );
 
   const bottleneck = useMemo(() => {
-    if (!steps.length) return null;
-    let best = steps[0];
+    const variances = selectedCalculation?.stepVariances ?? [];
+    if (!variances.length) return null;
+    let best = variances[0];
     let score = -1;
-    for (const s of steps) {
-      const a = s.actualDurationSeconds ?? 0;
-      const tv = Math.abs(timeVarianceRatio(s.standardDurationSeconds, a));
-      const sc = Math.max(a, tv);
+    for (const s of variances) {
+      const sc = Math.abs(s.timeVarianceRatio) * 1000 + s.laborCost;
       if (sc > score) {
         score = sc;
         best = s;
       }
     }
     return best;
-  }, [steps]);
+  }, [selectedCalculation]);
 
   const rowSelectClass = (id: string) =>
     cn(
@@ -282,9 +331,9 @@ export const RoutingAnalyticsPage: React.FC = () => {
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
             <p className="text-sm leading-relaxed">
-              أطول زمن فعلي أو أعلى انحراف زمني: <strong>{bottleneck.name}</strong> —{' '}
+              أعلى تأثير حسب الانحراف والتكلفة: <strong>{bottleneck.name}</strong> —{' '}
               {formatDurationSeconds(bottleneck.actualDurationSeconds ?? 0)} فعلي مقابل{' '}
-              {formatDurationSeconds(bottleneck.standardDurationSeconds)} قياسي
+              {formatDurationSeconds(bottleneck.standardDurationSeconds)} قياسي، تكلفة تقريبية {bottleneck.laborCost.toFixed(2)}
             </p>
           </CardContent>
         </Card>
@@ -363,14 +412,45 @@ export const RoutingAnalyticsPage: React.FC = () => {
           <CardTitle className="text-base font-semibold">تنفيذات مكتملة</CardTitle>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
-          <div className="max-w-full shrink-0 space-y-1.5 ">
-            <Label className="text-xs font-semibold text-muted-foreground">تصفية بالمنتج</Label>
-            <SearchableSelect
-              options={productFilterOptions}
-              value={filterProductId}
-              onChange={setFilterProductId}
-              placeholder="كل المنتجات"
-            />
+          <div className="grid max-w-full shrink-0 grid-cols-1 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground">تصفية بالمنتج</Label>
+              <SearchableSelect
+                options={productFilterOptions}
+                value={filterProductId}
+                onChange={setFilterProductId}
+                placeholder="كل المنتجات"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground">المشرف</Label>
+              <SearchableSelect
+                options={supervisorFilterOptions}
+                value={filterSupervisorId}
+                onChange={setFilterSupervisorId}
+                placeholder="كل المشرفين"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">من تاريخ</Label>
+                <input
+                  type="date"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={filterFromDate}
+                  onChange={(e) => setFilterFromDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">إلى تاريخ</Label>
+                <input
+                  type="date"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={filterToDate}
+                  onChange={(e) => setFilterToDate(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
           {isLoading ? (
             <LoadingSkeleton rows={6} type="card" />
@@ -497,10 +577,38 @@ export const RoutingAnalyticsPage: React.FC = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] xl:gap-8">
-          {detailPanel}
-          {tablePanel}
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KPIBox
+              icon="fact_check"
+              label="تنفيذات معروضة"
+              value={analyticsKpis.count}
+              colorClass="bg-sky-500/15 text-sky-700 dark:text-sky-400"
+            />
+            <KPIBox
+              icon="inventory_2"
+              label="إجمالي الكمية"
+              value={analyticsKpis.totalQty}
+              colorClass="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+            />
+            <KPIBox
+              icon="speed"
+              label="متوسط كفاءة الزمن"
+              value={`${(analyticsKpis.avgTimeEfficiency * 100).toFixed(1)}%`}
+              colorClass="bg-violet-500/15 text-violet-700 dark:text-violet-300"
+            />
+            <KPIBox
+              icon="payments"
+              label="إجمالي التكلفة"
+              value={analyticsKpis.totalCost.toFixed(2)}
+              colorClass="bg-amber-500/15 text-amber-800 dark:text-amber-300"
+            />
+          </div>
+          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] xl:gap-8">
+            {detailPanel}
+            {tablePanel}
+          </div>
+        </>
       )}
     </div>
   );

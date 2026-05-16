@@ -370,7 +370,7 @@ async function persistProductionReportCostSnapshot(
   const supervisorHourlyRates = buildSupervisorHourlyRatesMap(st._rawEmployees);
   const productCategoryById = new Map<string, string>();
   st._rawProducts.forEach((p) => {
-    if (p.id) productCategoryById.set(String(p.id), String(p.model || ''));
+    if (p.id) productCategoryById.set(String(p.id), String(p.category || ''));
   });
   const patch = buildProductionReportCostSnapshotPatch(row, monthRows, {
     hourlyRate: Number(st.laborSettings?.hourlyRate ?? 0),

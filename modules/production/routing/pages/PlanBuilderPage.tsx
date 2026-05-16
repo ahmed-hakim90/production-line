@@ -26,7 +26,12 @@ import {
   useRoutingPlanQuery,
   useRoutingStepsQuery,
 } from '../hooks/routingQueries';
-import { formatDurationSeconds, totalTimeSecondsFromSteps } from '../domain/calculations';
+import {
+  computeRoutingCalculation,
+  formatDurationSeconds,
+  routingWarningLabel,
+  totalTimeSecondsFromSteps,
+} from '../domain/calculations';
 import type { RoutingStepDraft } from '../types';
 import { routingPlanService } from '../services/routingPlanService';
 import { newRoutingDraft, routingStepLgGridClass, SortableRoutingStepRow } from './planBuilderSortableRow';
@@ -175,6 +180,26 @@ export const PlanBuilderPage: React.FC = () => {
       durationSeconds: s.durationSeconds,
       workersCount: s.workersCount,
     }));
+    const calculation = computeRoutingCalculation({
+      productId: routeProductId,
+      quantity: 1,
+      workerHourRate: 0,
+      routingTargetUnitSeconds,
+      validateActualSteps: false,
+      steps: rows,
+    });
+    const blockingWarnings = calculation.warnings.filter((w) =>
+      w === 'missing_steps' ||
+      w === 'step_zero_duration' ||
+      w === 'step_zero_workers' ||
+      w === 'invalid_target_seconds'
+    );
+    if (blockingWarnings.length > 0) {
+      toast.warning('راجع بيانات المسار', {
+        description: blockingWarnings.map(routingWarningLabel).join(' '),
+      });
+      return;
+    }
     const hasTarget =
       typeof routingTargetUnitSeconds === 'number' &&
       Number.isFinite(routingTargetUnitSeconds) &&

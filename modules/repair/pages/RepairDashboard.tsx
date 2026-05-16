@@ -37,6 +37,7 @@ import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils
 import { resolveRepairSettings } from '../config/repairSettings';
 import { useRepairJobs } from '../hooks/useRepairJobs';
 import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
+import { computeRepairJobCost } from '../utils/repairBusinessLogic';
 
 const num = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const shortDay = (isoDate: string) =>
@@ -126,7 +127,7 @@ export const RepairDashboard: React.FC = () => {
     const pendingDelivery = jobs.filter((j) => j.status === 'ready').length;
     const repairRevenue = jobs
       .filter((j) => isDeliveredStatus(j.status))
-      .reduce((sum, j) => sum + Number(j.finalCost || 0), 0);
+      .reduce((sum, j) => sum + computeRepairJobCost(j).finalCost, 0);
     const partsRevenue = salesInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
     const totalRevenue = repairRevenue + partsRevenue;
     const all = jobs.length || 1;
@@ -137,7 +138,7 @@ export const RepairDashboard: React.FC = () => {
   const avgTicket = useMemo(() => {
     const delivered = jobs.filter((job) => isDeliveredStatus(job.status));
     if (delivered.length === 0) return 0;
-    const total = delivered.reduce((sum, row) => sum + Number(row.finalCost || 0), 0);
+    const total = delivered.reduce((sum, row) => sum + computeRepairJobCost(row).finalCost, 0);
     return total / delivered.length;
   }, [jobs]);
   const statusChartData = useMemo(
@@ -181,7 +182,7 @@ export const RepairDashboard: React.FC = () => {
         const row = monthMap.get(key);
         if (!row) return;
         row.delivered += 1;
-        row.revenue += Number(job.finalCost || 0);
+        row.revenue += computeRepairJobCost(job).finalCost;
       });
     return months;
   }, [jobs]);
@@ -234,10 +235,8 @@ export const RepairDashboard: React.FC = () => {
     return jobs
       .filter((j) => isDeliveredStatus(j.status))
       .map((j) => {
-        const parts = (j.partsUsed || []).reduce((s, p) => s + Number(p.quantity || 0) * Number(p.unitCost || 0), 0);
-        const rev = Number(j.finalCost || 0);
-        const labor = Number(j.laborCost || 0);
-        return { rev, profit: rev - parts - labor };
+        const cost = computeRepairJobCost(j);
+        return { rev: cost.finalCost, profit: cost.finalCost - cost.partsCost - cost.laborCost };
       });
   }, [jobs]);
 

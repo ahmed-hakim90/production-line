@@ -13,6 +13,76 @@ export interface ActualStepLike {
   actualWorkersCount: number;
 }
 
+export const ROUTING_CALCULATION_VERSION = 2;
+
+export type RoutingValidationWarning =
+  | 'missing_product'
+  | 'missing_steps'
+  | 'step_missing_name'
+  | 'step_zero_duration'
+  | 'step_zero_workers'
+  | 'invalid_quantity'
+  | 'invalid_target_seconds'
+  | 'execution_incomplete';
+
+export interface RoutingCalculationStep {
+  name?: string;
+  durationSeconds: number;
+  workersCount: number;
+  actualDurationSeconds?: number;
+  actualWorkersCount?: number;
+}
+
+export interface RoutingCalculationInput {
+  productId?: string;
+  quantity?: number;
+  workerHourRate?: number;
+  routingTargetUnitSeconds?: number;
+  validateActualSteps?: boolean;
+  steps: RoutingCalculationStep[];
+}
+
+export interface RoutingStepVariance {
+  name: string;
+  standardDurationSeconds: number;
+  actualDurationSeconds: number;
+  standardWorkersCount: number;
+  actualWorkersCount: number;
+  timeVarianceRatio: number;
+  workerVarianceRatio: number;
+  laborCost: number;
+  warnings: RoutingValidationWarning[];
+}
+
+export interface RoutingCalculationResult extends ExecutionKpiResult {
+  calculationVersion: number;
+  routingTargetUnitSeconds?: number;
+  varianceBasisSecondsPerUnit: number;
+  warnings: RoutingValidationWarning[];
+  stepVariances: RoutingStepVariance[];
+  isExecutionComplete: boolean;
+}
+
+const pushUnique = <T,>(rows: T[], value: T) => {
+  if (!rows.includes(value)) rows.push(value);
+};
+
+export function normalizeRoutingTargetUnitSeconds(value: unknown): number | undefined {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.round(n);
+}
+
+export function resolveRoutingVarianceBasisSeconds(params: {
+  routingTargetUnitSeconds?: number;
+  totalTimeSeconds?: number;
+}): number {
+  const target = normalizeRoutingTargetUnitSeconds(params.routingTargetUnitSeconds);
+  if (target != null) return target;
+  const total = Number(params.totalTimeSeconds || 0);
+  return total > 0 ? Math.round(total) : 0;
+}
+
 /**
  * Wall-clock time for one routing step (seconds). Workers on the same step work in parallel:
  * the stage duration does not multiply by headcount (3 people doing one 10s stage ≈ 10s on the line).
@@ -137,6 +207,121 @@ export function computeExecutionKpis(input: ExecutionKpiInput): ExecutionKpiResu
     costPerUnit,
     workerHourRateUsed: input.workerHourRate,
   };
+}
+
+export function computeRoutingCalculation(input: RoutingCalculationInput): RoutingCalculationResult {
+  const warnings: RoutingValidationWarning[] = [];
+  const productId = String(input.productId || '').trim();
+  const validateActualSteps = input.validateActualSteps !== false;
+  if (!productId) pushUnique(warnings, 'missing_product');
+
+  const steps = Array.isArray(input.steps) ? input.steps : [];
+  if (steps.length === 0) pushUnique(warnings, 'missing_steps');
+
+  const normalizedSteps = steps.map((step, index) => {
+    const stepWarnings: RoutingValidationWarning[] = [];
+    const name = String(step.name || '').trim() || `خطوة ${index + 1}`;
+    const durationSeconds = Math.max(0, Number(step.durationSeconds) || 0);
+    const workersCount = Math.max(0, Number(step.workersCount) || 0);
+    const actualDurationSeconds = Math.max(0, Number(step.actualDurationSeconds) || 0);
+    const actualWorkersCount = Math.max(0, Number(step.actualWorkersCount) || 0);
+
+    if (!String(step.name || '').trim()) {
+      pushUnique(warnings, 'step_missing_name');
+      pushUnique(stepWarnings, 'step_missing_name');
+    }
+    if (durationSeconds <= 0) {
+      pushUnique(warnings, 'step_zero_duration');
+      pushUnique(stepWarnings, 'step_zero_duration');
+    }
+    if (workersCount <= 0) {
+      pushUnique(warnings, 'step_zero_workers');
+      pushUnique(stepWarnings, 'step_zero_workers');
+    }
+    if (validateActualSteps && (actualDurationSeconds <= 0 || actualWorkersCount <= 0)) {
+      pushUnique(warnings, 'execution_incomplete');
+      pushUnique(stepWarnings, 'execution_incomplete');
+    }
+
+    return {
+      name,
+      durationSeconds,
+      workersCount,
+      actualDurationSeconds,
+      actualWorkersCount,
+      warnings: stepWarnings,
+    };
+  });
+
+  const quantity = Number(input.quantity || 0);
+  if (!(quantity > 0)) pushUnique(warnings, 'invalid_quantity');
+  const target = normalizeRoutingTargetUnitSeconds(input.routingTargetUnitSeconds);
+  if (input.routingTargetUnitSeconds != null && target == null) {
+    pushUnique(warnings, 'invalid_target_seconds');
+  }
+
+  const standardSteps = normalizedSteps.map((step) => ({
+    durationSeconds: step.durationSeconds,
+    workersCount: step.workersCount,
+  }));
+  const actualSteps = normalizedSteps.map((step) => ({
+    actualDurationSeconds: step.actualDurationSeconds,
+    actualWorkersCount: step.actualWorkersCount,
+  }));
+  const kpis = computeExecutionKpis({
+    quantity,
+    workerHourRate: Math.max(0, Number(input.workerHourRate) || 0),
+    standardSteps,
+    actualSteps,
+  });
+  const varianceBasisSecondsPerUnit = resolveRoutingVarianceBasisSeconds({
+    routingTargetUnitSeconds: target,
+    totalTimeSeconds: kpis.standardTotalTimeSeconds,
+  });
+  const stepVariances = normalizedSteps.map((step) => ({
+    name: step.name,
+    standardDurationSeconds: step.durationSeconds,
+    actualDurationSeconds: step.actualDurationSeconds,
+    standardWorkersCount: step.workersCount,
+    actualWorkersCount: step.actualWorkersCount,
+    timeVarianceRatio: timeVarianceRatio(step.durationSeconds, step.actualDurationSeconds),
+    workerVarianceRatio: workerVarianceRatio(step.workersCount, step.actualWorkersCount),
+    laborCost: stepLaborCost(step.actualDurationSeconds, step.actualWorkersCount, Math.max(0, Number(input.workerHourRate) || 0)),
+    warnings: step.warnings,
+  }));
+
+  return {
+    ...kpis,
+    calculationVersion: ROUTING_CALCULATION_VERSION,
+    ...(target != null ? { routingTargetUnitSeconds: target } : {}),
+    varianceBasisSecondsPerUnit,
+    warnings,
+    stepVariances,
+    isExecutionComplete: !warnings.includes('execution_incomplete') && normalizedSteps.length > 0,
+  };
+}
+
+export function routingWarningLabel(warning: RoutingValidationWarning): string {
+  switch (warning) {
+    case 'missing_product':
+      return 'لم يتم اختيار منتج.';
+    case 'missing_steps':
+      return 'لا توجد خطوات صالحة.';
+    case 'step_missing_name':
+      return 'توجد خطوة بلا اسم.';
+    case 'step_zero_duration':
+      return 'توجد خطوة بزمن قياسي صفر.';
+    case 'step_zero_workers':
+      return 'توجد خطوة بعدد عمال صفر.';
+    case 'invalid_quantity':
+      return 'الكمية غير صالحة.';
+    case 'invalid_target_seconds':
+      return 'تارجت المسار غير صالح.';
+    case 'execution_incomplete':
+      return 'توجد خطوات تنفيذ غير مكتملة.';
+    default:
+      return warning;
+  }
 }
 
 export function formatDurationSeconds(totalSeconds: number): string {

@@ -84,8 +84,8 @@ export function useSoftDeleteRoutingPlanMutation() {
 export function useCompleteRoutingExecutionMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { executionId: string; workerHourRate: number }) =>
-      routingExecutionService.completeExecution(p.executionId, p.workerHourRate),
+    mutationFn: (p: { executionId: string; workerHourRate: number; completedBy?: string }) =>
+      routingExecutionService.completeExecution(p.executionId, p.workerHourRate, p.completedBy),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['productionRouting'] });
     },

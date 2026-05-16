@@ -32,6 +32,7 @@ import type { FirestoreUserWithRepair, RepairBranch, RepairJob } from '../types'
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { downloadUtf8Csv } from '../utils/csvExport';
+import { computeRepairJobCost } from '../utils/repairBusinessLogic';
 
 const calcDiffDays = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / (1000 * 60 * 60 * 24);
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
@@ -142,7 +143,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
     const avgRepair = delivered.length
       ? delivered.reduce((s, j) => s + calcDiffDays(j.createdAt, j.updatedAt), 0) / delivered.length
       : 0;
-    const revenue = delivered.reduce((s, j) => s + Number(j.finalCost || 0), 0);
+    const revenue = delivered.reduce((s, j) => s + computeRepairJobCost(j).finalCost, 0);
     const open = filtered.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
     return { totalJobs: filtered.length, successRate, avgRepair, revenue, open };
   }, [filtered, repairSettings.workflow.openStatusIds]);
@@ -159,7 +160,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
         acc[key].total += 1;
         if (job.status === 'delivered') {
           acc[key].delivered += 1;
-          acc[key].revenue += Number(job.finalCost || 0);
+          acc[key].revenue += computeRepairJobCost(job).finalCost;
         } else if (job.status === 'unrepairable') {
           acc[key].unrepairable += 1;
         }

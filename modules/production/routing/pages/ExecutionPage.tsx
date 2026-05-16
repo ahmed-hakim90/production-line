@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pause, Play, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Pause, Play, RotateCcw } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -17,7 +17,7 @@ import { useStopwatch } from '../hooks/useStopwatch';
 import { routingPlanService } from '../services/routingPlanService';
 import { routingStepService } from '../services/routingStepService';
 import { routingExecutionService } from '../services/routingExecutionService';
-import { formatDurationSeconds } from '../domain/calculations';
+import { computeRoutingCalculation, formatDurationSeconds, routingWarningLabel } from '../domain/calculations';
 import type { ProductionRoutingStep } from '../types';
 import { RoutingExecutionPrint } from '../components/RoutingExecutionPrint';
 import {
@@ -54,6 +54,7 @@ export const ExecutionPage: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [stepIndex, setStepIndex] = useState(0);
   const [actualWorkers, setActualWorkers] = useState(1);
+  const [stepNotes, setStepNotes] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
   const shareWhatsAppLockRef = useRef(false);
   const [exporting, setExporting] = useState(false);
@@ -179,7 +180,7 @@ export const ExecutionPage: React.FC = () => {
 
   const completeMut = useMutation({
     mutationFn: async () => {
-      await routingExecutionService.completeExecution(executionId, hourlyRate);
+      await routingExecutionService.completeExecution(executionId, hourlyRate, uid || undefined);
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['productionRouting'] });
@@ -201,11 +202,13 @@ export const ExecutionPage: React.FC = () => {
     if (!currentStepRow) return;
     syncFromSeconds(currentStepRow.actualDurationSeconds ?? 0);
     setActualWorkers(currentStepRow.actualWorkersCount ?? currentStepRow.standardWorkersCount);
+    setStepNotes(currentStepRow.notes ?? '');
   }, [
     stepIndex,
     currentStepRow?.id,
     currentStepRow?.actualDurationSeconds,
     currentStepRow?.actualWorkersCount,
+    currentStepRow?.notes,
     currentStepRow?.standardWorkersCount,
     syncFromSeconds,
   ]);
@@ -230,17 +233,25 @@ export const ExecutionPage: React.FC = () => {
     const row = execSteps[stepIndex];
     if (!row) return;
     const actualDurationSeconds = stopAndCaptureSeconds();
+    if ((actualDurationSeconds <= 0 || actualWorkers <= 0) && !window.confirm('هذه الخطوة بها زمن أو عمال صفر. هل تريد حفظها والمتابعة؟')) {
+      return;
+    }
     await routingExecutionService.patchExecutionStep(row.id, {
       actualDurationSeconds,
       actualWorkersCount: actualWorkers,
+      notes: stepNotes.trim(),
     });
     await qc.invalidateQueries({ queryKey: routingQueryKeys.executionSteps(executionId) });
     if (stepIndex < execSteps.length - 1) {
       setStepIndex((i) => i + 1);
     } else {
-      await completeMut.mutateAsync();
+      try {
+        await completeMut.mutateAsync();
+      } catch (error: any) {
+        window.alert(error?.message || 'تعذر إنهاء التنفيذ. راجع الخطوات غير المكتملة ثم أعد المحاولة.');
+      }
     }
-  }, [actualWorkers, completeMut, execSteps, execution, executionId, isNew, qc, stepIndex, stopAndCaptureSeconds]);
+  }, [actualWorkers, completeMut, execSteps, execution, executionId, isNew, qc, stepIndex, stepNotes, stopAndCaptureSeconds]);
 
   const productOptions = useMemo(
     () => products.map((p) => ({ value: p.id, label: p.name })),
@@ -259,6 +270,23 @@ export const ExecutionPage: React.FC = () => {
     currentStepRow && elapsedSeconds > 0 ? elapsedSeconds <= currentStepRow.standardDurationSeconds : null;
   const workerBetter =
     currentStepRow && actualWorkers >= 0 ? actualWorkers <= currentStepRow.standardWorkersCount : null;
+  const liveCalculation = useMemo(() => {
+    if (!execution || execSteps.length === 0) return null;
+    return computeRoutingCalculation({
+      productId: execution.productId,
+      quantity: execution.quantity,
+      workerHourRate: hourlyRate,
+      steps: execSteps.map((step, index) => ({
+        name: step.name,
+        durationSeconds: step.standardDurationSeconds,
+        workersCount: step.standardWorkersCount,
+        actualDurationSeconds: index === stepIndex ? elapsedSeconds : step.actualDurationSeconds ?? 0,
+        actualWorkersCount: index === stepIndex ? actualWorkers : step.actualWorkersCount ?? 0,
+      })),
+    });
+  }, [actualWorkers, elapsedSeconds, execSteps, execution, hourlyRate, stepIndex]);
+  const currentStepVariance = liveCalculation?.stepVariances[stepIndex] ?? null;
+  const progressPct = execSteps.length > 0 ? Math.round(((stepIndex + 1) / execSteps.length) * 100) : 0;
 
   if (!can('routing.execute')) {
     return (
@@ -532,15 +560,54 @@ export const ExecutionPage: React.FC = () => {
         />
         <Card className="shadow-sm">
           <CardContent className="space-y-6 p-4 sm:p-6">
-            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <div className="rounded-lg bg-[var(--color-muted)]/50 p-3">
-              <div className="text-[var(--color-text-muted)] text-xs mb-1">الزمن القياسي</div>
-              <div className="text-lg font-bold tabular-nums">{formatDurationSeconds(currentStepRow.standardDurationSeconds)}</div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>تقدم التنفيذ</span>
+                <span className="tabular-nums">{progressPct}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div>
+                  <p className="text-muted-foreground">الكمية</p>
+                  <p className="font-bold tabular-nums">{execution?.quantity ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">زمن فعلي كلي</p>
+                  <p className="font-bold tabular-nums">{formatDurationSeconds(liveCalculation?.actualTotalTimeSeconds ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">تكلفة متوقعة</p>
+                  <p className="font-bold tabular-nums">{(liveCalculation?.totalCost ?? 0).toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">تكلفة الوحدة</p>
+                  <p className="font-bold tabular-nums">{(liveCalculation?.costPerUnit ?? 0).toFixed(2)}</p>
+                </div>
+              </div>
+              {liveCalculation && liveCalculation.warnings.length > 0 && (
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  <p>{liveCalculation.warnings.map(routingWarningLabel).join(' ')}</p>
+                </div>
+              )}
             </div>
-            <div className="rounded-lg bg-[var(--color-muted)]/50 p-3">
-              <div className="text-[var(--color-text-muted)] text-xs mb-1">العمال القياسي</div>
-              <div className="text-lg font-bold tabular-nums">{currentStepRow.standardWorkersCount}</div>
-            </div>
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+              <div className="rounded-lg bg-[var(--color-muted)]/50 p-3">
+                <div className="text-[var(--color-text-muted)] text-xs mb-1">الزمن القياسي</div>
+                <div className="text-lg font-bold tabular-nums">{formatDurationSeconds(currentStepRow.standardDurationSeconds)}</div>
+              </div>
+              <div className="rounded-lg bg-[var(--color-muted)]/50 p-3">
+                <div className="text-[var(--color-text-muted)] text-xs mb-1">العمال القياسي</div>
+                <div className="text-lg font-bold tabular-nums">{currentStepRow.standardWorkersCount}</div>
+              </div>
+              <div className="rounded-lg bg-[var(--color-muted)]/50 p-3">
+                <div className="text-[var(--color-text-muted)] text-xs mb-1">انحراف الخطوة</div>
+                <div className="text-lg font-bold tabular-nums">
+                  {currentStepVariance ? `${(currentStepVariance.timeVarianceRatio * 100).toFixed(1)}%` : '—'}
+                </div>
+              </div>
             </div>
             <div className="space-y-4">
             <div>
@@ -608,6 +675,15 @@ export const ExecutionPage: React.FC = () => {
                 className={`h-14 text-xl tabular-nums ${workerBetter === false ? 'border-rose-400' : ''} ${workerBetter === true ? 'border-emerald-400' : ''}`}
                 value={actualWorkers}
                 onChange={(e) => setActualWorkers(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+            <div>
+              <Label className="mb-1 block text-sm font-semibold">ملاحظات الخطوة</Label>
+              <textarea
+                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={stepNotes}
+                onChange={(e) => setStepNotes(e.target.value)}
+                placeholder="اختياري"
               />
             </div>
             </div>

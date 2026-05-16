@@ -16,6 +16,7 @@ import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { downloadUtf8Csv } from '../utils/csvExport';
+import { computeRepairJobCost } from '../utils/repairBusinessLogic';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -140,7 +141,7 @@ export const RepairAdminDashboard: React.FC = () => {
       const successRate = terminal > 0 ? (deliveredJobs / terminal) * 100 : 0;
       const revenue = branchJobs
         .filter((j) => j.status === 'delivered')
-        .reduce((sum, j) => sum + Number(j.finalCost || 0), 0);
+        .reduce((sum, j) => sum + computeRepairJobCost(j).finalCost, 0);
       const partsRevenue = salesInvoices
         .filter((invoice) => invoice.branchId === branchId)
         .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);

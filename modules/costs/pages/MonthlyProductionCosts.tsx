@@ -8,12 +8,8 @@ import { reportService } from '@/modules/production/services/reportService';
 import {
   getCurrentMonth,
   formatCost,
-  calculateDailyIndirectCost,
-  buildLineAllocatedCostSummary,
   buildSupervisorHourlyRatesMap,
-  buildSupervisorIndirectShareMap,
-  getByQtyEffectiveMonthlyAmount,
-  getWorkingDaysForMonth,
+  computeLiveProductCosts,
 } from '../../../utils/costCalculations';
 import { productMaterialService } from '../../production/services/productMaterialService';
 import type { MonthlyProductionCost, ProductMaterial } from '../../../types';
@@ -298,178 +294,28 @@ export const MonthlyProductionCosts: React.FC = () => {
       ]);
       if (!mountedRef.current || requestId !== fetchRequestRef.current) return;
       const manufacturingReports = allReports.filter((report) => countsTowardProductManufacturingVolume(report));
-      const monthProductQtyTotals = new Map<string, number>();
-      const monthActiveDates = new Set<string>();
-      manufacturingReports.forEach((report) => {
-        if ((report.quantityProduced || 0) <= 0 || !report.productId) return;
-        monthProductQtyTotals.set(
-          report.productId,
-          (monthProductQtyTotals.get(report.productId) || 0) + (report.quantityProduced || 0),
-        );
-        if (String(report.date || '').startsWith(month)) {
-          monthActiveDates.add(String(report.date || ''));
-        }
-      });
-      const assetById = new Map(assets.map((asset) => [String(asset.id || ''), asset]));
-      const depreciationByCenter = new Map<string, number>();
-      assetDepreciations.forEach((entry) => {
-        if (entry.period !== month) return;
-        const asset = assetById.get(String(entry.assetId || ''));
-        const centerId = String(asset?.centerId || '');
-        if (!centerId) return;
-        depreciationByCenter.set(centerId, (depreciationByCenter.get(centerId) || 0) + Number(entry.depreciationAmount || 0));
-      });
-      const qtyRules = costCenters
-        .filter((center) => center.type === 'indirect' && center.isActive && (center.allocationBasis || 'line_percentage') === 'by_qty' && center.id)
-        .map((center) => {
-          const centerId = String(center.id || '');
-          const centerValue = costCenterValues.find((value) => value.costCenterId === centerId && value.month === month);
-          const valueSource = centerValue?.valueSource || center.valueSource || 'manual';
-          const hasSavedBreakdown = centerValue?.manualAmount !== undefined || centerValue?.salariesAmount !== undefined;
-          const manualAmount = hasSavedBreakdown
-            ? Number(centerValue?.manualAmount || 0)
-            : Number(centerValue?.amount || 0);
-          const salariesAmount = hasSavedBreakdown
-            ? Number(centerValue?.salariesAmount || 0)
-            : 0;
-          const snapshotBase = valueSource === 'manual'
-            ? manualAmount
-            : valueSource === 'salaries'
-              ? (hasSavedBreakdown ? salariesAmount : Number(centerValue?.amount || 0))
-              : (hasSavedBreakdown ? (manualAmount + salariesAmount) : Number(centerValue?.amount || 0));
-          const depreciation = Number(depreciationByCenter.get(centerId) || 0);
-          const resolvedAmount = snapshotBase + depreciation;
-          const workingDays = getWorkingDaysForMonth(
-            centerValue,
-            month,
-            systemSettings.costMonthlyWorkingDays,
-          );
-          const effectiveAmount = getByQtyEffectiveMonthlyAmount(
-            resolvedAmount,
-            workingDays,
-            monthActiveDates.size,
-          );
-          const allowedProductIds = center.productScope === 'selected'
-            ? center.productIds || []
-            : center.productScope === 'category'
-              ? Array.from(monthProductQtyTotals.keys()).filter((pid) =>
-                (center.productCategories || []).includes(String(productCategoryMap.get(pid) || 'غير مصنف'))
-              )
-            : Array.from(monthProductQtyTotals.keys());
-          const denominator = allowedProductIds.reduce(
-            (sum, pid) => sum + Number(monthProductQtyTotals.get(pid) || 0),
-            0,
-          );
-          return {
-            costCenterId: centerId,
-            effectiveAmount,
-            denominator,
-            allowedProductIds: new Set(allowedProductIds),
-          };
-        })
-        .filter((rule) => rule.effectiveAmount > 0 && rule.denominator > 0);
-
-      const lineDateQtyTotals = new Map<string, number>();
-      const lineDateHoursTotals = new Map<string, number>();
-      const lineMonthDates = new Map<string, Set<string>>();
-      const lineCenterSummaryCache = new Map<string, ReturnType<typeof buildLineAllocatedCostSummary>>();
-      manufacturingReports.forEach((r) => {
-        const key = `${r.lineId}_${r.date}`;
-        lineDateQtyTotals.set(key, (lineDateQtyTotals.get(key) || 0) + (r.quantityProduced || 0));
-        lineDateHoursTotals.set(key, (lineDateHoursTotals.get(key) || 0) + Math.max(0, r.workHours || 0));
-        const reportMonth = r.date?.slice(0, 7) || month;
-        const lineMonthKey = `${r.lineId}_${reportMonth}`;
-        if (!lineMonthDates.has(lineMonthKey)) lineMonthDates.set(lineMonthKey, new Set<string>());
-        lineMonthDates.get(lineMonthKey)!.add(String(r.date || ''));
-      });
-      const lineMonthActiveDays = new Map<string, number>();
-      lineMonthDates.forEach((dates, key) => lineMonthActiveDays.set(key, dates.size));
-
-      const indirectCache = new Map<string, number>();
-      const supervisorShareMap = buildSupervisorIndirectShareMap(
+      const productCategoryById = new Map(products.map((p) => [String(p.id || ''), String(p.category || '')]));
+      const liveCosts = computeLiveProductCosts(
         manufacturingReports,
-        supervisorHourlyRates,
         hourlyRate,
+        costCenters,
+        costCenterValues,
+        costAllocations,
+        {
+          assets,
+          assetDepreciations,
+          productCategoryById,
+          supervisorHourlyRates,
+          workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+        },
       );
-      const nextBreakdown: Record<string, { directCost: number; indirectCost: number }> = {};
-      const nextCenterBreakdown: Record<string, Record<string, number>> = {};
-      const addCenterCost = (productId: string, centerId: string, amount: number) => {
-        if (!centerId || amount <= 0) return;
-        if (!nextCenterBreakdown[productId]) nextCenterBreakdown[productId] = {};
-        nextCenterBreakdown[productId][centerId] = (nextCenterBreakdown[productId][centerId] || 0) + amount;
-      };
-      manufacturingReports.forEach((r) => {
-        if (!r.quantityProduced || r.quantityProduced <= 0) return;
-        const current = nextBreakdown[r.productId] || { directCost: 0, indirectCost: 0 };
-        current.directCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-
-        const reportMonth = r.date?.slice(0, 7) || month;
-        const cacheKey = `${r.lineId}_${reportMonth}`;
-        if (!indirectCache.has(cacheKey)) {
-          indirectCache.set(
-            cacheKey,
-            calculateDailyIndirectCost(
-              r.lineId,
-              reportMonth,
-              costCenters,
-              costCenterValues,
-              costAllocations,
-              assets,
-              assetDepreciations,
-              systemSettings.costMonthlyWorkingDays,
-              lineMonthActiveDays,
-            ),
-          );
-        }
-        const lineIndirect = indirectCache.get(cacheKey) || 0;
-        const lineDateKey = `${r.lineId}_${r.date}`;
-        const lineDateTotalHours = lineDateHoursTotals.get(lineDateKey) || 0;
-        const lineDateTotalQty = lineDateQtyTotals.get(lineDateKey) || 0;
-        const reportHours = Math.max(0, r.workHours || 0);
-        if (!lineCenterSummaryCache.has(cacheKey)) {
-          lineCenterSummaryCache.set(
-            cacheKey,
-            buildLineAllocatedCostSummary(
-              r.lineId,
-              reportMonth,
-              costCenters,
-              costCenterValues,
-              costAllocations,
-              assets,
-              assetDepreciations,
-              systemSettings.costMonthlyWorkingDays,
-              lineMonthActiveDays,
-            )
-          );
-        }
-        const lineCenterSummary = lineCenterSummaryCache.get(cacheKey);
-        if (lineDateTotalHours > 0 && reportHours > 0) {
-          const shareRatio = reportHours / lineDateTotalHours;
-          current.indirectCost += lineIndirect * shareRatio;
-          lineCenterSummary?.centers.forEach((center) => {
-            addCenterCost(r.productId, center.costCenterId, center.dailyAllocated * shareRatio);
-          });
-        } else {
-          if (lineDateTotalQty > 0) {
-            const shareRatio = r.quantityProduced / lineDateTotalQty;
-            current.indirectCost += lineIndirect * shareRatio;
-            lineCenterSummary?.centers.forEach((center) => {
-              addCenterCost(r.productId, center.costCenterId, center.dailyAllocated * shareRatio);
-            });
-          }
-        }
-        if (r.id) {
-          current.indirectCost += supervisorShareMap.get(r.id) || 0;
-        }
-        for (const rule of qtyRules) {
-          if (!rule.allowedProductIds.has(r.productId)) continue;
-          const share = rule.effectiveAmount * ((r.quantityProduced || 0) / rule.denominator);
-          current.indirectCost += share;
-          addCenterCost(r.productId, rule.costCenterId, share);
-        }
-
-        nextBreakdown[r.productId] = current;
-      });
+      const nextBreakdown = Object.fromEntries(
+        Object.entries(liveCosts.byProduct).map(([productId, cost]) => [
+          productId,
+          { directCost: cost.laborCost, indirectCost: cost.indirectCost },
+        ]),
+      );
+      const nextCenterBreakdown = liveCosts.byProductCenter;
 
       if (mountedRef.current) {
         setRecords(data);
@@ -501,6 +347,7 @@ export const MonthlyProductionCosts: React.FC = () => {
   }, [
     month,
     laborSettings,
+    products,
     costCenters,
     costCenterValues,
     costAllocations,
@@ -640,7 +487,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     try {
       const monthReports = await reportService.getByDateRange(startDate, endDate);
       const manufacturingMonth = monthReports.filter((r) => countsTowardProductManufacturingVolume(r));
-      const productIds = Array.from(
+      const productIds: string[] = Array.from(
         new Set(
           manufacturingMonth
             .filter((r) => (r.quantityProduced || 0) > 0)
@@ -1961,7 +1808,3 @@ export const MonthlyProductionCosts: React.FC = () => {
     </DetailPageShell>
   );
 };
-
-
-
-
