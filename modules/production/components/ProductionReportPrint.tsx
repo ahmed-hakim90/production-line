@@ -496,7 +496,11 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         : [{ label: 'الهالك', value: Number(report.wasteQuantity || 0), unit: 'وحدة', color: (report.wasteQuantity ?? 0) > 0 ? 'red' as const : 'default' as const }]),
       ...(rt === 'packaging'
         ? []
-        : [{ label: 'العمال', value: totalWorkersForPrintRow(report), color: 'default' as const }]),
+        : [{
+          label: 'العمال',
+          value: totalWorkersForPrintRow(report),
+          color: (hideWasteUi ? 'sky' : 'default') as const,
+        }]),
       {
         label: 'تكلفة الوحدة',
         value: report.costPerUnit != null && report.costPerUnit > 0 ? report.costPerUnit.toFixed(2) : '—',
@@ -524,6 +528,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const layout = (
       <PrintReportLayout
         ref={shareOuterCapture ? undefined : ref}
+        nestedInShareWrapper={shareOuterCapture}
         exportRootId={exportRootId}
         companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
         reportType={reportTypeHeading}
@@ -565,7 +570,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         ref={ref}
         dir="rtl"
         lang="ar"
-        className="print-root print-report arabic-export-root bg-white w-[640px] mx-auto"
+        className="print-root print-report arabic-export-root bg-white w-[640px] mx-auto p-0"
         style={{
           fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
           width: 640,
@@ -574,6 +579,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           boxSizing: 'border-box',
           letterSpacing: 'normal',
           wordSpacing: 'normal',
+          padding: 0,
         }}
       >
         {v ? (

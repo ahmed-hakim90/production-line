@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import {
   AlertCircle,
   AlertTriangle,
@@ -1526,7 +1527,9 @@ export const Reports: React.FC = () => {
           ? { shareStandardVariance: buildShareStandardVarianceBanner(variance) }
           : {}),
       };
-      setSharePrintRow(row);
+      flushSync(() => {
+        setSharePrintRow(row);
+      });
       try {
         await waitForExportPaint(150);
         const { shareToWhatsApp } = await import('../../../utils/reportExport');
@@ -3602,6 +3605,7 @@ export const Reports: React.FC = () => {
           pointerEvents: 'none',
           direction: 'rtl',
           width: 'max-content',
+          minWidth: 640,
           maxWidth: 'none',
           overflow: 'visible',
         }}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, SearchableSelect } from '../components/UI';
@@ -634,7 +635,9 @@ export const QuickAction: React.FC = () => {
         : {}),
     };
     const caption = formatProductionReportShareCaption(rowForShare, printTemplate);
-    setPrintReport(rowForShare);
+    flushSync(() => {
+      setPrintReport(rowForShare);
+    });
     await waitForExportPaint(150);
     setExporting(true);
     try {
@@ -1455,6 +1458,7 @@ export const QuickAction: React.FC = () => {
           pointerEvents: 'none',
           direction: 'rtl',
           width: 'max-content',
+          minWidth: 640,
           maxWidth: 'none',
           overflow: 'visible',
         }}

@@ -32,9 +32,9 @@ export type ShareToWhatsAppOptions = CaptureOptions & {
 };
 
 const applyRtlFontClone = (clonedDoc: Document) => {
-  clonedDoc.documentElement.setAttribute('dir', 'rtl');
+  clonedDoc.documentElement.setAttribute('dir', 'ltr');
   clonedDoc.documentElement.setAttribute('lang', 'ar');
-  clonedDoc.documentElement.style.direction = 'rtl';
+  clonedDoc.documentElement.style.direction = 'ltr';
 
   /**
    * Do not inject a Google Fonts <link> here — it loads asynchronously and html2canvas
@@ -45,6 +45,12 @@ const applyRtlFontClone = (clonedDoc: Document) => {
   /* letter-spacing (e.g. Tailwind tracking-*) breaks Arabic cursive joins in html2canvas */
   style.textContent = `
     html, body {
+      direction: ltr !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+    .print-root, .print-report, .arabic-export-root {
       direction: rtl !important;
     }
     .print-root, .print-report, .arabic-export-root,
@@ -54,6 +60,47 @@ const applyRtlFontClone = (clonedDoc: Document) => {
       font-variant-ligatures: normal !important;
       font-family: 'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif !important;
     }
+    /* html2canvas often ignores Tailwind grid at narrow viewport widths */
+    .print-report .grid {
+      display: grid !important;
+    }
+    .print-report .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
+    .print-report .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .print-report .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    .print-report .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+    .print-report .gap-2 { gap: 0.5rem !important; }
+    .print-report .flex { display: flex !important; }
+    .print-report .rounded-lg { border-radius: 0.5rem !important; }
+    .print-report .rounded-md { border-radius: 0.375rem !important; }
+    .print-report .border { border-width: 1px !important; border-style: solid !important; }
+    .print-report .border-2 { border-width: 2px !important; border-style: solid !important; }
+    .print-report .border-b { border-bottom-width: 1px !important; border-bottom-style: solid !important; }
+    .print-report .border-b-2 { border-bottom-width: 2px !important; border-bottom-style: solid !important; }
+    .print-report .border-t { border-top-width: 1px !important; border-top-style: solid !important; }
+    .print-report .border-l { border-left-width: 1px !important; border-left-style: solid !important; }
+    .print-report .border-slate-100 { border-color: #f1f5f9 !important; }
+    .print-report .border-slate-200 { border-color: #e2e8f0 !important; }
+    .print-report .bg-slate-50 { background-color: #f8fafc !important; }
+    .print-report .bg-white { background-color: #ffffff !important; }
+    .print-report .text-slate-400 { color: #94a3b8 !important; }
+    .print-report .text-slate-500 { color: #64748b !important; }
+    .print-report .text-slate-800 { color: #1e293b !important; }
+    .print-report .text-slate-900 { color: #0f172a !important; }
+    .print-report .overflow-hidden { overflow: hidden !important; }
+    .print-report .shrink-0 { flex-shrink: 0 !important; }
+    .print-report .self-stretch { align-self: stretch !important; }
+    .print-report .w-\\[3px\\] { width: 3px !important; min-width: 3px !important; }
+    .print-report .min-h-\\[5\\.25rem\\] { min-height: 5.25rem !important; }
+    .print-report table.erp-table { width: 100% !important; border-collapse: collapse !important; }
+    .print-report table.erp-table td { border-bottom: 1px solid #f1f5f9 !important; }
+    .arabic-export-root .border-slate-200 { border-color: #e2e8f0 !important; }
+    .arabic-export-root .bg-slate-50 { background-color: #f8fafc !important; }
+    .arabic-export-root .border-emerald-200 { border-color: #a7f3d0 !important; }
+    .arabic-export-root .bg-emerald-50 { background-color: #ecfdf5 !important; }
+    .arabic-export-root .border-rose-200 { border-color: #fecdd3 !important; }
+    .arabic-export-root .bg-rose-50 { background-color: #fff1f2 !important; }
+    .arabic-export-root .border-amber-200 { border-color: #fde68a !important; }
+    .arabic-export-root .bg-amber-50 { background-color: #fffbeb !important; }
   `;
   clonedDoc.head.appendChild(style);
 };
@@ -73,12 +120,26 @@ const ensureCairoLoaded = async () => {
   }
 };
 
-/** Min clone viewport width for Hakim print/share cards (matches PrintReportLayout `w-[640px]`). */
-const EXPORT_CARD_MIN_WINDOW_WIDTH = 640;
+/** Fixed capture width for standard Hakim report cards (image output is 1280px at scale 2). */
+const STANDARD_REPORT_CAPTURE_WIDTH = 640;
 
-const isWideExportCardRoot = (node: HTMLElement): boolean =>
-  node.matches('.print-root, .print-report, .arabic-export-root') ||
-  !!node.querySelector('.print-root, .print-report, .arabic-export-root');
+const isStandardReportCardRoot = (node: HTMLElement): boolean =>
+  node.matches('.print-report') || !!node.querySelector('.print-report');
+
+/**
+ * Prefer the Hakim report card root for capture. When the ref sits on an outer
+ * share wrapper (variance banner + nested PrintReportLayout), keep the outer node
+ * so the full share image is captured.
+ */
+const resolveStandardReportRoot = (el: HTMLElement): HTMLElement => {
+  if (el.matches('.print-report')) {
+    const nested = el.querySelector(':scope .print-report');
+    if (nested && nested !== el) return el;
+    return el;
+  }
+  const inner = el.querySelector('.print-report');
+  return (inner as HTMLElement | null) ?? el;
+};
 
 const measureExportElement = (node: HTMLElement) => {
   const rect = node.getBoundingClientRect();
@@ -97,6 +158,107 @@ const measureExportElement = (node: HTMLElement) => {
   const height = Math.max(1, ...candidateHeights.filter((value) => Number.isFinite(value) && value > 0));
 
   return { width, height };
+};
+
+const stablePixelWidth = (value: number) => `${Math.ceil(Math.max(1, value))}px`;
+
+const LIVE_CAPTURE_PROPS = [
+  'position',
+  'left',
+  'top',
+  'width',
+  'min-width',
+  'max-width',
+  'z-index',
+  'visibility',
+  'opacity',
+  'margin',
+  'transform',
+  'box-sizing',
+] as const;
+
+/** Pins the live DOM node at 640px width so html2canvas keeps Tailwind computed styles. */
+const prepareLiveCaptureViewport = async (
+  source: HTMLElement,
+  targetWidth: number,
+): Promise<{ cleanup: () => void }> => {
+  const saved = new Map<string, string>();
+  for (const prop of LIVE_CAPTURE_PROPS) {
+    saved.set(prop, source.style.getPropertyValue(prop));
+  }
+
+  source.style.setProperty('position', 'fixed');
+  source.style.setProperty('left', '0');
+  source.style.setProperty('top', '0');
+  source.style.setProperty('z-index', '2147483647');
+  source.style.setProperty('width', stablePixelWidth(targetWidth));
+  source.style.setProperty('min-width', stablePixelWidth(targetWidth));
+  source.style.setProperty('max-width', stablePixelWidth(targetWidth));
+  source.style.setProperty('margin', '0');
+  source.style.setProperty('transform', 'none');
+  source.style.setProperty('visibility', 'visible');
+  source.style.setProperty('opacity', '1');
+  source.style.setProperty('box-sizing', 'border-box');
+
+  await waitForImagesInElement(source);
+  await waitForExportPaint(50);
+
+  return {
+    cleanup: () => {
+      for (const prop of LIVE_CAPTURE_PROPS) {
+        const prev = saved.get(prop);
+        if (prev) source.style.setProperty(prop, prev);
+        else source.style.removeProperty(prop);
+      }
+    },
+  };
+};
+
+const prepareStableCaptureTarget = async (
+  source: HTMLElement,
+  targetWidth: number,
+): Promise<{ target: HTMLElement; heightTarget: HTMLElement; cleanup: () => void }> => {
+  const clone = source.cloneNode(true) as HTMLElement;
+  const host = document.createElement('div');
+
+  host.setAttribute('aria-hidden', 'true');
+  host.style.position = 'absolute';
+  host.style.left = '0';
+  host.style.top = '0';
+  host.style.zIndex = '0';
+  host.style.pointerEvents = 'none';
+  host.style.overflow = 'visible';
+  host.style.width = stablePixelWidth(targetWidth);
+  host.style.maxWidth = 'none';
+  host.style.background = '#fff';
+  host.style.direction = 'ltr';
+  host.style.display = 'block';
+  host.style.boxSizing = 'border-box';
+
+  clone.style.display = 'block';
+  clone.style.margin = '0';
+  clone.style.width = stablePixelWidth(targetWidth);
+  clone.style.minWidth = stablePixelWidth(targetWidth);
+  clone.style.maxWidth = stablePixelWidth(targetWidth);
+  clone.style.boxSizing = 'border-box';
+  clone.style.transform = 'none';
+  clone.style.direction = 'rtl';
+  clone.setAttribute('dir', 'rtl');
+  clone.setAttribute('lang', 'ar');
+
+  host.appendChild(clone);
+  document.body.appendChild(host);
+
+  await waitForImagesInElement(clone);
+  await waitForExportPaint();
+
+  return {
+    target: clone,
+    heightTarget: clone,
+    cleanup: () => {
+      host.remove();
+    },
+  };
 };
 
 const waitForImagesInElement = async (root: HTMLElement, timeoutMs = 4000) => {
@@ -149,36 +311,33 @@ export const waitForExportPaint = (extraDelayMs = 0): Promise<void> =>
 const capture = async (el: HTMLElement, options?: CaptureOptions) => {
   const { cloneRtlAndFonts = true, width, windowWidth, windowHeight } = options ?? {};
 
+  const captureRoot = resolveStandardReportRoot(el);
+  const isStandardCard = isStandardReportCardRoot(captureRoot);
+
   await ensureCairoLoaded();
-  await waitForImagesInElement(el);
+  await waitForImagesInElement(captureRoot);
   await waitForExportPaint();
 
   /**
    * html2canvas defaults `windowWidth` to the document width. On phones that is ~360–430px
-   * while print cards use fixed widths (e.g. 640px). The clone then lays out like a narrow
-   * viewport → squeezed column with large side margins in the PNG. Size the clone from the
-   * target element instead (see also StockTransactions share with explicit windowWidth).
+   * while standard report cards are designed as a fixed 640px artifact. Capture those
+   * reports at their canonical width every time; other custom cards keep their own width.
    */
-  const { width: measuredW, height: measuredH } = measureExportElement(el);
-  const wideCard = isWideExportCardRoot(el);
-  const shouldUseCardMinWidth =
-    wideCard &&
-    (measuredW >= 500 ||
-      el.matches('.arabic-export-root') ||
-      !!el.querySelector('.arabic-export-root'));
-  const targetW = shouldUseCardMinWidth ? Math.max(measuredW, EXPORT_CARD_MIN_WINDOW_WIDTH) : measuredW;
+  const { width: measuredW, height: measuredH } = measureExportElement(captureRoot);
+  const fixedReportW = isStandardCard ? STANDARD_REPORT_CAPTURE_WIDTH : undefined;
+  const targetW = fixedReportW ?? measuredW;
   const captureW = width ?? targetW;
-  const winW = windowWidth ?? Math.max(captureW, targetW);
-  const winH = windowHeight ?? measuredH;
-
-  return html2canvas(el, {
+  const winW =
+    windowWidth ??
+    (fixedReportW != null ? STANDARD_REPORT_CAPTURE_WIDTH : Math.max(captureW, targetW));
+  const canvasOptions = {
     scale: 2,
     useCORS: true,
     backgroundColor: '#ffffff',
     logging: false,
-    width: captureW,
     windowWidth: winW,
-    windowHeight: winH,
+    scrollX: 0,
+    scrollY: 0,
     ...(cloneRtlAndFonts
       ? {
           onclone: (clonedDoc: Document) => {
@@ -186,7 +345,38 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
           },
         }
       : {}),
-  });
+  };
+
+  if (isStandardCard) {
+    const live = await prepareLiveCaptureViewport(captureRoot, captureW);
+    const { height: liveH } = measureExportElement(captureRoot);
+    const winH = windowHeight ?? Math.max(measuredH, liveH);
+    try {
+      return await html2canvas(captureRoot, {
+        ...canvasOptions,
+        width: captureW,
+        height: liveH,
+        windowHeight: winH,
+      });
+    } finally {
+      live.cleanup();
+    }
+  }
+
+  const stableCapture = await prepareStableCaptureTarget(captureRoot, captureW);
+  const { height: stableH } = measureExportElement(stableCapture.heightTarget);
+  const winH = windowHeight ?? Math.max(measuredH, stableH);
+
+  try {
+    return await html2canvas(stableCapture.target, {
+      ...canvasOptions,
+      width: captureW,
+      height: stableH,
+      windowHeight: winH,
+    });
+  } finally {
+    stableCapture.cleanup();
+  }
 };
 
 const canvasToBlob = (

@@ -6,6 +6,7 @@ import {
   HAKIM_IMAGE_PRIMARY_BADGE_BG,
   HAKIM_IMAGE_PRIMARY_BADGE_TEXT,
   HAKIM_IMAGE_PROGRESS_TRACK,
+  HAKIM_IMAGE_WORKERS_STRIP,
 } from "@/utils/imageExportTheme"
 
 export interface ReportMetaCard {
@@ -17,7 +18,7 @@ interface ReportKPI {
   label: string
   value: string | number
   unit?: string
-  color?: "indigo" | "green" | "red" | "default"
+  color?: "indigo" | "green" | "red" | "sky" | "default"
 }
 
 interface ReportSection {
@@ -56,6 +57,8 @@ export interface PrintReportLayoutProps {
   /** Ignored for layout; kept for call-site compatibility with print settings. */
   paperSize?: string
   orientation?: string
+  /** When true, card fills a share wrapper (variance banner) instead of fixed 640 root. */
+  nestedInShareWrapper?: boolean
 }
 
 const gridColsClass = (count: number) => {
@@ -73,6 +76,9 @@ const gridColsClass = (count: number) => {
   }
 }
 
+const gridTemplateColumns = (count: number) =>
+  `repeat(${Math.max(1, Math.min(4, count))}, minmax(0, 1fr))`
+
 export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutProps>(
   (
     {
@@ -89,10 +95,12 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       logoUrl,
       brandAccent = HAKIM_IMAGE_PRIMARY,
       footerTagline = HAKIM_DEFAULT_FOOTER_TAGLINE,
+      nestedInShareWrapper = false,
     },
     ref,
   ) => {
     const accent = brandAccent
+    const cardWidth = nestedInShareWrapper ? ("100%" as const) : (640 as const)
     const headerBorderStyle: CSSProperties = { borderBottomColor: accent }
     const metaCells: ReportMetaCard[] =
       metaCards && metaCards.length > 0
@@ -109,6 +117,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       if (kpi.color === "indigo") return accent
       if (kpi.color === "green") return "#059669"
       if (kpi.color === "red") return "#dc2626"
+      if (kpi.color === "sky") return HAKIM_IMAGE_WORKERS_STRIP
       return "#cbd5e1"
     }
 
@@ -125,15 +134,18 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
         ref={ref}
         dir="rtl"
         lang="ar"
-        className="print-root print-report bg-white w-[640px] mx-auto p-9 print:p-0 print:w-full [font-feature-settings:normal] arabic-export-root"
+        className={cn(
+          "print-root print-report bg-white mx-auto p-9 print:p-0 print:w-full [font-feature-settings:normal] arabic-export-root",
+          !nestedInShareWrapper && "w-[640px]",
+        )}
         style={{
           fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
           fontSize: "13px",
           letterSpacing: "normal",
           wordSpacing: "normal",
-          width: 640,
-          minWidth: 640,
-          maxWidth: 640,
+          width: cardWidth,
+          minWidth: nestedInShareWrapper ? undefined : 640,
+          maxWidth: cardWidth,
           boxSizing: "border-box",
           flexShrink: 0,
         }}
@@ -176,6 +188,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
 
         <div
           className={cn("grid mb-4 border border-slate-200 rounded-lg overflow-hidden", gridColsClass(metaCells.length))}
+          style={{ display: "grid", gridTemplateColumns: gridTemplateColumns(metaCells.length) }}
         >
           {metaCells.map((item, i) => (
             <div
@@ -192,11 +205,15 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
           ))}
         </div>
 
-        <div className={cn("grid gap-2 mb-4", gridColsClass(kpis.length))}>
+        <div
+          className={cn("grid gap-2 mb-4", gridColsClass(kpis.length))}
+          style={{ display: "grid", gridTemplateColumns: gridTemplateColumns(kpis.length), gap: "0.5rem" }}
+        >
           {kpis.map((kpi, i) => (
             <div
               key={i}
               className="flex min-h-[5.25rem] overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+              style={{ display: "flex", flexDirection: "row", minHeight: "5.25rem" }}
             >
               {/* في RTL الشريط أول العناصر فيُرسَم يمين البطاقة (بداية القراءة) */}
               <div className="w-[3px] shrink-0 self-stretch" style={{ backgroundColor: kpiStripColor(kpi) }} />

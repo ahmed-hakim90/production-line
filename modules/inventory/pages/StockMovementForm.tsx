@@ -846,7 +846,7 @@ export const StockMovementForm: React.FC = () => {
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
-      <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -1, direction: 'rtl' }}>
+      <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl', minWidth: 640, width: 'max-content' }}>
         <StockTransferShareCard
           ref={transferShareCardRef}
           data={printData}

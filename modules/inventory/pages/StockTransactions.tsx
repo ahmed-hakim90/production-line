@@ -370,9 +370,10 @@ export const StockTransactions: React.FC = () => {
         return;
       }
       try {
-        const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${transferNo}`, {
-          windowWidth: 720,
-        });
+        const result = await shareToWhatsApp(
+          transferShareCardRef.current,
+          `stock-transfer-${transferNo}`,
+        );
         showShareFeedback(result);
       } catch (error: unknown) {
         const err = error as { name?: string; message?: string };
@@ -427,7 +428,6 @@ export const StockTransactions: React.FC = () => {
       const result = await shareToWhatsApp(
         transferShareCardRef.current,
         `stock-transfer-${row.referenceNo}`,
-        { windowWidth: 720 },
       );
       showShareFeedback(result);
     } catch (error: unknown) {
@@ -655,8 +655,9 @@ export const StockTransactions: React.FC = () => {
           left: '-10000px',
           top: 0,
           zIndex: 2147483000,
-          width: 720,
-          overflow: 'hidden',
+          width: 'max-content',
+          minWidth: 640,
+          overflow: 'visible',
           pointerEvents: 'none',
           direction: 'rtl',
           isolation: 'isolate',

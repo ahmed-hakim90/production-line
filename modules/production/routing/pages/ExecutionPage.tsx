@@ -436,7 +436,7 @@ export const ExecutionPage: React.FC = () => {
           </Button>
         </div>
 
-        <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+        <div style={{ position: 'fixed', left: '-9999px', top: 0, minWidth: 640, width: 'max-content' }}>
           <RoutingExecutionPrint
             ref={printRef}
             execution={execution}
